@@ -128,20 +128,23 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(false, false, false, false)]
-    [InlineData(false, true, false, false)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, true, false, false)]
-    [InlineData(false, false, true, false)]
-    [InlineData(false, true, true, false)]
-    [InlineData(true, false, true, false)]
-    [InlineData(true, true, true, false)]
-    [InlineData(true, false, false, true)]
+    [InlineData(false, false, false, false, 0)]
+    [InlineData(false, true, false, false, 0)]
+    [InlineData(true, false, false, false, 0)]
+    [InlineData(true, true, false, false, 0)]
+    [InlineData(false, false, true, false, 0)]
+    [InlineData(false, true, true, false, 0)]
+    [InlineData(true, false, true, false, 0)]
+    [InlineData(true, true, true, false, 0)]
+    [InlineData(true, false, false, true, 0)]
+    [InlineData(true, false, true, false, 1)]
+    [InlineData(true, false, true, false, 2)]
     public async Task ImportDataSet_SourceGroup_RetainsEveryExistingSecurityBeforeReplacingBook(
         bool amendment,
         bool reversed,
         bool twoSecurities,
-        bool failWrite
+        bool failWrite,
+        int corrupt
     )
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -177,6 +180,15 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
             await db.SaveChangesAsync();
         }
         var sourceRows = new[] { "new\t530307107\t111\tSH\n", "new\t530307305\t222\tSH\n" };
+        if (corrupt > 0)
+            sourceRows =
+            [
+                $"new\t530307107\t111\tSH\t111\t{(corrupt == 1 ? 111 : 0)}\n",
+                "new\t530307305\t222\tSH\t222\t0\n",
+                "new\t530307107\t111\tSH\t111\t0\n",
+                "new\t530307107\t111\tSH\t111\t0\n",
+                "new\t530307107\t111\tSH\t111\t0\n",
+            ];
         if (reversed)
             Array.Reverse(sourceRows);
         using var archive = BuildArchive(
@@ -192,7 +204,8 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
             ),
             (
                 "INFOTABLE.tsv",
-                "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\n" + string.Concat(sourceRows)
+                "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tVALUE\tVOTING_AUTH_SOLE\n"
+                    + string.Concat(sourceRows)
             )
         );
         if (failWrite)
@@ -260,8 +273,15 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
         }
     }
 
-    [Fact]
-    public async Task ImportDataSet_EmptyBaseRestatement_DoesNotDeleteLaterNewHoldings()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ImportDataSet_RestatementAndAdditions_FollowMetadataOrder(
+        bool emptyBase,
+        bool additionFirst
+    )
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
@@ -270,10 +290,17 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
             Cik: "123",
             Cusip: "530307107"
         );
+        var addedIssuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "ADDITION",
+            Name: "Addition",
+            Cik: "789",
+            Cusip: "037833100"
+        );
         var holder = new InstitutionalHolder { Cik = "456", Name = "Source holder" };
         using (var db = FreshContext())
         {
-            db.AddRange(issuer, holder);
+            db.AddRange(issuer, addedIssuer, holder);
             db.Add(
                 new InstitutionalHolding
                 {
@@ -291,6 +318,8 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
             );
             await db.SaveChangesAsync();
         }
+        var baseRows = emptyBase ? "" : "base\t530307107\t100\tSH\n";
+        var additionRows = "addition\t037833100\t200\tSH\n";
         using var archive = BuildArchive(
             (
                 "SUBMISSION.tsv",
@@ -304,14 +333,17 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
             ),
             (
                 "INFOTABLE.tsv",
-                "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\naddition\t530307107\t100\tSH\n"
+                "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\n"
+                    + (additionFirst ? additionRows + baseRows : baseRows + additionRows)
             )
         );
         await CreateImporter(PriceProviderReturning([]))
             .ImportDataSet(archive, new DateOnly(2020, 1, 1), CancellationToken.None);
         using var verify = FreshContext();
-        var position = await verify.Set<InstitutionalHolding>().SingleAsync();
-        position.AccessionNumber.Should().Be("addition");
-        position.Shares.Should().Be(100);
+        var positions = await verify.Set<InstitutionalHolding>().ToListAsync();
+        positions.Should().HaveCount(emptyBase ? 1 : 2);
+        positions.Single(row => row.AccessionNumber == "addition").Shares.Should().Be(200);
+        if (!emptyBase)
+            positions.Single(row => row.AccessionNumber == "base").Shares.Should().Be(100);
     }
 }
