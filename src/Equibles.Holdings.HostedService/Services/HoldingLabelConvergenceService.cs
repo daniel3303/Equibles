@@ -323,14 +323,6 @@ public class HoldingLabelConvergenceService
                 }
             }
 
-            // Quarter aggregates group by listing, so they are marked before the batch is recorded
-            // as converged; a crash in between rescans the batch rather than losing the rebuild.
-            if (batchQuarters.Count > 0)
-                await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
-                    dbContext,
-                    batchQuarters,
-                    cancellationToken
-                );
             changedQuarters.UnionWith(batchQuarters);
             await RecordConverged(
                 dbContext,
@@ -431,8 +423,16 @@ public class HoldingLabelConvergenceService
                     .ToListAsync(cancellationToken)
             );
         }
+        // The label and its rebuild intent must survive together: a retry cannot discover
+        // the old quarter labels after the position update has committed.
+        var changedDates = dates.Distinct().ToList();
+        await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+            dbContext,
+            changedDates,
+            cancellationToken
+        );
         await transaction.CommitAsync(cancellationToken);
-        return (dates.Count, dates.Distinct().ToList());
+        return (dates.Count, changedDates);
     }
 
     // Re-derives one issuer's fingerprint the way the pass does: its own claims decide which

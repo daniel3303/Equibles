@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
@@ -5,6 +6,7 @@ using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -175,6 +177,68 @@ public class HoldingLabelConvergenceServiceTests : IAsyncLifetime
             .NotBeNull();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Converge_FailedSnapshotWriteRollsBackLabelsAndRetries(bool cancel)
+    {
+        var position = await SeedHolding(ClassBCusip, "BF-B", shares: 8, withManagerLeg: true);
+        var failure = new FailSnapshotWrite(cancel);
+        var context = _fixture.CreateDbContext(options => options.AddInterceptors(failure));
+        _contexts.Add(context);
+        var service = CreateService(context);
+
+        if (cancel)
+            await Assert.ThrowsAsync<OperationCanceledException>(() =>
+                service.Converge(CancellationToken.None)
+            );
+        else
+            (await service.Converge(CancellationToken.None)).Should().Be(0);
+
+        failure.Fired.Should().BeTrue();
+        var unchanged = await Reload(position);
+        unchanged.ListedTicker.Should().Be("BF-B");
+        unchanged.Shares.Should().Be(8);
+        unchanged.ManagerEntries.Should().ContainSingle();
+        await using (var read = FreshContext())
+        {
+            (await read.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Quarter))
+                .DirtyAt.Should()
+                .BeNull();
+            (await read.Set<HoldingLabelConvergenceState>().AnyAsync()).Should().BeFalse();
+        }
+
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(1);
+        (await Reload(position)).ListedTicker.Should().BeNull();
+        await using var verified = FreshContext();
+        (await verified.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Quarter))
+            .DirtyAt.Should()
+            .NotBeNull();
+        (await verified.Set<HoldingLabelConvergenceState>().AnyAsync()).Should().BeTrue();
+    }
+
+    private sealed class FailSnapshotWrite(bool cancel) : DbCommandInterceptor
+    {
+        public bool Fired { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (!Fired && command.CommandText.Contains("INSERT INTO \"AumQuarterlySnapshot\""))
+            {
+                Fired = true;
+                if (cancel)
+                    throw new OperationCanceledException("Injected snapshot cancellation");
+                throw new InvalidOperationException("Injected snapshot write failure");
+            }
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
     private EquiblesFinancialDbContext FreshContext()
     {
         var context = _fixture.CreateDbContext();
@@ -182,9 +246,9 @@ public class HoldingLabelConvergenceServiceTests : IAsyncLifetime
         return context;
     }
 
-    private HoldingLabelConvergenceService CreateService()
+    private HoldingLabelConvergenceService CreateService(EquiblesFinancialDbContext context = null)
     {
-        var context = FreshContext();
+        context ??= FreshContext();
         return new HoldingLabelConvergenceService(
             ServiceScopeSubstitute.Create(
                 (typeof(EquiblesFinancialDbContext), context),
