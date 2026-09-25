@@ -228,4 +228,54 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
         );
         (await failures.GetAll().CountAsync()).Should().Be(1);
     }
+
+    [Fact]
+    public async Task Sweep_FailedAttemptsConsumeBudget_AndPreserveEarlierRetryDate()
+    {
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns([Entry("first", Filed), Entry("second", Filed.AddDays(1), "456")]);
+        edgar
+            .GetFilingArtifactNames(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns([]);
+        var result = await Ingestion(edgar)
+            .IngestRecentFilings(
+                Filed.AddDays(1),
+                2,
+                new(2020, 1, 1),
+                CancellationToken.None,
+                maxFilings: 1
+            );
+        result.HasMoreFilings.Should().BeTrue();
+        result.EarliestFailedDate.Should().Be(Filed);
+        await edgar
+            .DidNotReceive()
+            .GetFilingArtifactNames("456", "second", Arg.Any<CancellationToken>());
+        await using var db = fixture.CreateDbContext();
+        (await db.Set<HoldingsImportFailure>().SingleAsync()).AccessionNumber.Should().Be("first");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task Sweep_RejectsNonPositiveBudget(int budget)
+    {
+        var edgar = Substitute.For<ISecEdgarClient>();
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            Ingestion(edgar)
+                .IngestRecentFilings(
+                    Filed,
+                    1,
+                    new(2020, 1, 1),
+                    CancellationToken.None,
+                    maxFilings: budget
+                )
+        );
+        edgar.ReceivedCalls().Should().BeEmpty();
+    }
 }

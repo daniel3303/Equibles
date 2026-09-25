@@ -55,9 +55,11 @@ public class Realtime13FIngestionService
         int lookbackDays,
         DateOnly minReportDate,
         CancellationToken cancellationToken,
-        RealtimeSweepState sweepState = null
+        RealtimeSweepState sweepState = null,
+        int maxFilings = int.MaxValue
     )
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxFilings, 1);
         var (entries, earliestFailedDate) = await DiscoverEntries(
             today,
             lookbackDays,
@@ -98,6 +100,7 @@ public class Realtime13FIngestionService
         var earliestRetryDate = earliestFailedDate;
 
         var totalImported = 0;
+        var attempted = 0;
         foreach (var entry in sorted)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -131,6 +134,23 @@ public class Realtime13FIngestionService
                 continue;
             }
 
+            // Persist progress only before the first unattempted date. The accession
+            // ledger resumes a partly processed day without losing its amendments.
+            if (attempted == maxFilings)
+            {
+                var resumeFrom =
+                    earliestRetryDate.HasValue && earliestRetryDate.Value < entry.DateFiled
+                        ? earliestRetryDate.Value
+                        : entry.DateFiled;
+                _logger.LogInformation(
+                    "13F real-time ingestion yielded after {Count} attempts; resuming from {Date:yyyy-MM-dd}",
+                    attempted,
+                    resumeFrom
+                );
+                return new RealtimeIngestionResult(totalImported, resumeFrom, true);
+            }
+
+            attempted++;
             var outcome = await ImportEntry(entry, minReportDate, cancellationToken);
             if (outcome is EntryImportOutcome.Failed or EntryImportOutcome.Incomplete)
             {
@@ -145,12 +165,15 @@ public class Realtime13FIngestionService
                     earliestRetryDate = entry.DateFiled;
                 continue;
             }
-            if (outcome != EntryImportOutcome.Imported)
+            if (outcome is not (EntryImportOutcome.Imported or EntryImportOutcome.Skipped))
                 continue;
 
+            // A source-confirmed out-of-range filing is complete too; otherwise it
+            // consumes every bounded pass without ever moving the daily frontier.
             if (!await RecordProcessed([entry.AccessionNumber], cancellationToken, sweepState))
                 return new RealtimeIngestionResult(totalImported, entry.DateFiled);
-            totalImported++;
+            if (outcome == EntryImportOutcome.Imported)
+                totalImported++;
         }
 
         // Daily indexes can be incomplete even when every discovered filing imports.

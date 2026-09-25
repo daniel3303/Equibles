@@ -47,4 +47,24 @@ public class Holdings13FRealtimeWorkerComputeWindowStartTests
 
         result.Should().Be(new DateOnly(2026, 5, 18));
     }
+
+    [Theory]
+    [InlineData(2020, 1, 1, 2020, 1, 7)]
+    [InlineData(2026, 5, 12, 2026, 5, 18)]
+    [InlineData(2026, 5, 13, 2026, 5, 27)]
+    [InlineData(2026, 5, 27, 2026, 5, 27)]
+    public void ComputeWindowEnd_BoundsHistoricalDiscoveryButKeepsTheTrailingSweep(
+        int year,
+        int month,
+        int day,
+        int endYear,
+        int endMonth,
+        int endDay
+    )
+    {
+        Holdings13FRealtimeWorker
+            .ComputeWindowEnd(new(2026, 5, 27), new(year, month, day))
+            .Should()
+            .Be(new DateOnly(endYear, endMonth, endDay));
+    }
 }

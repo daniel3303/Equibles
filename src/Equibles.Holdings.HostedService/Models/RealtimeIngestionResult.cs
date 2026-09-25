@@ -4,8 +4,14 @@ namespace Equibles.Holdings.HostedService.Models;
 /// Outcome of a real-time sweep (13F or 13D/G). <see cref="EarliestFailedDate"/>
 /// is the oldest date this cycle left retryable work behind — a daily index that
 /// could not be fetched (SEC throttling or a transient error), or the filing
-/// date of a filing whose import threw — or null if the window swept cleanly.
+/// date of a filing whose import threw or was left for the next bounded pass —
+/// or null if the window swept cleanly.
 /// The worker uses it to hold the sweep watermark back so the failed work is
 /// re-swept next cycle, even after it ages out of the trailing window.
+/// <see cref="HasMoreFilings"/> requests prompt continuation of a bounded pass.
 /// </summary>
-public record RealtimeIngestionResult(int FilingsImported, DateOnly? EarliestFailedDate);
+public record RealtimeIngestionResult(
+    int FilingsImported,
+    DateOnly? EarliestFailedDate,
+    bool HasMoreFilings = false
+);
