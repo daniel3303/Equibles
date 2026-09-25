@@ -21,4 +21,7 @@ public enum HoldingsImportFailureReason
 
     [Display(Name = "Source position missing from storage")]
     MissingSourcePosition,
+
+    [Display(Name = "Awaiting ordered filing recovery")]
+    PendingRecovery,
 }

@@ -82,9 +82,8 @@ public class Realtime13FIngestionService
             .Where(row => row.ResolvedAt == null)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-        var retryFrom = pendingRows
-            .GroupBy(row => row.Cik)
-            .ToDictionary(group => group.Key, group => group.Min(row => row.FilingDate));
+        var recoveringManagers = pendingRows.Select(row => row.Cik.TrimStart('0')).ToHashSet();
+        var retryFrom = new Dictionary<string, DateOnly>();
 
         // Sort chronologically so originals are always imported before their
         // amendments — HandleAmendments in the import pipeline deletes prior
@@ -102,6 +101,20 @@ public class Realtime13FIngestionService
         foreach (var entry in sorted)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Recovery owns the complete ordered tail for these managers. Persist new
+            // discoveries before advancing the sweep, including filings older than its floor.
+            if (recoveringManagers.Contains(entry.Cik.TrimStart('0')))
+            {
+                if (!alreadyProcessed.Contains(entry.AccessionNumber))
+                    await failures.EnqueueRecovery(
+                        entry.AccessionNumber,
+                        entry.Cik.TrimStart('0'),
+                        entry.DateFiled,
+                        cancellationToken
+                    );
+                continue;
+            }
 
             if (
                 alreadyProcessed.Contains(entry.AccessionNumber)

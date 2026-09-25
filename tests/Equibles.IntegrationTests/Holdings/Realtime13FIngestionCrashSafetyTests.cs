@@ -246,6 +246,13 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             CancellationToken.None
         );
         using (var verify = FreshContext())
+            (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
+        await ingestion.IngestSpecificFilings(
+            [original, amendment],
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+        using (var verify = FreshContext())
         {
             var position = await verify.Set<InstitutionalHolding>().SingleAsync();
             position.Shares.Should().Be(2000);
@@ -404,7 +411,7 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             recorded.Should().BeFalse("a crash before import completes must not record the ledger");
         }
 
-        // Sweep 2 — prices now resolve; the filing must be re-ingested, not skipped.
+        // A failed import belongs to ordered recovery; a reset alone remains a sweep retry.
         var imported = await ingestion.IngestRecentFilings(
             today,
             1,
@@ -416,7 +423,17 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
                 .SingleAsync()
         );
 
-        imported.FilingsImported.Should().Be(1);
+        imported.FilingsImported.Should().Be(resetDuringImport ? 1 : 0);
+        if (!resetDuringImport)
+            (
+                await ingestion.IngestSpecificFilings(
+                    [Entry()],
+                    minReportDate,
+                    CancellationToken.None
+                )
+            )
+                .Should()
+                .Be(1);
 
         using var verify = FreshContext();
         var holdings = await verify
