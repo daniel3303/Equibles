@@ -272,6 +272,7 @@ public class CongressionalTradeSyncService
         await _filingLedger.RecordProcessed(batch.Kind, recordable, ct, parserVersion);
         await ReportPartiallyReadFilings(batch.Kind, recordable, parserVersion);
         await ReportTickerConflicts(batch.Kind, recordable, outcome, parserVersion);
+        await ReportRowsDatedAfterFiling(batch.Kind, recordable, outcome, parserVersion);
 
         if (
             batch.ArchiveYear == null
@@ -340,6 +341,41 @@ public class CongressionalTradeSyncService
 
     internal const string TickerConflictErrorContext = "CongressTrades.TickerConflict";
 
+    private async Task ReportRowsDatedAfterFiling(
+        CongressionalFilingKind kind,
+        IReadOnlyCollection<ProcessedFiling> recorded,
+        TradePersistOutcome outcome,
+        int parserVersion
+    )
+    {
+        var recordedIds = recorded
+            .Select(filing => filing.SourceId)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (
+            var row in outcome.DatedAfterFiling.Where(row =>
+                row.FilingKind == kind && recordedIds.Contains(row.SourceId)
+            )
+        )
+        {
+            await _errorReporter.Report(
+                ErrorSource.CongressScraper,
+                DatedAfterFilingErrorContext,
+                DescribeRowDatedAfterFiling(row, parserVersion),
+                stackTrace: null
+            );
+        }
+    }
+
+    internal const string DatedAfterFilingErrorContext = "CongressTrades.RowDatedAfterFiling";
+
+    internal static string DescribeRowDatedAfterFiling(
+        TradeDatedAfterFiling row,
+        int parserVersion
+    ) =>
+        $"{row.FilingKind} {row.SourceId} row {row.SourceRowIndex}: transaction date "
+        + $"{row.TransactionDate:yyyy-MM-dd} is after the filing date {row.FilingDate:yyyy-MM-dd}; "
+        + $"the row was not stored and the filing was recorded at parser version {parserVersion}";
+
     internal static string DescribeTickerConflict(
         TradeTickerConflict conflict,
         int parserVersion
@@ -385,11 +421,12 @@ public class CongressionalTradeSyncService
     /// </summary>
     internal sealed record TradePersistOutcome(
         IReadOnlySet<string> UnpersistedSourceIds,
-        IReadOnlyList<TradeTickerConflict> TickerConflicts
+        IReadOnlyList<TradeTickerConflict> TickerConflicts,
+        IReadOnlyList<TradeDatedAfterFiling> DatedAfterFiling
     )
     {
         public TradePersistOutcome(IReadOnlySet<string> unpersistedSourceIds)
-            : this(unpersistedSourceIds, []) { }
+            : this(unpersistedSourceIds, [], []) { }
 
         public static readonly TradePersistOutcome Empty = new(new HashSet<string>());
     }
@@ -404,6 +441,18 @@ public class CongressionalTradeSyncService
         int? SourceRowIndex,
         string StoredTicker,
         string IncomingTicker
+    );
+
+    /// <summary>
+    /// A source row whose transaction date is after its own filing date. The row is not stored;
+    /// the rest of the filing is persisted and recorded.
+    /// </summary>
+    internal sealed record TradeDatedAfterFiling(
+        CongressionalFilingKind? FilingKind,
+        string SourceId,
+        int? SourceRowIndex,
+        DateOnly TransactionDate,
+        DateOnly FilingDate
     );
 
     private async Task<DisclosureFetchResult> FetchDisclosureTransactions(
@@ -444,7 +493,23 @@ public class CongressionalTradeSyncService
             .Select(TickerNormalizer.NormalizeIdentity)
             .Where(ticker => ticker != null)
             .ToHashSet(StringComparer.Ordinal);
+        // A trade is disclosed after it happens, so a row dated after its own filing is a source
+        // typo (a wrong year: 3031, 2220, 2202 in production). Re-reading the same bytes gives the
+        // same date, so the row is dropped and reported once and the rest of the filing records;
+        // holding the filing back re-fetched it every cycle and blocked its archive year forever.
+        var datedAfterFiling = transactions
+            .Where(t => t.SourceId != null && t.TransactionDate > t.FilingDate)
+            .Select(t => new TradeDatedAfterFiling(
+                t.FilingKind,
+                t.SourceId,
+                t.SourceRowIndex,
+                t.TransactionDate,
+                t.FilingDate
+            ))
+            .ToList();
+
         var tickered = transactions
+            .Where(transaction => transaction.TransactionDate <= transaction.FilingDate)
             .Where(transaction => TickerNormalizer.NormalizeIdentity(transaction.Ticker) != null)
             .Where(transaction =>
                 configuredTickers.Count == 0
@@ -454,16 +519,10 @@ public class CongressionalTradeSyncService
             )
             .ToList();
 
-        // A source row dated after its own filing is never recordable, even when the ticker is
-        // absent or not tracked. Keep the whole filing retryable rather than checkpointing a
-        // semantically malformed disclosure.
-        var unpersistedSourceIds = transactions
-            .Where(t => t.SourceId != null && t.TransactionDate > t.FilingDate)
-            .Select(t => t.SourceId)
-            .ToHashSet();
+        var unpersistedSourceIds = new HashSet<string>();
 
         if (tickered.Count == 0)
-            return new TradePersistOutcome(unpersistedSourceIds);
+            return new TradePersistOutcome(unpersistedSourceIds, [], datedAfterFiling);
 
         var resolutions = await _issuerResolver.Resolve(tickered, ct);
         _logger.LogInformation(
@@ -501,7 +560,7 @@ public class CongressionalTradeSyncService
         var tickerConflicts = new List<TradeTickerConflict>();
         unpersistedSourceIds.UnionWith(await PersistTrades(trades, tickerConflicts, dbContext, ct));
 
-        return new TradePersistOutcome(unpersistedSourceIds, tickerConflicts);
+        return new TradePersistOutcome(unpersistedSourceIds, tickerConflicts, datedAfterFiling);
     }
 
     /// <summary>
