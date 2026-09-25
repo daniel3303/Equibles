@@ -158,8 +158,7 @@ public class SearchAggregator
     {
         if (searchTask == null || searchTask.IsCompleted)
         {
-            scope.Dispose();
-            timeoutSource.Dispose();
+            Release(scope, timeoutSource);
             return;
         }
 
@@ -167,13 +166,24 @@ public class SearchAggregator
             settled =>
             {
                 _ = settled.Exception;
-                scope.Dispose();
-                timeoutSource.Dispose();
+                Release(scope, timeoutSource);
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default
         );
+    }
+
+    private static void Release(IServiceScope scope, CancellationTokenSource timeoutSource)
+    {
+        try
+        {
+            scope.Dispose();
+        }
+        finally
+        {
+            timeoutSource.Dispose();
+        }
     }
 
     // Strips control characters (notably CR/LF) from the user-supplied query so a crafted
