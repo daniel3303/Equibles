@@ -5,6 +5,7 @@ using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -244,6 +245,85 @@ public class HoldingLabelConvergenceServiceTests : IAsyncLifetime
         var context = _fixture.CreateDbContext();
         _contexts.Add(context);
         return context;
+    }
+
+    [Fact]
+    public async Task Converge_MovesHistoryOntoACoRegisteredRetiredClass()
+    {
+        await RetireClassA(coRegistered: true);
+        var classA = await SeedHolding(ClassACusip, null, shares: 3);
+        var classB = await SeedHolding(ClassBCusip, "BF-B", shares: 8);
+
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(2);
+
+        (await Reload(classA)).ListedTicker.Should().Be("BF-A");
+        (await Reload(classB)).ListedTicker.Should().BeNull();
+    }
+
+    // A retired ticker never registered beside the presentation may be the same security renamed.
+    [Fact]
+    public async Task Converge_KeepsHistoryOffARetiredTickerNotCoRegistered()
+    {
+        await RetireClassA(coRegistered: false);
+        var classA = await SeedHolding(ClassACusip, null, shares: 3);
+
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(0);
+
+        (await Reload(classA)).ListedTicker.Should().BeNull();
+    }
+
+    // Co-registration proves a distinct class, not that the CUSIP it holds is its own.
+    [Fact]
+    public async Task Converge_KeepsHistoryOffARetiredClassUnderACusipNeverStatedForIt()
+    {
+        await RetireClassA(coRegistered: true, statedCusip: "115637999");
+        var classA = await SeedHolding(ClassACusip, null, shares: 3);
+
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(0);
+
+        (await Reload(classA)).ListedTicker.Should().BeNull();
+    }
+
+    private async Task RetireClassA(bool coRegistered, string statedCusip = ClassACusip)
+    {
+        await using var seed = FreshContext();
+        var classA = await seed.Set<EquityListing>()
+            .SingleAsync(listing => listing.Ticker == "BF-A");
+        classA.Active = false;
+        classA.IsDirectoryListed = false;
+        classA.DelistedOn = Quarter.AddDays(30);
+        seed.Set<EquityListingRetirementEvidence>()
+            .Add(
+                new EquityListingRetirementEvidence
+                {
+                    EquityIssuerId = _issuerId,
+                    ListedTicker = "BF-A",
+                    DelistedOn = classA.DelistedOn.Value,
+                    Cusip = statedCusip,
+                }
+            );
+        seed.Set<IssuerSecurityRegistration>()
+            .AddRange(
+                new IssuerSecurityRegistration
+                {
+                    EquityIssuerId = _issuerId,
+                    TradingSymbol = "BFB",
+                    Title = "Class B",
+                    AccessionNumber = "0000014693-26-000010",
+                    FiledDate = Quarter,
+                },
+                new IssuerSecurityRegistration
+                {
+                    EquityIssuerId = _issuerId,
+                    TradingSymbol = "BFA",
+                    Title = "Class A",
+                    AccessionNumber = coRegistered
+                        ? "0000014693-26-000010"
+                        : "0000014693-20-000001",
+                    FiledDate = Quarter,
+                }
+            );
+        await seed.SaveChangesAsync();
     }
 
     private HoldingLabelConvergenceService CreateService(EquiblesFinancialDbContext context = null)

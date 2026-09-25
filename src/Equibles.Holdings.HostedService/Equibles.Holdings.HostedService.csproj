@@ -18,6 +18,7 @@
     <ProjectReference Include="..\Equibles.Holdings.Repositories\Equibles.Holdings.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Holdings.BusinessLogic\Equibles.Holdings.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Data\Equibles.Sec.FinancialFacts.Data.csproj" />
     <ProjectReference Include="..\Equibles.CorporateActions.Data\Equibles.CorporateActions.Data.csproj" />
     <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />

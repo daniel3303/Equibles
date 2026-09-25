@@ -6,6 +6,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
+using Equibles.Sec.FinancialFacts.Data.Registrations;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.HostedService.Services;
@@ -43,6 +44,25 @@ public class HoldingLabelConvergenceService
         /// security before a rename or a reverse split, so history never moves onto one.
         /// </summary>
         public List<string> LiveTickers { get; init; } = [];
+
+        /// <summary>Retired US tickers on the issuer's other securities.</summary>
+        public List<string> RetiredSiblingTickers { get; init; } = [];
+
+        /// <summary>The fails archive's CUSIP evidence for each retired ticker of the issuer.</summary>
+        public List<RetiredCusipStatement> RetiredCusipStatements { get; init; } = [];
+
+        /// <summary>
+        /// "TICKER|CUSIP" pairs a primary row may move onto: a retired sibling co-registered with the
+        /// presentation on one 12(b) cover page, under a CUSIP stated for that exact ticker.
+        /// </summary>
+        public List<string> AdmittedRetiredCusips { get; set; } = [];
+    }
+
+    internal sealed class RetiredCusipStatement
+    {
+        public string Ticker { get; init; }
+        public string Cusip { get; init; }
+        public List<string> Candidates { get; init; } = [];
     }
 
     internal sealed class StoredLabel
@@ -117,7 +137,62 @@ public class HoldingLabelConvergenceService
                     )
                     .Select(listing => listing.Ticker)
                     .ToList(),
+                RetiredSiblingTickers = issuer
+                    .Securities.Where(security =>
+                        security.Id != issuer.Presentation.Listing.EquitySecurityId
+                    )
+                    .SelectMany(security => security.Listings)
+                    .Where(listing =>
+                        listing.MarketCountryCode == "US"
+                        && (!listing.Active || listing.DelistedOn != null)
+                    )
+                    .Select(listing => listing.Ticker)
+                    .ToList(),
+                RetiredCusipStatements = dbContext
+                    .Set<EquityListingRetirementEvidence>()
+                    .Where(evidence => evidence.EquityIssuerId == issuer.Id)
+                    .Select(evidence => new RetiredCusipStatement
+                    {
+                        Ticker = evidence.ListedTicker,
+                        Cusip = evidence.Cusip,
+                        Candidates = evidence.HistoricalCusipBackfillCandidates,
+                    })
+                    .ToList(),
             });
+
+    // Co-registration proves a distinct class, never a renamed predecessor, and the archive's own
+    // statement for that ticker proves the CUSIP is the retired class's rather than one it wrongly holds.
+    internal static void AdmitRetiredSiblings(
+        CandidateIssuer issuer,
+        IReadOnlyCollection<(string Symbol, string Accession)> registrations
+    ) =>
+        issuer.AdmittedRetiredCusips = issuer
+            .RetiredSiblingTickers.Where(ticker =>
+                !issuer.LiveTickers.Contains(ticker, StringComparer.Ordinal)
+                && CoverPageRegistration.RegisteredTogether(
+                    registrations,
+                    issuer.PresentationTicker,
+                    ticker
+                )
+            )
+            .SelectMany(ticker =>
+                issuer
+                    .RetiredCusipStatements.Where(statement =>
+                        string.Equals(statement.Ticker, ticker, StringComparison.OrdinalIgnoreCase)
+                    )
+                    .Select(statement =>
+                        statement.Cusip
+                        ?? (statement.Candidates.Count == 1 ? statement.Candidates[0] : null)
+                    )
+                    .Where(cusip => cusip != null)
+                    .Select(cusip => RetiredCusipKey(ticker, cusip))
+            )
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+    private static string RetiredCusipKey(string ticker, string cusip) =>
+        $"{ticker}|{cusip.Trim().ToUpperInvariant()}";
 
     // Only primary rows and presentation-ticker rows can move, and both filters are conditions on
     // the unique index, so an issuer holding millions of sibling-labelled rows is never heap-read.
@@ -177,7 +252,13 @@ public class HoldingLabelConvergenceService
                     && resolved != null
                     && !string.Equals(resolved, presentation, StringComparison.Ordinal)
                     && issuer.PresentationIdentified
-                    && issuer.LiveTickers.Contains(resolved, StringComparer.Ordinal)
+                    && (
+                        issuer.LiveTickers.Contains(resolved, StringComparer.Ordinal)
+                        || issuer.AdmittedRetiredCusips.Contains(
+                            RetiredCusipKey(resolved, label.Cusip),
+                            StringComparer.Ordinal
+                        )
+                    )
                 )
                     siblingMoves.Add(
                         new Relabel(label.EquityIssuerId, label.Cusip, null, resolved, label.Count)
@@ -219,6 +300,8 @@ public class HoldingLabelConvergenceService
             issuer.PresentationIdentified ? "identified" : "unidentified",
             string.Join(",", issuer.LiveTickers.Order(StringComparer.Ordinal)),
         };
+        if (issuer.AdmittedRetiredCusips.Count > 0)
+            parts.Add("retired:" + string.Join(",", issuer.AdmittedRetiredCusips));
         foreach (
             var cusip in claimedCusips
                 .Select(cusip => cusip.ToUpperInvariant())
@@ -244,6 +327,9 @@ public class HoldingLabelConvergenceService
         var stockRepo = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var candidates = await BuildCandidateQuery(dbContext).ToListAsync(cancellationToken);
+        var registrations = await CoverPageRegistration.Load(dbContext, null, cancellationToken);
+        foreach (var candidate in candidates)
+            AdmitRetiredSiblings(candidate, registrations.GetValueOrDefault(candidate.Id, []));
         var claims = await HoldingCusipResolution.Load(
             stockRepo,
             stockRepo.GetAll(),
@@ -502,6 +588,12 @@ public class HoldingLabelConvergenceService
             .SingleOrDefaultAsync(cancellationToken);
         if (issuer == null)
             return null;
+        var registrations = await CoverPageRegistration.Load(
+            dbContext,
+            [issuerId],
+            cancellationToken
+        );
+        AdmitRetiredSiblings(issuer, registrations.GetValueOrDefault(issuerId, []));
         var own = await HoldingCusipResolution.Load(
             stockRepo,
             stockRepo.GetAll().Where(stock => stock.Id == issuerId),

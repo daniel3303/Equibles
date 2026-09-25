@@ -1,3 +1,5 @@
+using Equibles.Sec.FinancialFacts.Data.Registrations;
+using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
@@ -15,7 +17,7 @@ public class FtdImportServiceSiblingCusipTests
     [Fact]
     public void RegisteredTogether_SymbolsOnOneCoverPage_MatchAcrossSeparatorSpellings()
     {
-        FtdImportService
+        CoverPageRegistration
             .RegisteredTogether([("BFA", "a-1"), ("BFB", "a-1")], "BF-A", "BF.B")
             .Should()
             .BeTrue();
@@ -24,7 +26,7 @@ public class FtdImportServiceSiblingCusipTests
     [Fact]
     public void RegisteredTogether_SymbolsOnDifferentFilings_AreNotProof()
     {
-        FtdImportService
+        CoverPageRegistration
             .RegisteredTogether([("OLD", "a-1"), ("NEW", "a-2")], "OLD", "NEW")
             .Should()
             .BeFalse();
@@ -33,7 +35,7 @@ public class FtdImportServiceSiblingCusipTests
     [Fact]
     public void RegisteredTogether_MissingAccession_IsNotProof()
     {
-        FtdImportService
+        CoverPageRegistration
             .RegisteredTogether([("A", null), ("B", null)], "A", "B")
             .Should()
             .BeFalse();
@@ -160,5 +162,129 @@ public class FtdImportServiceSiblingCusipTests
             )
             .Should()
             .BeNull();
+    }
+
+    private static readonly Guid Issuer = Guid.NewGuid();
+
+    private static FtdImportService.SiblingSecurity Security(
+        string ticker,
+        string cusip,
+        DateOnly? delistedOn = null
+    ) =>
+        new(
+            Guid.NewGuid(),
+            Issuer,
+            cusip,
+            [new FtdImportService.SiblingListing(ticker, delistedOn)]
+        );
+
+    private static FtdRecord Fail(string date, string cusip, string symbol) =>
+        new()
+        {
+            SettlementDate = DateOnly.ParseExact(date, "yyyyMMdd"),
+            Cusip = cusip,
+            Symbol = symbol,
+        };
+
+    private static readonly Dictionary<Guid, List<(string Symbol, string Accession)>> UnitCover =
+        new() { [Issuer] = [("AMAC", "a-1"), ("AMACU", "a-1")] };
+
+    [Fact]
+    public void PlanSiblingCusipMoves_HeldCusipTradesAsCoRegisteredSibling_MovesIt()
+    {
+        var moves = FtdImportService.PlanSiblingCusipMoves(
+            [Fail("20260728", "G03456129", "AMACU")],
+            [Security("AMAC", "G03456129"), Security("AMACU", null)],
+            UnitCover
+        );
+
+        moves
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new FtdImportService.SiblingCusipMove(Issuer, "G03456129", "AMAC", "AMACU"));
+    }
+
+    [Fact]
+    public void PlanSiblingCusipMoves_HolderEverSeenUnderTheCusip_Abstains()
+    {
+        FtdImportService
+            .PlanSiblingCusipMoves(
+                [Fail("20260701", "G03456129", "AMAC"), Fail("20260728", "G03456129", "AMACU")],
+                [Security("AMAC", "G03456129"), Security("AMACU", null)],
+                UnitCover
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void PlanSiblingCusipMoves_TwoSymbolsOnTheLatestDate_Abstains()
+    {
+        FtdImportService
+            .PlanSiblingCusipMoves(
+                [Fail("20260728", "G03456129", "AMACU"), Fail("20260728", "G03456129", "AMACW")],
+                [Security("AMAC", "G03456129"), Security("AMACU", null)],
+                UnitCover
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void PlanSiblingCusipMoves_SiblingAlreadyHoldsACusip_Abstains()
+    {
+        FtdImportService
+            .PlanSiblingCusipMoves(
+                [Fail("20260728", "G03456129", "AMACU")],
+                [Security("AMAC", "G03456129"), Security("AMACU", "G03456111")],
+                UnitCover
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void PlanSiblingCusipMoves_NotCoRegistered_Abstains()
+    {
+        FtdImportService
+            .PlanSiblingCusipMoves(
+                [Fail("20260728", "G03456129", "AMACU")],
+                [Security("AMAC", "G03456129"), Security("AMACU", null)],
+                new Dictionary<Guid, List<(string Symbol, string Accession)>>
+                {
+                    [Issuer] = [("AMAC", "a-2"), ("AMACU", "a-1")],
+                }
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void PlanSiblingCusipMoves_RetiredSiblingSeenAfterItsDelisting_Abstains()
+    {
+        FtdImportService
+            .PlanSiblingCusipMoves(
+                [Fail("20260728", "G03456129", "AMACU")],
+                [Security("AMAC", "G03456129"), Security("AMACU", null, new DateOnly(2026, 7, 1))],
+                UnitCover
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void PlanSiblingCusipMoves_SeparatorStrippedFailsSymbol_MatchesTheListing()
+    {
+        var moves = FtdImportService.PlanSiblingCusipMoves(
+            [Fail("20260728", "115637100", "BFA")],
+            [Security("BF-B", "115637100"), Security("BF-A", null)],
+            new Dictionary<Guid, List<(string Symbol, string Accession)>>
+            {
+                [Issuer] = [("BFB", "a-1"), ("BFA", "a-1")],
+            }
+        );
+
+        moves.Should().ContainSingle().Which.SiblingTicker.Should().Be("BF-A");
     }
 }
