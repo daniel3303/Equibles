@@ -117,12 +117,14 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
             """;
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, true)]
     public async Task IngestRecentFilings_ImportReportsIncomplete_LeavesAccessionUnrecordedForRetry(
         bool completeSubmission,
-        bool textUnavailable
+        bool textUnavailable,
+        bool inconsistentDeclarations
     )
     {
         // No CommonStock is seeded for the filing's CUSIP, so the import maps no
@@ -148,6 +150,8 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
                     "</formData>",
                     "<summaryPage><tableEntryTotal>1</tableEntryTotal><tableValueTotal>1</tableValueTotal></summaryPage></formData>"
                 );
+            if (inconsistentDeclarations)
+                cover = cover.Replace("<tableEntryTotal>1", "<tableEntryTotal>2");
             var submission = $"""
                 <SEC-DOCUMENT>
                 <DOCUMENT>
@@ -251,5 +255,24 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
                     Arg.Any<string>(),
                     Arg.Any<CancellationToken>()
                 );
+        if (inconsistentDeclarations)
+        {
+            await edgar
+                .Received(1)
+                .GetDocumentFileBytes(
+                    entry.Cik,
+                    Accession,
+                    "primary_doc.xml",
+                    Arg.Any<CancellationToken>()
+                );
+            await edgar
+                .Received(1)
+                .GetDocumentFileBytes(
+                    entry.Cik,
+                    Accession,
+                    "infotable.xml",
+                    Arg.Any<CancellationToken>()
+                );
+        }
     }
 }

@@ -547,14 +547,16 @@ public class Realtime13FIngestionService
     )
     {
         var submission = await TryReadSubmission(entry, cancellationToken);
-        if (submission != null)
-            return submission;
+        if (submission?.Filing != null)
+            return submission.Filing;
 
-        var artifacts = await _edgarClient.GetFilingArtifactNames(
-            entry.Cik,
-            entry.AccessionNumber,
-            cancellationToken
-        );
+        var artifacts =
+            submission?.ArtifactNames
+            ?? await _edgarClient.GetFilingArtifactNames(
+                entry.Cik,
+                entry.AccessionNumber,
+                cancellationToken
+            );
 
         var primaryDocName = SelectCoverPage(artifacts);
         if (primaryDocName == null)
@@ -602,7 +604,7 @@ public class Realtime13FIngestionService
 
     // Complete submissions stay available when the artifact directory returns server errors.
     // Bound this first route so unavailable text never starves the existing XML-artifact route.
-    private async Task<Parsed13FFiling> TryReadSubmission(
+    private async Task<Parsed13FSubmission> TryReadSubmission(
         EdgarDailyIndexEntry entry,
         CancellationToken cancellationToken
     )
