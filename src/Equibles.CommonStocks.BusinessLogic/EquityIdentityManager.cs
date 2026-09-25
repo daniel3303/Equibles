@@ -679,6 +679,155 @@ public class EquityIdentityManager
         return (primaryOwnerIds, aliases, listings);
     }
 
+    /// <summary>
+    /// Moves a CUSIP from the security trading as <paramref name="holderTicker"/> to the sibling
+    /// class trading as <paramref name="siblingTicker"/>, which the caller proved is distinct.
+    /// </summary>
+    /// <remarks>
+    /// The holder keeps only its own listed claim, promoted when it is the presentation. The sibling
+    /// receives the CUSIP as its security's when it is the presentation, as a listed claim otherwise.
+    /// </remarks>
+    public async Task<bool> ReassignSiblingCusip(
+        Guid issuerId,
+        string cusip,
+        string holderTicker,
+        string siblingTicker,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var normalizedCusip = cusip?.Trim().ToUpperInvariant();
+        var holderSymbol = holderTicker?.Trim().ToUpperInvariant();
+        var siblingSymbol = siblingTicker?.Trim().ToUpperInvariant();
+        if (
+            string.IsNullOrEmpty(normalizedCusip)
+            || string.IsNullOrEmpty(holderSymbol)
+            || string.IsNullOrEmpty(siblingSymbol)
+            || holderSymbol == siblingSymbol
+        )
+            return false;
+
+        await using var transaction = await _commonStockRepository.BeginCusipIdentityWrite(
+            cancellationToken
+        );
+        var stock = await _commonStockRepository.GetForUpdate(issuerId, cancellationToken);
+        if (stock?.Presentation == null)
+            return false;
+        var holder = SoleSecurityTrading(stock, holderSymbol);
+        var sibling = SoleSecurityTrading(stock, siblingSymbol);
+        if (
+            holder == null
+            || sibling == null
+            || holder.Id == sibling.Id
+            || !string.Equals(holder.Cusip, normalizedCusip, StringComparison.OrdinalIgnoreCase)
+            || sibling.Cusip != null
+        )
+            return false;
+
+        // One owner per CUSIP: nothing else may hold it, and a sibling with a listed CUSIP of its
+        // own contradicts the observation.
+        var heldElsewhere = await _commonStockRepository
+            .GetSecurities()
+            .AnyAsync(
+                security =>
+                    security.Id != holder.Id
+                    && security.Cusip != null
+                    && security.Cusip.ToUpper() == normalizedCusip,
+                cancellationToken
+            );
+        var aliased = await _commonStockRepository
+            .GetCusipAliases()
+            .AnyAsync(alias => alias.Cusip.ToUpper() == normalizedCusip, cancellationToken);
+        var listedClaims = await _commonStockRepository
+            .GetListedCusips()
+            .Where(listing =>
+                listing.EquityIssuerId == stock.Id || listing.Cusip.ToUpper() == normalizedCusip
+            )
+            .ToListAsync(cancellationToken);
+        if (
+            heldElsewhere
+            || aliased
+            || listedClaims.Any(listing =>
+                string.Equals(listing.Cusip, normalizedCusip, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    listing.ListedTicker,
+                    siblingSymbol,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+        )
+            return false;
+
+        var presentationSecurityId = stock.Presentation.Listing.EquitySecurityId;
+        var previousPresentationCusip = stock.Presentation.Listing.Security.Cusip;
+        var holderClaims = listedClaims
+            .Where(listing =>
+                string.Equals(
+                    listing.ListedTicker,
+                    holderSymbol,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            .ToList();
+        holder.Cusip = null;
+        if (holder.Id == presentationSecurityId && holderClaims.Count == 1)
+        {
+            holder.Cusip = holderClaims[0].Cusip.ToUpperInvariant();
+            _commonStockRepository.DeleteListedCusip(holderClaims[0]);
+        }
+        if (sibling.Id == presentationSecurityId)
+            sibling.Cusip = normalizedCusip;
+        else
+            _commonStockRepository.AddListedCusip(
+                new EquityListingCusipEvidence
+                {
+                    EquityIssuerId = stock.Id,
+                    ListedTicker = sibling
+                        .Listings.First(listing =>
+                            listing.MarketCountryCode == "US"
+                            && listing.Ticker.ToUpperInvariant() == siblingSymbol
+                        )
+                        .Ticker,
+                    Cusip = normalizedCusip,
+                }
+            );
+
+        await _commonStockRepository.SaveChanges();
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+
+        await _bus.Publish(
+            new StockCusipChanged(
+                stock.Id,
+                stock.Presentation.Listing.Ticker,
+                previousPresentationCusip,
+                stock.Presentation.Listing.Security.Cusip
+            ),
+            cancellationToken
+        );
+        return true;
+    }
+
+    // The one security whose only US ticker is this symbol; anything else is ambiguous.
+    private static EquitySecurity SoleSecurityTrading(EquityIssuer stock, string symbol)
+    {
+        var matches = stock
+            .Securities.Where(security =>
+                security.Listings.Any(listing =>
+                    listing.MarketCountryCode == "US" && listing.Ticker.ToUpperInvariant() == symbol
+                )
+            )
+            .Take(2)
+            .ToList();
+        if (matches.Count != 1)
+            return null;
+        var tickers = matches[0]
+            .Listings.Where(listing => listing.MarketCountryCode == "US")
+            .Select(listing => listing.Ticker.ToUpperInvariant())
+            .Distinct()
+            .Count();
+        return tickers == 1 ? matches[0] : null;
+    }
+
     // The sibling keeps its identity through its own listed-CUSIP claim, so releasing the wrongly
     // held CUSIP never leaves that class unresolvable.
     private async Task<EquitySecurity> FindReleasableSibling(

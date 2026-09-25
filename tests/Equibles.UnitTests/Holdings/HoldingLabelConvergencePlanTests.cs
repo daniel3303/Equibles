@@ -265,6 +265,79 @@ public class HoldingLabelConvergencePlanTests
         mapping["45166V114"].Should().Be(new CusipTarget(Issuer, "IDXGW"));
     }
 
+    private static CandidateIssuer LibertyBroadband() =>
+        new()
+        {
+            Id = Issuer,
+            PresentationTicker = "LBRDK",
+            PresentationIdentified = true,
+            RetiredSiblingTickers = ["LBRDA"],
+        };
+
+    [Fact]
+    public void Plan_PrimaryRowOfACoRegisteredRetiredClass_MovesOntoIt()
+    {
+        var issuer = LibertyBroadband();
+        AdmitRetiredSiblings(issuer, [("LBRDK", "a-1"), ("LBRDA", "a-1")]);
+
+        var moves = Plan(
+            [Label("530307107", null)],
+            new Dictionary<Guid, CandidateIssuer> { [Issuer] = issuer },
+            Mapping(("530307107", Issuer, "LBRDA"))
+        );
+
+        moves.Should().ContainSingle().Which.ToTicker.Should().Be("LBRDA");
+    }
+
+    // A retired ticker never registered beside the presentation may be the same security renamed.
+    [Fact]
+    public void Plan_PrimaryRowOfARetiredTickerNotCoRegistered_StaysPut()
+    {
+        var issuer = LibertyBroadband();
+        AdmitRetiredSiblings(issuer, [("LBRDK", "a-2"), ("LBRDA", "a-1")]);
+
+        Plan(
+                [Label("530307107", null)],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = issuer },
+                Mapping(("530307107", Issuer, "LBRDA"))
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    // While the presentation holds no CUSIP the sibling's claim may itself be the wrong class, and a
+    // row moved onto a sibling label is never read again.
+    [Fact]
+    public void Plan_RetiredSiblingWhileThePresentationHasNoCusip_StaysPut()
+    {
+        var issuer = new CandidateIssuer
+        {
+            Id = Issuer,
+            PresentationTicker = "LBRDK",
+            PresentationIdentified = false,
+            RetiredSiblingTickers = ["LBRDA"],
+        };
+        AdmitRetiredSiblings(issuer, [("LBRDK", "a-1"), ("LBRDA", "a-1")]);
+
+        Plan(
+                [Label("530307107", null)],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = issuer },
+                Mapping(("530307107", Issuer, "LBRDA"))
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void Fingerprint_AdmittingARetiredSibling_ChangesIt()
+    {
+        var before = LibertyBroadband();
+        var after = LibertyBroadband();
+        AdmitRetiredSiblings(after, [("LBRDK", "a-1"), ("LBRDA", "a-1")]);
+
+        Fingerprint(after, [], Mapping()).Should().NotBe(Fingerprint(before, [], Mapping()));
+    }
+
     private static StoredLabel Label(string cusip, string ticker) =>
         new()
         {
