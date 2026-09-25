@@ -2106,6 +2106,7 @@ public class HoldingsImportService
             """,
             cancellationToken
         );
+        await ValidateCapturedCusipMapping(dbContext, sourceCusips, context, cancellationToken);
         await PreserveStoredObservationKeys(
             dbContext,
             identityRows.Values.ToList(),
@@ -2215,6 +2216,44 @@ public class HoldingsImportService
             await transaction.CommitAsync(cancellationToken);
 
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
+    }
+
+    private static async Task ValidateCapturedCusipMapping(
+        EquiblesFinancialDbContext dbContext,
+        Dictionary<string, HashSet<string>> sourceGroups,
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var sourceCusips = sourceGroups
+            .Values.SelectMany(group => group)
+            .Where(cusip => !string.IsNullOrWhiteSpace(cusip))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Query the database spelling captured by resolution, even when a filing spells
+        // the same identifier with different casing. The dictionary matches case-insensitively.
+        var cusips = context.CusipMapping.Keys.Where(sourceCusips.Contains).ToArray();
+        if (cusips.Length == 0)
+            return;
+        // Identity writers hold the same issuer locks. Re-read after acquiring them:
+        // a lock alone cannot make the mapping captured before a long archive current.
+        // Never acquire the global CUSIP lock here; identity writers take it first.
+        var stockRepo = new EquityIssuerRepository(dbContext);
+        var claims = await HoldingCusipResolution.Load(
+            stockRepo,
+            stockRepo.GetAll(),
+            cusips,
+            cancellationToken
+        );
+        var current = HoldingCusipResolution.Resolve(claims, []);
+        foreach (var cusip in cusips)
+            if (
+                !current.TryGetValue(cusip, out var target)
+                || !context.CusipMapping.TryGetValue(cusip, out var captured)
+                || target != captured
+            )
+                throw new HoldingObservationConflictException(
+                    $"CUSIP {cusip} changed or lost its resolved security during import; retry with a fresh source mapping."
+                );
     }
 
     private static async Task PreserveStoredObservationKeys(

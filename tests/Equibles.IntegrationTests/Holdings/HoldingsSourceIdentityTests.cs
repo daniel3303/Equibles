@@ -346,4 +346,115 @@ public class HoldingsSourceIdentityTests : IAsyncLifetime
         if (!emptyBase)
             positions.Single(row => row.AccessionNumber == "base").Shares.Should().Be(100);
     }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ImportDataSet_IdentityChangesAfterCapture_RefusesStaleGrouping(
+        bool retained,
+        bool amendment
+    )
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "CLASSC",
+            Name: "Classes",
+            Cik: "123",
+            Cusip: "530307107"
+        );
+        var holder = new InstitutionalHolder { Cik = "456", Name = "Source holder" };
+        using (var db = FreshContext())
+        {
+            db.AddRange(issuer, holder);
+            db.Add(new EquityIssuerCusipAlias { EquityIssuerId = issuer.Id, Cusip = "530307305" });
+            if (retained)
+                db.Add(
+                    new InstitutionalHolding
+                    {
+                        EquityIssuerId = issuer.Id,
+                        InstitutionalHolderId = holder.Id,
+                        ReportDate = new DateOnly(2026, 6, 30),
+                        FilingDate = new DateOnly(2026, 8, 1),
+                        FilingType = FilingType.Form13F,
+                        ShareType = ShareType.Shares,
+                        Cusip = "530307305",
+                        Shares = 222,
+                        AccessionNumber = "old",
+                        ManagerEntries = [new HoldingManagerEntry { Shares = 222 }],
+                    }
+                );
+            await db.SaveChangesAsync();
+        }
+        var prices = Substitute.For<IStockPriceProvider>();
+        prices
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(async _ =>
+            {
+                using var db = FreshContext();
+                await using var transaction = await db.Database.BeginTransactionAsync();
+                await db.Database.ExecuteSqlRawAsync(
+                    "SELECT pg_advisory_xact_lock(1163282519,7456)"
+                );
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT \"Id\" FROM \"EquityIssuer\" WHERE \"Id\"={issuer.Id} FOR NO KEY UPDATE"
+                );
+                await db.Set<EquitySecurity>()
+                    .Where(row => row.EquityIssuerId == issuer.Id && row.Cusip == "530307107")
+                    .ExecuteUpdateAsync(set => set.SetProperty(row => row.Cusip, "530307305"));
+                await db.Set<EquityIssuerCusipAlias>()
+                    .Where(row => row.EquityIssuerId == issuer.Id)
+                    .ExecuteDeleteAsync();
+                db.Add(
+                    new EquityListingCusipEvidence
+                    {
+                        EquityIssuerId = issuer.Id,
+                        Cusip = "530307107",
+                        ListedTicker = "CLASSA",
+                    }
+                );
+                await db.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return new Dictionary<(Guid, string, DateOnly), decimal>();
+            });
+        using var archive = BuildArchive(
+            (
+                "SUBMISSION.tsv",
+                "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+                    + $"{(amendment ? "13F-HR/A" : "13F-HR")}\tnew\t2026-08-15\t2026-06-30\t456\n"
+            ),
+            (
+                "COVERPAGE.tsv",
+                "ACCESSION_NUMBER\tISAMENDMENT\tAMENDMENTTYPE\tFILINGMANAGER_NAME\n"
+                    + $"new\t{(amendment ? "Y" : "N")}\tRESTATEMENT\tSource holder\n"
+            ),
+            (
+                "INFOTABLE.tsv",
+                "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\n"
+                    + "new\t530307107\t111\tSH\nnew\t530307305\t222\tSH\n"
+            )
+        );
+        var result = await CreateImporter(prices)
+            .ImportDataSet(archive, new DateOnly(2020, 1, 1), CancellationToken.None);
+        result.ConflictedFilings.Should().ContainSingle().Which.Should().Be("new");
+        using var verify = FreshContext();
+        var positions = await verify
+            .Set<InstitutionalHolding>()
+            .Include(row => row.ManagerEntries)
+            .ToListAsync();
+        positions.Should().HaveCount(retained ? 1 : 0);
+        if (retained)
+        {
+            positions[0].AccessionNumber.Should().Be("old");
+            positions[0].Shares.Should().Be(222);
+            positions[0].ManagerEntries.Single().Shares.Should().Be(222);
+        }
+        (await verify.Set<HoldingsImportFailure>().SingleAsync())
+            .Reason.Should()
+            .Be(HoldingsImportFailureReason.IdentityConflict);
+    }
 }
