@@ -232,30 +232,74 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Backfill_EsefWithNoRetrievableText_ReplacesStaleContentWithAnEmptyBody()
+    public async Task Backfill_EsefPastTheRetrievalCeiling_ReplacesStaleContentWithAnEmptyBody()
     {
         var document = SeedEsef();
-        var emptyEnvelope = GzipCompressor.Compress([]);
+        var filler = new string('a', EsefReportContent.MaxRetrievalHtmlChars + 1);
+        var oversized = GzipCompressor.Compress(
+            Encoding.UTF8.GetBytes($"<html><body><p>{filler}</p></body></html>")
+        );
         _fileManager
             .OpenRead(document.XbrlContent)
-            .Returns(_ => new MemoryStream(emptyEnvelope, writable: false));
+            .Returns(_ => new MemoryStream(oversized, writable: false));
         _fileManager.GetContent(document.Content).Returns("Source: Register.\n\n"u8.ToArray());
 
         var result = await BuildSut().Backfill(batchSize: 10);
 
         result.Replaced.Should().Be(1);
         result.Failed.Should().Be(0);
-        document.NormalizedContentAttempts.Should().Be(0);
         await _persistenceService
             .Received(1)
             .ReplaceContent(
                 Arg.Is<Document>(d =>
                     d.Id == document.Id
                     && d.NormalizedContentVersion == Document.NormalizedContentBuilderVersion
+                    && d.NormalizedContentAttempts == 0
                 ),
                 Arg.Is<byte[]>(b => b.Length == 0),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Fact]
+    public async Task Backfill_EsefWithAnEmptyCapturedEnvelope_FailsAndKeepsItsText()
+    {
+        var document = SeedEsef();
+        var empty = GzipCompressor.Compress([]);
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(empty, writable: false));
+
+        var result = await BuildSut().Backfill(batchSize: 10);
+
+        result.Failed.Should().Be(1);
+        document.NormalizedContentAttempts.Should().Be(1);
+        document.NormalizedContentVersion.Should().Be(0);
+        await _persistenceService
+            .DidNotReceiveWithAnyArgs()
+            .ReplaceContent(default, default, default);
+    }
+
+    [Fact]
+    public async Task Backfill_EdgarFilingWithNoText_FailsAndKeepsItsText()
+    {
+        var document = SeedDocument(normalizedContentVersion: 0);
+        _secEdgarClient
+            .GetDocumentContent(
+                document.AccessionNumber,
+                _company.Cik,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns("   ");
+
+        var result = await BuildSut().Backfill(batchSize: 10);
+
+        result.Failed.Should().Be(1);
+        document.NormalizedContentAttempts.Should().Be(1);
+        document.NormalizedContentVersion.Should().Be(0);
+        await _persistenceService
+            .DidNotReceiveWithAnyArgs()
+            .ReplaceContent(default, default, default);
     }
 
     [Theory]

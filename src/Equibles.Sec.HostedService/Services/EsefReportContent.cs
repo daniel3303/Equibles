@@ -22,6 +22,13 @@ public static class EsefReportContent
     public const int MaxRetrievalHtmlChars = 16 * 1024 * 1024;
 
     /// <summary>
+    /// True when the report's text is past <see cref="MaxRetrievalHtmlChars"/>, the one case in which
+    /// <see cref="Build"/> returns no body by design rather than because nothing was readable.
+    /// </summary>
+    public static bool ExceedsRetrievalLimit(string html) =>
+        StripEmbeddedData(html)?.Length > MaxRetrievalHtmlChars;
+
+    /// <summary>
     /// Drops every encoded payload the report embeds in itself. A European report carries its figures and
     /// its typefaces inline rather than beside it: in one sampled report a font in a style rule was 7.5 MB
     /// of 10.4 MB and the images a further 1.3 MB. None of it is readable text, so it goes before the
