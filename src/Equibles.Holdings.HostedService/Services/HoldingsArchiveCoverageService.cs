@@ -78,16 +78,20 @@ public class HoldingsArchiveCoverageService(
                 return date == reportDate;
             })
             .ToDictionary(row => row.AccessionNumber);
-        var latestDates = selected
+        var latestFilings = selected
             .Values.GroupBy(row => row.Cik)
             .ToDictionary(
                 group => group.Key,
                 group =>
-                    group.Max(row =>
-                    {
-                        TryParseDateOnly(row.FilingDate, out var date);
-                        return date;
-                    })
+                    group
+                        .Select(row =>
+                        {
+                            TryParseDateOnly(row.FilingDate, out var date);
+                            return new { FilingDate = date, row.AccessionNumber };
+                        })
+                        .OrderBy(row => row.FilingDate)
+                        .ThenBy(row => row.AccessionNumber, StringComparer.Ordinal)
+                        .Last()
             );
         var allCiks = selected.Values.Select(row => row.Cik).Distinct().ToList();
         var holderIds = (await holders.GetByCiks(allCiks, cancellationToken)).ToDictionary(
@@ -132,19 +136,34 @@ public class HoldingsArchiveCoverageService(
                     row.ShareType,
                     row.OptionType,
                     row.FilingDate,
+                    row.AccessionNumber,
                     row.Shares,
                 })
                 .ToListAsync(cancellationToken);
             // A later restatement may legitimately remove a source position. Its own import
             // and recovery record own that newer book; never reintroduce an old position here.
+            var latest = latestFilings[submission.Cik];
             var later =
-                stored.Any(row => row.FilingDate > latestDates[submission.Cik])
+                stored.Any(row =>
+                    row.FilingDate > latest.FilingDate
+                    || (
+                        row.FilingDate == latest.FilingDate
+                        && string.CompareOrdinal(row.AccessionNumber, latest.AccessionNumber) > 0
+                    )
+                )
                 || await holdings
                     .GetFilingsByHolder(new InstitutionalHolder { Id = holderId }, reportDate)
                     .AnyAsync(
                         row =>
                             row.FilingType == FilingType.Form13F
-                            && row.FilingDate > latestDates[submission.Cik],
+                            && (
+                                row.FilingDate > latest.FilingDate
+                                || (
+                                    row.FilingDate == latest.FilingDate
+                                    && string.Compare(row.AccessionNumber, latest.AccessionNumber)
+                                        > 0
+                                )
+                            ),
                         cancellationToken
                     );
             if (later)
@@ -178,6 +197,10 @@ public class HoldingsArchiveCoverageService(
                 if (matches.Count > 1 || (matches.Count == 1 && !matched.Add(matches[0].Id)))
                     ambiguous = true;
                 if (matches.Count != 1)
+                    complete = false;
+                else if (matches[0].AccessionNumber != accession)
+                    // A later filing rollup cannot certify that its positions replaced the old
+                    // book. Preserve source-side quantity repairs, but require current provenance.
                     complete = false;
                 else if (cusips.Count > 1 && matches[0].Shares != expectedShares[key])
                     // Presence of just one source leg does not prove that the importer combined
@@ -247,7 +270,7 @@ public class HoldingsArchiveCoverageService(
         if (missingFilings > 0)
             signal.RequestReplay();
         logger.LogInformation(
-            "13F source coverage for {ReportDate}: checked {Checked} filings, {Missing} with missing tracked positions queued; {Later} have newer filings",
+            "13F source coverage for {ReportDate}: checked {Checked} filings, {Missing} with missing or stale tracked positions queued; {Later} have newer filings",
             reportDate,
             checkedFilings,
             missingFilings,

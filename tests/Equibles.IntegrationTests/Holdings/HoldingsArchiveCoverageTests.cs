@@ -250,12 +250,14 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
     }
 
     [Theory]
-    [InlineData("NEW HOLDINGS", false, 0)]
-    [InlineData("NEW HOLDINGS", true, 1)]
-    [InlineData("RESTATEMENT", true, 0)]
+    [InlineData("NEW HOLDINGS", false, false, 0)]
+    [InlineData("NEW HOLDINGS", true, false, 1)]
+    [InlineData("NEW HOLDINGS", true, true, 0)]
+    [InlineData("RESTATEMENT", true, false, 0)]
     public async Task Audit_Amendments_ReplaceOnlyTheirOwnPersistenceKeys(
         string amendmentType,
         bool differentSecurity,
+        bool originalPresent,
         int expectedFailures
     )
     {
@@ -284,6 +286,12 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
         position.AccessionNumber = "amendment";
         position.FilingDate = new DateOnly(2026, 8, 20);
         db.Add(position);
+        if (originalPresent)
+        {
+            var original = Position(issuer.Id, holder.Id, "438516106", null);
+            original.Shares = 4569;
+            db.Add(original);
+        }
         await db.SaveChangesAsync();
 
         await AuditArchive(
@@ -297,6 +305,97 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             (await db.Set<HoldingsImportFailure>().SingleAsync())
                 .AccessionNumber.Should()
                 .Be("original");
+    }
+
+    [Theory]
+    [InlineData(false, false, 1)]
+    [InlineData(false, true, 1)]
+    [InlineData(true, false, 0)]
+    [InlineData(true, true, 0)]
+    public async Task Audit_RequiresPositionProvenance_WithoutUndoingCurrentSourceQuantityRepairs(
+        bool currentSource,
+        bool sameShares,
+        int expectedFailures
+    )
+    {
+        await using var db = fixture.CreateDbContext();
+        var issuer = new EquityIssuer { Name = "Restated issuer" };
+        var holder = new InstitutionalHolder { Cik = "1948780", Name = "Restating manager" };
+        db.AddRange(issuer, holder);
+        db.Add(new EquityIssuerCusipAlias { EquityIssuerId = issuer.Id, Cusip = "11135F101" });
+        var position = Position(issuer.Id, holder.Id, "11135F101", null);
+        position.AccessionNumber = currentSource ? "0000000123-26-000002" : "0000000123-26-000001";
+        position.FilingDate = new DateOnly(2026, 8, currentSource ? 20 : 19);
+        position.Shares = sameShares ? 9256 : 460421;
+        db.Add(position);
+        // Import metadata may already describe the amendment even when its positions stayed old.
+        db.Add(
+            new InstitutionalFiling
+            {
+                InstitutionalHolderId = holder.Id,
+                AccessionNumber = "0000000123-26-000002",
+                ReportDate = position.ReportDate,
+                FilingDate = new DateOnly(2026, 8, 20),
+                FilingType = FilingType.Form13F,
+                IsAmendment = true,
+            }
+        );
+        await db.SaveChangesAsync();
+
+        await AuditArchive(
+            db,
+            "13F-HR/A\t0000000123-26-000002\t20-AUG-2026\t30-JUN-2026\t1948780\n",
+            "0000000123-26-000002\tY\tRESTATEMENT\tRestating manager\n",
+            "0000000123-26-000002\t11135F101\tSH\t\t4600\n0000000123-26-000002\t11135F101\tSH\t\t4656\n"
+        );
+
+        var failures = await db.Set<HoldingsImportFailure>().ToListAsync();
+        failures.Should().HaveCount(expectedFailures);
+        if (expectedFailures > 0)
+            failures.Single().AccessionNumber.Should().Be("0000000123-26-000002");
+        (await db.Set<InstitutionalHolding>().SingleAsync()).Shares.Should().Be(position.Shares);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Audit_LaterAccessionOnSameDay_DoesNotRestoreOldSourcePositions(
+        bool rollupOnly
+    )
+    {
+        await using var db = fixture.CreateDbContext();
+        var issuer = new EquityIssuer { Name = "Later issuer" };
+        var holder = new InstitutionalHolder { Cik = "1948780", Name = "Later manager" };
+        db.AddRange(issuer, holder);
+        db.Add(new EquityIssuerCusipAlias { EquityIssuerId = issuer.Id, Cusip = "11135F101" });
+        if (rollupOnly)
+            db.Add(
+                new InstitutionalFiling
+                {
+                    InstitutionalHolderId = holder.Id,
+                    AccessionNumber = "0000000123-26-000002",
+                    ReportDate = new DateOnly(2026, 6, 30),
+                    FilingDate = new DateOnly(2026, 8, 19),
+                    FilingType = FilingType.Form13F,
+                    IsAmendment = true,
+                }
+            );
+        else
+        {
+            var position = Position(issuer.Id, holder.Id, "999999999", null);
+            position.AccessionNumber = "0000000123-26-000002";
+            db.Add(position);
+        }
+        await db.SaveChangesAsync();
+
+        await AuditArchive(
+            db,
+            "13F-HR\t0000000123-26-000001\t19-AUG-2026\t30-JUN-2026\t1948780\n",
+            "0000000123-26-000001\tN\t\tLater manager\n",
+            "0000000123-26-000001\t11135F101\tSH\t\t9256\n"
+        );
+
+        (await db.Set<HoldingsImportFailure>().CountAsync()).Should().Be(0);
     }
 
     private static InstitutionalHolding Position(
