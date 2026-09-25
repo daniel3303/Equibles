@@ -84,28 +84,48 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DoWork_EmptyDailyIndex_PreservesConcurrentReset(bool concurrentReset)
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 11)]
+    public async Task DoWork_EmptyDailyIndex_PreservesConcurrentReset(
+        bool concurrentReset,
+        int pendingFailures
+    )
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         await using (var seed = _fixture.CreateDbContext())
         {
-            if (concurrentReset)
+            if (concurrentReset || pendingFailures > 0)
             {
                 seed.Set<RealtimeSweepState>()
                     .Add(
                         new RealtimeSweepState
                         {
                             WorkerName = Holdings13FRealtimeWorker.WorkerStateName,
-                            SweptThrough = today,
+                            SweptThrough = pendingFailures > 0 ? new DateOnly(2020, 1, 1) : today,
                         }
                     );
                 await seed.SaveChangesAsync();
             }
         }
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            var failures = new HoldingsImportFailureRepository(seed);
+            for (var i = 0; i < pendingFailures; i++)
+                await failures.Record(
+                    $"pending-{i}",
+                    $"{1000 + i}",
+                    today,
+                    today,
+                    HoldingsImportFailureReason.MissingSourcePosition,
+                    CancellationToken.None
+                );
+        }
         var resetApplied = false;
         var edgarClient = Substitute.For<ISecEdgarClient>();
+        edgarClient
+            .GetCompanyFilings(Arg.Any<string>(), null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+            .Returns([]);
         edgarClient
             .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(async _ =>
@@ -188,6 +208,25 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
 
         await worker.InvokeDoWork(CancellationToken.None);
 
+        if (pendingFailures > 0)
+        {
+            await edgarClient
+                .DidNotReceive()
+                .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+            await using var first = _fixture.CreateDbContext();
+            (
+                await first
+                    .Set<HoldingsImportFailure>()
+                    .CountAsync(r => r.NextAttemptAt > DateTime.UtcNow)
+            )
+                .Should()
+                .Be(10);
+            (await first.Set<RealtimeSweepState>().SingleAsync())
+                .SweptThrough.Should()
+                .Be(new DateOnly(2020, 1, 1));
+            await worker.InvokeDoWork(CancellationToken.None);
+        }
+
         await using var verify = _fixture.CreateDbContext();
         var state = await verify.Set<RealtimeSweepState>().SingleAsync();
         if (concurrentReset)
@@ -198,7 +237,22 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
         }
         else
         {
-            state.SweptThrough.Should().Be(today);
+            var start =
+                pendingFailures > 0
+                    ? new DateOnly(2020, 1, 1)
+                    : today.AddDays(
+                        -(Holdings13FRealtimeWorker.EffectiveMinLookback(today, 7) - 1)
+                    );
+            state
+                .SweptThrough.Should()
+                .Be(Holdings13FRealtimeWorker.ComputeWindowEnd(today, start));
+            var fetchedDates = edgarClient
+                .ReceivedCalls()
+                .Where(c => c.GetMethodInfo().Name == nameof(ISecEdgarClient.GetDailyIndex))
+                .Select(c => (DateOnly)c.GetArguments()[0])
+                .ToList();
+            fetchedDates.Count.Should().BeLessThanOrEqualTo(15);
+            fetchedDates.Min().Should().Be(start);
             logger
                 .Messages.Should()
                 .Contain(m => m.Contains("13F real-time ingestion cycle complete"));

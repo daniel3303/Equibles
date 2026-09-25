@@ -447,4 +447,137 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
         holdings[0].Shares.Should().Be(1000);
         holdings[0].AccessionNumber.Should().Be("ACC-ORIG");
     }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    public async Task BoundedSweep_ResumesOriginalAndAmendmentWithoutSkippingSourceDays(
+        int amendmentDayOffset,
+        bool earlierIndexFails
+    )
+    {
+        var original = Entry();
+        original.AccessionNumber = "001-original";
+        var amendment = new EdgarDailyIndexEntry
+        {
+            AccessionNumber = "002-amendment",
+            Cik = Cik,
+            FormType = "13F-HR/A",
+            DateFiled = original.DateFiled.AddDays(amendmentDayOffset),
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple Inc",
+                    Cik: "0000320193",
+                    Cusip: Cusip
+                )
+            );
+            await seed.SaveChangesAsync();
+        }
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var day = call.ArgAt<DateOnly>(0);
+                if (earlierIndexFails && day == original.DateFiled.AddDays(-1))
+                    throw new IOException("Earlier index unavailable");
+                return new[] { amendment, original }.Where(e => e.DateFiled == day).ToList();
+            });
+        edgar
+            .GetFilingArtifactNames(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(["primary_doc.xml", "infotable.xml"]);
+        edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+                Encoding.UTF8.GetBytes(
+                    call.ArgAt<string>(2) == "primary_doc.xml"
+                        ? PrimaryDoc()
+                            .Replace(
+                                "<isAmendment>false</isAmendment>",
+                                call.ArgAt<string>(1) == amendment.AccessionNumber
+                                    ? "<isAmendment>true</isAmendment><amendmentType>RESTATEMENT</amendmentType>"
+                                    : "<isAmendment>false</isAmendment>"
+                            )
+                        : InfoTable()
+                            .Replace(
+                                "1000",
+                                call.ArgAt<string>(1) == amendment.AccessionNumber ? "2000" : "1000"
+                            )
+                )
+            );
+        var scopes = CreateScopeFactory();
+        var prices = Substitute.For<IStockPriceProvider>();
+        prices
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
+        var importer = new HoldingsImportService(
+            scopes,
+            Substitute.For<ILogger<HoldingsImportService>>(),
+            Options.Create(new WorkerOptions()),
+            prices,
+            Substitute.For<MassTransit.IBus>()
+        );
+        var ingestion = new Realtime13FIngestionService(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            importer,
+            scopes,
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        var first = await ingestion.IngestRecentFilings(
+            amendment.DateFiled,
+            amendmentDayOffset + 2,
+            new(2024, 1, 1),
+            CancellationToken.None,
+            maxFilings: 1
+        );
+        first.FilingsImported.Should().Be(1);
+        first.HasMoreFilings.Should().BeTrue();
+        first
+            .EarliestFailedDate.Should()
+            .Be(earlierIndexFails ? original.DateFiled.AddDays(-1) : amendment.DateFiled);
+        using (var verify = FreshContext())
+        {
+            (await verify.Set<ProcessedFiling>().SingleAsync())
+                .AccessionNumber.Should()
+                .Be(original.AccessionNumber);
+            (await verify.Set<InstitutionalHolding>().SingleAsync()).Shares.Should().Be(1000);
+        }
+        var second = await ingestion.IngestRecentFilings(
+            amendment.DateFiled,
+            amendmentDayOffset + 2,
+            new(2024, 1, 1),
+            CancellationToken.None,
+            maxFilings: 1
+        );
+        second.FilingsImported.Should().Be(1);
+        second.HasMoreFilings.Should().BeFalse();
+        using (var verify = FreshContext())
+        {
+            (await verify.Set<ProcessedFiling>().CountAsync()).Should().Be(2);
+            var position = await verify.Set<InstitutionalHolding>().SingleAsync();
+            position.Shares.Should().Be(2000);
+            position.AccessionNumber.Should().Be(amendment.AccessionNumber);
+        }
+    }
 }
