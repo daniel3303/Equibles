@@ -205,6 +205,66 @@ public class HoldingLabelConvergencePlanTests
         contested.Should().Equal("115637100");
     }
 
+    [Fact]
+    public void Plan_PrimaryRowResolvedToThePresentationTicker_StaysPut()
+    {
+        // A retired listing reusing the presentation symbol (IDXGD back to IDXG) is the same line.
+        var issuers = new Dictionary<Guid, CandidateIssuer>
+        {
+            [Issuer] = new CandidateIssuer
+            {
+                Id = Issuer,
+                PresentationTicker = "IDXG",
+                PresentationIdentified = true,
+                LiveTickers = ["IDXG"],
+            },
+        };
+
+        var moves = Plan(
+            [Label("45166V304", null)],
+            issuers,
+            Mapping(("45166V304", Issuer, "IDXG"))
+        );
+
+        moves.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Resolve_RetiredSecurityTradingUnderThePresentationTicker_ResolvesToPrimary()
+    {
+        var primarySecurity = Guid.NewGuid();
+        var mapping = HoldingCusipResolution.Resolve(
+            new HoldingCusipResolution.Claims
+            {
+                Securities =
+                [
+                    new HoldingCusipResolution.SecurityClaim
+                    {
+                        Id = Guid.NewGuid(),
+                        EquityIssuerId = Issuer,
+                        Cusip = "45166V304",
+                        PrimarySecurityId = primarySecurity,
+                        PresentationTicker = "IDXG",
+                        UsTickers = ["IDXG"],
+                    },
+                    new HoldingCusipResolution.SecurityClaim
+                    {
+                        Id = Guid.NewGuid(),
+                        EquityIssuerId = Issuer,
+                        Cusip = "45166V114",
+                        PrimarySecurityId = primarySecurity,
+                        PresentationTicker = "IDXG",
+                        UsTickers = ["IDXGW"],
+                    },
+                ],
+            },
+            []
+        );
+
+        mapping["45166V304"].Should().Be(new CusipTarget(Issuer, null));
+        mapping["45166V114"].Should().Be(new CusipTarget(Issuer, "IDXGW"));
+    }
+
     private static StoredLabel Label(string cusip, string ticker) =>
         new()
         {
