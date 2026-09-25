@@ -142,13 +142,25 @@ public class DocumentNormalizationBackfillService
 
             try
             {
-                var normalizedContent = await BuildContent(document, cancellationToken);
+                var (normalizedContent, emptyByDesign) = await BuildContent(
+                    document,
+                    cancellationToken
+                );
                 if (
-                    normalizedContent.Length == 0
-                    || string.IsNullOrWhiteSpace(Encoding.UTF8.GetString(normalizedContent))
+                    !emptyByDesign
+                    && (
+                        normalizedContent.Length == 0
+                        || string.IsNullOrWhiteSpace(Encoding.UTF8.GetString(normalizedContent))
+                    )
                 )
                     throw new InvalidOperationException(
                         $"Normalization produced no content for document {document.Id}."
+                    );
+                if (emptyByDesign)
+                    _logger.LogInformation(
+                        "ESEF report {DocumentId} is past the retrieval ceiling ({EnvelopeBytes} bytes); storing an empty body as the importer does.",
+                        document.Id,
+                        document.XbrlUncompressedSize
                     );
 
                 document.NormalizedContentVersion = Document.NormalizedContentBuilderVersion;
@@ -192,7 +204,11 @@ public class DocumentNormalizationBackfillService
         return result;
     }
 
-    private async Task<byte[]> BuildContent(Document document, CancellationToken cancellationToken)
+    // EmptyByDesign marks an ESEF report too large to retrieve, which the importer also stores without text.
+    private async Task<(byte[] Content, bool EmptyByDesign)> BuildContent(
+        Document document,
+        CancellationToken cancellationToken
+    )
     {
         if (document.DocumentType != DocumentType.EsefAnnualReport)
         {
@@ -201,8 +217,11 @@ public class DocumentNormalizationBackfillService
                 document.Issuer.Cik,
                 cancellationToken
             );
-            return Encoding.UTF8.GetBytes(
-                _converter.Convert(_normalizer.Normalize(source)) ?? string.Empty
+            return (
+                Encoding.UTF8.GetBytes(
+                    _converter.Convert(_normalizer.Normalize(source)) ?? string.Empty
+                ),
+                false
             );
         }
 
@@ -229,11 +248,11 @@ public class DocumentNormalizationBackfillService
                 );
             output.Write(buffer, 0, read);
         }
-        return EsefReportContent.Build(
-            Encoding.UTF8.GetString(output.ToArray()),
-            _normalizer,
-            _converter
-        );
+        if (output.Length == 0)
+            throw new InvalidOperationException("Captured ESEF envelope is empty.");
+        var html = Encoding.UTF8.GetString(output.ToArray());
+        var content = EsefReportContent.Build(html, _normalizer, _converter);
+        return (content, content.Length == 0 && EsefReportContent.ExceedsRetrievalLimit(html));
     }
 
     private async Task<bool> ContentMatches(Document document, byte[] normalizedContent)
