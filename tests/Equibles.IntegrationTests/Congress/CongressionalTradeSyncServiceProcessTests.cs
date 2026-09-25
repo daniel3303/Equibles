@@ -613,46 +613,84 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         corrected.SourceRowIndex.Should().Be(source.SourceRowIndex);
     }
 
-    [Fact]
-    public async Task ProcessTransactions_TransactionAfterFiling_KeepsSourceUnpersisted()
+    private static (IEnumerable<string> Unpersisted, List<object> DatedAfterFiling) ReadOutcome(
+        Task processTask
+    )
     {
-        DbContext.Add(
-            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        var outcome = processTask.GetType().GetProperty("Result")!.GetValue(processTask)!;
+        var unpersisted =
+            (IEnumerable<string>)
+                outcome.GetType().GetProperty("UnpersistedSourceIds")!.GetValue(outcome)!;
+        var dated = (
+            (IEnumerable<object>)
+                outcome.GetType().GetProperty("DatedAfterFiling")!.GetValue(outcome)!
+        ).ToList();
+        return (unpersisted, dated);
+    }
+
+    private static T Read<T>(object row, string property) =>
+        (T)row.GetType().GetProperty(property)!.GetValue(row);
+
+    // The three production source typos (House DocIDs 20018672, 20020914, 20021790): a wrong year
+    // puts the trade after its own filing. The row is dropped, the filing's correctly dated row is
+    // stored, and the filing is no longer held back (it re-fetched every cycle and kept its
+    // archive year from completing).
+    [Theory]
+    [InlineData("20018672", "3031-04-30", "2021-05-03")]
+    [InlineData("20020914", "2220-04-07", "2022-05-04")]
+    [InlineData("20021790", "2202-09-19", "2022-10-12")]
+    public async Task ProcessTransactions_RowDatedAfterFiling_DropsTheRowAndKeepsTheFiling(
+        string sourceId,
+        string typoDate,
+        string filedOn
+    )
+    {
+        DbContext.AddRange(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc."),
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "IBM", Name: "IBM Corp.")
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
-        var transaction = Txn(
+        var filingDate = DateOnly.Parse(filedOn);
+        var typo = Txn(
+            "Jane Doe",
+            "IBM",
+            assetName: "International Business Machines Corporation (IBM)",
+            transactionDate: DateOnly.Parse(typoDate),
+            filingDate: filingDate,
+            sourceId: sourceId
+        );
+        var correct = Txn(
             "Jane Doe",
             "AAPL",
-            transactionDate: new DateOnly(2024, 6, 16),
-            filingDate: new DateOnly(2024, 6, 15),
-            sourceId: "future-date-filing"
+            transactionDate: filingDate.AddDays(-10),
+            filingDate: filingDate,
+            sourceId: sourceId
         );
 
         var processTask = (Task)
             ProcessTransactionsMethod.Invoke(
                 BuildSut(),
-                [new List<DisclosureTransaction> { transaction }, CancellationToken.None]
+                [new List<DisclosureTransaction> { typo, correct }, CancellationToken.None]
             );
         await processTask;
-        var outcome = processTask.GetType().GetProperty("Result")!.GetValue(processTask)!;
-        var unpersisted =
-            (IEnumerable<string>)
-                outcome.GetType().GetProperty("UnpersistedSourceIds")!.GetValue(outcome)!;
+        var (unpersisted, dated) = ReadOutcome(processTask);
 
-        unpersisted.Should().Contain("future-date-filing");
+        unpersisted.Should().NotContain(sourceId);
+        var row = dated.Should().ContainSingle().Subject;
+        Read<string>(row, "SourceId").Should().Be(sourceId);
+        Read<int?>(row, "SourceRowIndex").Should().Be(typo.SourceRowIndex);
+        Read<DateOnly>(row, "TransactionDate").Should().Be(DateOnly.Parse(typoDate));
         await using var verify = Fixture.CreateDbContext();
-        (await verify.Set<CongressionalTrade>().AsNoTracking().CountAsync()).Should().Be(0);
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        stored.FiledTicker.Should().Be("AAPL");
+        stored.SourceRowIndex.Should().Be(correct.SourceRowIndex);
+        stored.TransactionDate.Should().Be(filingDate.AddDays(-10));
     }
 
     [Fact]
-    public async Task ProcessTransactions_UnmatchedFutureTransaction_KeepsSourceUnpersisted()
+    public async Task ProcessTransactions_UnmatchedRowDatedAfterFiling_IsReportedNotHeldBack()
     {
-        DbContext.Add(
-            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
-        );
-        await DbContext.SaveChangesAsync();
-        DbContext.ChangeTracker.Clear();
         var transaction = Txn(
             "Jane Doe",
             null,
@@ -667,12 +705,12 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
                 [new List<DisclosureTransaction> { transaction }, CancellationToken.None]
             );
         await processTask;
-        var outcome = processTask.GetType().GetProperty("Result")!.GetValue(processTask)!;
-        var unpersisted =
-            (IEnumerable<string>)
-                outcome.GetType().GetProperty("UnpersistedSourceIds")!.GetValue(outcome)!;
+        var (unpersisted, dated) = ReadOutcome(processTask);
 
-        unpersisted.Should().Contain("tickerless-future-date-filing");
+        unpersisted.Should().NotContain("tickerless-future-date-filing");
+        Read<string>(dated.Should().ContainSingle().Subject, "SourceId")
+            .Should()
+            .Be("tickerless-future-date-filing");
     }
 
     [Fact]
