@@ -284,6 +284,35 @@ public class HoldingLabelConvergenceServiceTests : IAsyncLifetime
         (await Reload(classA)).ListedTicker.Should().BeNull();
     }
 
+    // Class A lost its CUSIP to another class, so rows it labelled under the primary CUSIP return.
+    [Fact]
+    public async Task Converge_MovesAVacatedClassesRowsOntoTheClassNowHoldingTheirCusip()
+    {
+        await using (var seed = FreshContext())
+        {
+            seed.Set<EquityListingCusipEvidence>()
+                .RemoveRange(await seed.Set<EquityListingCusipEvidence>().ToListAsync());
+            await seed.SaveChangesAsync();
+        }
+        var stale = await SeedHolding(ClassBCusip, "BF-A", shares: 3);
+
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(1);
+
+        (await Reload(stale)).ListedTicker.Should().BeNull();
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(0);
+    }
+
+    // While class A keeps its own CUSIP its labels are never re-read.
+    [Fact]
+    public async Task Converge_LeavesAClaimedClassesLabelsAlone()
+    {
+        var labelled = await SeedHolding(ClassBCusip, "BF-A", shares: 3);
+
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(0);
+
+        (await Reload(labelled)).ListedTicker.Should().Be("BF-A");
+    }
+
     private async Task RetireClassA(bool coRegistered, string statedCusip = ClassACusip)
     {
         await using var seed = FreshContext();

@@ -383,6 +383,99 @@ public class HoldingLabelConvergencePlanTests
         Fingerprint(after, [], Mapping()).Should().NotBe(Fingerprint(before, [], Mapping()));
     }
 
+    private static CandidateIssuer Seritage(bool identified = true)
+    {
+        var issuer = new CandidateIssuer
+        {
+            Id = Issuer,
+            PresentationTicker = "SRG",
+            PresentationIdentified = identified,
+            LiveTickers = ["SRG", "SRG-PA"],
+            UsTickers = ["SRG", "SRG-PA"],
+        };
+        MarkVacatedTickers(issuer, []);
+        return issuer;
+    }
+
+    // The preferred once held the common's CUSIP, so its label on common positions is stale.
+    [Fact]
+    public void Plan_VacatedSiblingRowUnderThePresentationsCusip_MovesToPrimary()
+    {
+        Plan(
+                [Label("81752R100", "SRG-PA")],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = Seritage() },
+                Mapping(("81752R100", Issuer, null))
+            )
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new Relabel(Issuer, "81752R100", "SRG-PA", null, 1));
+    }
+
+    [Fact]
+    public void Plan_VacatedSiblingRowWhileThePresentationHasNoCusip_StaysPut()
+    {
+        Plan(
+                [Label("81752R100", "SRG-PA")],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = Seritage(identified: false) },
+                Mapping(("81752R100", Issuer, null))
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void Plan_VacatedSiblingRowUnderAnUnresolvedCusip_StaysPut()
+    {
+        Plan(
+                [Label("81752R100", "SRG-PA")],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = Seritage() },
+                Mapping()
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    // A class that still holds a CUSIP is never re-read, so its labels are never moved.
+    [Fact]
+    public void Plan_SiblingLabelOfAClassThatStillHoldsACusip_StaysPut()
+    {
+        var issuer = Seritage();
+        MarkVacatedTickers(issuer, ["SRG-PA"]);
+
+        Plan(
+                [Label("81752R100", "SRG-PA")],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = issuer },
+                Mapping(("81752R100", Issuer, null))
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void MarkVacatedTickers_SkipsThePresentationAndEveryClaimedTicker()
+    {
+        var issuer = new CandidateIssuer
+        {
+            Id = Issuer,
+            PresentationTicker = "SRG",
+            UsTickers = ["SRG", "SRG-PA", "SRG-PB", "SRG-PB"],
+        };
+
+        MarkVacatedTickers(issuer, ["SRG-PB"]);
+
+        issuer.VacatedTickers.Should().Equal("SRG-PA");
+    }
+
+    [Fact]
+    public void Fingerprint_ATickerBecomingVacated_ChangesIt()
+    {
+        var claimed = Seritage();
+        MarkVacatedTickers(claimed, ["SRG-PA"]);
+
+        Fingerprint(Seritage(), [], Mapping()).Should().NotBe(Fingerprint(claimed, [], Mapping()));
+    }
+
     private static StoredLabel Label(string cusip, string ticker) =>
         new()
         {

@@ -39,6 +39,19 @@ public class HoldingLabelConvergenceQueryTranslationTests
         sql.Should().NotContain(" OR ");
     }
 
+    [Fact]
+    public void VacatedLabelRead_FiltersOnTheTickerListOnly()
+    {
+        using var ctx = TranslationContext();
+
+        var sql = HoldingLabelConvergenceService
+            .BuildVacatedLabelQuery(ctx, Guid.NewGuid(), ["SRG-PA"])
+            .ToQueryString();
+
+        sql.Should().Contain("\"ListedTicker\" = ANY");
+        sql.Should().NotContain(" OR ");
+    }
+
     private static EquiblesFinancialDbContext TranslationContext() =>
         new(
             new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
