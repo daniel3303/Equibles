@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text;
+using System.Xml;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
@@ -545,6 +546,10 @@ public class Realtime13FIngestionService
         CancellationToken cancellationToken
     )
     {
+        var submission = await TryReadSubmission(entry, cancellationToken);
+        if (submission != null)
+            return submission;
+
         var artifacts = await _edgarClient.GetFilingArtifactNames(
             entry.Cik,
             entry.AccessionNumber,
@@ -593,6 +598,45 @@ public class Realtime13FIngestionService
         }
 
         return filing;
+    }
+
+    // Complete submissions stay available when the artifact directory returns server errors.
+    // Bound this first route so unavailable text never starves the existing XML-artifact route.
+    private async Task<Parsed13FFiling> TryReadSubmission(
+        EdgarDailyIndexEntry entry,
+        CancellationToken cancellationToken
+    )
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
+        {
+            var content = await _edgarClient.GetDocumentContent(
+                entry.AccessionNumber,
+                entry.Cik,
+                timeout.Token
+            );
+            cancellationToken.ThrowIfCancellationRequested();
+            return Filing13FSubmissionParser.Parse(content, entry, _parser);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Complete 13F submission timed out for {Accession}; trying artifacts",
+                entry.AccessionNumber
+            );
+            return null;
+        }
+        catch (Exception exception)
+            when (exception is HttpRequestException or XmlException or FormatException)
+        {
+            _logger.LogInformation(
+                exception,
+                "Complete 13F submission unavailable for {Accession}; trying artifacts",
+                entry.AccessionNumber
+            );
+            return null;
+        }
     }
 
     /// <summary>

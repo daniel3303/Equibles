@@ -116,8 +116,14 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
             </informationTable>
             """;
 
-    [Fact]
-    public async Task IngestRecentFilings_ImportReportsIncomplete_LeavesAccessionUnrecordedForRetry()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task IngestRecentFilings_ImportReportsIncomplete_LeavesAccessionUnrecordedForRetry(
+        bool completeSubmission,
+        bool textUnavailable
+    )
     {
         // No CommonStock is seeded for the filing's CUSIP, so the import maps no
         // tracked stock and returns IsComplete=false ("retry once CUSIPs exist").
@@ -131,6 +137,35 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
         };
 
         var edgar = Substitute.For<ISecEdgarClient>();
+        if (textUnavailable)
+            edgar
+                .GetDocumentContent(Accession, entry.Cik, Arg.Any<CancellationToken>())
+                .Returns<string>(_ => throw new HttpRequestException("Submission unavailable"));
+        if (completeSubmission)
+        {
+            var cover = PrimaryDoc()
+                .Replace(
+                    "</formData>",
+                    "<summaryPage><tableEntryTotal>1</tableEntryTotal><tableValueTotal>1</tableValueTotal></summaryPage></formData>"
+                );
+            var submission = $"""
+                <SEC-DOCUMENT>
+                <DOCUMENT>
+                <TYPE>13F-HR
+                <FILENAME>primary_doc.xml
+                <TEXT><XML>{cover}</XML></TEXT>
+                </DOCUMENT>
+                <DOCUMENT>
+                <TYPE>INFORMATION TABLE
+                <FILENAME>infotable.xml
+                <TEXT><XML>{InfoTable()}</XML></TEXT>
+                </DOCUMENT>
+                </SEC-DOCUMENT>
+                """;
+            edgar
+                .GetDocumentContent(Accession, entry.Cik, Arg.Any<CancellationToken>())
+                .Returns(submission);
+        }
         edgar
             .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(_ => [entry]);
@@ -208,5 +243,13 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
                 Accession,
                 "an incomplete import must stay unrecorded so a later cycle retries it"
             );
+        if (completeSubmission)
+            await edgar
+                .DidNotReceive()
+                .GetFilingArtifactNames(
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<CancellationToken>()
+                );
     }
 }
