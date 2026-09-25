@@ -81,6 +81,8 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
             : base(logger, scopeFactory, errorReporter, workerOptions, configuration) { }
 
         public Task InvokeDoWork(CancellationToken ct) => DoWork(ct);
+
+        public Task InvokeWait(CancellationToken ct) => WaitForNextCycle(SleepInterval, ct);
     }
 
     [Theory]
@@ -161,6 +163,8 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                     .Returns(new HoldingsImportFailureRepository(ctx));
                 sp.GetService(typeof(RealtimeSweepStateRepository))
                     .Returns(new RealtimeSweepStateRepository(ctx));
+                sp.GetService(typeof(HoldingsRealtimeReplaySignal))
+                    .Returns(new HoldingsRealtimeReplaySignal());
                 var importService = new HoldingsImportService(
                     scopeFactory,
                     Substitute.For<ILogger<HoldingsImportService>>(),
@@ -224,7 +228,9 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
             (await first.Set<RealtimeSweepState>().SingleAsync())
                 .SweptThrough.Should()
                 .Be(new DateOnly(2020, 1, 1));
+            await worker.InvokeWait(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
             await worker.InvokeDoWork(CancellationToken.None);
+            await worker.InvokeWait(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
         }
 
         await using var verify = _fixture.CreateDbContext();
