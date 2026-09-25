@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Data.Models;
@@ -100,6 +101,7 @@ public class HoldingsArchiveCoverageService(
             .ToHashSetAsync(cancellationToken);
         var additions = await ReadAdditionKeys(context, selected, cancellationToken);
         var expected = new Dictionary<PositionKey, HashSet<string>>();
+        var expectedShares = new Dictionary<PositionKey, decimal?>();
         string accession = null;
         var checkedFilings = 0;
         var missingFilings = 0;
@@ -129,6 +131,7 @@ public class HoldingsArchiveCoverageService(
                     row.ShareType,
                     row.OptionType,
                     row.FilingDate,
+                    row.Shares,
                 })
                 .ToListAsync(cancellationToken);
             // A later restatement may legitimately remove a source position. Its own import
@@ -172,6 +175,10 @@ public class HoldingsArchiveCoverageService(
                     .ToList();
                 if (matches.Count != 1 || !matched.Add(matches[0].Id))
                     complete = false;
+                else if (cusips.Count > 1 && matches[0].Shares != expectedShares[key])
+                    // Presence of just one source leg does not prove that the importer combined
+                    // the group. Unknown or altered counts remain pending for investigation.
+                    complete = false;
             }
             if (complete)
                 return;
@@ -201,6 +208,7 @@ public class HoldingsArchiveCoverageService(
             {
                 await Check();
                 expected.Clear();
+                expectedShares.Clear();
                 accession = next;
             }
             if (!selected.ContainsKey(next))
@@ -210,8 +218,19 @@ public class HoldingsArchiveCoverageService(
                 continue;
             var key = Key(target, row);
             if (!expected.TryGetValue(key, out var cusips))
+            {
                 expected[key] = cusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                expectedShares[key] = 0;
+            }
             cusips.Add(cusip.ToUpperInvariant());
+            expectedShares[key] = long.TryParse(
+                GetValue(row, "SSHPRNAMT"),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var shares
+            )
+                ? expectedShares[key] + shares
+                : null;
         }
         await Check();
         if (missingFilings > 0)

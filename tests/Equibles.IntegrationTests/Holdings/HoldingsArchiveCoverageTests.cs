@@ -189,17 +189,19 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
     }
 
     [Theory]
-    [InlineData("438516205", null, false, false, 0)]
-    [InlineData("438516106", null, false, false, 0)]
-    [InlineData("438516205", "RETAINED", false, false, 0)]
-    [InlineData("999999999", null, false, false, 1)]
-    [InlineData("438516205", null, true, false, 1)]
-    [InlineData("438516205", null, false, true, 1)]
+    [InlineData("438516205", null, false, false, false, 0)]
+    [InlineData("438516106", null, false, false, false, 0)]
+    [InlineData("438516205", "RETAINED", false, false, false, 0)]
+    [InlineData("999999999", null, false, false, false, 1)]
+    [InlineData("438516205", null, true, false, false, 1)]
+    [InlineData("438516205", null, false, true, false, 1)]
+    [InlineData("438516205", null, false, false, true, 1)]
     public async Task Audit_MergedSourceCusips_RequiresOneGroundedObservationPerSecurity(
         string storedCusip,
         string storedLabel,
         bool duplicateObservation,
         bool sibling,
+        bool partial,
         int expectedFailures
     )
     {
@@ -219,7 +221,10 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             );
         else
             db.Add(new EquityIssuerCusipAlias { EquityIssuerId = issuer.Id, Cusip = "438516106" });
-        db.Add(Position(issuer.Id, holder.Id, storedCusip, storedLabel));
+        var stored = Position(issuer.Id, holder.Id, storedCusip, storedLabel);
+        if (partial)
+            stored.Shares = 264131;
+        db.Add(stored);
         if (duplicateObservation)
             db.Add(Position(issuer.Id, holder.Id, "438516106", "RETAINED"));
         await db.SaveChangesAsync();
@@ -231,7 +236,9 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             "original\t438516205\tSH\t\t264131\noriginal\t438516106\tSH\t\t4569\n"
         );
         (await db.Set<HoldingsImportFailure>().CountAsync()).Should().Be(expectedFailures);
-        (await db.Set<InstitutionalHolding>().FirstAsync()).Shares.Should().Be(268700);
+        (await db.Set<InstitutionalHolding>().FirstAsync())
+            .Shares.Should()
+            .Be(partial ? 264131 : 268700);
     }
 
     [Theory]
