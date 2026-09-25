@@ -31,6 +31,7 @@ internal static class HoldingCusipResolution
         public Guid EquityIssuerId { get; init; }
         public string Cusip { get; init; }
         public Guid? PrimarySecurityId { get; init; }
+        public string PresentationTicker { get; init; }
         public List<string> UsTickers { get; init; } = [];
     }
 
@@ -65,6 +66,7 @@ internal static class HoldingCusipResolution
                 EquityIssuerId = security.EquityIssuerId,
                 Cusip = security.Cusip,
                 PrimarySecurityId = (Guid?)security.Issuer.Presentation.Listing.EquitySecurityId,
+                PresentationTicker = security.Issuer.Presentation.Listing.Ticker,
                 UsTickers = security
                     .Listings.Where(listing => listing.MarketCountryCode == "US")
                     .Select(listing => listing.Ticker)
@@ -154,7 +156,19 @@ internal static class HoldingCusipResolution
             if (securityClaims.Count() != 1)
                 continue;
             var security = securityClaims.Single();
-            if (security.Id == security.PrimarySecurityId)
+            // A retired security trading under the presentation ticker is that primary series
+            // before a reverse split or CUSIP change, never a second class.
+            if (
+                security.Id == security.PrimarySecurityId
+                || (
+                    security.UsTickers.Count == 1
+                    && string.Equals(
+                        security.UsTickers[0],
+                        security.PresentationTicker,
+                        StringComparison.Ordinal
+                    )
+                )
+            )
                 cusipMapping[security.Cusip] = new CusipTarget(security.EquityIssuerId, null);
             else if (security.UsTickers.Count == 1)
                 cusipMapping[security.Cusip] = new CusipTarget(
