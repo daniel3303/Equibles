@@ -48,11 +48,21 @@ public class HoldingLabelConvergenceService
         /// <summary>Retired US tickers on the issuer's other securities.</summary>
         public List<string> RetiredSiblingTickers { get; init; } = [];
 
+        /// <summary>The fails archive's CUSIP evidence for each retired ticker of the issuer.</summary>
+        public List<RetiredCusipStatement> RetiredCusipStatements { get; init; } = [];
+
         /// <summary>
-        /// Retired sibling tickers the SEC registered on one 12(b) cover page with the presentation,
-        /// so distinct classes; set by <see cref="AdmitRetiredSiblings"/>.
+        /// "TICKER|CUSIP" pairs a primary row may move onto: a retired sibling co-registered with the
+        /// presentation on one 12(b) cover page, under a CUSIP stated for that exact ticker.
         /// </summary>
-        public List<string> AdmittedRetiredTickers { get; set; } = [];
+        public List<string> AdmittedRetiredCusips { get; set; } = [];
+    }
+
+    internal sealed class RetiredCusipStatement
+    {
+        public string Ticker { get; init; }
+        public string Cusip { get; init; }
+        public List<string> Candidates { get; init; } = [];
     }
 
     internal sealed class StoredLabel
@@ -138,16 +148,25 @@ public class HoldingLabelConvergenceService
                     )
                     .Select(listing => listing.Ticker)
                     .ToList(),
+                RetiredCusipStatements = dbContext
+                    .Set<EquityListingRetirementEvidence>()
+                    .Where(evidence => evidence.EquityIssuerId == issuer.Id)
+                    .Select(evidence => new RetiredCusipStatement
+                    {
+                        Ticker = evidence.ListedTicker,
+                        Cusip = evidence.Cusip,
+                        Candidates = evidence.HistoricalCusipBackfillCandidates,
+                    })
+                    .ToList(),
             });
 
-    // A renamed predecessor never shares a cover page with its successor, so co-registration is
-    // what lets history move onto a retired class. It never stands in for the presentation's own
-    // CUSIP, which is what shows the identity being relabelled onto is itself settled.
+    // Co-registration proves a distinct class, never a renamed predecessor, and the archive's own
+    // statement for that ticker proves the CUSIP is the retired class's rather than one it wrongly holds.
     internal static void AdmitRetiredSiblings(
         CandidateIssuer issuer,
         IReadOnlyCollection<(string Symbol, string Accession)> registrations
     ) =>
-        issuer.AdmittedRetiredTickers = issuer
+        issuer.AdmittedRetiredCusips = issuer
             .RetiredSiblingTickers.Where(ticker =>
                 !issuer.LiveTickers.Contains(ticker, StringComparer.Ordinal)
                 && CoverPageRegistration.RegisteredTogether(
@@ -156,8 +175,24 @@ public class HoldingLabelConvergenceService
                     ticker
                 )
             )
+            .SelectMany(ticker =>
+                issuer
+                    .RetiredCusipStatements.Where(statement =>
+                        string.Equals(statement.Ticker, ticker, StringComparison.OrdinalIgnoreCase)
+                    )
+                    .Select(statement =>
+                        statement.Cusip
+                        ?? (statement.Candidates.Count == 1 ? statement.Candidates[0] : null)
+                    )
+                    .Where(cusip => cusip != null)
+                    .Select(cusip => RetiredCusipKey(ticker, cusip))
+            )
             .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
+
+    private static string RetiredCusipKey(string ticker, string cusip) =>
+        $"{ticker}|{cusip.Trim().ToUpperInvariant()}";
 
     // Only primary rows and presentation-ticker rows can move, and both filters are conditions on
     // the unique index, so an issuer holding millions of sibling-labelled rows is never heap-read.
@@ -219,7 +254,10 @@ public class HoldingLabelConvergenceService
                     && issuer.PresentationIdentified
                     && (
                         issuer.LiveTickers.Contains(resolved, StringComparer.Ordinal)
-                        || issuer.AdmittedRetiredTickers.Contains(resolved, StringComparer.Ordinal)
+                        || issuer.AdmittedRetiredCusips.Contains(
+                            RetiredCusipKey(resolved, label.Cusip),
+                            StringComparer.Ordinal
+                        )
                     )
                 )
                     siblingMoves.Add(
@@ -262,11 +300,8 @@ public class HoldingLabelConvergenceService
             issuer.PresentationIdentified ? "identified" : "unidentified",
             string.Join(",", issuer.LiveTickers.Order(StringComparer.Ordinal)),
         };
-        if (issuer.AdmittedRetiredTickers.Count > 0)
-            parts.Add(
-                "retired:"
-                    + string.Join(",", issuer.AdmittedRetiredTickers.Order(StringComparer.Ordinal))
-            );
+        if (issuer.AdmittedRetiredCusips.Count > 0)
+            parts.Add("retired:" + string.Join(",", issuer.AdmittedRetiredCusips));
         foreach (
             var cusip in claimedCusips
                 .Select(cusip => cusip.ToUpperInvariant())

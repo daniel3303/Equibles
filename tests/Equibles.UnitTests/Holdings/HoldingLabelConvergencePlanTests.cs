@@ -265,13 +265,22 @@ public class HoldingLabelConvergencePlanTests
         mapping["45166V114"].Should().Be(new CusipTarget(Issuer, "IDXGW"));
     }
 
-    private static CandidateIssuer LibertyBroadband() =>
+    private static CandidateIssuer LibertyBroadband(params string[] statedCandidates) =>
         new()
         {
             Id = Issuer,
             PresentationTicker = "LBRDK",
             PresentationIdentified = true,
             RetiredSiblingTickers = ["LBRDA"],
+            RetiredCusipStatements =
+            [
+                new RetiredCusipStatement
+                {
+                    Ticker = "LBRDA",
+                    Candidates =
+                        statedCandidates.Length > 0 ? [.. statedCandidates] : ["530307107"],
+                },
+            ],
         };
 
     [Fact]
@@ -316,7 +325,43 @@ public class HoldingLabelConvergencePlanTests
             PresentationTicker = "LBRDK",
             PresentationIdentified = false,
             RetiredSiblingTickers = ["LBRDA"],
+            RetiredCusipStatements =
+            [
+                new RetiredCusipStatement { Ticker = "LBRDA", Candidates = ["530307107"] },
+            ],
         };
+        AdmitRetiredSiblings(issuer, [("LBRDK", "a-1"), ("LBRDA", "a-1")]);
+
+        Plan(
+                [Label("530307107", null)],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = issuer },
+                Mapping(("530307107", Issuer, "LBRDA"))
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    // Co-registration proves a distinct class, not that the CUSIP it holds is its own.
+    [Fact]
+    public void Plan_RetiredSiblingHoldingACusipTheArchiveNeverStatedForIt_StaysPut()
+    {
+        var issuer = LibertyBroadband("530307999");
+        AdmitRetiredSiblings(issuer, [("LBRDK", "a-1"), ("LBRDA", "a-1")]);
+
+        Plan(
+                [Label("530307107", null)],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = issuer },
+                Mapping(("530307107", Issuer, "LBRDA"))
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    // Two staged candidates mean the archive stated no single CUSIP for the symbol.
+    [Fact]
+    public void Plan_RetiredSiblingWithSeveralStagedCandidates_StaysPut()
+    {
+        var issuer = LibertyBroadband("530307107", "530307999");
         AdmitRetiredSiblings(issuer, [("LBRDK", "a-1"), ("LBRDA", "a-1")]);
 
         Plan(

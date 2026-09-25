@@ -684,8 +684,9 @@ public class EquityIdentityManager
     /// class trading as <paramref name="siblingTicker"/>, which the caller proved is distinct.
     /// </summary>
     /// <remarks>
-    /// The holder keeps only its own listed claim, promoted when it is the presentation. The sibling
-    /// receives the CUSIP as its security's when it is the presentation, as a listed claim otherwise.
+    /// The holder keeps only its own listed claim, promoted when it is the presentation and the
+    /// claim is uncontested. The sibling receives the CUSIP as its security's when it is the
+    /// presentation, as a listed claim otherwise.
     /// </remarks>
     public async Task<bool> ReassignSiblingCusip(
         Guid issuerId,
@@ -769,7 +770,11 @@ public class EquityIdentityManager
             )
             .ToList();
         holder.Cusip = null;
-        if (holder.Id == presentationSecurityId && holderClaims.Count == 1)
+        if (
+            holder.Id == presentationSecurityId
+            && holderClaims.Count == 1
+            && await IsSoleClaim(holderClaims[0], cancellationToken)
+        )
         {
             holder.Cusip = holderClaims[0].Cusip.ToUpperInvariant();
             _commonStockRepository.DeleteListedCusip(holderClaims[0]);
@@ -805,6 +810,31 @@ public class EquityIdentityManager
             cancellationToken
         );
         return true;
+    }
+
+    // A listed CUSIP also held by a security, an alias or another listing is contested, and
+    // promoting it would let one claim win where the resolver drops all of them.
+    private async Task<bool> IsSoleClaim(
+        EquityListingCusipEvidence claim,
+        CancellationToken cancellationToken
+    )
+    {
+        var cusip = claim.Cusip.ToUpperInvariant();
+        return !await _commonStockRepository
+                .GetSecurities()
+                .AnyAsync(
+                    security => security.Cusip != null && security.Cusip.ToUpper() == cusip,
+                    cancellationToken
+                )
+            && !await _commonStockRepository
+                .GetCusipAliases()
+                .AnyAsync(alias => alias.Cusip.ToUpper() == cusip, cancellationToken)
+            && !await _commonStockRepository
+                .GetListedCusips()
+                .AnyAsync(
+                    listing => listing.Id != claim.Id && listing.Cusip.ToUpper() == cusip,
+                    cancellationToken
+                );
     }
 
     // The one security whose only US ticker is this symbol; anything else is ambiguous.

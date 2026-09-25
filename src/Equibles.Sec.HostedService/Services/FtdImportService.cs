@@ -1852,7 +1852,7 @@ public class FtdImportService
 
     /// <summary>
     /// Moves a CUSIP to the co-registered sibling class the SEC's fails file states it for, reading
-    /// the newest twelve fortnightly files at most once a week.
+    /// the newest sixteen half-month files at most once a week.
     /// </summary>
     public async Task<int> ReconcileSiblingCusipsFromArchive(CancellationToken cancellationToken)
     {
@@ -1860,32 +1860,6 @@ public class FtdImportService
         {
             if (!await SiblingReconcileDue(cancellationToken))
                 return 0;
-
-            var records = new List<FtdRecord>();
-            foreach (
-                var fileName in GetFileNames(OldestAvailableDate).TakeLast(SiblingReconcileFiles)
-            )
-            {
-                try
-                {
-                    records.AddRange(await DownloadAndParse(fileName, cancellationToken));
-                }
-                catch (HttpRequestException ex)
-                    when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    // An unpublished or permanently missing file carries no observation.
-                }
-                catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
-                {
-                    // A partial window could make an older symbol look current, so skip this week.
-                    _logger.LogWarning(
-                        ex,
-                        "Sibling-CUSIP reconcile: failed to read {File}; retrying next cycle",
-                        fileName
-                    );
-                    return 0;
-                }
-            }
 
             using var scope = _scopeFactory.CreateScope();
             EquityIssuerRepository stockRepo =
@@ -1908,6 +1882,43 @@ public class FtdImportService
                         .ToList()
                 ))
                 .ToListAsync(cancellationToken);
+            // Only a held CUSIP can move, so every other row is dropped as each file is read.
+            var heldCusips = securities
+                .Where(security => security.Cusip != null)
+                .Select(security => security.Cusip.ToUpperInvariant())
+                .ToHashSet(StringComparer.Ordinal);
+
+            var records = new List<FtdRecord>();
+            foreach (
+                var fileName in GetFileNames(OldestAvailableDate).TakeLast(SiblingReconcileFiles)
+            )
+            {
+                try
+                {
+                    records.AddRange(
+                        (await DownloadAndParse(fileName, cancellationToken)).Where(record =>
+                            record.Cusip != null
+                            && heldCusips.Contains(record.Cusip.Trim().ToUpperInvariant())
+                        )
+                    );
+                }
+                catch (HttpRequestException ex)
+                    when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    // An unpublished or permanently missing file carries no observation.
+                }
+                catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
+                {
+                    // A partial window could make an older symbol look current, so skip this week.
+                    _logger.LogWarning(
+                        ex,
+                        "Sibling-CUSIP reconcile: failed to read {File}; retrying next cycle",
+                        fileName
+                    );
+                    return 0;
+                }
+            }
+
             var candidateIssuers = securities
                 .GroupBy(security => security.EquityIssuerId)
                 .Where(group => group.Count() > 1)
@@ -1972,8 +1983,9 @@ public class FtdImportService
 
     private const string SiblingReconcileStateName = "Ftd.SiblingCusipReconcileV1";
 
-    // Twelve fortnightly files cover six months, long enough for a thinly failed class to appear.
-    private const int SiblingReconcileFiles = 12;
+    // The newest two or three half-month files are not yet published, so sixteen reach back about
+    // six months, long enough for a thinly failed class to appear.
+    private const int SiblingReconcileFiles = 16;
 
     private static readonly TimeSpan SiblingReconcileInterval = TimeSpan.FromDays(7);
 

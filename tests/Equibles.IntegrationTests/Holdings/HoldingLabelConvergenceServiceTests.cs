@@ -272,7 +272,19 @@ public class HoldingLabelConvergenceServiceTests : IAsyncLifetime
         (await Reload(classA)).ListedTicker.Should().BeNull();
     }
 
-    private async Task RetireClassA(bool coRegistered)
+    // Co-registration proves a distinct class, not that the CUSIP it holds is its own.
+    [Fact]
+    public async Task Converge_KeepsHistoryOffARetiredClassUnderACusipNeverStatedForIt()
+    {
+        await RetireClassA(coRegistered: true, statedCusip: "115637999");
+        var classA = await SeedHolding(ClassACusip, null, shares: 3);
+
+        (await CreateService().Converge(CancellationToken.None)).Should().Be(0);
+
+        (await Reload(classA)).ListedTicker.Should().BeNull();
+    }
+
+    private async Task RetireClassA(bool coRegistered, string statedCusip = ClassACusip)
     {
         await using var seed = FreshContext();
         var classA = await seed.Set<EquityListing>()
@@ -280,6 +292,16 @@ public class HoldingLabelConvergenceServiceTests : IAsyncLifetime
         classA.Active = false;
         classA.IsDirectoryListed = false;
         classA.DelistedOn = Quarter.AddDays(30);
+        seed.Set<EquityListingRetirementEvidence>()
+            .Add(
+                new EquityListingRetirementEvidence
+                {
+                    EquityIssuerId = _issuerId,
+                    ListedTicker = "BF-A",
+                    DelistedOn = classA.DelistedOn.Value,
+                    Cusip = statedCusip,
+                }
+            );
         seed.Set<IssuerSecurityRegistration>()
             .AddRange(
                 new IssuerSecurityRegistration

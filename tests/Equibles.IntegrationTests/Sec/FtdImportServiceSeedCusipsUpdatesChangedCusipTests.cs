@@ -1552,6 +1552,199 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             .Be("G03456129");
     }
 
+    [Fact]
+    public async Task ReconcileSiblingCusipsFromArchive_AFileFailsToDownload_SkipsTheWeekUnstamped()
+    {
+        await SeedArcadia();
+        var sec = Substitute.For<ISecEdgarClient>();
+        var zip = FailsZip("20260728|G03456129|AMACU|100|ARCADIA UNITS|10.05");
+        var calls = 0;
+        sec.DownloadStream(Arg.Any<string>())
+            .Returns(_ =>
+                ++calls == 3
+                    ? throw new HttpRequestException(
+                        "unavailable",
+                        null,
+                        System.Net.HttpStatusCode.ServiceUnavailable
+                    )
+                    : new MemoryStream(zip)
+            );
+        var sut = CreateSut(Substitute.For<IBus>(), sec);
+
+        (await sut.ReconcileSiblingCusipsFromArchive(CancellationToken.None)).Should().Be(0);
+        (await sut.ReconcileSiblingCusipsFromArchive(CancellationToken.None))
+            .Should()
+            .Be(1, "a skipped week leaves the gate unstamped");
+    }
+
+    [Fact]
+    public async Task ReconcileSiblingCusipsFromArchive_AMissingFile_IsSkipped()
+    {
+        await SeedArcadia();
+        var sec = Substitute.For<ISecEdgarClient>();
+        var zip = FailsZip("20260728|G03456129|AMACU|100|ARCADIA UNITS|10.05");
+        var calls = 0;
+        sec.DownloadStream(Arg.Any<string>())
+            .Returns(_ =>
+                ++calls % 2 == 0
+                    ? throw new HttpRequestException(
+                        "missing",
+                        null,
+                        System.Net.HttpStatusCode.NotFound
+                    )
+                    : new MemoryStream(zip)
+            );
+
+        (
+            await CreateSut(Substitute.For<IBus>(), sec)
+                .ReconcileSiblingCusipsFromArchive(CancellationToken.None)
+        )
+            .Should()
+            .Be(1);
+    }
+
+    // The latest observation decides, whatever order the files arrive in.
+    [Fact]
+    public async Task ReconcileSiblingCusipsFromArchive_ANewerFileStatesTheHolder_KeepsTheCusip()
+    {
+        await SeedArcadia();
+        var sec = Substitute.For<ISecEdgarClient>();
+        var newer = FailsZip("20260728|G03456129|AMAC|100|ARCADIA ACQUISITION|10.05");
+        var older = FailsZip("20260615|G03456129|AMACU|100|ARCADIA UNITS|10.05");
+        var calls = 0;
+        sec.DownloadStream(Arg.Any<string>())
+            .Returns(_ => new MemoryStream(++calls == 1 ? newer : older));
+
+        (
+            await CreateSut(Substitute.For<IBus>(), sec)
+                .ReconcileSiblingCusipsFromArchive(CancellationToken.None)
+        )
+            .Should()
+            .Be(0);
+
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("G03456129");
+    }
+
+    // A preferred class holding the common's CUSIP hands it to the presentation itself.
+    [Fact]
+    public async Task ReassignSiblingCusip_ToThePresentation_SetsItsSecurityCusip()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SRG",
+            Name: "Seritage Growth Properties",
+            Cik: "1628063",
+            SecondaryTickers: ["SRG-PA"]
+        );
+        var preferred = stock.Securities.Single(security =>
+            security.Listings.Any(listing => listing.Ticker == "SRG-PA")
+        );
+        preferred.Cusip = "81752R100";
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<EquityIssuer>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+        var bus = Substitute.For<IBus>();
+        var manager = new EquityIdentityManager(new EquityIssuerRepository(FreshContext()), bus);
+
+        (await manager.ReassignSiblingCusip(stock.Id, "81752R100", "SRG-PA", "SRG"))
+            .Should()
+            .BeTrue();
+
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("81752R100");
+        (await verify.Set<EquitySecurity>().SingleAsync(security => security.Id == preferred.Id))
+            .Cusip.Should()
+            .BeNull();
+        (await verify.Set<EquityListingCusipEvidence>().AnyAsync()).Should().BeFalse();
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockCusipChanged>(e => e.PreviousCusip == null && e.Cusip == "81752R100"),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task ReassignSiblingCusip_AnAliasedCusip_Refuses()
+    {
+        var stock = await SeedArcadia();
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            var other = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "OTHR",
+                Name: "Other Corp",
+                Cik: "2050002"
+            );
+            seed.Set<EquityIssuer>().Add(other);
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(new EquityIssuerCusipAlias { EquityIssuerId = other.Id, Cusip = "G03456129" });
+            await seed.SaveChangesAsync();
+        }
+        var manager = new EquityIdentityManager(
+            new EquityIssuerRepository(FreshContext()),
+            Substitute.For<IBus>()
+        );
+
+        (await manager.ReassignSiblingCusip(stock.Id, "G03456129", "AMAC", "AMACU"))
+            .Should()
+            .BeFalse();
+    }
+
+    // Promoting a contested claim would let it win where the resolver drops every contender.
+    [Fact]
+    public async Task ReassignSiblingCusip_PresentationClaimAlsoAliased_MovesWithoutPromoting()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "FGBI",
+            Name: "First Guaranty Bancshares",
+            Cik: "1408534",
+            Cusip: "32043P205",
+            SecondaryTickers: ["FGBIP"]
+        );
+        var other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OTHR",
+            Name: "Other Corp",
+            Cik: "2050002"
+        );
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<EquityIssuer>().AddRange(stock, other);
+            seed.Set<EquityListingCusipEvidence>()
+                .Add(
+                    new EquityListingCusipEvidence
+                    {
+                        EquityIssuerId = stock.Id,
+                        ListedTicker = "FGBI",
+                        Cusip = "32043P106",
+                    }
+                );
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(new EquityIssuerCusipAlias { EquityIssuerId = other.Id, Cusip = "32043P106" });
+            await seed.SaveChangesAsync();
+        }
+        var manager = new EquityIdentityManager(
+            new EquityIssuerRepository(FreshContext()),
+            Substitute.For<IBus>()
+        );
+
+        (await manager.ReassignSiblingCusip(stock.Id, "32043P205", "FGBI", "FGBIP"))
+            .Should()
+            .BeTrue();
+
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync(issuer => issuer.Id == stock.Id))
+            .Presentation.Listing.Security.Cusip.Should()
+            .BeNull();
+        (await verify.Set<EquityListingCusipEvidence>().Select(e => e.Cusip).ToListAsync())
+            .Should()
+            .BeEquivalentTo(["32043P106", "32043P205"]);
+    }
+
     private async Task<EquityIssuer> SeedArcadia()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
