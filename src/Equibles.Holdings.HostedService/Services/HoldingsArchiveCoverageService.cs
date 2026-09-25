@@ -98,8 +98,8 @@ public class HoldingsArchiveCoverageService(
             .Where(row => row.ResolvedAt == null)
             .Select(row => row.AccessionNumber)
             .ToHashSetAsync(cancellationToken);
-        var expected =
-            new HashSet<(Guid Issuer, string Cusip, ShareType Shares, OptionType? Option)>();
+        var additions = await ReadAdditionKeys(context, selected, cancellationToken);
+        var expected = new Dictionary<PositionKey, HashSet<string>>();
         string accession = null;
         var checkedFilings = 0;
         var missingFilings = 0;
@@ -123,6 +123,7 @@ public class HoldingsArchiveCoverageService(
                 )
                 .Select(row => new
                 {
+                    row.Id,
                     row.EquityIssuerId,
                     row.Cusip,
                     row.ShareType,
@@ -148,17 +149,31 @@ public class HoldingsArchiveCoverageService(
                 return;
             }
             checkedFilings++;
-            var actual = stored
-                .Select(row =>
-                    (
-                        row.EquityIssuerId,
-                        row.Cusip?.ToUpperInvariant(),
-                        row.ShareType,
-                        row.OptionType
-                    )
+            var actual = stored.ToLookup(row =>
+                (row.EquityIssuerId, row.Cusip?.ToUpperInvariant(), row.ShareType, row.OptionType)
+            );
+            var matched = new HashSet<Guid>();
+            var complete = true;
+            foreach (var (key, cusips) in expected)
+            {
+                // NEW HOLDINGS replaces overlapping persistence keys, but leaves the rest of
+                // the base book intact. Do not demand the overwritten CUSIP from an older key.
+                if (
+                    additions.TryGetValue((submission.Cik, key), out var addition)
+                    && HoldingsImportService.CompareByFilingDateThenAccession(addition, submission)
+                        > 0
                 )
-                .ToHashSet();
-            if (expected.IsSubsetOf(actual))
+                    continue;
+                // The importer merges source CUSIPs at this exact listing/share/option key.
+                // A stored representative must belong to that source group. Its display label
+                // may have been retained by replay; multiple observations stay a refusal.
+                var matches = cusips
+                    .SelectMany(cusip => actual[(key.Issuer, cusip, key.Shares, key.Option)])
+                    .ToList();
+                if (matches.Count != 1 || !matched.Add(matches[0].Id))
+                    complete = false;
+            }
+            if (complete)
                 return;
             missingFilings++;
             if (!pending.Add(accession))
@@ -193,14 +208,10 @@ public class HoldingsArchiveCoverageService(
             var cusip = GetValue(row, "CUSIP");
             if (!context.CusipMapping.TryGetValue(cusip, out var target))
                 continue;
-            expected.Add(
-                (
-                    target.CommonStockId,
-                    cusip.ToUpperInvariant(),
-                    ParseShareType(GetValue(row, "SSHPRNAMTTYPE")),
-                    ParseOptionType(GetValue(row, "PUTCALL"))
-                )
-            );
+            var key = Key(target, row);
+            if (!expected.TryGetValue(key, out var cusips))
+                expected[key] = cusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            cusips.Add(cusip.ToUpperInvariant());
         }
         await Check();
         if (missingFilings > 0)
@@ -212,5 +223,55 @@ public class HoldingsArchiveCoverageService(
             missingFilings,
             laterFilings
         );
+    }
+
+    private readonly record struct PositionKey(
+        Guid Issuer,
+        string ListedTicker,
+        ShareType Shares,
+        OptionType? Option
+    );
+
+    private static PositionKey Key(CusipTarget target, Dictionary<string, string> row) =>
+        new(
+            target.CommonStockId,
+            target.ListedTicker,
+            ParseShareType(GetValue(row, "SSHPRNAMTTYPE")),
+            ParseOptionType(GetValue(row, "PUTCALL"))
+        );
+
+    private static async Task<
+        Dictionary<(string Cik, PositionKey Position), SubmissionRow>
+    > ReadAdditionKeys(
+        ImportContext context,
+        Dictionary<string, SubmissionRow> selected,
+        CancellationToken cancellationToken
+    )
+    {
+        var additions = selected
+            .Where(pair => HoldingsImportService.IsNewHoldingsAmendment(pair.Key, context))
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+        var latest = new Dictionary<(string Cik, PositionKey Position), SubmissionRow>();
+        if (additions.Count == 0)
+            return latest;
+        // Retain only additive-amendment keys, rather than buffering the whole quarterly corpus.
+        await foreach (
+            var row in context.TsvParser.ParseEntry(FindEntry(context.Archive, "INFOTABLE.tsv"))
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (
+                !additions.TryGetValue(GetValue(row, "ACCESSION_NUMBER"), out var submission)
+                || !context.CusipMapping.TryGetValue(GetValue(row, "CUSIP"), out var target)
+            )
+                continue;
+            var key = (submission.Cik, Key(target, row));
+            if (
+                !latest.TryGetValue(key, out var previous)
+                || HoldingsImportService.CompareByFilingDateThenAccession(submission, previous) > 0
+            )
+                latest[key] = submission;
+        }
+        return latest;
     }
 }

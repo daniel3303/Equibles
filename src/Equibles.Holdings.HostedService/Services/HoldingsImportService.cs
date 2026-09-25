@@ -1015,7 +1015,7 @@ public class HoldingsImportService
         return latestByCik;
     }
 
-    private static int CompareByFilingDateThenAccession(SubmissionRow left, SubmissionRow right)
+    internal static int CompareByFilingDateThenAccession(SubmissionRow left, SubmissionRow right)
     {
         TryParseDateOnly(left.FilingDate, out var leftDate);
         TryParseDateOnly(right.FilingDate, out var rightDate);
@@ -1515,7 +1515,7 @@ public class HoldingsImportService
         }
     }
 
-    private static bool IsNewHoldingsAmendment(string accession, ImportContext context)
+    internal static bool IsNewHoldingsAmendment(string accession, ImportContext context)
     {
         return context.CoverPages != null
             && context.CoverPages.TryGetValue(accession, out var coverPage)
