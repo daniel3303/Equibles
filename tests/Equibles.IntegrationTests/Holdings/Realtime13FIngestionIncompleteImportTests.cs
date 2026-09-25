@@ -143,10 +143,11 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
                 .Returns<string>(_ => throw new HttpRequestException("Submission unavailable"));
         if (completeSubmission)
         {
-            var cover = PrimaryDoc().Replace(
-                "</formData>",
-                "<summaryPage><tableEntryTotal>1</tableEntryTotal><tableValueTotal>1</tableValueTotal></summaryPage></formData>"
-            );
+            var cover = PrimaryDoc()
+                .Replace(
+                    "</formData>",
+                    "<summaryPage><tableEntryTotal>1</tableEntryTotal><tableValueTotal>1</tableValueTotal></summaryPage></formData>"
+                );
             var submission = $"""
                 <SEC-DOCUMENT>
                 <DOCUMENT>

@@ -37,7 +37,8 @@ internal static class Filing13FSubmissionParser
                     header.Descendants().Where(element => element.Name.LocalName == "cik")
                 )
                 .Select(element => element.Value.Trim().TrimStart('0'))
-                .ToList() ?? [];
+                .ToList()
+            ?? [];
         if (declaredCiks.Count != 1 || declaredCiks[0] != entry.Cik.TrimStart('0'))
             return null;
 

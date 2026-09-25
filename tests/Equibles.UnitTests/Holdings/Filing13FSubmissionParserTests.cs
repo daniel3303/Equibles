@@ -171,7 +171,11 @@ public class Filing13FSubmissionParserTests
         await act.Should().ThrowAsync<OperationCanceledException>();
         await edgar
             .DidNotReceive()
-            .GetFilingArtifactNames(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .GetFilingArtifactNames(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
