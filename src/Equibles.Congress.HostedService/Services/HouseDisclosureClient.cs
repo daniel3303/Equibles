@@ -553,15 +553,18 @@ public partial class HouseDisclosureClient
         PtrHeaderTokens.Count(token => line.Contains(token, StringComparison.OrdinalIgnoreCase))
         >= 3;
 
-    // A filed row prints its dates AND the start of its amount range ("$15,001 -") on the
-    // anchor line, so a dated line with a range start and no anchor is a row the parser could
-    // not read. A dated line without one is a wrapped bond name that continues its row: a
-    // maturity ("Due 10/1/2033 [GS] $50,000", only the upper bound wraps) or a maturity plus a
-    // dated date ("09/15/2166 DTD 12/06/2017 [Cs]"), which carries two dates of its own.
+    // A filed row prints its transaction and notification dates side by side, then its amount,
+    // so a line without an anchor but with two adjacent dates or a date and a range start
+    // ("$15,001 -") is a row the parser could not read. Any other dated line is a wrapped bond
+    // name that continues its row: a maturity ("Due 10/1/2033 [GS] $50,000", only the upper
+    // bound wraps) or a maturity and its dated date ("09/15/2166 DTD 12/06/2017 [Cs]").
     private static bool LooksLikeMalformedTransactionRow(string line) =>
         !IsFieldLabelLine(line)
         && DateTokenRegex().IsMatch(line)
-        && AmountRangeStartRegex().IsMatch(line);
+        && (AdjacentDatesRegex().IsMatch(line) || AmountRangeStartRegex().IsMatch(line));
+
+    [GeneratedRegex(@"\b\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}/\d{1,2}/\d{4}\b")]
+    private static partial Regex AdjacentDatesRegex();
 
     // "$15,001 -", the top bracket "$50,000,001 +", or "Over $50,000,000".
     [GeneratedRegex(@"\$\s*[\d,]+(?:\.\d+)?\s*[-+]|\b(?i:over)\s*\$")]

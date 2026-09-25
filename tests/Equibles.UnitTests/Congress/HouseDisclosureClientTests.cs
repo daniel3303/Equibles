@@ -385,6 +385,27 @@ public class HouseDisclosureClientTests
         result.Transactions[1].Ticker.Should().Be("HDS");
     }
 
+    [Theory]
+    // An exact amount carries no range start; the lower-case "p" is not a marker we accept.
+    [InlineData("sP Microsoft Corp. (msFT) [sT] p 04/01/2024 04/02/2024 $982.18")]
+    // An unknown type letter with both dates and no amount at all.
+    [InlineData("Microsoft Corp. (MSFT) [ST] X 04/01/2024 04/02/2024")]
+    public void ParseTransactionLinesWithShape_UnanchoredLineWithAdjacentDates_IsRejectedNotGlued(
+        string unreadableRow
+    )
+    {
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            ["Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000", unreadableRow],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.RejectedSourceRowCount.Should().Be(1);
+        var apple = result.Transactions.Should().ContainSingle().Subject;
+        apple.AssetName.Should().Be("Apple Inc. (AAPL)");
+        apple.AssetType.Should().BeNull();
+    }
+
     [Fact]
     public void ParseTransactionLinesWithShape_UnreadableRowWithTopBracketAmount_IsRejected()
     {
