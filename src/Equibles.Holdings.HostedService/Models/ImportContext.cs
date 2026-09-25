@@ -22,6 +22,7 @@ public class ImportContext
     // Populated by phases
     public Dictionary<string, SubmissionRow> Submissions { get; set; }
     public Dictionary<string, CoverPageRow> CoverPages { get; set; }
+    public HashSet<string> InfoTableAccessions { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     // CUSIP → the exact security it identifies: the filer row plus the listed ticker when
     // the CUSIP belongs to one of the filer's SECONDARY listings (null = the primary or a

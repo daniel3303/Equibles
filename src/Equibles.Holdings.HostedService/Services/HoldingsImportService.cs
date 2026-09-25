@@ -105,7 +105,6 @@ public class HoldingsImportService
         await ParseOtherManagers(context, cancellationToken);
         await ParseOtherManagerCoverList(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
-        await HandleAmendments(context, cancellationToken);
         var holdingsResult = await StreamAndInsertHoldings(context, cancellationToken);
         await FlushFilingOtherManagers(context, cancellationToken);
         await RecordConflictedFilings(
@@ -501,6 +500,8 @@ public class HoldingsImportService
             var accession = GetValue(row, AccessionNumberColumn);
             if (!context.Submissions.TryGetValue(accession, out var submission))
                 continue;
+
+            context.InfoTableAccessions.Add(accession);
 
             var cusip = GetValue(row, "CUSIP");
             if (string.IsNullOrEmpty(cusip))
@@ -1015,7 +1016,7 @@ public class HoldingsImportService
         return latestByCik;
     }
 
-    private static int CompareByFilingDateThenAccession(SubmissionRow left, SubmissionRow right)
+    internal static int CompareByFilingDateThenAccession(SubmissionRow left, SubmissionRow right)
     {
         TryParseDateOnly(left.FilingDate, out var leftDate);
         TryParseDateOnly(right.FilingDate, out var rightDate);
@@ -1414,108 +1415,52 @@ public class HoldingsImportService
         };
     }
 
-    private async Task HandleAmendments(ImportContext context, CancellationToken cancellationToken)
+    private async Task HandleAmendment(
+        EquiblesFinancialDbContext dbContext,
+        string accession,
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
     {
-        using var scope = _scopeFactory.CreateScope();
-        var holdingRepo =
-            scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
-
-        foreach (var (accession, submission) in context.Submissions)
-        {
-            if (
-                !TryResolveAmendmentTarget(
-                    accession,
-                    submission,
-                    context,
-                    out var holderId,
-                    out var reportDate,
-                    out var filingType
-                )
-            )
-                continue;
-
-            // "NEW HOLDINGS" amendments add positions to the existing portfolio;
-            // only "RESTATEMENT" amendments (and legacy filings without the field)
-            // replace the entire set.
-            if (IsNewHoldingsAmendment(accession, context))
-            {
-                _logger.LogInformation(
-                    "Amendment {Accession} is NEW HOLDINGS — merging without deleting existing positions",
-                    accession
-                );
-                continue;
-            }
-
-            // Scope the delete to the amendment's OWN filing type. A holder can
-            // file a 13F-HR and a Schedule 13D/G whose report dates collide on the
-            // same quarter end (BlackRock's monthly 13G/A amendments land on
-            // 31 Mar / 31 Dec — exactly the 13F quarter ends), and the upsert key
-            // keeps them as distinct rows. Deleting by (holder, reportDate) alone
-            // let a 13G/A restatement wipe the entire 13F-HR portfolio at that
-            // quarter (#3738), so a $5T filer vanished from the AUM rankings.
-            // Restatements only ever replace their own form's rows.
-            var existingQuery = holdingRepo
-                .GetAll()
-                .Where(h =>
-                    h.InstitutionalHolderId == holderId
-                    && h.ReportDate == reportDate
-                    && h.FilingType == filingType
-                );
-
-            // A 13F restatement replaces the holder's whole portfolio for the
-            // quarter, but a Schedule 13D/G filing covers a SINGLE security — its
-            // delete must be scoped to the exact (issuer, listing) pairs the
-            // amendment itself reports, not the whole issuer. Passive filers
-            // amend many issuers with the same event date (year/quarter end);
-            // an unscoped delete let each 13G/A wipe every other issuer's stake
-            // at that date, and a stock-grained one wipes the SIBLING CLASS's
-            // stake when a filer holds two classes — and since the wiped
-            // accessions stay recorded as processed and no bulk data set exists
-            // for 13D/G, either loss is permanent and silent.
-            var deleted = 0;
-            if (filingType != FilingType.Form13F)
-            {
-                if (
-                    !context.ScheduleAccessionTargets.TryGetValue(accession, out var issuerTargets)
-                    || issuerTargets.Count == 0
-                )
-                    continue;
-
-                foreach (var target in issuerTargets)
-                {
-                    // One DELETE per (issuer, listing) pair — an accession names one
-                    // security, at most a handful. A null listing compares as IS NULL.
-                    deleted += await existingQuery
-                        .Where(h =>
-                            h.EquityIssuerId == target.CommonStockId
-                            && h.ListedTicker == target.ListedTicker
-                        )
-                        .ExecuteDeleteAsync(cancellationToken);
-                }
-            }
-            else
-            {
-                // Set-based delete: materialising a large filer's whole portfolio
-                // into the change tracker (and deleting row-by-id) accumulated
-                // hundreds of thousands of tracked entities across a bulk data
-                // set's restatements; one DELETE statement per amendment does the
-                // same work with zero materialisation.
-                deleted = await existingQuery.ExecuteDeleteAsync(cancellationToken);
-            }
-
-            if (deleted > 0)
-            {
-                _logger.LogInformation(
-                    "Deleted {Count} {FilingType} holdings for RESTATEMENT amendment {Accession}",
-                    deleted,
-                    filingType,
-                    accession
-                );
-            }
-        }
+        if (
+            !TryResolveAmendmentTarget(
+                accession,
+                context.Submissions[accession],
+                context,
+                out var holderId,
+                out var reportDate,
+                out var filingType
+            ) || IsNewHoldingsAmendment(accession, context)
+        )
+            return;
+        var existing = dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.InstitutionalHolderId == holderId
+                && h.ReportDate == reportDate
+                && h.FilingType == filingType
+            );
+        var deleted = 0;
+        if (filingType == FilingType.Form13F)
+            deleted = await existing.ExecuteDeleteAsync(cancellationToken);
+        else if (context.ScheduleAccessionTargets.TryGetValue(accession, out var targets))
+            foreach (var target in targets)
+                deleted += await existing
+                    .Where(h =>
+                        h.EquityIssuerId == target.CommonStockId
+                        && h.ListedTicker == target.ListedTicker
+                    )
+                    .ExecuteDeleteAsync(cancellationToken);
+        if (deleted > 0)
+            _logger.LogInformation(
+                "Deleted {Count} {FilingType} holdings for RESTATEMENT amendment {Accession}",
+                deleted,
+                filingType,
+                accession
+            );
     }
 
-    private static bool IsNewHoldingsAmendment(string accession, ImportContext context)
+    internal static bool IsNewHoldingsAmendment(string accession, ImportContext context)
     {
         return context.CoverPages != null
             && context.CoverPages.TryGetValue(accession, out var coverPage)
@@ -1573,25 +1518,130 @@ public class HoldingsImportService
         var skippedStaleParent = false;
         string currentAccession = null;
 
-        await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
+        // Each pass contains at most one filing per manager/report/form book. SEC's
+        // physical TSV order is not amendment order; bases must commit before additions.
+        // Re-reading the compressed entry keeps memory bounded to one filing.
+        var passes = context
+            .Submissions.Values.GroupBy(submission => new
+            {
+                Cik = CikNormalizer.Canonicalize(submission.Cik),
+                ReportDate = TryParseDateOnly(submission.PeriodOfReport, out var date)
+                    ? date
+                    : DateOnly.MinValue,
+                FilingType = submission.FormType.ToHoldingsFilingType(),
+            })
+            .SelectMany(group =>
+                group
+                    .OrderBy(
+                        submission => submission,
+                        Comparer<SubmissionRow>.Create(CompareByFilingDateThenAccession)
+                    )
+                    .Select((submission, index) => (submission.AccessionNumber, Pass: index))
+            )
+            .GroupBy(item => item.Pass)
+            .OrderBy(group => group.Key)
+            .Select(group =>
+                group
+                    .Select(item => item.AccessionNumber)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            );
+        foreach (var pass in passes)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            currentAccession = null;
+            // Empty and non-empty accessions share the same metadata-order pass.
+            foreach (var emptyAccession in pass.Except(context.InfoTableAccessions))
+            {
+                var flushed = await RepairMergeAndFlush(
+                    emptyAccession,
+                    [],
+                    context,
+                    cancellationToken
+                );
+                skippedStaleParent |= flushed.SkippedStaleParent;
+                if (flushed.Conflicted)
+                    conflictedAccessions.Add(emptyAccession);
+            }
 
-            var accession = GetValue(row, AccessionNumberColumn);
+            await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-            // Flush at the accession boundary, not at a fixed row count. Every
-            // row sharing an upsert key inside one filing lives in that filing's
-            // INFOTABLE section (a holder splits a position across otherManager
-            // codes so the same security can appear several times with rows
-            // scattered hundreds apart). FlushBatch's WhenMatched clause
-            // REPLACES — so if a key's rows fall in different flushes, only
-            // the last one's sum survives. SEC orders the bulk INFOTABLE by
-            // INFOTABLE_SK and the realtime archive by XML element order, so
-            // a single accession's rows are always contiguous; flushing only
-            // when the accession changes guarantees both the per-filing
-            // share-count repair and the in-memory aggregation see the whole
-            // filing before any UPSERT for its keys runs.
-            if (currentAccession != null && accession != currentAccession && bufferedRows.Count > 0)
+                var accession = GetValue(row, AccessionNumberColumn);
+                if (!pass.Contains(accession))
+                    continue;
+
+                // Flush at the accession boundary, not at a fixed row count. Every
+                // row sharing an upsert key inside one filing lives in that filing's
+                // INFOTABLE section (a holder splits a position across otherManager
+                // codes so the same security can appear several times with rows
+                // scattered hundreds apart). FlushBatch's WhenMatched clause
+                // REPLACES — so if a key's rows fall in different flushes, only
+                // the last one's sum survives. SEC orders the bulk INFOTABLE by
+                // INFOTABLE_SK and the realtime archive by XML element order, so
+                // a single accession's rows are always contiguous; flushing only
+                // when the accession changes guarantees both the per-filing
+                // share-count repair and the in-memory aggregation see the whole
+                // filing before any UPSERT for its keys runs.
+                if (
+                    currentAccession != null
+                    && accession != currentAccession
+                    && context.Submissions.ContainsKey(currentAccession)
+                )
+                {
+                    var flushed = await RepairMergeAndFlush(
+                        currentAccession,
+                        bufferedRows,
+                        context,
+                        cancellationToken
+                    );
+                    totalInserted += flushed.Inserted;
+                    totalDuplicates += flushed.Duplicates;
+                    totalPending += flushed.Pending;
+                    skippedStaleParent |= flushed.SkippedStaleParent;
+                    if (flushed.Conflicted)
+                        conflictedAccessions.Add(currentAccession);
+                    bufferedRows.Clear();
+                }
+                currentAccession = accession;
+
+                if (!context.Submissions.TryGetValue(accession, out var submission))
+                    continue;
+
+                var cusip = GetValue(row, "CUSIP");
+                if (!context.CusipMapping.TryGetValue(cusip, out var target))
+                {
+                    totalSkipped++;
+                    RecordUnmappedCusip(context, row, cusip, accession, submission);
+                    continue;
+                }
+
+                if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId))
+                    continue;
+
+                TryParseDateOnly(submission.FilingDate, out var filingDate);
+                TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
+
+                var (holding, managerEntry, _, reportedValue) = ParseHoldingRow(
+                    row,
+                    accession,
+                    cusip,
+                    target,
+                    holderId,
+                    filingDate,
+                    reportDate,
+                    context
+                );
+                bufferedRows.Add(
+                    new BufferedHoldingRow
+                    {
+                        Holding = holding,
+                        ManagerEntry = managerEntry,
+                        ReportedValue = reportedValue,
+                    }
+                );
+            }
+
+            if (currentAccession != null && context.Submissions.ContainsKey(currentAccession))
             {
                 var flushed = await RepairMergeAndFlush(
                     currentAccession,
@@ -1607,60 +1657,6 @@ public class HoldingsImportService
                     conflictedAccessions.Add(currentAccession);
                 bufferedRows.Clear();
             }
-            currentAccession = accession;
-
-            if (!context.Submissions.TryGetValue(accession, out var submission))
-                continue;
-
-            var cusip = GetValue(row, "CUSIP");
-            if (!context.CusipMapping.TryGetValue(cusip, out var target))
-            {
-                totalSkipped++;
-                RecordUnmappedCusip(context, row, cusip, accession, submission);
-                continue;
-            }
-
-            if (!context.CikToHolderId.TryGetValue(submission.Cik, out var holderId))
-                continue;
-
-            TryParseDateOnly(submission.FilingDate, out var filingDate);
-            TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
-
-            var (holding, managerEntry, _, reportedValue) = ParseHoldingRow(
-                row,
-                accession,
-                cusip,
-                target,
-                holderId,
-                filingDate,
-                reportDate,
-                context
-            );
-            bufferedRows.Add(
-                new BufferedHoldingRow
-                {
-                    Holding = holding,
-                    ManagerEntry = managerEntry,
-                    ReportedValue = reportedValue,
-                }
-            );
-        }
-
-        if (bufferedRows.Count > 0)
-        {
-            var flushed = await RepairMergeAndFlush(
-                currentAccession,
-                bufferedRows,
-                context,
-                cancellationToken
-            );
-            totalInserted += flushed.Inserted;
-            totalDuplicates += flushed.Duplicates;
-            totalPending += flushed.Pending;
-            skippedStaleParent |= flushed.SkippedStaleParent;
-            if (flushed.Conflicted)
-                conflictedAccessions.Add(currentAccession);
-            bufferedRows.Clear();
         }
 
         _logger.LogInformation(
@@ -1701,6 +1697,36 @@ public class HoldingsImportService
         CancellationToken cancellationToken
     )
     {
+        // Preserve source identity before repair can remove an unpriceable source leg.
+        // Identity-only copies also validate groups with no surviving writable rows.
+        var identityRows = bufferedRows
+            .Select(row => row.Holding)
+            .GroupBy(BuildHoldingKey)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var row = group.First();
+                    return new InstitutionalHolding
+                    {
+                        EquityIssuerId = row.EquityIssuerId,
+                        InstitutionalHolderId = row.InstitutionalHolderId,
+                        ReportDate = row.ReportDate,
+                        ShareType = row.ShareType,
+                        OptionType = row.OptionType,
+                        FilingType = row.FilingType,
+                        ListedTicker = row.ListedTicker,
+                        Cusip = row.Cusip,
+                    };
+                }
+            );
+        var sourceCusips = bufferedRows
+            .Select(row => row.Holding)
+            .GroupBy(BuildHoldingKey)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => row.Cusip).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            );
         if (Corrupt13FShareCountRepairer.IsSuspect(bufferedRows))
         {
             var outcome = Corrupt13FShareCountRepairer.Repair(bufferedRows, context.StockPrices);
@@ -1734,9 +1760,14 @@ public class HoldingsImportService
         try
         {
             flushResult = await HoldingsBatchPacer.Complete(
-                holdingsMap.Count > 0
-                    ? FlushBatch(holdingsMap.Values.ToList(), cancellationToken)
-                    : Task.FromResult(new HoldingsFlushResult(0, SkippedStaleParent: false)),
+                FlushBatch(
+                    holdingsMap.Values.ToList(),
+                    identityRows,
+                    sourceCusips,
+                    accession,
+                    context,
+                    cancellationToken
+                ),
                 static result => result.Inserted > 0,
                 context.BatchPause,
                 cancellationToken
@@ -2007,14 +2038,35 @@ public class HoldingsImportService
 
     private async Task<HoldingsFlushResult> FlushBatch(
         List<InstitutionalHolding> holdings,
+        Dictionary<string, InstitutionalHolding> identityRows,
+        Dictionary<string, HashSet<string>> sourceCusips,
+        string accession,
+        ImportContext context,
         CancellationToken cancellationToken
     )
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var submission = context.Submissions[accession];
+        if (
+            string.IsNullOrWhiteSpace(submission.Cik)
+            || !context.CikToHolderId.TryGetValue(submission.Cik, out var holderId)
+        )
+            return new HoldingsFlushResult(0, SkippedStaleParent: true);
+        TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
+        var filingType = submission.FormType.ToHoldingsFilingType() ?? FilingType.Form13F;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        var bookLock =
+            $"holdings-book:{holderId}:{reportDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:{(int)filingType}";
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({bookLock}, 0))",
+            cancellationToken
+        );
         // Validate the stable issuer owner immediately before writing. Removing a legacy
         // directory row must not discard an otherwise valid historical position.
-        var issuerIds = holdings.Select(row => row.EquityIssuerId).Distinct().ToArray();
+        var issuerIds = identityRows.Values.Select(row => row.EquityIssuerId).Distinct().ToArray();
         var existingIssuerIds = await dbContext
             .Set<EquityIssuer>()
             .Where(row => issuerIds.Contains(row.Id))
@@ -2023,7 +2075,9 @@ public class HoldingsImportService
         var safeHoldings = holdings
             .Where(row => existingIssuerIds.Contains(row.EquityIssuerId))
             .ToList();
-        var skipped = holdings.Count - safeHoldings.Count;
+        var skipped = identityRows.Values.Count(row =>
+            !existingIssuerIds.Contains(row.EquityIssuerId)
+        );
         if (skipped > 0)
         {
             _logger.LogWarning(
@@ -2031,13 +2085,19 @@ public class HoldingsImportService
                 skipped
             );
         }
-        if (safeHoldings.Count == 0)
-            return new HoldingsFlushResult(0, SkippedStaleParent: skipped > 0);
-
-        await using var transaction =
-            dbContext.Database.CurrentTransaction == null
-                ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
-                : null;
+        if (skipped > 0)
+            return new HoldingsFlushResult(0, SkippedStaleParent: true);
+        var retainedIssuerIds = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(row =>
+                row.InstitutionalHolderId == holderId
+                && row.ReportDate == reportDate
+                && row.FilingType == filingType
+            )
+            .Select(row => row.EquityIssuerId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        issuerIds = issuerIds.Concat(retainedIssuerIds).Distinct().ToArray();
         // Serialise overlapping import batches by stable issuer, including a presentation change
         // between two captures. NO KEY UPDATE remains compatible with dependent-row FK checks.
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
@@ -2046,7 +2106,25 @@ public class HoldingsImportService
             """,
             cancellationToken
         );
-        await PreserveStoredObservationKeys(dbContext, safeHoldings, cancellationToken);
+        await ValidateCapturedCusipMapping(dbContext, sourceCusips, context, cancellationToken);
+        await PreserveStoredObservationKeys(
+            dbContext,
+            identityRows.Values.ToList(),
+            sourceCusips,
+            cancellationToken
+        );
+        foreach (var row in safeHoldings)
+        {
+            var identity = identityRows[BuildHoldingKey(row)];
+            row.Cusip = identity.Cusip;
+            row.ListedTicker = identity.ListedTicker;
+        }
+        await HandleAmendment(dbContext, accession, context, cancellationToken);
+        if (safeHoldings.Count == 0)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new HoldingsFlushResult(0, SkippedStaleParent: false);
+        }
 
         // PostgreSQL takes a KEY SHARE lock on each issuer while checking the holding FK.
         // Bulk and realtime imports can flush overlapping stocks concurrently; one shared parent
@@ -2140,9 +2218,48 @@ public class HoldingsImportService
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
     }
 
+    private static async Task ValidateCapturedCusipMapping(
+        EquiblesFinancialDbContext dbContext,
+        Dictionary<string, HashSet<string>> sourceGroups,
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var sourceCusips = sourceGroups
+            .Values.SelectMany(group => group)
+            .Where(cusip => !string.IsNullOrWhiteSpace(cusip))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Query the database spelling captured by resolution, even when a filing spells
+        // the same identifier with different casing. The dictionary matches case-insensitively.
+        var cusips = context.CusipMapping.Keys.Where(sourceCusips.Contains).ToArray();
+        if (cusips.Length == 0)
+            return;
+        // Identity writers hold the same issuer locks. Re-read after acquiring them:
+        // a lock alone cannot make the mapping captured before a long archive current.
+        // Never acquire the global CUSIP lock here; identity writers take it first.
+        var stockRepo = new EquityIssuerRepository(dbContext);
+        var claims = await HoldingCusipResolution.Load(
+            stockRepo,
+            stockRepo.GetAll(),
+            cusips,
+            cancellationToken
+        );
+        var current = HoldingCusipResolution.Resolve(claims, []);
+        foreach (var cusip in cusips)
+            if (
+                !current.TryGetValue(cusip, out var target)
+                || !context.CusipMapping.TryGetValue(cusip, out var captured)
+                || target != captured
+            )
+                throw new HoldingObservationConflictException(
+                    $"CUSIP {cusip} changed or lost its resolved security during import; retry with a fresh source mapping."
+                );
+    }
+
     private static async Task PreserveStoredObservationKeys(
         EquiblesFinancialDbContext dbContext,
         List<InstitutionalHolding> incoming,
+        Dictionary<string, HashSet<string>> sourceCusips,
         CancellationToken cancellationToken
     )
     {
@@ -2152,16 +2269,19 @@ public class HoldingsImportService
         var keys = JsonSerializer.Serialize(
             incoming
                 .Where(row => row.Cusip != null)
-                .Select(row => new
-                {
-                    row.EquityIssuerId,
-                    row.InstitutionalHolderId,
-                    row.ReportDate,
-                    row.Cusip,
-                    ShareType = (int)row.ShareType,
-                    OptionType = (int?)row.OptionType,
-                    FilingType = (int)row.FilingType,
-                })
+                .SelectMany(row =>
+                    sourceCusips[BuildHoldingKey(row)]
+                        .Select(cusip => new
+                        {
+                            row.EquityIssuerId,
+                            row.InstitutionalHolderId,
+                            row.ReportDate,
+                            Cusip = cusip,
+                            ShareType = (int)row.ShareType,
+                            OptionType = (int?)row.OptionType,
+                            FilingType = (int)row.FilingType,
+                        })
+                )
                 .Distinct()
         );
         var stored = await dbContext
@@ -2181,23 +2301,29 @@ public class HoldingsImportService
             )
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-        static object ObservationKey(InstitutionalHolding row) =>
+        static object ObservationKey(InstitutionalHolding row, string cusip) =>
             new
             {
                 row.EquityIssuerId,
                 row.InstitutionalHolderId,
                 row.ReportDate,
-                row.Cusip,
+                Cusip = cusip,
                 row.ShareType,
                 row.OptionType,
                 row.FilingType,
             };
         var retained = stored
-            .GroupBy(ObservationKey)
+            .GroupBy(row => ObservationKey(row, row.Cusip))
             .ToDictionary(group => group.Key, group => group.ToList());
         foreach (var row in incoming)
         {
-            if (row.Cusip == null || !retained.TryGetValue(ObservationKey(row), out var matches))
+            if (row.Cusip == null)
+                continue;
+            var matches = sourceCusips[BuildHoldingKey(row)]
+                .SelectMany(cusip => retained.GetValueOrDefault(ObservationKey(row, cusip)) ?? [])
+                .DistinctBy(match => match.Id)
+                .ToList();
+            if (matches.Count == 0)
                 continue;
             if (matches.Count != 1)
                 throw new HoldingObservationConflictException(
@@ -2207,6 +2333,7 @@ public class HoldingsImportService
                         + "."
                 );
             row.ListedTicker = matches[0].ListedTicker;
+            row.Cusip = matches[0].Cusip;
         }
         var collision = FindRetainedIdentityCollision(incoming);
         if (collision != null)
