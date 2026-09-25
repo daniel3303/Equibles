@@ -31,6 +31,29 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
             cancellationToken
         );
 
+    // Discovery is not an import attempt and must not postpone an existing retry.
+    public Task EnqueueRecovery(
+        string accession,
+        string cik,
+        DateOnly filed,
+        CancellationToken cancellationToken
+    ) =>
+        DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "HoldingsImportFailure"
+              ("AccessionNumber", "Cik", "FilingDate", "Reason", "Attempts",
+               "FirstFailedAt", "LastAttemptAt", "NextAttemptAt", "ResolvedAt")
+            VALUES ({accession}, {cik}, {filed}, {(int)
+                HoldingsImportFailureReason.PendingRecovery}, 0,
+                    clock_timestamp(), clock_timestamp(), clock_timestamp(), NULL)
+            ON CONFLICT ("AccessionNumber") DO UPDATE SET
+              "ResolvedAt" = NULL, "LastAttemptAt" = clock_timestamp(),
+              "NextAttemptAt" = clock_timestamp()
+            WHERE "HoldingsImportFailure"."ResolvedAt" IS NOT NULL
+            """,
+            cancellationToken
+        );
+
     public Task Resolve(
         string accession,
         CancellationToken cancellationToken,
