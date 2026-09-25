@@ -145,6 +145,27 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Reapply their later tail only after the entire oldest-first bulk pass has finished.
         await ApplyPendingRealtimeReplay(stoppingToken);
 
+        // Position coverage does not depend on valuation. Check it before maintenance can
+        // spend the cycle repricing a large backlog, but let maintenance survive SEC outages.
+        try
+        {
+            await using var auditScope = ScopeFactory.CreateAsyncScope();
+            await auditScope
+                .ServiceProvider.GetRequiredService<HoldingsArchiveCoverageService>()
+                .AuditLatest(minReportDate, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Holdings source coverage audit failed; reconciliation remains pending"
+            );
+        }
+
         // Revise mis-published filed values, heal abandoned zero-value rows (publish the filed
         // figure) and reset implausible derivations for honest repricing. Bounded per cycle;
         // self-terminating once the backlog drains. Runs BEFORE the pending recalculation so a
@@ -162,12 +183,6 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Restamp FilingType on filing rollup rows written before the column existed. Self-
         // terminating like the pass above.
         await BackfillFilingRollupTypes(stoppingToken);
-
-        // A successful import marker is not proof that every tracked source position survived.
-        await using (var auditScope = ScopeFactory.CreateAsyncScope())
-            await auditScope
-                .ServiceProvider.GetRequiredService<HoldingsArchiveCoverageService>()
-                .AuditLatest(minReportDate, stoppingToken);
     }
 
     /// <summary>
