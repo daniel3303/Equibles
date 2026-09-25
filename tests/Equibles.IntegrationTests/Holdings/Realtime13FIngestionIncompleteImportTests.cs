@@ -138,7 +138,8 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
 
         var edgar = Substitute.For<ISecEdgarClient>();
         if (textUnavailable)
-            edgar.GetDocumentContent(Accession, entry.Cik, Arg.Any<CancellationToken>())
+            edgar
+                .GetDocumentContent(Accession, entry.Cik, Arg.Any<CancellationToken>())
                 .Returns<string>(_ => throw new HttpRequestException("Submission unavailable"));
         if (completeSubmission)
         {

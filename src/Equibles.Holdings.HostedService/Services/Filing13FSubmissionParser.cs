@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.BusinessLogic;
@@ -26,8 +27,26 @@ internal static class Filing13FSubmissionParser
         var cover = XmlBody(covers[0].Body);
         if (cover == null)
             return null;
+        // The XML-only parser permits an index fallback; this preferred route must prove its filer.
+        var declaredCiks =
+            XDocument
+                .Parse(cover)
+                .Root?.Elements()
+                .Where(element => element.Name.LocalName == "headerData")
+                .SelectMany(header =>
+                    header.Descendants().Where(element => element.Name.LocalName == "cik")
+                )
+                .Select(element => element.Value.Trim().TrimStart('0'))
+                .ToList() ?? [];
+        if (declaredCiks.Count != 1 || declaredCiks[0] != entry.Cik.TrimStart('0'))
+            return null;
 
-        var filing = parser.ParseCoverPage(cover, entry.AccessionNumber, entry.Cik, entry.DateFiled);
+        var filing = parser.ParseCoverPage(
+            cover,
+            entry.AccessionNumber,
+            entry.Cik,
+            entry.DateFiled
+        );
         if (
             filing.Cik != entry.Cik.TrimStart('0')
             || filing.IsAmendment != (entry.FormType == "13F-HR/A")

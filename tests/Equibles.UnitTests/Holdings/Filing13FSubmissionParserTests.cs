@@ -1,6 +1,6 @@
 using Equibles.Holdings.HostedService.Services;
-using Equibles.Integrations.Sec.Models;
 using Equibles.Integrations.Sec.Contracts;
+using Equibles.Integrations.Sec.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -88,6 +88,7 @@ public class Filing13FSubmissionParserTests
     [InlineData("<tableEntryTotal>2", "<tableEntryTotal>3")]
     [InlineData("<tableValueTotal>300", "<tableValueTotal>301")]
     [InlineData("<cik>0000001234", "<cik>9999")]
+    [InlineData("<cik>0000001234</cik>", "")]
     [InlineData("<TYPE>13F-HR", "<TYPE>13F-HR/A")]
     [InlineData("<TYPE>INFORMATION TABLE", "<TYPE>EX-99")]
     [InlineData("<isAmendment>false", "<isAmendment>true")]
@@ -164,11 +165,46 @@ public class Filing13FSubmissionParserTests
             NullLogger<Realtime13FIngestionService>.Instance
         );
 
-        var act = () => ingestion.IngestSpecificFilings([Entry], DateOnly.MinValue, cancellation.Token);
+        var act = () =>
+            ingestion.IngestSpecificFilings([Entry], DateOnly.MinValue, cancellation.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await edgar
             .DidNotReceive()
             .GetFilingArtifactNames(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void RecordedSecSubmission_PreservesBothCusipsAndOtherManagerLists()
+    {
+        var source = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Holdings",
+                "13f-complete-submission.txt"
+            )
+        );
+        var entry = new EdgarDailyIndexEntry
+        {
+            Cik = "1053906",
+            AccessionNumber = "0001053906-23-000008",
+            DateFiled = new DateOnly(2023, 8, 11),
+            FormType = "13F-HR",
+        };
+
+        var filing = Filing13FSubmissionParser.Parse(source, entry, new());
+
+        filing.Should().NotBeNull();
+        filing.PeriodOfReport.Should().Be(new DateOnly(2023, 6, 30));
+        filing.Holdings.Should().HaveCount(119);
+        filing.Holdings.Sum(h => h.Value).Should().Be(3_226_843);
+        var current = filing.Holdings.Single(h => h.Cusip == "23255M204");
+        var predecessor = filing.Holdings.Single(h => h.Cusip == "23255M105");
+        current.Shares.Should().Be(138_403);
+        current.OtherManagers.Should().Be("1,2,3,4,5");
+        predecessor.Shares.Should().Be(552);
+        predecessor.OtherManagers.Should().Be("1,2,3,4");
+        filing.OtherManagers.Should().ContainKeys(1, 2, 3, 4, 5);
     }
 }
