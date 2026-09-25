@@ -119,13 +119,18 @@ public class HoldingLabelConvergenceService
                     .ToList(),
             });
 
+    // Only primary rows and presentation-ticker rows can move, and both filters are conditions on
+    // the unique index, so an issuer holding millions of sibling-labelled rows is never heap-read.
     internal static IQueryable<StoredLabel> BuildStoredLabelQuery(
         EquiblesFinancialDbContext dbContext,
-        Guid[] issuerIds
+        Guid issuerId,
+        string listedTicker
     ) =>
         dbContext
             .Set<InstitutionalHolding>()
-            .Where(holding => issuerIds.Contains(holding.EquityIssuerId))
+            .Where(holding =>
+                holding.EquityIssuerId == issuerId && holding.ListedTicker == listedTicker
+            )
             .GroupBy(holding => new
             {
                 holding.EquityIssuerId,
@@ -278,8 +283,19 @@ public class HoldingLabelConvergenceService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var issuers = batch.ToDictionary(entry => entry.Issuer.Id, entry => entry.Issuer);
-            var labels = await BuildStoredLabelQuery(dbContext, [.. issuers.Keys])
-                .ToListAsync(cancellationToken);
+            var labels = new List<StoredLabel>();
+            foreach (var issuer in issuers.Values)
+            {
+                labels.AddRange(
+                    await BuildStoredLabelQuery(dbContext, issuer.Id, null)
+                        .ToListAsync(cancellationToken)
+                );
+                if (issuer.PresentationTicker != null)
+                    labels.AddRange(
+                        await BuildStoredLabelQuery(dbContext, issuer.Id, issuer.PresentationTicker)
+                            .ToListAsync(cancellationToken)
+                    );
+            }
             var batchQuarters = new HashSet<DateOnly>();
             var unsettled = new HashSet<Guid>();
             var fingerprints = batch.ToDictionary(
@@ -400,14 +416,16 @@ public class HoldingLabelConvergenceService
         var dates = new List<DateOnly>();
         foreach (var move in moves)
         {
-            dates.AddRange(
-                await dbContext
-                    .Database.SqlQuery<DateOnly>(
+            // The source label is written as IS NULL or '=' so the unique index serves it; a
+            // null-safe comparison would heap-read every row the issuer holds.
+            var update =
+                move.FromTicker == null
+                    ? dbContext.Database.SqlQuery<DateOnly>(
                         $"""
                         UPDATE "InstitutionalHolding" AS h SET "ListedTicker" = {move.ToTicker}
                         WHERE h."EquityIssuerId" = {issuerId}
+                          AND h."ListedTicker" IS NULL
                           AND h."Cusip" IS NOT DISTINCT FROM {move.Cusip}
-                          AND h."ListedTicker" IS NOT DISTINCT FROM {move.FromTicker}
                           AND NOT EXISTS (
                               SELECT 1 FROM "InstitutionalHolding" AS o
                               WHERE o."EquityIssuerId" = h."EquityIssuerId"
@@ -420,8 +438,25 @@ public class HoldingLabelConvergenceService
                         RETURNING h."ReportDate" AS "Value"
                         """
                     )
-                    .ToListAsync(cancellationToken)
-            );
+                    : dbContext.Database.SqlQuery<DateOnly>(
+                        $"""
+                        UPDATE "InstitutionalHolding" AS h SET "ListedTicker" = {move.ToTicker}
+                        WHERE h."EquityIssuerId" = {issuerId}
+                          AND h."ListedTicker" = {move.FromTicker}
+                          AND h."Cusip" IS NOT DISTINCT FROM {move.Cusip}
+                          AND NOT EXISTS (
+                              SELECT 1 FROM "InstitutionalHolding" AS o
+                              WHERE o."EquityIssuerId" = h."EquityIssuerId"
+                                AND o."InstitutionalHolderId" = h."InstitutionalHolderId"
+                                AND o."ReportDate" = h."ReportDate"
+                                AND o."ShareType" = h."ShareType"
+                                AND o."OptionType" IS NOT DISTINCT FROM h."OptionType"
+                                AND o."FilingType" = h."FilingType"
+                                AND o."ListedTicker" IS NOT DISTINCT FROM {move.ToTicker})
+                        RETURNING h."ReportDate" AS "Value"
+                        """
+                    );
+            dates.AddRange(await update.ToListAsync(cancellationToken));
         }
         // The label and its rebuild intent must survive together: a retry cannot discover
         // the old quarter labels after the position update has committed.
