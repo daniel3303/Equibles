@@ -44,4 +44,9 @@ public class Parsed13FFiling
     public List<OtherManagerIdentity> CoverPageOtherManagers { get; set; } = [];
 
     public List<Parsed13FHolding> Holdings { get; set; } = [];
+
+    internal bool CompleteSubmissionVerified { get; set; }
+    internal string ReportType { get; set; }
+    internal int? OtherIncludedManagersCount { get; set; }
+    internal bool ConfidentialOmitted { get; set; }
 }

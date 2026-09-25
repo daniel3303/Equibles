@@ -6,6 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content
+      Include="../Equibles.UnitTests/TestAssets/Holdings/13f-zero-position-submission.txt"
+      Link="TestAssets/Holdings/13f-zero-position-submission.txt"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

@@ -40,4 +40,6 @@ public class Parsed13FHolding
     /// silently discard the shared-attribution information for realtime filings only.
     /// </summary>
     public string OtherManagers { get; set; }
+
+    internal bool HasExplicitZeroQuantities { get; set; }
 }

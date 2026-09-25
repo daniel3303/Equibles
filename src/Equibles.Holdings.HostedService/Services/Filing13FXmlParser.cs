@@ -57,6 +57,7 @@ public class Filing13FXmlParser
             ConfidentialTreatmentRequested = IsAmendmentValue(
                 Value(Descendant(coverPage, "confidentialTreatmentRequestedFlag"))
             ),
+            ReportType = Value(Child(coverPage, "reportType")),
         };
 
         // The summary page carries the filer's own declared totals. Scoped to summaryPage —
@@ -66,6 +67,18 @@ public class Filing13FXmlParser
         var summaryPage = Descendant(root, "summaryPage");
         if (summaryPage != null)
         {
+            var confidential = Value(Child(summaryPage, "isConfidentialOmitted"));
+            filing.ConfidentialOmitted =
+                confidential != null
+                && !confidential.Equals("false", StringComparison.OrdinalIgnoreCase)
+                && confidential != "0";
+            if (
+                int.TryParse(
+                    Value(Child(summaryPage, "otherIncludedManagersCount")),
+                    out var otherCount
+                )
+            )
+                filing.OtherIncludedManagersCount = otherCount;
             if (int.TryParse(Value(Descendant(summaryPage, "tableEntryTotal")), out var entryTotal))
                 filing.TableEntryTotal = entryTotal;
             if (
@@ -181,6 +194,12 @@ public class Filing13FXmlParser
                     // Raw comma list, not plucked here: the one shared interpretation lives
                     // in the bulk reader, which this value round-trips into via the archive.
                     OtherManagers = Value(Child(info, "otherManager")),
+                    HasExplicitZeroQuantities =
+                        IsExplicitZero(Child(info, "value"))
+                        && IsExplicitZero(Child(amount, "sshPrnamt"))
+                        && IsExplicitZero(Child(voting, "Sole"))
+                        && IsExplicitZero(Child(voting, "Shared"))
+                        && IsExplicitZero(Child(voting, "None")),
                 }
             );
         }
@@ -209,6 +228,15 @@ public class Filing13FXmlParser
         parent == null ? null : Children(parent, localName).FirstOrDefault();
 
     private static string Value(XElement element) => element?.Value.Trim();
+
+    private static bool IsExplicitZero(XElement element) =>
+        long.TryParse(
+            Value(element),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var value
+        )
+        && value == 0;
 
     private static bool IsAmendmentValue(string raw) =>
         !string.IsNullOrEmpty(raw)

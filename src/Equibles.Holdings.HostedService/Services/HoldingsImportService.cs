@@ -99,7 +99,7 @@ public class HoldingsImportService
             // No tracked stock mapped — typically a cold start where the FTD
             // scraper hasn't seeded CUSIPs yet. NOT terminal: leave the data
             // set unprocessed so a later cycle backfills it once CUSIPs exist.
-            return new ImportResult(submissionCount, IsComplete: false);
+            return new ImportResult(submissionCount, IsComplete: false, NoTrackedStocks: true);
         await BuildPriceMap(context, cancellationToken);
         await BuildSplitMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);

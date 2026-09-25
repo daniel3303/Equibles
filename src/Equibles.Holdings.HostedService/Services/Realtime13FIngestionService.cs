@@ -323,6 +323,19 @@ public class Realtime13FIngestionService
         }
         if (!importResult.IsComplete)
         {
+            if (
+                importResult.NoTrackedStocks
+                && IsSourceConfirmedZeroOriginal(filing)
+                && !await HasRetainedBook(filing, cancellationToken)
+            )
+            {
+                _logger.LogInformation(
+                    "Completed source-confirmed zero-position 13F {Accession} (CIK {Cik})",
+                    entry.AccessionNumber,
+                    entry.Cik
+                );
+                return EntryImportOutcome.Imported;
+            }
             await RecordFailure(
                 entry,
                 filing.PeriodOfReport,
@@ -355,6 +368,40 @@ public class Realtime13FIngestionService
         }
 
         return EntryImportOutcome.Imported;
+    }
+
+    internal static bool IsSourceConfirmedZeroOriginal(Parsed13FFiling filing) =>
+        filing.CompleteSubmissionVerified
+        && !filing.IsAmendment
+        && !filing.ConfidentialTreatmentRequested
+        && !filing.ConfidentialOmitted
+        && filing.ReportType == "13F HOLDINGS REPORT"
+        && filing.OtherIncludedManagersCount == 0
+        && filing.OtherManagers.Count == 0
+        && filing.CoverPageOtherManagers.Count == 0
+        && filing.Holdings.Count > 0
+        && filing.TableEntryTotal == filing.Holdings.Count
+        && filing.TableValueTotal == 0
+        && filing.Holdings.All(h =>
+            h.HasExplicitZeroQuantities && string.IsNullOrWhiteSpace(h.OtherManagers)
+        );
+
+    private async Task<bool> HasRetainedBook(
+        Parsed13FFiling filing,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var holdings = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
+        return await holdings
+            .GetAll()
+            .AnyAsync(
+                h =>
+                    h.InstitutionalHolder.Cik == filing.Cik
+                    && h.ReportDate == filing.PeriodOfReport
+                    && h.FilingType == FilingType.Form13F,
+                cancellationToken
+            );
     }
 
     private async Task RecordFailure(

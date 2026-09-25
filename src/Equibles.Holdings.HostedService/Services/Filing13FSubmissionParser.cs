@@ -21,6 +21,11 @@ internal static class Filing13FSubmissionParser
             return null;
 
         var artifacts = SecDocumentEnvelopeParser.EnumerateArtifacts(submission);
+        if (
+            artifacts.Count != CountTag(submission, "<DOCUMENT>")
+            || artifacts.Count != CountTag(submission, "</DOCUMENT>")
+        )
+            return null;
         var covers = artifacts.Where(a => a.Type is "13F-HR" or "13F-HR/A").ToList();
         if (covers.Count != 1 || covers[0].Type != entry.FormType)
             return null;
@@ -55,27 +60,37 @@ internal static class Filing13FSubmissionParser
         )
             return null;
 
-        // A filer's cover totals can disagree with its own table. Preserve the safe SEC
-        // filenames so the existing standalone-XML route need not rediscover this directory.
-        var fallback = new Parsed13FSubmission(null, artifacts.Select(a => a.FileName).ToList());
-        if (filing.TableEntryTotal == null || filing.TableValueTotal == null)
-            return fallback;
-
         foreach (var artifact in artifacts.Where(a => a.Type == "INFORMATION TABLE"))
         {
             var xml = XmlBody(artifact.Body);
             if (xml == null)
-                return fallback;
+                return null;
             filing.Holdings.AddRange(parser.ParseInformationTable(xml));
         }
 
+        // A filer's cover totals can disagree with its own table. Preserve the safe SEC
+        // filenames so the existing standalone-XML route need not rediscover this directory.
+        var fallback = new Parsed13FSubmission(null, artifacts.Select(a => a.FileName).ToList());
         if (
             filing.Holdings.Count != filing.TableEntryTotal
             || filing.Holdings.Sum(h => h.Value) != filing.TableValueTotal
             || (filing.Holdings.Count == 0 && !filing.IsAmendment)
         )
             return fallback;
+        filing.CompleteSubmissionVerified = true;
         return fallback with { Filing = filing };
+    }
+
+    private static int CountTag(string value, string tag)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = value.IndexOf(tag, offset, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            count++;
+            offset += tag.Length;
+        }
+        return count;
     }
 
     private static string XmlBody(string body)

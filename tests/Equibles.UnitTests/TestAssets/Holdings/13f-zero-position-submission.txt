@@ -1,0 +1,137 @@
+<SEC-DOCUMENT>0001172661-23-003928.txt : 20231114
+<SEC-HEADER>0001172661-23-003928.hdr.sgml : 20231114
+<ACCEPTANCE-DATETIME>20231114112921
+ACCESSION NUMBER:		0001172661-23-003928
+CONFORMED SUBMISSION TYPE:	13F-HR
+PUBLIC DOCUMENT COUNT:		2
+CONFORMED PERIOD OF REPORT:	20230930
+FILED AS OF DATE:		20231114
+DATE AS OF CHANGE:		20231114
+EFFECTIVENESS DATE:		20231114
+
+FILER:
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Vident Investment Advisory, LLC
+		CENTRAL INDEX KEY:			0001634047
+		IRS NUMBER:				471618011
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		13F-HR
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	028-16741
+		FILM NUMBER:		231402778
+
+	BUSINESS ADDRESS:	
+		STREET 1:		1125 SANCTUARY PARKWAY
+		STREET 2:		SUITE 515
+		CITY:			ALPHARETTA
+		STATE:			GA
+		ZIP:			30009
+		BUSINESS PHONE:		404-487-1961
+
+	MAIL ADDRESS:	
+		STREET 1:		1125 SANCTUARY PARKWAY
+		STREET 2:		SUITE 515
+		CITY:			ALPHARETTA
+		STATE:			GA
+		ZIP:			30009
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>13F-HR
+<SEQUENCE>1
+<FILENAME>primary_doc.xml
+<TEXT>
+<XML>
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xsi:schemaLocation="http://www.sec.gov/edgar/thirteenffiler eis_13F_Filer.xsd" xmlns="http://www.sec.gov/edgar/thirteenffiler" xmlns:ns1="http://www.sec.gov/edgar/common" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <schemaVersion>X0202</schemaVersion>
+  <headerData>
+    <submissionType>13F-HR</submissionType>
+    <filerInfo>
+      <liveTestFlag>LIVE</liveTestFlag>
+      <flags>
+        <confirmingCopyFlag>false</confirmingCopyFlag>
+        <returnCopyFlag>false</returnCopyFlag>
+        <overrideInternetFlag>false</overrideInternetFlag>
+      </flags>
+      <filer>
+        <credentials>
+          <cik>0001634047</cik>
+          <ccc>XXXXXXXX</ccc>
+        </credentials>
+      </filer>
+      <periodOfReport>09-30-2023</periodOfReport>
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPage>
+      <reportCalendarOrQuarter>09-30-2023</reportCalendarOrQuarter>
+      <isAmendment>false</isAmendment>
+      <filingManager>
+        <name>Vident Investment Advisory, LLC</name>
+        <address>
+          <ns1:street1>1125 Sanctuary Parkway</ns1:street1>
+          <ns1:street2>Suite 515</ns1:street2>
+          <ns1:city>Alpharetta</ns1:city>
+          <ns1:stateOrCountry>GA</ns1:stateOrCountry>
+          <ns1:zipCode>30009</ns1:zipCode>
+        </address>
+      </filingManager>
+      <reportType>13F HOLDINGS REPORT</reportType>
+      <form13FFileNumber>028-16741</form13FFileNumber>
+      <crdNumber>000171004</crdNumber>
+      <secFileNumber>801-80534</secFileNumber>
+      <provideInfoForInstruction5>Y</provideInfoForInstruction5>
+      <additionalInformation>Vident Investment Advisory, LLC no longer has discretionary authority over any positions as of July 15, 2023, and such discretionary authority was transferred to Vident Advisory, LLC. This will be the final 13F filing for Vident Investment Advisory, LLC.</additionalInformation>
+    </coverPage>
+    <signatureBlock>
+      <name>Amrita Nandakumar</name>
+      <title>President</title>
+      <phone>404-267-1962</phone>
+      <signature>/s/ Amrita Nadakumar</signature>
+      <city>New York</city>
+      <stateOrCountry>NY</stateOrCountry>
+      <signatureDate>11-14-2023</signatureDate>
+    </signatureBlock>
+    <summaryPage>
+      <otherIncludedManagersCount>0</otherIncludedManagersCount>
+      <tableEntryTotal>1</tableEntryTotal>
+      <tableValueTotal>0</tableValueTotal>
+    </summaryPage>
+  </formData>
+</edgarSubmission>
+</XML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>INFORMATION TABLE
+<SEQUENCE>2
+<FILENAME>infotable.xml
+<TEXT>
+<XML>
+<?xml version="1.0" ?>
+<informationTable xsi:schemaLocation="http://www.sec.gov/edgar/document/thirteenf/informationtable eis_13FDocument.xsd" xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable" xmlns:n1="http://www.sec.gov/edgar/document/thirteenf/informationtable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <infoTable>
+    <nameOfIssuer>N/A</nameOfIssuer>
+    <titleOfClass>N/A</titleOfClass>
+    <cusip>000000000</cusip>
+    <value>0</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>0</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+</informationTable>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

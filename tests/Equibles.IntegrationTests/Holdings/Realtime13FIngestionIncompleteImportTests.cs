@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
@@ -115,6 +116,115 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
               </infoTable>
             </informationTable>
             """;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConfirmedZeroOriginal_ResolvesCompleteRecoveryOnlyForAnEmptyQuarter(
+        bool retainedBook
+    )
+    {
+        const string cik = "1634047";
+        const string accession = "0001172661-23-003928";
+        var filed = new DateOnly(2023, 11, 14);
+        var report = new DateOnly(2023, 9, 30);
+        using var db = FreshContext();
+        if (retainedBook)
+        {
+            db.Add(
+                new InstitutionalHolding
+                {
+                    Issuer = new EquityIssuer { Name = "Existing issuer" },
+                    InstitutionalHolder = new InstitutionalHolder
+                    {
+                        Cik = cik,
+                        Name = "Existing filer",
+                    },
+                    FilingDate = filed.AddDays(-1),
+                    ReportDate = report,
+                    FilingType = FilingType.Form13F,
+                    AccessionNumber = "retained-earlier-filing",
+                    Cusip = "111111111",
+                    Shares = 10,
+                    Value = 100,
+                }
+            );
+            await db.SaveChangesAsync();
+        }
+        var failures = new HoldingsImportFailureRepository(db);
+        await failures.Record(
+            accession,
+            cik,
+            filed,
+            report,
+            HoldingsImportFailureReason.Incomplete,
+            CancellationToken.None
+        );
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetDocumentContent(accession, cik, Arg.Any<CancellationToken>())
+            .Returns(
+                File.ReadAllText(
+                    Path.Combine(
+                        AppContext.BaseDirectory,
+                        "TestAssets",
+                        "Holdings",
+                        "13f-zero-position-submission.txt"
+                    )
+                )
+            );
+        edgar
+            .GetCompanyFilings(cik, null, filed, Arg.Any<DateOnly?>())
+            .Returns([
+                new FilingData
+                {
+                    AccessionNumber = accession,
+                    Form = "13F-HR",
+                    FilingDate = filed,
+                    ReportDate = report,
+                },
+            ]);
+        var scopes = CreateScopeFactory();
+        var importer = new HoldingsImportService(
+            scopes,
+            Substitute.For<ILogger<HoldingsImportService>>(),
+            Options.Create(new WorkerOptions()),
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
+        );
+        var ingestion = new Realtime13FIngestionService(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            importer,
+            scopes,
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        var recovery = new HoldingsImportRecoveryService(
+            failures,
+            new InstitutionalHoldingRepository(db),
+            edgar,
+            ingestion,
+            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+        );
+
+        await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        using var verify = FreshContext();
+        (await verify.Set<ProcessedFiling>().AnyAsync(p => p.AccessionNumber == accession))
+            .Should()
+            .Be(!retainedBook);
+        var failure = await verify.Set<HoldingsImportFailure>().SingleAsync();
+        failure.ResolvedAt.HasValue.Should().Be(!retainedBook);
+        var holdings = await verify.Set<InstitutionalHolding>().ToListAsync();
+        holdings.Should().HaveCount(retainedBook ? 1 : 0);
+        if (retainedBook)
+        {
+            holdings[0].Shares.Should().Be(10);
+            holdings[0].Value.Should().Be(100);
+            holdings[0].AccessionNumber.Should().Be("retained-earlier-filing");
+        }
+    }
 
     [Theory]
     [InlineData(false, false, false)]

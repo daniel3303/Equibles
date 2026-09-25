@@ -16,7 +16,8 @@ public record ImportResult(
     int SubmissionCount,
     bool IsComplete,
     int InsertedHoldings = 0,
-    IReadOnlyList<string> ConflictedFilings = null
+    IReadOnlyList<string> ConflictedFilings = null,
+    bool NoTrackedStocks = false
 )
 {
     public IReadOnlyList<string> ConflictedFilings { get; init; } = ConflictedFilings ?? [];
