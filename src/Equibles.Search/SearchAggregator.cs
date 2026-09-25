@@ -101,19 +101,19 @@ public class SearchAggregator
         CancellationToken cancellationToken
     )
     {
-        using var scope = _scopeFactory.CreateScope();
-        var provider = scope
-            .ServiceProvider.GetServices<ISearchProvider>()
-            .First(candidate => candidate.GetType() == providerType);
-
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken
-        );
-        timeoutSource.CancelAfter(ProviderTimeout);
+        // Released by ReleaseWhenSettled, never while the provider may still use its scope.
+        var scope = _scopeFactory.CreateScope();
+        var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task<SearchResultGroup> searchTask = null;
 
         try
         {
-            var searchTask = provider.Search(request, timeoutSource.Token);
+            var provider = scope
+                .ServiceProvider.GetServices<ISearchProvider>()
+                .First(candidate => candidate.GetType() == providerType);
+            timeoutSource.CancelAfter(ProviderTimeout);
+
+            searchTask = provider.Search(request, timeoutSource.Token);
             // Backstop: a provider that ignores the token still cannot stall the page.
             var completed = await Task.WhenAny(
                 searchTask,
@@ -142,6 +142,38 @@ public class SearchAggregator
             );
             return Empty;
         }
+        finally
+        {
+            ReleaseWhenSettled(searchTask, scope, timeoutSource);
+        }
+    }
+
+    // An abandoned provider can still be reading through its scope's DbContext; disposing the
+    // scope then returns a connection that is mid-read to the pool, corrupting the next borrower.
+    private static void ReleaseWhenSettled(
+        Task searchTask,
+        IServiceScope scope,
+        CancellationTokenSource timeoutSource
+    )
+    {
+        if (searchTask == null || searchTask.IsCompleted)
+        {
+            scope.Dispose();
+            timeoutSource.Dispose();
+            return;
+        }
+
+        searchTask.ContinueWith(
+            settled =>
+            {
+                _ = settled.Exception;
+                scope.Dispose();
+                timeoutSource.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default
+        );
     }
 
     // Strips control characters (notably CR/LF) from the user-supplied query so a crafted
