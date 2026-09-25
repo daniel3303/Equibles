@@ -84,6 +84,35 @@ public static class CommonStockRepositoryExtensions
             .ToHashSet();
     }
 
+    /// <summary>
+    /// Current US directory issuers whose default listing or a US reference listing carries
+    /// exactly this ticker. Each branch filters one listing's ticker so PostgreSQL starts from
+    /// the ticker index; an OR across both listings walked every directory issuer.
+    /// </summary>
+    public static IQueryable<Guid> GetUsTickerOwnerIds(
+        this EquityIssuerRepository repository,
+        string listedTicker
+    )
+    {
+        var directory = repository.GetCurrentUsDirectory();
+        return directory
+            .Where(candidate => candidate.Presentation.Listing.Ticker == listedTicker)
+            .Select(candidate => candidate.Id)
+            .Union(
+                directory
+                    .SelectMany(
+                        candidate => candidate.Securities.SelectMany(security => security.Listings),
+                        (candidate, listing) => new { candidate.Id, Listing = listing }
+                    )
+                    .Where(claim =>
+                        claim.Listing.MarketCountryCode == "US"
+                        && claim.Listing.IsReferenceListed
+                        && claim.Listing.Ticker == listedTicker
+                    )
+                    .Select(claim => claim.Id)
+            );
+    }
+
     public static async Task<(EquityIssuer Stock, string Error)> ResolveByTicker(
         this EquityIssuerRepository repository,
         string ticker
@@ -96,26 +125,16 @@ public static class CommonStockRepositoryExtensions
         var literal = normalized;
         var folded = TickerNormalizer.NormalizeDashListed(normalized) ?? literal;
 
-        async Task<List<EquityIssuer>> FindOwners(string listedTicker) =>
-            await repository
-                .GetCurrentUsDirectory()
-                .Where(candidate =>
-                    candidate.Presentation.Listing.Ticker == listedTicker
-                    || (
-                        candidate.Presentation.Listing.Active
-                        && candidate
-                            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
-                            .Where(nativeListing =>
-                                nativeListing.MarketCountryCode == "US"
-                                && (nativeListing.IsReferenceListed)
-                            )
-                            .Select(nativeListing => nativeListing.Ticker)
-                            .ToList()
-                            .Contains(listedTicker)
-                    )
-                )
-                .Take(2)
-                .ToListAsync();
+        async Task<List<EquityIssuer>> FindOwners(string listedTicker)
+        {
+            var ownerIds = await repository.GetUsTickerOwnerIds(listedTicker).Take(2).ToListAsync();
+            return ownerIds.Count == 0
+                ? []
+                : await repository
+                    .GetCurrentUsDirectory()
+                    .Where(candidate => ownerIds.Contains(candidate.Id))
+                    .ToListAsync();
+        }
 
         var authoritativeOwners = await FindOwners(literal);
         if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)

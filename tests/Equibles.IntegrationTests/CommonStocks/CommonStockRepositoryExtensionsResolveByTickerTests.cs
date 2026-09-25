@@ -91,6 +91,81 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveByTicker_ReferenceListedTickerResolvesItsOwner()
+    {
+        _dbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "GOOGL",
+                Name: "Alphabet",
+                Cik: "0001652044",
+                ReferenceTickers: ["GOOG"]
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTicker("GOOG");
+
+        stock!.Name.Should().Be("Alphabet");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTicker_DefaultAndReferenceClaimsOnTwoIssuersFailClosed()
+    {
+        // The default owner claims DUP twice, so a duplicate-keeping read could fill both
+        // owner slots with it and hide the second claimant.
+        _dbContext.AddRange(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "DUP",
+                Name: "Default owner",
+                Cik: "2001",
+                ReferenceTickers: ["DUP"]
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "OTHR",
+                Name: "Reference owner",
+                Cik: "2002",
+                ReferenceTickers: ["DUP"]
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTicker("DUP");
+
+        stock.Should().BeNull();
+        error.Should().Be("Listed security 'DUP' is ambiguous.");
+    }
+
+    [Fact]
+    public async Task ResolveByTicker_DirectoryOnlySecondaryListingIsNotAnOwnerClaim()
+    {
+        _dbContext.AddRange(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "ONE",
+                Name: "Default owner",
+                Cik: "3001"
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "TWO",
+                Name: "Directory secondary",
+                Cik: "3002",
+                SecondaryTickers: ["ONE"]
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTicker("ONE");
+
+        stock!.Name.Should().Be("Default owner");
+        error.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetByCikTolerant_UnpaddedInputResolvesPaddedPrimaryCik()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
