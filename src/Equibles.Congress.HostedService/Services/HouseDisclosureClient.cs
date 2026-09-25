@@ -73,16 +73,19 @@ public partial class HouseDisclosureClient
                     try
                     {
                         ct.ThrowIfCancellationRequested();
-                        var txns = await DownloadAndParsePtrPdf(filing, year, ct);
+                        var parsed = await DownloadAndParsePtrPdf(filing, year, ct);
 
                         // A missing PDF is not handled: leave the filing
                         // unrecorded so it retries once the file appears.
-                        if (txns == null)
+                        if (parsed == null)
                         {
                             result.IsComplete = false;
                             continue;
                         }
 
+                        LogDeterministicVerdict(filing, parsed);
+
+                        var txns = parsed.Transactions;
                         foreach (var txn in txns)
                         {
                             txn.SourceId = filing.DocId;
@@ -92,7 +95,12 @@ public partial class HouseDisclosureClient
 
                         result.Transactions.AddRange(txns);
                         result.ProcessedFilings.Add(
-                            new ProcessedFiling(filing.DocId, filing.FilingDate, txns.Count)
+                            new ProcessedFiling(
+                                filing.DocId,
+                                filing.FilingDate,
+                                txns.Count,
+                                parsed.RejectedSourceRowCount
+                            )
                         );
                     }
                     catch (OperationCanceledException)
@@ -234,11 +242,13 @@ public partial class HouseDisclosureClient
         return new HouseFilingIndexResult(filings, isComplete);
     }
 
-    // Returns null when the PDF is missing (404) so the caller can tell "not
-    // yet available" apart from "parsed with zero transactions"; a parse
-    // failure throws to the caller's per-filing handler. Both leave the filing
-    // unrecorded so it is retried on a later cycle.
-    private async Task<List<DisclosureTransaction>> DownloadAndParsePtrPdf(
+    // Returns null when the PDF is missing (404) so the caller can tell "not yet available"
+    // apart from a parsed document; an unreadable PDF (PdfPig throws on a truncated download)
+    // reaches the caller's per-filing handler. Both leave the filing unrecorded so it is retried
+    // on a later cycle. Everything the parser decides about readable bytes is deterministic —
+    // re-parsing the same file with the same parser yields the same answer — so the caller
+    // records those verdicts and only a parser version bump reopens them.
+    private async Task<HousePtrParseResult> DownloadAndParsePtrPdf(
         HouseFiling filing,
         int year,
         CancellationToken ct
@@ -258,15 +268,44 @@ public partial class HouseDisclosureClient
         response.EnsureSuccessStatusCode();
 
         var pdfBytes = await response.Content.ReadAsByteArrayAsync(ct);
-        var parsed = ParsePtrPdfWithShape(pdfBytes, filing.MemberName, filing.FilingDate);
-        if (parsed.Transactions.Count == 0 || parsed.RejectedSourceRowCount > 0)
+        return ParsePtrPdfWithShape(pdfBytes, filing.MemberName, filing.FilingDate);
+    }
+
+    // Each verdict is logged once: the filing is recorded, so it is not seen again until a
+    // parser version bump. A scanned paper report (no text layer) is a policy skip; rows the
+    // parser could not read are a loss worth a warning so a new shape gets a parser fix.
+    private void LogDeterministicVerdict(HouseFiling filing, HousePtrParseResult parsed)
+    {
+        if (!parsed.HasExtractableText)
         {
-            throw new InvalidDataException(
-                $"House PTR PDF {filing.DocId} has no recognized transaction rows"
+            _logger.LogInformation(
+                "House PTR PDF {DocId} for {Member} has no text layer (scanned paper filing); recorded with no transactions",
+                filing.DocId,
+                filing.MemberName
             );
+            return;
         }
 
-        return parsed.Transactions;
+        if (parsed.RejectedSourceRowCount > 0)
+        {
+            _logger.LogWarning(
+                "House PTR PDF {DocId} for {Member}: {Rejected} transaction-shaped rows could not be parsed; recording the {Parsed} recognized rows until a parser version bump reopens the filing",
+                filing.DocId,
+                filing.MemberName,
+                parsed.RejectedSourceRowCount,
+                parsed.Transactions.Count
+            );
+            return;
+        }
+
+        if (parsed.Transactions.Count == 0 && parsed.PolicySkippedRowCount == 0)
+        {
+            _logger.LogWarning(
+                "House PTR PDF {DocId} for {Member} has a text layer but no recognized transaction rows; recorded with no transactions until a parser version bump reopens the filing",
+                filing.DocId,
+                filing.MemberName
+            );
+        }
     }
 
     // PdfPig's page.Text concatenates glyphs with no line breaks, so the PTR
@@ -279,7 +318,7 @@ public partial class HouseDisclosureClient
         DateOnly filingDate
     ) => ParsePtrPdfWithShape(pdfBytes, memberName, filingDate).Transactions;
 
-    private static HousePtrParseResult ParsePtrPdfWithShape(
+    internal static HousePtrParseResult ParsePtrPdfWithShape(
         byte[] pdfBytes,
         string memberName,
         DateOnly filingDate
@@ -289,6 +328,8 @@ public partial class HouseDisclosureClient
         var lines = new List<string>();
         foreach (var page in document.GetPages())
             lines.AddRange(ExtractLines(page));
+        // A scanned paper report opens fine but carries no text layer at all, so it yields no
+        // lines; that is the one signal that separates it from an electronic filing.
         return ParseTransactionLinesWithShape(lines, memberName, filingDate);
     }
 
@@ -349,6 +390,10 @@ public partial class HouseDisclosureClient
         DateOnly filingDate
     ) => ParseTransactionLinesWithShape(rawLines, memberName, filingDate).Transactions;
 
+    // Row-index invariant: every row-shaped line takes the next SourceRowIndex whether it is
+    // parsed, rejected or policy-skipped, and trades upsert on (kind, SourceId, SourceRowIndex)
+    // without ever deleting. A later parser may turn a rejected row into a parsed one, but must
+    // not change WHICH lines count as rows, or every later index lands on another stored trade.
     internal static HousePtrParseResult ParseTransactionLinesWithShape(
         IReadOnlyList<string> rawLines,
         string memberName,
@@ -376,6 +421,7 @@ public partial class HouseDisclosureClient
 
         var transactions = new List<DisclosureTransaction>();
         var rejectedSourceRowCount = 0;
+        var policySkippedRowCount = 0;
         var sourceRowIndex = 0;
 
         for (var i = 0; i < lines.Count; i++)
@@ -383,14 +429,23 @@ public partial class HouseDisclosureClient
             if (IsFieldLabelLine(lines[i]))
                 continue;
 
-            var anchor = TransactionAnchorRegex().Match(lines[i]);
-            if (!anchor.Success)
+            var anchor = FindTransactionAnchor(lines[i]);
+            if (anchor == null)
             {
                 if (LooksLikeMalformedTransactionRow(lines[i]))
                 {
                     rejectedSourceRowCount++;
                     sourceRowIndex++;
                 }
+                continue;
+            }
+
+            // An exchange row is a filed row with no trade type of ours (the Senate parser skips
+            // "Exchange" the same way). It takes its row index and is not a parse failure.
+            if (IsPolicySkippedTransactionType(anchor.Groups[1].Value))
+            {
+                policySkippedRowCount++;
+                sourceRowIndex++;
                 continue;
             }
 
@@ -426,7 +481,23 @@ public partial class HouseDisclosureClient
             sourceRowIndex++;
         }
 
-        return new HousePtrParseResult(transactions, rejectedSourceRowCount);
+        return new HousePtrParseResult(
+            transactions,
+            rejectedSourceRowCount,
+            policySkippedRowCount,
+            HasExtractableText: lines.Count > 0
+        );
+    }
+
+    private static bool IsPolicySkippedTransactionType(string marker) =>
+        string.Equals(marker.Trim(), "E", StringComparison.Ordinal);
+
+    // The LAST anchor on the line: an asset name can itself end in a marker and a date (a bond
+    // "Ser E 03/15/2035"), and the row's own marker always follows the asset text.
+    private static Match FindTransactionAnchor(string line)
+    {
+        var matches = TransactionAnchorRegex().Matches(line);
+        return matches.Count == 0 ? null : matches[^1];
     }
 
     private static string FindSubholding(IReadOnlyList<string> lines, int start)
@@ -482,8 +553,22 @@ public partial class HouseDisclosureClient
         PtrHeaderTokens.Count(token => line.Contains(token, StringComparison.OrdinalIgnoreCase))
         >= 3;
 
+    // A filed row prints its transaction and notification dates side by side, then its amount,
+    // so a line without an anchor but with two adjacent dates or a date and a range start
+    // ("$15,001 -") is a row the parser could not read. Any other dated line is a wrapped bond
+    // name that continues its row: a maturity ("Due 10/1/2033 [GS] $50,000", only the upper
+    // bound wraps) or a maturity and its dated date ("09/15/2166 DTD 12/06/2017 [Cs]").
     private static bool LooksLikeMalformedTransactionRow(string line) =>
-        !IsFieldLabelLine(line) && DateTokenRegex().IsMatch(line);
+        !IsFieldLabelLine(line)
+        && DateTokenRegex().IsMatch(line)
+        && (AdjacentDatesRegex().IsMatch(line) || AmountRangeStartRegex().IsMatch(line));
+
+    [GeneratedRegex(@"\b\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}/\d{1,2}/\d{4}\b")]
+    private static partial Regex AdjacentDatesRegex();
+
+    // "$15,001 -", the top bracket "$50,000,001 +", or "Over $50,000,000".
+    [GeneratedRegex(@"\$\s*[\d,]+(?:\.\d+)?\s*[-+]|\b(?i:over)\s*\$")]
+    private static partial Regex AmountRangeStartRegex();
 
     private static bool IsFieldLabelLine(string line) => FieldLabelRegex().IsMatch(line);
 
@@ -631,9 +716,11 @@ public partial class HouseDisclosureClient
     // The reprinted page-break column-header block as the word clustering renders it —
     // observed verbatim in every polluted production row. Optional leading "ID" (older
     // layouts have no ID column) and optional trailing "$200?" (the cap-gains threshold can
-    // cluster onto a separate line) cover the variants.
+    // cluster onto a separate line) cover the variants. Case-insensitive because the
+    // small-caps font (below) scrambles the header's case too ("iD owner asset ...").
     [GeneratedRegex(
-        @"\s*(?:ID\s+)?Owner Asset Transaction Date Notification Amount Cap\. Type Date Gains >(?:\s*\$200\?)?\s*"
+        @"\s*(?:ID\s+)?Owner Asset Transaction Date Notification Amount Cap\. Type Date Gains >(?:\s*\$200\?)?\s*",
+        RegexOptions.IgnoreCase
     )]
     private static partial Regex ReprintedHeaderBlockRegex();
 
@@ -642,26 +729,35 @@ public partial class HouseDisclosureClient
     [GeneratedRegex(@"^\d{7,}\s+")]
     private static partial Regex LeadingFilingIdRegex();
 
-    // The transaction-type marker (P, S, S (partial), S (full)) immediately
-    // followed by its transaction date — the anchor identifying the line that
-    // starts a transaction row. Group 1 = type, group 2 = MM/DD/YYYY date.
-    [GeneratedRegex(@"(?<=\s|^)(S \(partial\)|S \(full\)|S|P)\s+(\d{2}/\d{2}/\d{4})")]
+    // The transaction-type marker (P, S, S (partial), S (full), or E for an exchange, which is
+    // skipped by policy) followed by the transaction AND notification dates — the anchor that
+    // starts a transaction row. Requiring both dates keeps an asset name ending in a marker and
+    // one date ("Ser E 03/15/2035") from reading as a row. Group 1 = type, group 2 = the
+    // transaction date. The sale marker also matches "s": a small-caps font in some official
+    // PDFs extracts it in lower case ("s (partial) 03/22/2019"); every other letter is exact.
+    [GeneratedRegex(
+        @"(?<=\s|^)([Ss] \((?i:partial|full)\)|[Ss]|P|E)\s+(\d{2}/\d{2}/\d{4})\s+\d{1,2}/\d{1,2}/\d{4}"
+    )]
     private static partial Regex TransactionAnchorRegex();
 
     // Bracketed asset-type code such as [ST], [OP], [OI].
     [GeneratedRegex(@"\s*\[([A-Za-z]{1,3})\]\s*")]
     private static partial Regex AssetTypeCodeRegex();
 
-    [GeneratedRegex(@"^\s*Subholding\s+Of\s*:\s*(.+?)\s*$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^\s*S\s*ubholding\s+O\s*f\s*:\s*(.+?)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex SubholdingRegex();
 
+    // The field labels are printed in that same small-caps font, so the extracted text carries
+    // a break after the capital ("F ILING S TATUS :", "S UBHOLDING O F :", "D ESCRIPTION :")
+    // or, when the small glyphs have no text at all, only the capitals ("F      S     :"). Each
+    // label pattern therefore allows optional whitespace after its leading capitals.
     [GeneratedRegex(
-        @"(?:^|\s)(?:S\s+O|Subholding\s+Of)\s*:\s*(.+?)(?=\s+(?:D|Description|F\s+S|Filing\s+Status)\s*:|$)",
+        @"(?:^|\s)(?:S\s+O|S\s*ubholding\s+O\s*f)\s*:\s*(.+?)(?=\s+(?:D|D\s*escription|F\s+S|F\s*iling\s+S\s*tatus|L|L\s*ocation|C|C\s*omments)\s*:|$)",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex InlineSubholdingRegex();
 
-    [GeneratedRegex(@"(?:^|\s)(?:F\s+S|Filing\s+Status)\s*:", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:^|\s)(?:F\s+S|F\s*iling\s+S\s*tatus)\s*:", RegexOptions.IgnoreCase)]
     private static partial Regex InlineFilingStatusRegex();
 
     internal static HouseInlineAssetDetails ExtractInlineAssetDetails(string assetText)
@@ -697,8 +793,10 @@ public partial class HouseDisclosureClient
     [GeneratedRegex(@"\b\d{1,2}/\d{1,2}/\d{4}\b")]
     private static partial Regex DateTokenRegex();
 
+    // A line that IS a detail field (see the small-caps note on InlineSubholdingRegex for the
+    // spacing). Location and Comments are the two remaining PTR detail fields.
     [GeneratedRegex(
-        @"^\s*(?:F\s+S|D|Filing\s+Status|Description|Subholding\s+Of|Digitally\s+Signed)\s*:",
+        @"^\s*(?:F\s+S|D|L|C|F\s*iling\s+S\s*tatus|D\s*escription|S\s*ubholding\s+O\s*f|L\s*ocation|C\s*omments|D\s*igitally\s+S\s*igned)\s*:",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex FieldLabelRegex();
@@ -731,8 +829,13 @@ public partial class HouseDisclosureClient
 
     internal sealed record HouseInlineAssetDetails(string AssetName, string Subholding);
 
+    // RejectedSourceRowCount: transaction-shaped rows the parser could not read (they still take
+    // a SourceRowIndex). PolicySkippedRowCount: filed rows with no trade type of ours (exchanges).
+    // HasExtractableText: false for a scanned paper report, which has no text layer at all.
     internal sealed record HousePtrParseResult(
         List<DisclosureTransaction> Transactions,
-        int RejectedSourceRowCount
+        int RejectedSourceRowCount,
+        int PolicySkippedRowCount,
+        bool HasExtractableText
     );
 }

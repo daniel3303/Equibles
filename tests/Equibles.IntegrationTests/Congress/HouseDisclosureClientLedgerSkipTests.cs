@@ -10,9 +10,10 @@ namespace Equibles.IntegrationTests.Congress;
 
 /// <summary>
 /// Pins the ingested-filing ledger contract on the House PTR client: filings
-/// whose DocID is already recorded are never re-downloaded, while a blank,
-/// missing, or unreadable PDF is NOT reported — so it retries on a later cycle
-/// instead of being lost.
+/// whose DocID is already recorded are never re-downloaded; a missing or
+/// unreadable PDF is NOT reported, so it retries on a later cycle instead of
+/// being lost; a readable PDF with no text layer (a scanned paper report) IS
+/// reported, because re-downloading it cannot change that verdict.
 /// </summary>
 public class HouseDisclosureClientLedgerSkipTests
 {
@@ -61,8 +62,11 @@ public class HouseDisclosureClientLedgerSkipTests
     }
 
     [Fact]
-    public async Task GetRecentTransactions_BlankPdf_IsIncompleteAndNotProcessed()
+    public async Task GetRecentTransactions_BlankPdf_IsRecordedAsAScannedPaperFiling()
     {
+        // A readable PDF with no text layer is a scanned paper report: a deterministic verdict
+        // that re-downloading cannot change, so it is recorded with zero items (a parser
+        // version bump reopens it) and the cycle stays complete.
         var pdf = BlankPdf();
         var handler = new HouseHandler(
             IndexXml(),
@@ -81,8 +85,12 @@ public class HouseDisclosureClientLedgerSkipTests
         );
 
         result.Transactions.Should().BeEmpty();
-        result.IsComplete.Should().BeFalse();
-        result.ProcessedFilings.Should().BeEmpty();
+        result.IsComplete.Should().BeTrue();
+        result
+            .ProcessedFilings.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new { SourceId = NewDocId, ItemCount = 0 });
     }
 
     [Fact]

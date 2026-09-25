@@ -421,11 +421,25 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             );
         await replayTask;
 
+        // The parse is deterministic, so holding the filing back would re-read the same ticker
+        // every cycle. The stored row wins and the conflict is carried out to be reported once.
         var outcome = replayTask.GetType().GetProperty("Result")!.GetValue(replayTask)!;
         var unpersisted =
             (IEnumerable<string>)
                 outcome.GetType().GetProperty("UnpersistedSourceIds")!.GetValue(outcome)!;
-        unpersisted.Should().Contain("immutable-ticker-filing");
+        unpersisted.Should().NotContain("immutable-ticker-filing");
+        var conflict = (
+            (IEnumerable<object>)
+                outcome.GetType().GetProperty("TickerConflicts")!.GetValue(outcome)!
+        )
+            .Should()
+            .ContainSingle()
+            .Subject;
+        string Read(string property) =>
+            (string)conflict.GetType().GetProperty(property)!.GetValue(conflict);
+        Read("SourceId").Should().Be("immutable-ticker-filing");
+        Read("StoredTicker").Should().Be("AAPL");
+        Read("IncomingTicker").Should().Be("MSFT");
 
         await using var verify = Fixture.CreateDbContext();
         var stored = await verify
