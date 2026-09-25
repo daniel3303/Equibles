@@ -580,4 +580,68 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             position.AccessionNumber.Should().Be(amendment.AccessionNumber);
         }
     }
+
+    [Fact]
+    public async Task BoundedSweep_OutOfRangeFilingsDoNotConsumeEveryPassForever()
+    {
+        var first = Entry();
+        first.AccessionNumber = "001-old";
+        var second = Entry();
+        second.AccessionNumber = "002-old";
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns([second, first]);
+        edgar
+            .GetFilingArtifactNames(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(["primary_doc.xml", "infotable.xml"]);
+        edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+                Encoding.UTF8.GetBytes(
+                    call.ArgAt<string>(2) == "primary_doc.xml" ? PrimaryDoc() : InfoTable()
+                )
+            );
+        var ingestion = new Realtime13FIngestionService(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            null,
+            CreateScopeFactory(),
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        var firstPass = await ingestion.IngestRecentFilings(
+            first.DateFiled,
+            1,
+            new(2025, 1, 1),
+            CancellationToken.None,
+            maxFilings: 1
+        );
+        firstPass.HasMoreFilings.Should().BeTrue();
+        firstPass.FilingsImported.Should().Be(0);
+        firstPass.EarliestFailedDate.Should().Be(first.DateFiled);
+        var secondPass = await ingestion.IngestRecentFilings(
+            first.DateFiled,
+            1,
+            new(2025, 1, 1),
+            CancellationToken.None,
+            maxFilings: 1
+        );
+        secondPass.HasMoreFilings.Should().BeFalse();
+        secondPass.FilingsImported.Should().Be(0);
+        secondPass.EarliestFailedDate.Should().BeNull();
+        using var verify = FreshContext();
+        (await verify.Set<ProcessedFiling>().CountAsync()).Should().Be(2);
+        (await verify.Set<HoldingsImportFailure>().CountAsync()).Should().Be(0);
+        (await verify.Set<InstitutionalHolding>().CountAsync()).Should().Be(0);
+    }
 }

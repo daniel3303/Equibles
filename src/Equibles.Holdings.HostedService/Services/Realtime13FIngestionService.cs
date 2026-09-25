@@ -165,12 +165,15 @@ public class Realtime13FIngestionService
                     earliestRetryDate = entry.DateFiled;
                 continue;
             }
-            if (outcome != EntryImportOutcome.Imported)
+            if (outcome is not (EntryImportOutcome.Imported or EntryImportOutcome.Skipped))
                 continue;
 
+            // A source-confirmed out-of-range filing is complete too; otherwise it
+            // consumes every bounded pass without ever moving the daily frontier.
             if (!await RecordProcessed([entry.AccessionNumber], cancellationToken, sweepState))
                 return new RealtimeIngestionResult(totalImported, entry.DateFiled);
-            totalImported++;
+            if (outcome == EntryImportOutcome.Imported)
+                totalImported++;
         }
 
         // Daily indexes can be incomplete even when every discovered filing imports.
