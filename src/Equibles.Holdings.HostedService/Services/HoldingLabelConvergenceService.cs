@@ -15,26 +15,8 @@ namespace Equibles.Holdings.HostedService.Services;
 /// presentation listing or CUSIP claims change.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Replays keep a stored row's label (<c>PreserveStoredObservationKeys</c> and the insert
-/// trigger), so without this pass one security ends up under two keys: rows labelled with what is
-/// now the presentation ticker beside new rows written as primary, and primary rows whose CUSIP
-/// now names a sibling listing. Per-row comparisons key on the raw label, so the split reads as a
-/// fund selling one class and buying another.
-/// </para>
-/// <para>
-/// A label moves only when the move is certain: a presentation-ticker label becomes primary unless
-/// the row's CUSIP resolves to a different listing of the issuer, and a primary row takes a sibling
-/// label only when its CUSIP resolves to that still-trading sibling under the importer's own
-/// precedence and the presentation carries a CUSIP of its own, so a rename stored as a new listing
-/// is never mistaken for a second class. A move whose target key is already occupied is left alone, so no two
-/// positions ever merge. The row keeps its id, so its manager legs stay attached.
-/// </para>
-/// <para>
-/// Reading an issuer's positions is a heap scan (a multi-class issuer holds hundreds of thousands
-/// of rows), so each issuer's identity fingerprint is stored and its positions are read again
-/// only after that identity changes. The first pass reads every candidate once.
-/// </para>
+/// Replays keep a stored row's label, so this pass is what stops one security living under two
+/// keys; the invariants are in the holdings-13f-lane skill.
 /// </remarks>
 [Service]
 public class HoldingLabelConvergenceService
@@ -188,6 +170,7 @@ public class HoldingLabelConvergenceService
                 if (
                     resolvesHere
                     && resolved != null
+                    && !string.Equals(resolved, presentation, StringComparison.Ordinal)
                     && issuer.PresentationIdentified
                     && issuer.LiveTickers.Contains(resolved, StringComparer.Ordinal)
                 )
@@ -298,20 +281,46 @@ public class HoldingLabelConvergenceService
             var labels = await BuildStoredLabelQuery(dbContext, [.. issuers.Keys])
                 .ToListAsync(cancellationToken);
             var batchQuarters = new HashSet<DateOnly>();
+            var unsettled = new HashSet<Guid>();
+            var fingerprints = batch.ToDictionary(
+                entry => entry.Issuer.Id,
+                entry => entry.Fingerprint
+            );
             foreach (
                 var issuerMoves in Plan(labels, issuers, mapping)
                     .GroupBy(move => move.EquityIssuerId)
             )
             {
-                var (moved, dates) = await Apply(
-                    dbContext,
-                    issuerMoves.Key,
-                    [.. issuerMoves],
-                    cancellationToken
-                );
-                relabelled += moved;
-                occupied += issuerMoves.Sum(move => move.Count) - moved;
-                batchQuarters.UnionWith(dates);
+                try
+                {
+                    var applied = await Apply(
+                        dbContext,
+                        stockRepo,
+                        issuerMoves.Key,
+                        fingerprints[issuerMoves.Key],
+                        [.. issuerMoves],
+                        cancellationToken
+                    );
+                    if (applied == null)
+                    {
+                        unsettled.Add(issuerMoves.Key);
+                        continue;
+                    }
+                    relabelled += applied.Value.Moved;
+                    occupied += issuerMoves.Sum(move => move.Count) - applied.Value.Moved;
+                    batchQuarters.UnionWith(applied.Value.Dates);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // One issuer's failure must not stall every issuer ordered after it.
+                    dbContext.ChangeTracker.Clear();
+                    unsettled.Add(issuerMoves.Key);
+                    _logger.LogWarning(
+                        ex,
+                        "Stored label convergence failed for issuer {IssuerId}; retrying next cycle",
+                        issuerMoves.Key
+                    );
+                }
             }
 
             // Quarter aggregates group by listing, so they are marked before the batch is recorded
@@ -323,7 +332,11 @@ public class HoldingLabelConvergenceService
                     cancellationToken
                 );
             changedQuarters.UnionWith(batchQuarters);
-            await RecordConverged(dbContext, batch, cancellationToken);
+            await RecordConverged(
+                dbContext,
+                [.. batch.Where(entry => !unsettled.Contains(entry.Issuer.Id))],
+                cancellationToken
+            );
         }
 
         if (relabelled > 0 || occupied > 0)
@@ -367,10 +380,13 @@ public class HoldingLabelConvergenceService
     }
 
     // One issuer per transaction under the same parent lock the import flush takes, so a
-    // concurrent flush cannot read a key this pass is moving.
-    private static async Task<(int Moved, List<DateOnly> Dates)> Apply(
+    // concurrent flush cannot read a key this pass is moving. Null when the identity changed
+    // after planning; the issuer is then left for the next cycle.
+    private static async Task<(int Moved, List<DateOnly> Dates)?> Apply(
         EquiblesFinancialDbContext dbContext,
+        EquityIssuerRepository stockRepo,
         Guid issuerId,
+        string plannedFingerprint,
         List<Relabel> moves,
         CancellationToken cancellationToken
     )
@@ -384,6 +400,11 @@ public class HoldingLabelConvergenceService
             """,
             cancellationToken
         );
+        if (
+            await CurrentFingerprint(dbContext, stockRepo, issuerId, cancellationToken)
+            != plannedFingerprint
+        )
+            return null;
         var dates = new List<DateOnly>();
         foreach (var move in moves)
         {
@@ -412,5 +433,39 @@ public class HoldingLabelConvergenceService
         }
         await transaction.CommitAsync(cancellationToken);
         return (dates.Count, dates.Distinct().ToList());
+    }
+
+    // Re-derives one issuer's fingerprint the way the pass does: its own claims decide which
+    // CUSIPs count, and every issuer's claims on those CUSIPs decide how they resolve.
+    internal static async Task<string> CurrentFingerprint(
+        EquiblesFinancialDbContext dbContext,
+        EquityIssuerRepository stockRepo,
+        Guid issuerId,
+        CancellationToken cancellationToken
+    )
+    {
+        var issuer = await BuildCandidateQuery(dbContext)
+            .Where(candidate => candidate.Id == issuerId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (issuer == null)
+            return null;
+        var own = await HoldingCusipResolution.Load(
+            stockRepo,
+            stockRepo.GetAll().Where(stock => stock.Id == issuerId),
+            null,
+            cancellationToken
+        );
+        var cusips = own
+            .Listed.Select(claim => claim.Cusip)
+            .Concat(own.Aliases.Select(claim => claim.Cusip))
+            .Concat(own.Securities.Select(claim => claim.Cusip))
+            .ToList();
+        var claims = await HoldingCusipResolution.Load(
+            stockRepo,
+            stockRepo.GetAll(),
+            cusips,
+            cancellationToken
+        );
+        return Fingerprint(issuer, cusips, HoldingCusipResolution.Resolve(claims, []));
     }
 }
