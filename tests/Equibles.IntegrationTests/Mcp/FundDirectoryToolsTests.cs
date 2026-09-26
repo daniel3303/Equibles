@@ -229,7 +229,7 @@ public class FundDirectoryToolsTests : IDisposable
         var result = await _tools.GetFundProfile(series.Slug);
 
         result.Should().Contain("12 holdings reported");
-        result.Should().Contain("no tracked-stock holding rows are stored");
+        result.Should().Contain("no holding rows are stored");
         result.Should().NotContain("rows 0-0");
     }
 
@@ -275,7 +275,9 @@ public class FundDirectoryToolsTests : IDisposable
         var result = await _tools.GetFundProfile("VOO");
 
         result.Should().Contain("VANGUARD 500 INDEX FUND");
-        result.Should().Contain("507 holdings reported, 1 stored tracked-stock holdings");
+        result
+            .Should()
+            .Contain("507 holdings reported, 1 stored holdings, coverage: partial portfolio");
     }
 
     [Fact]
@@ -322,7 +324,7 @@ public class FundDirectoryToolsTests : IDisposable
 
     private static NportFiling MakeFiling(FundSeries series, string accession, DateOnly filingDate)
     {
-        return new NportFiling
+        var filing = new NportFiling
         {
             EquityIssuerId = null,
             RegistrantCik = series.RegistrantCik,
@@ -339,6 +341,8 @@ public class FundDirectoryToolsTests : IDisposable
             NetAssets = 1_150_000_000m,
             ReportedHoldingCount = series.ReportedHoldingCount,
         };
+        series.LatestNportFilingId = filing.Id;
+        return filing;
     }
 
     private static NportHolding MakeHolding(string name, decimal valueUsd)

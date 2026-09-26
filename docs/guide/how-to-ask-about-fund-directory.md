@@ -15,7 +15,7 @@ Ask your assistant to search by fund name, registrant, or ticker:
 - "Search the fund directory for Vanguard."
 - "What fund has the ticker VOO?"
 
-The assistant calls `SearchFunds`, which first requires every query word anywhere across the fund name, registrant, or ticker; punctuation and word order need not mirror the SEC row. If that strict search has no rows, it broadens to any query word. Verified share-class aliases such as VOO and VFIAX resolve their SEC series. The table is largest by net assets first and shows the **profile id**, ticker when present, fund type, net assets, stored rows, the fund's full reported investment-row count when available, and latest report date. Only multi-series trust rows limit the stored count to tracked-stock positions.
+The assistant calls `SearchFunds`, which first requires every query word anywhere across the fund name, registrant, or ticker; punctuation and word order need not mirror the SEC row. If that strict search has no rows, it broadens to any query word. Verified share-class aliases such as VOO and VFIAX resolve their SEC series. The table is largest by net assets first and shows the **profile id**, ticker when present, fund type, net assets, stored rows, the fund's full reported investment-row count when available, and latest report date. Some multi-series trust reports retain only tracked-stock positions; compare the stored and reported counts before treating them as a complete portfolio.
 
 No result is a coverage result, not evidence that the fund does not exist. Form NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts; money market funds and small business investment companies do not file it. Operating companies and vehicles outside that filing regime are also out of scope. Fixed-income-only series can be absent because reports from multi-series trusts enter this tracked directory after at least one holding matches a tracked stock.
 
@@ -31,7 +31,7 @@ Ask for one fund's details using its profile id, SEC series id, stored ticker, o
 
 The assistant calls the `GetFundProfile` tool and replies with the fund's registrant and series, its latest reporting period, net and total assets, its full reported holding count when available, its stored holding count, and a table of its largest stored holdings — issuer name, CUSIP, position size, U.S.-dollar value, share of net assets, and asset category, largest first.
 
-For the large multi-series trusts, only positions whose CUSIPs match tracked stocks are stored. The reported count makes the omitted part explicit while the net-asset totals continue to describe the fund's full filing.
+Coverage is full when the stored and reported counts match, partial when fewer positions are stored, and unknown when the reported count is unavailable or the counts are inconsistent. The profile uses the report selected by the fund directory, and pages its holdings in the database; assets and counts refer to that same report.
 
 ## What you should see
 
