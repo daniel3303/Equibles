@@ -132,11 +132,7 @@ public class HoldingsAggregateRefreshService
         // so without the filter the "N most recent report dates" the daily
         // safety net rebuilds are the last N business days of 13D/G activity —
         // not the recent 13F quarters it exists to protect.
-        var distinctDates = dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => h.FilingType == FilingType.Form13F)
-            .Select(h => h.ReportDate)
-            .Distinct();
+        var distinctDates = InstitutionalHoldingReportDateQueries.Get13FReportDates(dbContext);
         return await orderAndLimit(distinctDates).ToListAsync(cancellationToken);
     }
 
