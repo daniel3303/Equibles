@@ -31,7 +31,7 @@ public class InstitutionalHoldingRepositoryUniqueFilerIdsCombinedQueryTests
             .GetUniqueFilerIdsCombined(new DateOnly(2026, 6, 30), new DateOnly(2026, 3, 31))
             .ToQueryString();
 
-        sql.Should().Contain("SELECT DISTINCT");
+        sql.Should().Contain("UNION").And.NotContain("UNION ALL");
         sql.ToUpperInvariant().Should().NotContain("NOT EXISTS");
     }
 }

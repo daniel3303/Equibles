@@ -63,10 +63,39 @@ public class HoldingsImportService
         CancellationToken cancellationToken
     ) => ImportDataSet(archive, minReportDate, TimeSpan.Zero, cancellationToken);
 
-    public virtual async Task<ImportResult> ImportDataSet(
+    public virtual Task<ImportResult> ImportDataSet(
         ZipArchive archive,
         DateOnly minReportDate,
         TimeSpan batchPause,
+        CancellationToken cancellationToken
+    ) => ImportDataSetCore(archive, minReportDate, batchPause, null, cancellationToken);
+
+    internal async Task<ImportResult> ImportZeroRestatement(
+        Parsed13FFiling filing,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!Filing13FZeroPositionEvidence.IsRestatement(filing))
+            throw new InvalidDataException(
+                "A zero restatement requires complete verified source evidence."
+            );
+
+        using var archive = new Realtime13FArchiveBuilder().Build([filing]);
+        return await ImportDataSetCore(
+            archive,
+            minReportDate,
+            TimeSpan.Zero,
+            filing,
+            cancellationToken
+        );
+    }
+
+    private async Task<ImportResult> ImportDataSetCore(
+        ZipArchive archive,
+        DateOnly minReportDate,
+        TimeSpan batchPause,
+        Parsed13FFiling confirmedZeroRestatement,
         CancellationToken cancellationToken
     )
     {
@@ -76,6 +105,7 @@ public class HoldingsImportService
             Archive = archive,
             MinReportDate = minReportDate,
             BatchPause = batchPause,
+            ConfirmedZeroRestatement = confirmedZeroRestatement,
         };
 
         var parseResult = await ParseSubmissions(context, cancellationToken);
@@ -95,7 +125,7 @@ public class HoldingsImportService
             // A malformed publication is not evidence of an empty quarter. Keep it
             // retryable so a corrected archive can recover without clearing a false success.
             return new ImportResult(submissionCount, IsComplete: false);
-        if (cusipResult == CusipMappingOutcome.NoTrackedStocks)
+        if (cusipResult == CusipMappingOutcome.NoTrackedStocks && confirmedZeroRestatement == null)
             // No tracked stock mapped — typically a cold start where the FTD
             // scraper hasn't seeded CUSIPs yet. NOT terminal: leave the data
             // set unprocessed so a later cycle backfills it once CUSIPs exist.
@@ -1604,6 +1634,10 @@ public class HoldingsImportService
                 }
                 currentAccession = accession;
 
+                // The explicit-zero source rows prove an empty book; they are not securities.
+                if (accession == context.ConfirmedZeroRestatement?.AccessionNumber)
+                    continue;
+
                 if (!context.Submissions.TryGetValue(accession, out var submission))
                     continue;
 
@@ -2122,6 +2156,8 @@ public class HoldingsImportService
         await HandleAmendment(dbContext, accession, context, cancellationToken);
         if (safeHoldings.Count == 0)
         {
+            if (context.ConfirmedZeroRestatement is { } zero && zero.AccessionNumber == accession)
+                await StoreZeroRestatement(dbContext, zero, holderId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return new HoldingsFlushResult(0, SkippedStaleParent: false);
         }
@@ -2216,6 +2252,48 @@ public class HoldingsImportService
             await transaction.CommitAsync(cancellationToken);
 
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
+    }
+
+    private static async Task StoreZeroRestatement(
+        EquiblesFinancialDbContext dbContext,
+        Parsed13FFiling filing,
+        Guid holderId,
+        CancellationToken cancellationToken
+    )
+    {
+        // Keep an empty filing as positive evidence that the quarter was reported.
+        // This write shares the position deletion's transaction and book lock.
+        await dbContext
+            .Set<InstitutionalFiling>()
+            .Where(f =>
+                f.InstitutionalHolderId == holderId
+                && f.ReportDate == filing.PeriodOfReport
+                && f.FilingType == FilingType.Form13F
+            )
+            .ExecuteDeleteAsync(cancellationToken);
+        dbContext
+            .Set<InstitutionalFiling>()
+            .Add(
+                new InstitutionalFiling
+                {
+                    AccessionNumber = filing.AccessionNumber,
+                    InstitutionalHolderId = holderId,
+                    FilingDate = filing.FilingDate,
+                    ReportDate = filing.PeriodOfReport,
+                    IsAmendment = true,
+                    FilingType = FilingType.Form13F,
+                    PositionCount = 0,
+                    TotalValue = 0,
+                    DeclaredPositionCount = filing.TableEntryTotal,
+                    DeclaredTotalValue = 0,
+                }
+            );
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+            dbContext,
+            [filing.PeriodOfReport],
+            cancellationToken
+        );
     }
 
     private static async Task ValidateCapturedCusipMapping(
@@ -2592,6 +2670,17 @@ public class HoldingsImportService
             .Where(f =>
                 affected.Contains((f.InstitutionalHolderId, f.ReportDate))
                 && !present.Contains(f.AccessionNumber)
+                && !(
+                    f.FilingType == FilingType.Form13F
+                    && f.IsAmendment
+                    && f.PositionCount == 0
+                    && f.DeclaredTotalValue == 0
+                    && !summaries.Any(s =>
+                        s.InstitutionalHolderId == f.InstitutionalHolderId
+                        && s.ReportDate == f.ReportDate
+                        && s.FilingType == FilingType.Form13F
+                    )
+                )
             )
             .ToList();
         if (orphans.Count > 0)

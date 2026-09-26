@@ -5,6 +5,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
+using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
@@ -459,7 +460,17 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // Latest 13F quarter-end dates first — see Get13FHistoryByHolder for why 13D/G
     // event dates are excluded.
     public IQueryable<DateOnly> Get13FReportDatesByHolder(InstitutionalHolder holder) =>
-        Get13FHistoryByHolder(holder).DistinctReportDatesDescending();
+        Get13FHistoryByHolder(holder)
+            .Select(h => h.ReportDate)
+            .Union(
+                Zero13FRestatements()
+                    .Where(f => f.InstitutionalHolderId == holder.Id)
+                    .Select(f => f.ReportDate)
+            )
+            .OrderByDescending(date => date);
+
+    private IQueryable<InstitutionalFiling> Zero13FRestatements() =>
+        DbContext.Set<InstitutionalFiling>().Zero13FRestatements();
 
     // Request-path twin of Get13FReportDatesByHolder. A large filer can carry thousands of
     // positions per quarter, so DISTINCT over its full history turns a one-row-per-quarter
@@ -475,6 +486,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .OrderByDescending(h => h.ReportDate)
             .Select(h => (DateOnly?)h.ReportDate)
             .FirstOrDefaultAsync(cancellationToken);
+        var zeroDates = await Zero13FRestatements()
+            .Where(f => f.InstitutionalHolderId == holder.Id)
+            .Select(f => f.ReportDate)
+            .ToListAsync(cancellationToken);
+        if (zeroDates.Count > 0 && (latestLiveDate == null || zeroDates.Max() > latestLiveDate))
+            latestLiveDate = zeroDates.Max();
         if (latestLiveDate is not { } latest)
             return [];
 
@@ -489,7 +506,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
         if (latest > dates[0])
             dates.Insert(0, latest);
-        return dates;
+        return dates.Concat(zeroDates).Distinct().OrderByDescending(date => date).ToList();
     }
 
     public IQueryable<HolderQuarterlySnapshot> GetHolderQuarterlySnapshots(
@@ -709,7 +726,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(Is13F)
             .Where(h => h.ReportDate == reportDate)
             .Select(h => h.InstitutionalHolderId)
-            .Distinct();
+            .Union(
+                Zero13FRestatements()
+                    .Where(f => f.ReportDate == reportDate)
+                    .Select(f => f.InstitutionalHolderId)
+            );
     }
 
     // Snapshot-first denominator for public most-held rankings. Closed-quarter AUM snapshots
@@ -1971,6 +1992,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             && c.FilingType == FilingType.Form13F
                             && c.InstitutionalHolderId == h.InstitutionalHolderId
                         )
+                    && !Zero13FRestatements()
+                        .Any(f =>
+                            f.ReportDate == current
+                            && f.InstitutionalHolderId == h.InstitutionalHolderId
+                        )
                 )
             );
     }
@@ -2001,6 +2027,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             && c.FilingType == FilingType.Form13F
                             && c.InstitutionalHolderId == h.InstitutionalHolderId
                         )
+                    && !Zero13FRestatements()
+                        .Any(f =>
+                            f.ReportDate == current
+                            && f.InstitutionalHolderId == h.InstitutionalHolderId
+                        )
                 )
             );
     }
@@ -2027,7 +2058,13 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(Is13F)
             .Where(h => h.ReportDate == reportDate && holderIds.Contains(h.InstitutionalHolderId))
             .Select(h => h.InstitutionalHolderId)
-            .Distinct();
+            .Union(
+                Zero13FRestatements()
+                    .Where(f =>
+                        f.ReportDate == reportDate && holderIds.Contains(f.InstitutionalHolderId)
+                    )
+                    .Select(f => f.InstitutionalHolderId)
+            );
     }
 
     // Combined-quarter variant of GetQuarterlyActivity. The "current" side aggregates
@@ -2056,6 +2093,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                         && c.FilingType == FilingType.Form13F
                                         && c.InstitutionalHolderId == h.InstitutionalHolderId
                                     )
+                                && !Zero13FRestatements()
+                                    .Any(f =>
+                                        f.ReportDate == current
+                                        && f.InstitutionalHolderId == h.InstitutionalHolderId
+                                    )
                             )
                         )
                         .Sum(h => (long?)h.Shares)
@@ -2073,6 +2115,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                         && c.FilingType == FilingType.Form13F
                                         && c.InstitutionalHolderId == h.InstitutionalHolderId
                                     )
+                                && !Zero13FRestatements()
+                                    .Any(f =>
+                                        f.ReportDate == current
+                                        && f.InstitutionalHolderId == h.InstitutionalHolderId
+                                    )
                             )
                         )
                         .Sum(h => (long?)h.Value)
@@ -2088,6 +2135,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                                     c.ReportDate == current
                                     && c.FilingType == FilingType.Form13F
                                     && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                            && !Zero13FRestatements()
+                                .Any(f =>
+                                    f.ReportDate == current
+                                    && f.InstitutionalHolderId == h.InstitutionalHolderId
                                 )
                         )
                     )
@@ -2116,7 +2168,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(Is13F)
             .Where(h => h.ReportDate == current || h.ReportDate == previous)
             .Select(h => h.InstitutionalHolderId)
-            .Distinct();
+            .Union(
+                Zero13FRestatements()
+                    .Where(f => f.ReportDate == current || f.ReportDate == previous)
+                    .Select(f => f.InstitutionalHolderId)
+            );
     }
 
     // Combined-quarter variant of churn detection. "New" = holder appears in the
@@ -2153,13 +2209,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 // the position). Non-filers are assumed to still hold.
                 SoldOutFilerCount = g.Where(h =>
                         h.ReportDate == previous
-                        && DbContext
-                            .Set<InstitutionalHolding>()
-                            .Any(c =>
-                                c.ReportDate == current
-                                && c.FilingType == FilingType.Form13F
-                                && c.InstitutionalHolderId == h.InstitutionalHolderId
-                            )
+                        && (
+                            DbContext
+                                .Set<InstitutionalHolding>()
+                                .Any(c =>
+                                    c.ReportDate == current
+                                    && c.FilingType == FilingType.Form13F
+                                    && c.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                            || Zero13FRestatements()
+                                .Any(f =>
+                                    f.ReportDate == current
+                                    && f.InstitutionalHolderId == h.InstitutionalHolderId
+                                )
+                        )
                         && !DbContext
                             .Set<InstitutionalHolding>()
                             .Any(c =>

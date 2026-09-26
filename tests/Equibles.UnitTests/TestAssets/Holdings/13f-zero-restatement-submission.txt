@@ -1,0 +1,138 @@
+<SEC-DOCUMENT>0001999371-26-020307.txt : 20260910
+<SEC-HEADER>0001999371-26-020307.hdr.sgml : 20260910
+<ACCEPTANCE-DATETIME>20260910150119
+ACCESSION NUMBER:		0001999371-26-020307
+CONFORMED SUBMISSION TYPE:	13F-HR/A
+PUBLIC DOCUMENT COUNT:		2
+CONFORMED PERIOD OF REPORT:	20260630
+FILED AS OF DATE:		20260910
+DATE AS OF CHANGE:		20260910
+EFFECTIVENESS DATE:		20260910
+
+FILER:
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			ABS Direct Equity Fund LLC
+		CENTRAL INDEX KEY:			0001729347
+		ORGANIZATION NAME:           	
+		EIN:				000000000
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		13F-HR/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	028-23609
+		FILM NUMBER:		261370802
+
+	BUSINESS ADDRESS:	
+		STREET 1:		2187 ATLANTIC STREET, SUITE 604
+		CITY:			STAMFORD
+		STATE:			CT
+		ZIP:			06902
+		BUSINESS PHONE:		2036183700
+
+	MAIL ADDRESS:	
+		STREET 1:		2187 ATLANTIC STREET, SUITE 604
+		CITY:			STAMFORD
+		STATE:			CT
+		ZIP:			06902
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>13F-HR/A
+<SEQUENCE>1
+<FILENAME>primary_doc.xml
+<TEXT>
+<XML>
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xsi:schemaLocation="http://www.sec.gov/edgar/thirteenffiler eis_13F_Filer.xsd" xmlns="http://www.sec.gov/edgar/thirteenffiler" xmlns:ns1="http://www.sec.gov/edgar/common" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <schemaVersion>X0202</schemaVersion>
+  <headerData>
+    <submissionType>13F-HR/A</submissionType>
+    <filerInfo>
+      <liveTestFlag>LIVE</liveTestFlag>
+      <flags>
+        <confirmingCopyFlag>false</confirmingCopyFlag>
+        <overrideInternetFlag>false</overrideInternetFlag>
+      </flags>
+      <filer>
+        <credentials>
+          <cik>0001729347</cik>
+          <ccc>XXXXXXXX</ccc>
+        </credentials>
+      </filer>
+      <periodOfReport>06-30-2026</periodOfReport>
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPage>
+      <reportCalendarOrQuarter>06-30-2026</reportCalendarOrQuarter>
+      <isAmendment>true</isAmendment>
+      <amendmentNo>1</amendmentNo>
+      <amendmentInfo>
+        <amendmentType>RESTATEMENT</amendmentType>
+        <confDeniedExpired>false</confDeniedExpired>
+      </amendmentInfo>
+      <filingManager>
+        <name>ABS Direct Equity Fund LLC</name>
+        <address>
+          <ns1:street1>2187 Atlantic Street, Suite 604</ns1:street1>
+          <ns1:city>Stamford</ns1:city>
+          <ns1:stateOrCountry>CT</ns1:stateOrCountry>
+          <ns1:zipCode>06902</ns1:zipCode>
+        </address>
+      </filingManager>
+      <reportType>13F HOLDINGS REPORT</reportType>
+      <form13FFileNumber>028-23609</form13FFileNumber>
+      <provideInfoForInstruction5>Y</provideInfoForInstruction5>
+      <additionalInformation>The Form 13F-HR for the quarter ended June 30, 2026 was filed under ABS Investment Management LLC, CIK 0001660708 and SEC Accession Number 0001999371-26-018033. The correct filing can be accessed at https://www.sec.gov/Archives/edgar/data/1660708/000199937126018033/0001999371-26-018033-index.htm.</additionalInformation>
+    </coverPage>
+    <signatureBlock>
+      <name>DAVID FINN</name>
+      <title>Chief Compliance Officer</title>
+      <phone>203-618-3700</phone>
+      <signature>/s/ DAVID FINN</signature>
+      <city>STAMFORD</city>
+      <stateOrCountry>CT</stateOrCountry>
+      <signatureDate>09-10-2026</signatureDate>
+    </signatureBlock>
+    <summaryPage>
+      <otherIncludedManagersCount>0</otherIncludedManagersCount>
+      <tableEntryTotal>1</tableEntryTotal>
+      <tableValueTotal>0</tableValueTotal>
+    </summaryPage>
+  </formData>
+</edgarSubmission>
+</XML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>INFORMATION TABLE
+<SEQUENCE>2
+<FILENAME>infotable.xml
+<TEXT>
+<XML>
+<?xml version="1.0" ?>
+<informationTable xsi:schemaLocation="http://www.sec.gov/edgar/document/thirteenf/informationtable eis_13FDocument.xsd" xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable" xmlns:n1="http://www.sec.gov/edgar/document/thirteenf/informationtable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <infoTable>
+    <nameOfIssuer>0</nameOfIssuer>
+    <titleOfClass>0</titleOfClass>
+    <cusip>000000000</cusip>
+    <figi>000000000000</figi>
+    <value>0</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>0</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>OTR</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+</informationTable>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

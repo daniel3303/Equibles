@@ -32,3 +32,11 @@
 - The cover declares 8 rows and 4,359,220; the complete information table has 10 rows totalling 4,406,898 in filed units.
 - The standalone `1972.xml` returns 404; retain the complete original's positions without marking its cover totals verified.
 - An available standalone table keeps precedence; amendments and zero quantities cannot use this fallback.
+
+# Source-confirmed zero restatement
+
+- Source: https://www.sec.gov/Archives/edgar/data/1729347/000199937126020307/0001999371-26-020307.txt
+- Captured: 2026-09-26; original bytes retained without edits.
+- SHA-256: `16b93695ae364d84862df17594d5d141ae3e2e4857fe96acd76fb3ab9a4c7729`.
+- The restatement corrects a filing submitted under the wrong manager; the complete submission verifies one row with explicit zero shares, value, and votes.
+- Its empty book must replace the original without falling back to the prior quarter or treating missing quantities as zero.
