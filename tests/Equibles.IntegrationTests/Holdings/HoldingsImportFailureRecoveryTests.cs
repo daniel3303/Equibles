@@ -79,25 +79,45 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         (await failures.GetAll().AsNoTracking().SingleAsync()).ResolvedAt.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Recovery_RefusesToOverwriteARetainedAmendmentMissingFromTheSourceResponse()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Recovery_RefusesToOverwriteARetainedAmendmentMissingFromTheSourceResponse(
+        bool emptyRestatement
+    )
     {
         await using var db = fixture.CreateDbContext();
         var issuer = new Equibles.CommonStocks.Data.Models.EquityIssuer { Name = "Issuer" };
         var holder = new InstitutionalHolder { Cik = "123", Name = "Manager" };
         db.AddRange(issuer, holder);
-        db.Add(
-            new InstitutionalHolding
-            {
-                EquityIssuerId = issuer.Id,
-                InstitutionalHolderId = holder.Id,
-                ReportDate = Quarter,
-                FilingDate = new(2026, 9, 1),
-                FilingType = FilingType.Form13F,
-                AccessionNumber = "retained-amendment",
-                Shares = 17,
-            }
-        );
+        if (emptyRestatement)
+            db.Add(
+                new InstitutionalFiling
+                {
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = Quarter,
+                    FilingDate = new(2026, 9, 1),
+                    AccessionNumber = "retained-amendment",
+                    FilingType = FilingType.Form13F,
+                    IsAmendment = true,
+                    PositionCount = 0,
+                    DeclaredPositionCount = 1,
+                    DeclaredTotalValue = 0,
+                }
+            );
+        else
+            db.Add(
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = issuer.Id,
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = Quarter,
+                    FilingDate = new(2026, 9, 1),
+                    FilingType = FilingType.Form13F,
+                    AccessionNumber = "retained-amendment",
+                    Shares = 17,
+                }
+            );
         await db.SaveChangesAsync();
         var failures = new HoldingsImportFailureRepository(db);
         await failures.Record(
@@ -147,7 +167,12 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
                 Arg.Any<CancellationToken>()
             );
         (await failures.GetAll().AsNoTracking().SingleAsync()).ResolvedAt.Should().BeNull();
-        (await db.Set<InstitutionalHolding>().SingleAsync()).Shares.Should().Be(17);
+        if (emptyRestatement)
+            (await db.Set<InstitutionalFiling>().SingleAsync())
+                .AccessionNumber.Should()
+                .Be("retained-amendment");
+        else
+            (await db.Set<InstitutionalHolding>().SingleAsync()).Shares.Should().Be(17);
     }
 
     [Theory]

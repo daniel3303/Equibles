@@ -262,12 +262,8 @@ public class HoldingsAggregateRefreshService
         CancellationToken cancellationToken
     )
     {
-        var latest = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => h.FilingType == FilingType.Form13F)
-            .Select(h => h.ReportDate)
-            .OrderByDescending(d => d)
-            .FirstOrDefaultAsync(cancellationToken);
+        var dates = InstitutionalHoldingReportDateQueries.Get13FReportDates(dbContext);
+        var latest = await dates.OrderByDescending(d => d).FirstOrDefaultAsync(cancellationToken);
         if (latest == default)
         {
             return;
@@ -285,10 +281,8 @@ public class HoldingsAggregateRefreshService
             return;
         }
 
-        var previous = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => h.ReportDate < latest && h.FilingType == FilingType.Form13F)
-            .Select(h => h.ReportDate)
+        var previous = await dates
+            .Where(date => date < latest)
             .OrderByDescending(d => d)
             .FirstOrDefaultAsync(cancellationToken);
         if (previous == default)
@@ -551,7 +545,16 @@ public class HoldingsAggregateRefreshService
         var emptyFilings = await dbContext
             .Set<InstitutionalFiling>()
             .Zero13FRestatements()
-            .Where(f => f.ReportDate == reportDate)
+            .Where(f =>
+                f.ReportDate == reportDate
+                && !dbContext
+                    .Set<InstitutionalHolding>()
+                    .Any(h =>
+                        h.ReportDate == reportDate
+                        && h.FilingType == FilingType.Form13F
+                        && h.InstitutionalHolderId == f.InstitutionalHolderId
+                    )
+            )
             .Select(f => f.InstitutionalHolderId)
             .Distinct()
             .CountAsync(cancellationToken);

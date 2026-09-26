@@ -322,6 +322,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .OrderByDescending(h => h.ReportDate)
             .Select(h => (DateOnly?)h.ReportDate)
             .FirstOrDefaultAsync(cancellationToken);
+        var emptyDates = await Zero13FRestatements()
+            .Select(f => f.ReportDate)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (emptyDates.Count > 0 && (latestLiveDate == null || emptyDates.Max() > latestLiveDate))
+            latestLiveDate = emptyDates.Max();
         if (latestLiveDate is not { } latest)
             return [];
 
@@ -337,7 +343,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             // during that short lag without falling back to the corpus-wide DISTINCT.
             if (latest > snapshotDates[0])
                 snapshotDates.Insert(0, latest);
-            return snapshotDates;
+            return snapshotDates
+                .Concat(emptyDates)
+                .Distinct()
+                .OrderByDescending(date => date)
+                .ToList();
         }
 
         // GetConnectionString throws on non-relational providers (the EF InMemory tests),
@@ -353,7 +363,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     Cached13FReportDates.TryGetValue(cacheKey, out var entry)
                     && DateTime.UtcNow - entry.LoadedUtc < ReportDatesCacheTtl
                 )
-                    return new List<DateOnly>(entry.Dates);
+                    return entry
+                        .Dates.Concat(emptyDates)
+                        .Distinct()
+                        .OrderByDescending(date => date)
+                        .ToList();
             }
         }
 
@@ -1572,6 +1586,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // when the quarter was amended. Callers wanting "what did the filer declare for this
     // quarter" take the latest FilingDate: a restatement's declaration supersedes the
     // original's, and for the ordinary one-filing case it is simply that filing.
+    public IQueryable<string> GetRetained13FAccessions(string cik, DateOnly fromDate) =>
+        GetAll()
+            .Where(h =>
+                h.InstitutionalHolder.Cik == cik
+                && h.FilingType == FilingType.Form13F
+                && h.FilingDate >= fromDate
+            )
+            .Select(h => h.AccessionNumber)
+            .Union(
+                Zero13FRestatements()
+                    .Where(f => f.InstitutionalHolder.Cik == cik && f.FilingDate >= fromDate)
+                    .Select(f => f.AccessionNumber)
+            );
+
     public IQueryable<InstitutionalFiling> GetFilingsByHolder(
         InstitutionalHolder holder,
         DateOnly reportDate

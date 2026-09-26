@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Data.Common;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
@@ -32,7 +34,7 @@ public class Zero13FRestatementImportTests(ParadeDbFixture fixture) : IAsyncLife
         DateFiled = new DateOnly(2026, 9, 10),
         FormType = "13F-HR/A",
     };
-    private readonly List<EquiblesFinancialDbContext> _contexts = [];
+    private readonly ConcurrentBag<EquiblesFinancialDbContext> _contexts = [];
 
     public Task InitializeAsync() => fixture.ResetAsync();
 
@@ -43,23 +45,33 @@ public class Zero13FRestatementImportTests(ParadeDbFixture fixture) : IAsyncLife
         return Task.CompletedTask;
     }
 
-    private EquiblesFinancialDbContext Context(bool rejectEmptySummary = false)
+    private EquiblesFinancialDbContext Context(
+        bool rejectEmptySummary = false,
+        DbCommandInterceptor observer = null
+    )
     {
-        var context = rejectEmptySummary
-            ? fixture.CreateDbContext(options => options.AddInterceptors(new RejectEmptySummary()))
-            : fixture.CreateDbContext();
+        var context = fixture.CreateDbContext(options =>
+        {
+            if (rejectEmptySummary)
+                options.AddInterceptors(new RejectEmptySummary());
+            if (observer != null)
+                options.AddInterceptors(observer);
+        });
         _contexts.Add(context);
         return context;
     }
 
-    private IServiceScopeFactory Scopes(bool rejectEmptySummary = false)
+    private IServiceScopeFactory Scopes(
+        bool rejectEmptySummary = false,
+        DbCommandInterceptor observer = null
+    )
     {
         var factory = Substitute.For<IServiceScopeFactory>();
         factory
             .CreateScope()
             .Returns(_ =>
             {
-                var db = Context(rejectEmptySummary);
+                var db = Context(rejectEmptySummary, observer);
                 var services = Substitute.For<IServiceProvider>();
                 services.GetService(typeof(EquiblesFinancialDbContext)).Returns(db);
                 services
@@ -313,6 +325,174 @@ public class Zero13FRestatementImportTests(ParadeDbFixture fixture) : IAsyncLife
         retained.Shares.Should().Be(10);
         retained.ManagerEntries.Should().ContainSingle();
         (await verify.Set<InstitutionalFiling>().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ConcurrentSummaryRead_HoldsTheBookLockUntilItsWritesFinish()
+    {
+        var stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "ZERO",
+            Name: "Example equity",
+            Cik: "12345",
+            Cusip: "123456789"
+        );
+        var holder = new InstitutionalHolder { Cik = Entry.Cik, Name = "Restating manager" };
+        using (var seed = Context())
+        {
+            seed.Add(stock);
+            seed.Add(holder);
+            await seed.SaveChangesAsync();
+        }
+        using var original = new Realtime13FArchiveBuilder().Build([
+            new Parsed13FFiling
+            {
+                Cik = Entry.Cik,
+                AccessionNumber = "ORIGINAL",
+                FilingDate = Entry.DateFiled.AddDays(-1),
+                PeriodOfReport = Quarter,
+                FilingManagerName = holder.Name,
+                Holdings =
+                [
+                    new Parsed13FHolding
+                    {
+                        Cusip = "123456789",
+                        Shares = 10,
+                        Value = 500,
+                        ShareType = "SH",
+                    },
+                ],
+            },
+        ]);
+        var pause = new SummaryReadPause();
+        var originalTask = Importer(Scopes(observer: pause))
+            .ImportDataSet(original, Previous, CancellationToken.None);
+        Task<ImportResult> zeroTask = null;
+        try
+        {
+            await pause.Read.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            using var probe = Context();
+            var key = $"holdings-book:{holder.Id}:2026-06-30:0";
+            (
+                await probe
+                    .Database.SqlQuery<bool>(
+                        $"SELECT pg_try_advisory_xact_lock(hashtextextended({key}, 0)) AS \"Value\""
+                    )
+                    .SingleAsync()
+            )
+                .Should()
+                .BeFalse("summary reads and writes must share the position writer's lock");
+            var filing = Filing13FSubmissionParser
+                .Parse(System.Text.Encoding.UTF8.GetString(Source()), Entry, new())
+                .Filing;
+            zeroTask = Importer(Scopes())
+                .ImportZeroRestatement(filing, Previous, CancellationToken.None);
+        }
+        finally
+        {
+            pause.Resume.TrySetResult();
+            await originalTask;
+            if (zeroTask != null)
+                await zeroTask;
+        }
+        using var verify = Context();
+        (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<InstitutionalFiling>().SingleAsync())
+            .AccessionNumber.Should()
+            .Be(Entry.AccessionNumber);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EmptyQuarter_RemainsSelectableAndDoesNotDoubleCountAnInFlightPositiveBook(
+        bool positiveBook
+    )
+    {
+        var stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "ZERO",
+            Name: "Example equity",
+            Cik: "12345",
+            Cusip: "123456789"
+        );
+        var holder = new InstitutionalHolder { Cik = Entry.Cik, Name = "Restating manager" };
+        using (var seed = Context())
+        {
+            seed.Add(stock);
+            seed.Add(holder);
+            seed.Add(Position(stock, holder, Previous, FilingType.Form13F, "PRIOR"));
+            await seed.SaveChangesAsync();
+        }
+        using var read = Context();
+        var repository = new InstitutionalHoldingRepository(read);
+        (await repository.Get13FAvailableReportDatesCached()).Should().Equal(Previous);
+        using (var seed = Context())
+        {
+            seed.Add(
+                new InstitutionalFiling
+                {
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = Quarter,
+                    FilingDate = Entry.DateFiled,
+                    AccessionNumber = Entry.AccessionNumber,
+                    IsAmendment = true,
+                    FilingType = FilingType.Form13F,
+                    PositionCount = 0,
+                    DeclaredPositionCount = 1,
+                    DeclaredTotalValue = 0,
+                }
+            );
+            if (positiveBook)
+                seed.Add(Position(stock, holder, Quarter, FilingType.Form13F, "LATER"));
+            await seed.SaveChangesAsync();
+        }
+        (await repository.Get13FAvailableReportDates().ToListAsync())
+            .Should()
+            .Equal(Quarter, Previous);
+        (await repository.Get13FAvailableReportDatesCached()).Should().Equal(Quarter, Previous);
+        await new HoldingsAggregateRefreshService(
+            Scopes(),
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        ).RebuildQuarterAsync(Quarter, CancellationToken.None);
+        using var verify = Context();
+        var snapshot = await verify
+            .Set<AumQuarterlySnapshot>()
+            .SingleAsync(s => s.ReportDate == Quarter);
+        snapshot.FilerCount.Should().Be(1);
+        snapshot.TotalValue.Should().Be(positiveBook ? 500 : 0);
+        snapshot.PositionCount.Should().Be(positiveBook ? 1 : 0);
+        (await verify.Set<HolderQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Quarter))
+            .PositionCount.Should()
+            .Be(positiveBook ? 1 : 0);
+    }
+
+    private sealed class SummaryReadPause : DbCommandInterceptor
+    {
+        public TaskCompletionSource Read { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Resume { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _paused;
+
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            DbDataReader result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (
+                command.CommandText.Contains("InstitutionalHolding")
+                && command.CommandText.Contains("GROUP BY")
+                && Interlocked.Exchange(ref _paused, 1) == 0
+            )
+            {
+                Read.TrySetResult();
+                await Resume.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+            }
+            return result;
+        }
     }
 
     private sealed class RejectEmptySummary : SaveChangesInterceptor

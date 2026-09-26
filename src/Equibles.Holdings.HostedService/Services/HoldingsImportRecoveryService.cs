@@ -94,14 +94,7 @@ public class HoldingsImportRecoveryService(
             .DistinctBy(entry => entry.AccessionNumber)
             .ToList();
         var retainedAccessions = await holdings
-            .GetAll()
-            .Where(row =>
-                row.InstitutionalHolder.Cik == cik
-                && row.FilingType == Equibles.Holdings.Data.Models.FilingType.Form13F
-                && row.FilingDate >= from
-            )
-            .Select(row => row.AccessionNumber)
-            .Distinct()
+            .GetRetained13FAccessions(cik, from)
             .ToListAsync(cancellationToken);
         var offeredAccessions = entries
             .Select(entry => entry.AccessionNumber)

@@ -2544,7 +2544,7 @@ public class HoldingsImportService
         CancellationToken cancellationToken
     )
     {
-        var affected = new HashSet<(Guid HolderId, DateOnly ReportDate)>();
+        var affected = new HashSet<(Guid HolderId, DateOnly ReportDate, FilingType FilingType)>();
         foreach (var submission in context.Submissions.Values)
         {
             if (string.IsNullOrEmpty(submission.Cik))
@@ -2553,11 +2553,30 @@ public class HoldingsImportService
                 continue;
             if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
                 continue;
-            affected.Add((holderId, reportDate));
+            if (submission.FormType.ToHoldingsFilingType() is not { } filingType)
+                continue;
+            affected.Add((holderId, reportDate, filingType));
         }
         if (affected.Count == 0)
             return;
 
+        // Bound lock ownership per transaction; a bulk archive contains thousands of books.
+        foreach (
+            var batch in affected
+                .OrderBy(book => book.HolderId)
+                .ThenBy(book => book.ReportDate)
+                .ThenBy(book => book.FilingType)
+                .Chunk(100)
+        )
+            await SyncFilingSummaryBatch(context, batch.ToHashSet(), cancellationToken);
+    }
+
+    private async Task SyncFilingSummaryBatch(
+        ImportContext context,
+        HashSet<(Guid HolderId, DateOnly ReportDate, FilingType FilingType)> affected,
+        CancellationToken cancellationToken
+    )
+    {
         // The two IN lists widen to a (holder × quarter) cross-product in SQL; the
         // in-memory HashSet narrows the result back to the exact pairs we touched.
         var holderIds = affected.Select(a => a.HolderId).Distinct().ToList();
@@ -2565,6 +2584,24 @@ public class HoldingsImportService
 
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        var bookLocks = affected
+            .Select(book =>
+                $"holdings-book:{book.HolderId}:{book.ReportDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:{(int)book.FilingType}"
+            )
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToArray();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            WITH ordered_books AS MATERIALIZED (
+                SELECT key FROM unnest({bookLocks}) AS books(key) ORDER BY key
+            )
+            SELECT pg_advisory_xact_lock(hashtextextended(key, 0)) FROM ordered_books
+            """,
+            cancellationToken
+        );
 
         var rows = await dbContext
             .Set<InstitutionalHolding>()
@@ -2598,7 +2635,9 @@ public class HoldingsImportService
         // whose holdings rows disagree on grouping metadata (mixed amendment flag,
         // inconsistent dates) yields several groups, so collapse to the dominant
         // variant per accession instead of aborting the whole data set.
-        var summaries = rows.Where(r => affected.Contains((r.InstitutionalHolderId, r.ReportDate)))
+        var summaries = rows.Where(r =>
+                affected.Contains((r.InstitutionalHolderId, r.ReportDate, r.FilingType))
+            )
             .GroupBy(r => r.AccessionNumber, StringComparer.Ordinal)
             .Select(g =>
                 g.OrderByDescending(r => r.PositionCount)
@@ -2668,7 +2707,7 @@ public class HoldingsImportService
             .ToListAsync(cancellationToken);
         var orphans = existingFilings
             .Where(f =>
-                affected.Contains((f.InstitutionalHolderId, f.ReportDate))
+                affected.Contains((f.InstitutionalHolderId, f.ReportDate, f.FilingType))
                 && !present.Contains(f.AccessionNumber)
                 && !(
                     f.FilingType == FilingType.Form13F
@@ -2689,6 +2728,7 @@ public class HoldingsImportService
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        await transaction.CommitAsync(cancellationToken);
         _logger.LogInformation(
             "Synced {Count} filing summaries across {Pairs} (holder, quarter) pair(s)",
             summaries.Count,
