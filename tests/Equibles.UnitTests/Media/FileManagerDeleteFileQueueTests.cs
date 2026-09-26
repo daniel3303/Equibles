@@ -33,13 +33,15 @@ public class FileManagerDeleteFileQueueTests
     // A filesystem-stored file's blob can't be unlinked inline (shared by dedup, racy),
     // so the delete must leave a mark the sweep can act on — carrying both the hash for
     // the reference re-check and the path to locate the blob.
-    [Fact]
-    public void DeleteFile_FileSystemFile_QueuesBlobDeletionAndDeletesRow()
+    [Theory]
+    [InlineData("FileSystem")]
+    [InlineData("FileSystemGzip")]
+    public void DeleteFile_FileSystemFile_QueuesBlobDeletionAndDeletesRow(string provider)
     {
         var (manager, files, queue) = CreateSut();
         var file = new File
         {
-            StorageProvider = StorageProvider.FileSystem,
+            StorageProvider = StorageProvider.FromValue(provider),
             ContentHash = "sha256:abc123",
             RelativePath = "blob/sha256/ab/c1/abc123",
         };

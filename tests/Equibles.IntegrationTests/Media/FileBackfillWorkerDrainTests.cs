@@ -28,8 +28,12 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
     public FileBackfillWorkerDrainTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    [Fact]
-    public async Task DrainOnce_MovesDatabaseBlobsToDisk_LeavesImagesAndBytelessRows()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DrainOnce_MovesDatabaseBlobsToDisk_LeavesImagesAndBytelessRows(
+        bool compressText
+    )
     {
         var root = Path.Combine(
             Path.GetTempPath(),
@@ -78,14 +82,27 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
         };
         byteless.FileContent = new FileContent { File = byteless, Bytes = null };
 
-        DbContext.AddRange(eligible, audio, image, byteless);
+        var text = new File
+        {
+            Name = "filing",
+            Extension = "txt",
+            ContentType = "text/plain",
+        };
+        var textBytes = "plain filing text"u8.ToArray();
+        text.FileContent = new FileContent { File = text, Bytes = textBytes };
+        DbContext.AddRange(eligible, audio, image, byteless, text);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
         try
         {
             var storageOptions = Options.Create(
-                new FileStorageOptions { Enabled = true, RootPath = root }
+                new FileStorageOptions
+                {
+                    Enabled = true,
+                    RootPath = root,
+                    CompressTextFiles = compressText,
+                }
             );
             var services = new ServiceCollection();
             services.AddScoped<EquiblesFinancialDbContext>(_ => Fixture.CreateDbContext());
@@ -101,8 +118,8 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
 
             var result = await worker.DrainOnce(CancellationToken.None);
 
-            result.Claimed.Should().Be(2);
-            result.Moved.Should().Be(2);
+            result.Claimed.Should().Be(3);
+            result.Moved.Should().Be(3);
 
             await using var verify = Fixture.CreateDbContext();
 
@@ -143,6 +160,19 @@ public class FileBackfillWorkerDrainTests : ParadeDbMcpTestBase
                 .FirstAsync(f => f.Id == image.Id);
             imageAfter.StorageProvider.Should().Be(StorageProvider.Database);
             imageAfter.FileContent.Bytes.Should().Equal(imageBytes);
+
+            var textAfter = await verify
+                .Set<File>()
+                .Include(f => f.FileContent)
+                .FirstAsync(f => f.Id == text.Id);
+            textAfter
+                .StorageProvider.Should()
+                .Be(compressText ? StorageProvider.FileSystemGzip : StorageProvider.FileSystem);
+            textAfter.FileContent.Should().BeNull();
+            textAfter.Size.Should().Be(textBytes.Length);
+            (await new FileSystemFileStorageProvider(storageOptions).GetContent(textAfter))
+                .Should()
+                .Equal(textBytes);
 
             var bytelessAfter = await verify.Set<File>().FirstAsync(f => f.Id == byteless.Id);
             bytelessAfter.StorageProvider.Should().Be(StorageProvider.Database);

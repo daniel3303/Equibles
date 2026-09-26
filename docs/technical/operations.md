@@ -186,3 +186,11 @@ A `docker compose down` keeps these volumes. `docker compose down -v` deletes th
 - Watch the Status page for progress; data starts showing up as soon as the first cycle of each scraper writes a row.
 - **`CREATE EXTENSION "pg_search" does not exist`** during migration — you're running against a vanilla Postgres image instead of `paradedb/paradedb`. See [Migrations → Postgres extensions](migrations.md#postgres-extensions).
 - **FINRA / FRED scrapers always error** — their API key is set incorrectly. Unset both vars to let them skip gracefully (the rest of the platform runs without them).
+
+## Plain-text file compression
+
+- `FileStorage:CompressTextFiles=true` compresses new filesystem `text/plain` files with gzip, including database-to-filesystem backfill writes. MIME matching ignores case, surrounding whitespace and parameters. Other formats retain their existing bytes.
+- Deploy reader support to every host before enabling this setting. It defaults to false; turning it off affects future writes only. Older binaries cannot read the new `FileSystemGzip` provider and are not a valid rollback after compressed rows exist.
+- `File.Size`, name, extension and content type describe the original bytes. `ContentHash` and `RelativePath` identify the compressed bytes. Reads verify the physical hash and logical length and return the original bytes through the normal file manager; compressed streams remain seekable.
+- This applies to the media store, not arbitrary files written directly to disk. Existing `FileSystem` rows remain readable and require a separate verified migration to gain compression.
+- A migration must preserve file IDs, verify every compressed copy, make it durable before changing rows, and queue replaced blobs for the ordinary cross-database reference checks and deletion grace period. Never overwrite or directly delete an original blob: other rows can share it.

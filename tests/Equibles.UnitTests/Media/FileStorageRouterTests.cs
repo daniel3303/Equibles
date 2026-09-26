@@ -69,11 +69,15 @@ public class FileStorageRouterTests
     [Fact]
     public void ReadProvider_DispatchesOnStoredValue()
     {
-        var router = Build(enabled: true, root: "/tmp/x");
+        var router = Build(enabled: false, root: "/tmp/x");
         router
             .ReadProvider(StorageProvider.Database)
             .Provider.Should()
             .Be(StorageProvider.Database);
+        router
+            .ReadProvider(StorageProvider.FileSystemGzip)
+            .Should()
+            .BeOfType<FileSystemFileStorageProvider>();
         router
             .ReadProvider(StorageProvider.FileSystem)
             .Provider.Should()

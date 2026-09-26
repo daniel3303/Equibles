@@ -47,5 +47,7 @@ public class FileStorageRouter
 
     /// <summary>Resolves the provider for reading a file by the value recorded when it was written.</summary>
     public IFileStorageProvider ReadProvider(StorageProvider stored) =>
-        stored == StorageProvider.FileSystem ? _fileSystemProvider : _databaseProvider;
+        stored == StorageProvider.FileSystem || stored == StorageProvider.FileSystemGzip
+            ? _fileSystemProvider
+            : _databaseProvider;
 }

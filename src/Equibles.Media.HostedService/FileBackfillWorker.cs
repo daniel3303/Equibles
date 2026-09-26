@@ -197,13 +197,15 @@ public class FileBackfillWorker : BackgroundService
                 var tier = IsAudio(blob.ContentType)
                     ? FileStorageTiers.Audio
                     : FileStorageTiers.Blob;
-                var stamp = await fileSystemProvider.WriteBuffered(blob.Bytes, tier);
+                var stamp = new File { ContentType = blob.ContentType };
+                await fileSystemProvider.SaveBuffered(stamp, blob.Bytes, tier);
                 written.Add(
                     new MovedBlob(
                         blob.Id,
                         blob.ContentId,
                         stamp.RelativePath,
                         stamp.ContentHash,
+                        stamp.StorageProvider,
                         blob.Bytes.Length
                     )
                 );
@@ -227,7 +229,7 @@ public class FileBackfillWorker : BackgroundService
             var file = new File { Id = blob.FileId };
             dbContext.Attach(file);
             file.Size = blob.Size;
-            file.StorageProvider = StorageProvider.FileSystem;
+            file.StorageProvider = blob.StorageProvider;
             file.RelativePath = blob.RelativePath;
             file.ContentHash = blob.ContentHash;
 
@@ -254,6 +256,7 @@ public class FileBackfillWorker : BackgroundService
         Guid ContentId,
         string RelativePath,
         string ContentHash,
+        StorageProvider StorageProvider,
         long Size
     );
 }

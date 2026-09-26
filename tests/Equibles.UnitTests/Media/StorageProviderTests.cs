@@ -11,12 +11,14 @@ public class StorageProviderTests
     [InlineData("database")]
     [InlineData("FileSystem")]
     [InlineData("filesystem")]
+    [InlineData("FileSystemGzip")]
+    [InlineData("filesystemgzip")]
     public void FromValue_KnownValue_ReturnsCanonicalInstance(string value)
     {
         var provider = StorageProvider.FromValue(value);
 
         provider.Should().NotBeNull();
-        provider.Value.Should().BeOneOf("Database", "FileSystem");
+        provider.Value.Should().BeOneOf("Database", "FileSystem", "FileSystemGzip");
     }
 
     // The converter relies on FromValue returning null for NULL/unknown columns so it

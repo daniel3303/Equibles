@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.IO.Compression;
 using Equibles.Core.AutoWiring;
 using Equibles.Media.BusinessLogic.Configuration;
 using Equibles.Media.Data.Models;
@@ -28,8 +30,9 @@ public class FileSystemFileStorageProvider : IFileStorageProvider
 
     public async Task Save(File file, byte[] content, string tier)
     {
-        var fullPath = StampAndResolve(file, content, tier);
-        await DurableFileWriter.WriteIfMissing(fullPath, content);
+        var stored = Encode(file, content);
+        var fullPath = StampAndResolve(file, stored, tier);
+        await DurableFileWriter.WriteIfMissing(fullPath, stored);
     }
 
     /// <summary>
@@ -39,9 +42,8 @@ public class FileSystemFileStorageProvider : IFileStorageProvider
     /// </summary>
     public async Task SaveBuffered(File file, byte[] content, string tier)
     {
-        var stamp = await WriteBuffered(content, tier);
-        file.Size = content.Length;
-        file.StorageProvider = StorageProvider.FileSystem;
+        var stored = Encode(file, content);
+        var stamp = await WriteBuffered(stored, tier);
         file.RelativePath = stamp.RelativePath;
         file.ContentHash = stamp.ContentHash;
         file.FileContent = null;
@@ -77,22 +79,95 @@ public class FileSystemFileStorageProvider : IFileStorageProvider
         var relativePath = ContentAddressedPath.Build(tier, hashHex);
         var fullPath = Path.Combine(RequireRoot(), ContentAddressedPath.ToOsPath(relativePath));
 
-        file.Size = content.Length;
-        file.StorageProvider = StorageProvider.FileSystem;
         file.RelativePath = relativePath;
         file.ContentHash = ContentAddressedPath.HashPrefix + hashHex;
         file.FileContent = null;
         return fullPath;
     }
 
-    public Task<byte[]> GetContent(File file)
+    private byte[] Encode(File file, byte[] content)
     {
-        return System.IO.File.ReadAllBytesAsync(ResolvePath(file));
+        file.Size = content.LongLength;
+        file.StorageProvider = StorageProvider.FileSystem;
+        if (
+            !_options.CompressTextFiles
+            || !string.Equals(
+                file.ContentType?.Split(';', 2)[0].Trim(),
+                "text/plain",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            return content;
+        }
+
+        file.StorageProvider = StorageProvider.FileSystemGzip;
+        if (content.Length == 0)
+        {
+            // GZipStream emits no member when no bytes were written. Store a valid empty
+            // gzip member so every FileSystemGzip blob has the same interoperable format.
+            return Convert.FromHexString("1F8B080000000000000303000000000000000000");
+        }
+
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+        {
+            gzip.Write(content);
+        }
+
+        return output.ToArray();
     }
 
-    public Task<Stream> OpenRead(File file)
+    public async Task<byte[]> GetContent(File file)
     {
-        Stream stream = new FileStream(
+        var stored = await System.IO.File.ReadAllBytesAsync(ResolvePath(file));
+        if (file.StorageProvider != StorageProvider.FileSystemGzip)
+        {
+            return stored;
+        }
+
+        // Validate the stored hash before decoding: GZipStream can accept a missing footer.
+        // Size stays logical, while the path and hash always describe the physical bytes.
+        if (
+            stored.Length < 18
+            || stored[0] != 0x1f
+            || stored[1] != 0x8b
+            || stored[2] != 8
+            || file.ContentHash
+                != ContentAddressedPath.HashPrefix + ContentAddressedPath.ComputeSha256Hex(stored)
+            || file.Size < 0
+            || file.Size > Array.MaxLength
+            || BinaryPrimitives.ReadUInt32LittleEndian(stored.AsSpan(stored.Length - 4))
+                != (uint)file.Size
+        )
+        {
+            throw new InvalidDataException(
+                $"Compressed file {file.Id} has invalid storage metadata or bytes."
+            );
+        }
+
+        using var input = new MemoryStream(stored, writable: false);
+        using var gzip = new GZipStream(input, CompressionMode.Decompress);
+        var content = new byte[(int)file.Size];
+        await gzip.ReadExactlyAsync(content);
+        if (gzip.ReadByte() != -1)
+        {
+            throw new InvalidDataException($"Compressed file {file.Id} exceeds its original size.");
+        }
+
+        return content;
+    }
+
+    public async Task<Stream> OpenRead(File file)
+    {
+        if (file.StorageProvider == StorageProvider.FileSystemGzip)
+        {
+            // Preserve seek/length/range semantics for callers; large audio and PDF blobs
+            // retain their streaming path and are never selected for text compression.
+            return new MemoryStream(await GetContent(file), writable: false);
+        }
+
+        return new FileStream(
             ResolvePath(file),
             FileMode.Open,
             FileAccess.Read,
@@ -100,7 +175,6 @@ public class FileSystemFileStorageProvider : IFileStorageProvider
             bufferSize: 1 << 16,
             FileOptions.Asynchronous | FileOptions.SequentialScan
         );
-        return Task.FromResult(stream);
     }
 
     private string ResolvePath(File file)

@@ -12,4 +12,7 @@ public class FileStorageOptions
 
     /// <summary>Absolute physical root of the store, e.g. "/data/media". Required when <see cref="Enabled"/>.</summary>
     public string RootPath { get; set; }
+
+    /// <summary>Compress new text/plain filesystem blobs. Deploy compatible readers before enabling.</summary>
+    public bool CompressTextFiles { get; set; }
 }

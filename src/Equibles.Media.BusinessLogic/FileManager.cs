@@ -146,7 +146,10 @@ public class FileManager : IFileManager
             return;
 
         if (
-            file.StorageProvider == StorageProvider.FileSystem
+            (
+                file.StorageProvider == StorageProvider.FileSystem
+                || file.StorageProvider == StorageProvider.FileSystemGzip
+            )
             && file.ContentHash != null
             && file.RelativePath != null
         )

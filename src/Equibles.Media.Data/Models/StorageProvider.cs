@@ -23,11 +23,15 @@ public sealed class StorageProvider
     /// <summary>Bytes stored on a content-addressed filesystem tree; the File carries RelativePath + ContentHash.</summary>
     public static readonly StorageProvider FileSystem = new("FileSystem");
 
+    /// <summary>Gzip bytes on the filesystem; Size and ContentType describe the original file.</summary>
+    public static readonly StorageProvider FileSystemGzip = new("FileSystemGzip");
+
     private static readonly ConcurrentDictionary<string, StorageProvider> AllByValue = new(
         new[]
         {
             new KeyValuePair<string, StorageProvider>(Database.Value, Database),
             new KeyValuePair<string, StorageProvider>(FileSystem.Value, FileSystem),
+            new KeyValuePair<string, StorageProvider>(FileSystemGzip.Value, FileSystemGzip),
         },
         StringComparer.OrdinalIgnoreCase
     );
