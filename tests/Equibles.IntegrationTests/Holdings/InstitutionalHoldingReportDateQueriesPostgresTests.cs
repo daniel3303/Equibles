@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
@@ -90,7 +91,7 @@ public class InstitutionalHoldingReportDateQueriesPostgresTests : IAsyncLifetime
             new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
                 .UseNpgsql(_database.GetConnectionString())
                 .Options,
-            Array.Empty<IModuleConfiguration>()
+            new IModuleConfiguration[] { new FilingDateModule() }
         );
         await db.Database.OpenConnectionAsync();
         // The query reads only these columns; a temporary relation permits duplicate dates at
@@ -99,8 +100,18 @@ public class InstitutionalHoldingReportDateQueriesPostgresTests : IAsyncLifetime
             """
             CREATE TEMP TABLE "InstitutionalHolding" ("ReportDate" date NOT NULL, "FilingType" integer NOT NULL);
             CREATE INDEX ON "InstitutionalHolding" ("ReportDate");
+            CREATE TEMP TABLE "InstitutionalFiling" (
+                "ReportDate" date NOT NULL, "FilingType" integer NOT NULL,
+                "IsAmendment" boolean NOT NULL, "PositionCount" integer NOT NULL,
+                "DeclaredTotalValue" bigint);
             """
         );
         return db;
+    }
+
+    private sealed class FilingDateModule : IModuleConfiguration
+    {
+        public void ConfigureEntities(ModelBuilder builder) =>
+            builder.Entity<InstitutionalFiling>().Ignore(f => f.InstitutionalHolder);
     }
 }
