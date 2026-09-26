@@ -6,3 +6,20 @@
 - Covers the SEC SGML envelope, XML declarations, namespaces, two reported CUSIPs, and distinct other-manager lists.
 - Declared information-table rows: 119; declared value: 3,226,843 in the source's filed units.
 - The replay test runs offline; source download belongs to fixture maintenance.
+
+# Complete submission with inconsistent cover totals
+
+- Source: https://www.sec.gov/Archives/edgar/data/1076598/0000940394-21-000993.txt
+- Captured: 2026-09-25; original bytes retained without edits.
+- SHA-256: `9b94855315b0017b01ffeaf54ae3a730c78254761f9de81ac9f053475ee64c1d`.
+- The cover declares 2,925 rows and 67,435,365; its information table contains 2,924 rows totalling 67,439,348 in filed units.
+- Reuse the two safe artifact filenames for standalone XML retrieval while retaining the strict complete-submission acceptance rule.
+
+# Source-confirmed zero positions
+
+- Source: https://www.sec.gov/Archives/edgar/data/1634047/0001172661-23-003928.txt
+- Captured: 2026-09-26; original bytes retained without edits.
+- SHA-256: `0dc9812340320699e2256df912b4b67b14c967edd917f9727b9088f91ca8a9ce`.
+- The manager explicitly reports that all discretionary authority transferred on July 15, 2023 and this is its final filing.
+- Declared row count is one and value is zero; the sole placeholder row explicitly reports zero shares, value, and every voting quantity.
+- Completion uses these structured source quantities, verified envelope declarations, and an empty retained quarter; no name or identifier pattern classifies the placeholder.

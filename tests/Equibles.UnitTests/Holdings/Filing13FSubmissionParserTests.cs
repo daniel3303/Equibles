@@ -1,3 +1,4 @@
+using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
@@ -68,7 +69,7 @@ public class Filing13FSubmissionParserTests
     [Fact]
     public void CompleteSubmission_PreservesFiledRowsAndAttribution()
     {
-        var filing = Filing13FSubmissionParser.Parse(Submission, Entry, new());
+        var filing = Filing13FSubmissionParser.Parse(Submission, Entry, new())?.Filing;
 
         filing.Should().NotBeNull();
         filing.PeriodOfReport.Should().Be(new DateOnly(2026, 6, 30));
@@ -95,6 +96,44 @@ public class Filing13FSubmissionParserTests
     [InlineData("<tableEntryTotal>2</tableEntryTotal>", "")]
     public void IncompleteOrInconsistentSubmission_IsNotAccepted(string oldValue, string newValue)
     {
+        var filing = Filing13FSubmissionParser
+            .Parse(Submission.Replace(oldValue, newValue), Entry, new())
+            ?.Filing;
+
+        filing.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("<tableEntryTotal>2", "<tableEntryTotal>3")]
+    [InlineData("<tableValueTotal>300", "<tableValueTotal>301")]
+    [InlineData("<tableEntryTotal>2</tableEntryTotal>", "")]
+    public void InconsistentDeclarations_RetainSafeFilenamesForStandaloneXml(
+        string oldValue,
+        string newValue
+    )
+    {
+        var result = Filing13FSubmissionParser.Parse(
+            Submission.Replace(oldValue, newValue),
+            Entry,
+            new()
+        );
+
+        result.Filing.Should().BeNull();
+        result.ArtifactNames.Should().Equal("primary_doc.xml", "positions.xml");
+    }
+
+    [Theory]
+    [InlineData("</SEC-DOCUMENT>", "")]
+    [InlineData("<cik>0000001234", "<cik>9999")]
+    [InlineData("<cik>0000001234</cik>", "")]
+    [InlineData("<TYPE>13F-HR", "<TYPE>13F-HR/A")]
+    [InlineData("primary_doc.xml", "../primary_doc.xml")]
+    [InlineData("<FILENAME>positions.xml", "")]
+    [InlineData("positions.xml", "../positions.xml")]
+    [InlineData("<TYPE>INFORMATION TABLE", "")]
+    [InlineData("</DOCUMENT>\n</SEC-DOCUMENT>", "</SEC-DOCUMENT>")]
+    public void UnverifiedEnvelope_DoesNotSupplyArtifactFilenames(string oldValue, string newValue)
+    {
         Filing13FSubmissionParser
             .Parse(Submission.Replace(oldValue, newValue), Entry, new())
             .Should()
@@ -116,7 +155,7 @@ public class Filing13FSubmissionParserTests
         );
         split.Should().Contain("second.xml");
 
-        Filing13FSubmissionParser.Parse(split, Entry, new()).Holdings.Should().HaveCount(2);
+        Filing13FSubmissionParser.Parse(split, Entry, new()).Filing.Holdings.Should().HaveCount(2);
     }
 
     [Fact]
@@ -137,7 +176,7 @@ public class Filing13FSubmissionParserTests
             FormType = "13F-HR/A",
         };
 
-        var filing = Filing13FSubmissionParser.Parse(empty, amendment, new());
+        var filing = Filing13FSubmissionParser.Parse(empty, amendment, new())?.Filing;
 
         filing.Should().NotBeNull();
         filing.IsAmendment.Should().BeTrue();
@@ -179,6 +218,89 @@ public class Filing13FSubmissionParserTests
     }
 
     [Fact]
+    public void RecordedFinalFiling_ExplicitZerosProveNoReportedPosition()
+    {
+        var filing = ReadZeroPositionFiling();
+
+        Realtime13FIngestionService.IsSourceConfirmedZeroOriginal(filing).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("<sshPrnamt>0", "<sshPrnamt>1")]
+    [InlineData("<sshPrnamt>0</sshPrnamt>", "")]
+    [InlineData("<Sole>0</Sole>", "")]
+    [InlineData("<Sole>0", "<Sole>bad")]
+    [InlineData("<tableValueTotal>0", "<tableValueTotal>1")]
+    [InlineData("<tableEntryTotal>1", "<tableEntryTotal>2")]
+    [InlineData("<otherIncludedManagersCount>0", "<otherIncludedManagersCount>1")]
+    [InlineData("13F HOLDINGS REPORT", "13F COMBINATION REPORT")]
+    [InlineData(
+        "</summaryPage>",
+        "<isConfidentialOmitted>true</isConfidentialOmitted></summaryPage>"
+    )]
+    public void ZeroCompletion_RequiresExplicitConsistentOwnPositionEvidence(
+        string oldValue,
+        string newValue
+    )
+    {
+        var filing = ReadZeroPositionFiling(oldValue, newValue);
+
+        var confirmed =
+            filing != null && Realtime13FIngestionService.IsSourceConfirmedZeroOriginal(filing);
+        confirmed.Should().BeFalse();
+    }
+
+    private static Parsed13FFiling ReadZeroPositionFiling(
+        string oldValue = null,
+        string newValue = null
+    )
+    {
+        var source = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Holdings",
+                "13f-zero-position-submission.txt"
+            )
+        );
+        if (oldValue != null)
+            source = source.Replace(oldValue, newValue);
+        var entry = new EdgarDailyIndexEntry
+        {
+            Cik = "1634047",
+            AccessionNumber = "0001172661-23-003928",
+            DateFiled = new DateOnly(2023, 11, 14),
+            FormType = "13F-HR",
+        };
+        return Filing13FSubmissionParser.Parse(source, entry, new())?.Filing;
+    }
+
+    [Fact]
+    public void RecordedInconsistentSecSubmission_RetainsArtifactNamesWithoutAcceptingItsTotals()
+    {
+        var source = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Holdings",
+                "13f-inconsistent-cover-submission.txt"
+            )
+        );
+        var entry = new EdgarDailyIndexEntry
+        {
+            Cik = "1076598",
+            AccessionNumber = "0000940394-21-000993",
+            DateFiled = new DateOnly(2021, 5, 17),
+            FormType = "13F-HR",
+        };
+
+        var result = Filing13FSubmissionParser.Parse(source, entry, new());
+
+        result.Filing.Should().BeNull();
+        result.ArtifactNames.Should().Equal("primary_doc.xml", "infotable.xml");
+    }
+
+    [Fact]
     public void RecordedSecSubmission_PreservesBothCusipsAndOtherManagerLists()
     {
         var source = File.ReadAllText(
@@ -197,7 +319,7 @@ public class Filing13FSubmissionParserTests
             FormType = "13F-HR",
         };
 
-        var filing = Filing13FSubmissionParser.Parse(source, entry, new());
+        var filing = Filing13FSubmissionParser.Parse(source, entry, new())?.Filing;
 
         filing.Should().NotBeNull();
         filing.PeriodOfReport.Should().Be(new DateOnly(2023, 6, 30));

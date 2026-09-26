@@ -8,7 +8,7 @@ namespace Equibles.Holdings.HostedService.Services;
 internal static class Filing13FSubmissionParser
 {
     // A partial envelope must never turn a restatement into a holdings-removing amendment.
-    internal static Parsed13FFiling Parse(
+    internal static Parsed13FSubmission Parse(
         string submission,
         EdgarDailyIndexEntry entry,
         Filing13FXmlParser parser
@@ -21,6 +21,11 @@ internal static class Filing13FSubmissionParser
             return null;
 
         var artifacts = SecDocumentEnvelopeParser.EnumerateArtifacts(submission);
+        if (
+            artifacts.Count != CountTag(submission, "<DOCUMENT>")
+            || artifacts.Count != CountTag(submission, "</DOCUMENT>")
+        )
+            return null;
         var covers = artifacts.Where(a => a.Type is "13F-HR" or "13F-HR/A").ToList();
         if (covers.Count != 1 || covers[0].Type != entry.FormType)
             return null;
@@ -52,8 +57,6 @@ internal static class Filing13FSubmissionParser
             filing.Cik != entry.Cik.TrimStart('0')
             || filing.IsAmendment != (entry.FormType == "13F-HR/A")
             || filing.PeriodOfReport == DateOnly.MinValue
-            || filing.TableEntryTotal == null
-            || filing.TableValueTotal == null
         )
             return null;
 
@@ -65,13 +68,29 @@ internal static class Filing13FSubmissionParser
             filing.Holdings.AddRange(parser.ParseInformationTable(xml));
         }
 
+        // A filer's cover totals can disagree with its own table. Preserve the safe SEC
+        // filenames so the existing standalone-XML route need not rediscover this directory.
+        var fallback = new Parsed13FSubmission(null, artifacts.Select(a => a.FileName).ToList());
         if (
             filing.Holdings.Count != filing.TableEntryTotal
             || filing.Holdings.Sum(h => h.Value) != filing.TableValueTotal
             || (filing.Holdings.Count == 0 && !filing.IsAmendment)
         )
-            return null;
-        return filing;
+            return fallback;
+        filing.CompleteSubmissionVerified = true;
+        return fallback with { Filing = filing };
+    }
+
+    private static int CountTag(string value, string tag)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = value.IndexOf(tag, offset, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            count++;
+            offset += tag.Length;
+        }
+        return count;
     }
 
     private static string XmlBody(string body)
@@ -86,3 +105,5 @@ internal static class Filing13FSubmissionParser
         return body[5..^6].Trim();
     }
 }
+
+internal sealed record Parsed13FSubmission(Parsed13FFiling Filing, List<string> ArtifactNames);
