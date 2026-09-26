@@ -30,9 +30,9 @@ namespace Equibles.Holdings.Data.Models;
 ///
 /// <para>
 /// Each accession is its own row. A RESTATEMENT amendment carries a new
-/// accession and deletes+reinserts the holdings under it, so the original and
-/// the amendment remain distinct filing rows — exactly as the per-accession
-/// GROUP BY treated them.
+/// accession and replaces the original's positions and rollup. A source-verified
+/// zero-position restatement retains an empty rollup: absence of position rows
+/// alone cannot distinguish a reported empty quarter from an unreported one.
 /// </para>
 /// </summary>
 [Index(nameof(AccessionNumber), IsUnique = true)]

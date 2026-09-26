@@ -66,6 +66,7 @@ public class HoldingsImportServiceSyncFilingSummariesDuplicateAccessionTests : I
                 {
                     AccessionNumber = Accession,
                     Cik = Cik,
+                    FormType = "13F-HR",
                     PeriodOfReport = "2026-03-31",
                 },
             },

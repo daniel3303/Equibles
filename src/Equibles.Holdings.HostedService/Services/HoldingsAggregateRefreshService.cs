@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
+using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
@@ -261,12 +262,8 @@ public class HoldingsAggregateRefreshService
         CancellationToken cancellationToken
     )
     {
-        var latest = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => h.FilingType == FilingType.Form13F)
-            .Select(h => h.ReportDate)
-            .OrderByDescending(d => d)
-            .FirstOrDefaultAsync(cancellationToken);
+        var dates = InstitutionalHoldingReportDateQueries.Get13FReportDates(dbContext);
+        var latest = await dates.OrderByDescending(d => d).FirstOrDefaultAsync(cancellationToken);
         if (latest == default)
         {
             return;
@@ -284,10 +281,8 @@ public class HoldingsAggregateRefreshService
             return;
         }
 
-        var previous = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => h.ReportDate < latest && h.FilingType == FilingType.Form13F)
-            .Select(h => h.ReportDate)
+        var previous = await dates
+            .Where(date => date < latest)
             .OrderByDescending(d => d)
             .FirstOrDefaultAsync(cancellationToken);
         if (previous == default)
@@ -463,6 +458,26 @@ public class HoldingsAggregateRefreshService
             })
             .ToList();
 
+        var positiveHolderIds = snapshots.Select(s => s.InstitutionalHolderId).ToList();
+        var emptyFilings = await dbContext
+            .Set<InstitutionalFiling>()
+            .Zero13FRestatements()
+            .Where(f =>
+                f.ReportDate == reportDate && !positiveHolderIds.Contains(f.InstitutionalHolderId)
+            )
+            .GroupBy(f => f.InstitutionalHolderId)
+            .Select(g => new { HolderId = g.Key, FilingDate = g.Max(f => f.FilingDate) })
+            .ToListAsync(cancellationToken);
+        snapshots.AddRange(
+            emptyFilings.Select(f => new HolderQuarterlySnapshot
+            {
+                InstitutionalHolderId = f.HolderId,
+                ReportDate = reportDate,
+                FilingDate = f.FilingDate,
+                ComputedAt = computedAt,
+            })
+        );
+
         if (snapshots.Count > 0)
         {
             // Single INSERT … ON CONFLICT (InstitutionalHolderId, ReportDate)
@@ -527,7 +542,24 @@ public class HoldingsAggregateRefreshService
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (aggregate is null)
+        var emptyFilings = await dbContext
+            .Set<InstitutionalFiling>()
+            .Zero13FRestatements()
+            .Where(f =>
+                f.ReportDate == reportDate
+                && !dbContext
+                    .Set<InstitutionalHolding>()
+                    .Any(h =>
+                        h.ReportDate == reportDate
+                        && h.FilingType == FilingType.Form13F
+                        && h.InstitutionalHolderId == f.InstitutionalHolderId
+                    )
+            )
+            .Select(f => f.InstitutionalHolderId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        if (aggregate is null && emptyFilings == 0)
         {
             // Quarter exists only in the snapshot table now (e.g. all holdings
             // for it were deleted). Drop the stale row so /stats and /trends
@@ -542,11 +574,11 @@ public class HoldingsAggregateRefreshService
         var snapshot = new AumQuarterlySnapshot
         {
             ReportDate = reportDate,
-            TotalValue = aggregate.TotalValue,
-            FilerCount = aggregate.FilerCount,
-            PositionCount = aggregate.PositionCount,
-            StockCount = aggregate.StockCount,
-            FilingCount = aggregate.FilingCount,
+            TotalValue = aggregate?.TotalValue ?? 0,
+            FilerCount = (aggregate?.FilerCount ?? 0) + emptyFilings,
+            PositionCount = aggregate?.PositionCount ?? 0,
+            StockCount = aggregate?.StockCount ?? 0,
+            FilingCount = (aggregate?.FilingCount ?? 0) + emptyFilings,
             ComputedAt = DateTime.UtcNow,
         };
 

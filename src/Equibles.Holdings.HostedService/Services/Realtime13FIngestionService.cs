@@ -281,11 +281,13 @@ public class Realtime13FIngestionService
         try
         {
             using var archive = _archiveBuilder.Build([filing]);
-            importResult = await _importService.ImportDataSet(
-                archive,
-                minReportDate,
-                cancellationToken
-            );
+            importResult = Filing13FZeroPositionEvidence.IsRestatement(filing)
+                ? await _importService.ImportZeroRestatement(
+                    filing,
+                    minReportDate,
+                    cancellationToken
+                )
+                : await _importService.ImportDataSet(archive, minReportDate, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -371,20 +373,7 @@ public class Realtime13FIngestionService
     }
 
     internal static bool IsSourceConfirmedZeroOriginal(Parsed13FFiling filing) =>
-        filing.CompleteSubmissionVerified
-        && !filing.IsAmendment
-        && !filing.ConfidentialTreatmentRequested
-        && !filing.ConfidentialOmitted
-        && filing.ReportType == "13F HOLDINGS REPORT"
-        && filing.OtherIncludedManagersCount == 0
-        && filing.OtherManagers.Count == 0
-        && filing.CoverPageOtherManagers.Count == 0
-        && filing.Holdings.Count > 0
-        && filing.TableEntryTotal == filing.Holdings.Count
-        && filing.TableValueTotal == 0
-        && filing.Holdings.All(h =>
-            h.HasExplicitZeroQuantities && string.IsNullOrWhiteSpace(h.OtherManagers)
-        );
+        Filing13FZeroPositionEvidence.IsOriginal(filing);
 
     private async Task<bool> HasRetainedBook(
         Parsed13FFiling filing,

@@ -11,6 +11,11 @@
       Link="TestAssets/Holdings/13f-zero-position-submission.txt"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="../Equibles.UnitTests/TestAssets/Holdings/13f-zero-restatement-submission.txt"
+      Link="TestAssets/Holdings/13f-zero-restatement-submission.txt"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
