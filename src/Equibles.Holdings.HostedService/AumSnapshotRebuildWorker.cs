@@ -1,6 +1,7 @@
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.HostedService;
@@ -127,11 +128,8 @@ public class AumSnapshotRebuildWorker : BackgroundService
         // can never produce a snapshot row, so a gate comparing against it
         // could never be satisfied and would re-run the full backfill on
         // every boot, forever.
-        var form13FQuarters = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => h.FilingType == FilingType.Form13F)
-            .Select(h => h.ReportDate)
-            .Distinct()
+        var form13FQuarters = await InstitutionalHoldingReportDateQueries
+            .Get13FReportDates(dbContext)
             .CountAsync(cancellationToken);
         if (form13FQuarters == 0)
         {

@@ -285,13 +285,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // into quarter-vs-single-day. Market-wide activity pages resolve their comparison
     // window off this list, so it must stay 13F-only.
     public IQueryable<DateOnly> Get13FAvailableReportDates() =>
-        GetAll().Where(Is13F).DistinctReportDatesDescending();
+        DbContext is null
+            ? GetAll().Where(Is13F).DistinctReportDatesDescending()
+            : InstitutionalHoldingReportDateQueries
+                .Get13FReportDates(DbContext)
+                .OrderByDescending(d => d);
 
-    // The live DISTINCT behind Get13FAvailableReportDates scans the whole holdings index
-    // (~34M rows) to produce fewer than a hundred quarter ends and measures ~28s warm. The
-    // worker-maintained AumQuarterlySnapshot table is the bounded one-row-per-quarter date spine
-    // for request paths; the process cache below is retained only for a fresh/unbackfilled
-    // database whose snapshot table is still empty.
+    // Snapshot dates are the published generation's date spine. Only a fresh/unbackfilled
+    // database falls back to the live date seeks, cached below until snapshots exist.
     private static readonly TimeSpan ReportDatesCacheTtl = TimeSpan.FromHours(1);
     private static readonly object ReportDatesCacheLock = new();
     private static readonly Dictionary<
