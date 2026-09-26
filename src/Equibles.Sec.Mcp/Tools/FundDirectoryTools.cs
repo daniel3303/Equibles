@@ -3,6 +3,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Sec.Data.Helpers;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -69,10 +70,7 @@ public class FundDirectoryTools
 
                 var result = MarkdownTable.Start(
                     $"Registered funds matching '{safeQuery}', largest by net assets first (showing {matches.Count} of {totalCount}):",
-                    // Sweep-discovered series only have their tracked-stock positions stored,
-                    // so a bond fund's Holdings can read 0 beside real net assets — say so, or
-                    // the count reads as "this fund holds nothing".
-                    "_Stored = holding rows retained by this platform; for multi-series trusts that is only positions whose CUSIPs match tracked stocks. Reported = the full investment-row count in the fund's filing before that filter (`—` means parser replay is pending or EDGAR could not be re-fetched). Net Assets is always the fund's reported total._",
+                    "_Stored = holding rows retained by this platform; some trust reports retain only positions whose CUSIPs match tracked stocks. Reported = the full investment-row count in the fund's filing (`—` means unavailable). Equal counts prove complete coverage; fewer stored rows indicate partial coverage; missing or inconsistent counts leave coverage unknown. Net Assets is always the fund's reported total._",
                     "| Fund | Profile id | Ticker | Type | Net Assets (USD) | Stored | Reported | Latest Report |",
                     "|------|-----------|--------|------|------------------|--------|----------|---------------|"
                 );
@@ -126,33 +124,21 @@ public class FundDirectoryTools
                 if (series == null)
                     return $"No registered fund found for '{safeFund}' in the tracked Form NPORT-P directory. Use SearchFunds to find a profile id. Form NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts; money market funds and small business investment companies do not file it. Fixed-income-only series and vehicles outside that filing regime may be absent. This is a coverage result, not evidence that the fund does not exist.";
 
-                var latest = await _nportRepository
-                    .GetSeriesReportsByPeriod(
-                        series.EquityIssuerId,
-                        series.RegistrantCik,
-                        series.SeriesId,
-                        DateOnly.MinValue
-                    )
-                    .Include(f => f.Holdings)
-                    .OrderByDescending(f => f.ReportPeriodDate)
-                    .ThenByDescending(f => f.FilingDate)
-                    .ThenByDescending(f => f.AccessionNumber)
-                    .FirstOrDefaultAsync();
+                offset = McpLimit.ClampOffset(offset);
+                var latest = await _nportRepository.GetPortfolioSnapshot(
+                    series.LatestNportFilingId,
+                    offset,
+                    McpLimit.Clamp(maxResults)
+                );
 
                 if (latest == null)
                     return $"No stored Form NPORT-P report is on record for {MarkdownText(series.SeriesName ?? series.RegistrantName)}. This is a dataset coverage result, not evidence that no SEC filing exists; the report may be outside the filing scope or absent from this ingestion, fetch, or replay state.";
 
-                var totalHoldings = latest.Holdings.Count;
+                var totalHoldings = latest.TotalHoldings;
                 if (totalHoldings == 0)
-                    return $"{MarkdownText(series.SeriesName ?? series.RegistrantName)} has a stored Form NPORT-P report for {latest.ReportPeriodDate:yyyy-MM-dd} with {FormatCount(latest.ReportedHoldingCount)} holdings reported, but no {(latest.EquityIssuerId == null ? "tracked-stock " : "")}holding rows are stored for that report.";
+                    return $"{MarkdownText(series.SeriesName ?? series.RegistrantName)} has a stored Form NPORT-P report for {latest.ReportPeriodDate:yyyy-MM-dd} with {FormatCount(latest.ReportedHoldingCount)} holdings reported, but no holding rows are stored for that report. Coverage: {Coverage(latest.HoldingsCoverage)}.";
 
-                offset = McpLimit.ClampOffset(offset);
-                var holdings = latest
-                    .Holdings.OrderByDescending(h => h.ValueUsd)
-                    .ThenBy(h => h.Id)
-                    .Skip(offset)
-                    .Take(McpLimit.Clamp(maxResults))
-                    .ToList();
+                var holdings = latest.Holdings;
                 if (holdings.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {totalHoldings} stored holdings exist; lower offset.";
 
@@ -165,9 +151,8 @@ public class FundDirectoryTools
                     + $" — registrant {MarkdownText(series.RegistrantName) ?? "-"}, "
                     + $"reported {latest.ReportPeriodDate:yyyy-MM-dd}, "
                     + $"net assets ${FormatAmount(latest.NetAssets)}, total assets ${FormatAmount(latest.TotalAssets)}, "
-                    + $"{FormatCount(latest.ReportedHoldingCount)} holdings reported, {latest.Holdings.Count} stored"
-                    + (latest.EquityIssuerId == null ? " tracked-stock holdings" : " holdings")
-                    + $", showing stored rows {first}-{last} by value:";
+                    + $"{FormatCount(latest.ReportedHoldingCount)} holdings reported, {totalHoldings} stored holdings, "
+                    + $"coverage: {Coverage(latest.HoldingsCoverage)}, showing stored rows {first}-{last} by value:";
 
                 var result = MarkdownTable.Start(
                     header,
@@ -200,6 +185,14 @@ public class FundDirectoryTools
     }
 
     private static string FormatAmount(decimal value) => McpFormat.Invariant(value, "N2");
+
+    private static string Coverage(string value) =>
+        value switch
+        {
+            FundHoldingsCoverage.FullPortfolio => "full reported portfolio",
+            FundHoldingsCoverage.TrackedEquitiesOnly => "partial portfolio",
+            _ => "unknown",
+        };
 
     private static string FormatPercent(decimal value) => McpFormat.Invariant(value, "N2") + "%";
 

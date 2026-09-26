@@ -38,6 +38,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Fund profiles read the directory-selected report with database paging, consistent filing facts and stored counts, and count-based full, partial or unknown portfolio coverage.
 - Discover 13F report dates through indexed date seeks so snapshot startup and recent-quarter rebuilds avoid scanning every historical position.
 - Cover N-PORT equity identifier aggregation with an index on ISIN, CUSIP, LEI and filing identity.
 - 13F positions stored under a share class that later lost its CUSIP to another class now move to the class that holds it.
