@@ -23,3 +23,12 @@
 - The manager explicitly reports that all discretionary authority transferred on July 15, 2023 and this is its final filing.
 - Declared row count is one and value is zero; the sole placeholder row explicitly reports zero shares, value, and every voting quantity.
 - Completion uses these structured source quantities, verified envelope declarations, and an empty retained quarter; no name or identifier pattern classifies the placeholder.
+
+# Complete original whose standalone table is unavailable
+
+- Source: https://www.sec.gov/Archives/edgar/data/1162777/000095012320012501/0000950123-20-012501.txt
+- Captured: 2026-09-26; original bytes retained without edits.
+- SHA-256: `ab618919e1d3578dcdc2b9a5f97095de0334e72d8c0a0fbd4b0ec9136e93ac2f`.
+- The cover declares 8 rows and 4,359,220; the complete information table has 10 rows totalling 4,406,898 in filed units.
+- The standalone `1972.xml` returns 404; retain the complete original's positions without marking its cover totals verified.
+- An available standalone table keeps precedence; amendments and zero quantities cannot use this fallback.

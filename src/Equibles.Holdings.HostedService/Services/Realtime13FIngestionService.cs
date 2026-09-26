@@ -588,7 +588,7 @@ public class Realtime13FIngestionService
         return new HashSet<string>(processed, StringComparer.OrdinalIgnoreCase);
     }
 
-    private async Task<Parsed13FFiling> ParseFiling(
+    internal async Task<Parsed13FFiling> ParseFiling(
         EdgarDailyIndexEntry entry,
         CancellationToken cancellationToken
     )
@@ -639,6 +639,14 @@ public class Realtime13FIngestionService
         // let the authoritative quarterly bulk import reconcile it later.
         if (filing.Holdings.Count == 0 && !filing.IsAmendment)
         {
+            if (submission?.OriginalFallback != null)
+            {
+                _logger.LogInformation(
+                    "Using complete-submission positions for original 13F {Accession}; standalone table unavailable and cover totals unreconciled",
+                    entry.AccessionNumber
+                );
+                return submission.OriginalFallback;
+            }
             _logger.LogWarning(
                 "Filing {Accession} yielded no holdings and is not an amendment — skipping",
                 entry.AccessionNumber

@@ -1,0 +1,282 @@
+<SEC-DOCUMENT>0000950123-20-012501.txt : 20201207
+<SEC-HEADER>0000950123-20-012501.hdr.sgml : 20201207
+<ACCEPTANCE-DATETIME>20201207094123
+ACCESSION NUMBER:		0000950123-20-012501
+CONFORMED SUBMISSION TYPE:	13F-HR
+PUBLIC DOCUMENT COUNT:		2
+CONFORMED PERIOD OF REPORT:	20200930
+FILED AS OF DATE:		20201207
+DATE AS OF CHANGE:		20201207
+EFFECTIVENESS DATE:		20201207
+
+FILER:
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Partners Value Investments LP
+		CENTRAL INDEX KEY:			0001162777
+		IRS NUMBER:				000000000
+		STATE OF INCORPORATION:			A6
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		13F-HR
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	028-18041
+		FILM NUMBER:		201371554
+
+	BUSINESS ADDRESS:	
+		STREET 1:		181 BAY STREET, BROOKFIELD PLACE
+		STREET 2:		SUITE 210
+		CITY:			TORONTO
+		STATE:			A6
+		ZIP:			M5J 2T3
+		BUSINESS PHONE:		416-369-2512
+
+	MAIL ADDRESS:	
+		STREET 1:		181 BAY STREET, BROOKFIELD PLACE
+		STREET 2:		SUITE 210
+		CITY:			TORONTO
+		STATE:			A6
+		ZIP:			M5J 2T3
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	BAM INVESTMENTS CORP.
+		DATE OF NAME CHANGE:	20060731
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	BNN INVESTMENTS LTD
+		DATE OF NAME CHANGE:	20011127
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>13F-HR
+<SEQUENCE>1
+<FILENAME>primary_doc.xml
+<TEXT>
+<XML>
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xsi:schemaLocation="http://www.sec.gov/edgar/thirteenffiler eis_13F_Filer.xsd" xmlns:ns1="http://www.sec.gov/edgar/common" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.sec.gov/edgar/thirteenffiler">
+  <headerData>
+    <submissionType>13F-HR</submissionType>
+    <filerInfo>
+      <liveTestFlag>LIVE</liveTestFlag>
+      <flags/>
+      <filer>
+        <credentials>
+          <cik>0001162777</cik>
+          <ccc>XXXXXXXX</ccc>
+        </credentials>
+      </filer>
+      <periodOfReport>09-30-2020</periodOfReport>
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPage>
+      <reportCalendarOrQuarter>09-30-2020</reportCalendarOrQuarter>
+      <isAmendment>false</isAmendment>
+      <filingManager>
+        <name>Partners Value Investments LP</name>
+        <address>
+          <ns1:street1>181 Bay Street, Brookfield Place</ns1:street1>
+          <ns1:street2>SUITE 210</ns1:street2>
+          <ns1:city>Toronto</ns1:city>
+          <ns1:stateOrCountry>A6</ns1:stateOrCountry>
+          <ns1:zipCode>M5J 2T3</ns1:zipCode>
+        </address>
+      </filingManager>
+      <reportType>13F HOLDINGS REPORT</reportType>
+      <form13FFileNumber>028-18041</form13FFileNumber>
+      <provideInfoForInstruction5>N</provideInfoForInstruction5>
+    </coverPage>
+    <signatureBlock>
+      <name>Leslie Yuen</name>
+      <title>Director, Finance</title>
+      <phone>416-956-5142</phone>
+      <signature>/s/ Leslie Yuen</signature>
+      <city>Toronto</city>
+      <stateOrCountry>A6</stateOrCountry>
+      <signatureDate>12-04-2020</signatureDate>
+    </signatureBlock>
+    <summaryPage>
+      <otherIncludedManagersCount>0</otherIncludedManagersCount>
+      <tableEntryTotal>8</tableEntryTotal>
+      <tableValueTotal>4359220</tableValueTotal>
+      <isConfidentialOmitted>false</isConfidentialOmitted>
+    </summaryPage>
+  </formData>
+</edgarSubmission>
+</XML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>INFORMATION TABLE
+<SEQUENCE>2
+<FILENAME>1972.xml
+<DESCRIPTION>INFORMATION TABLE FOR FORM 13F
+<TEXT>
+<XML>
+<informationTable xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+  <infoTable>
+    <nameOfIssuer>BROOKFIELD ASSET MGMT INC</nameOfIssuer>
+    <titleOfClass>CL A LTD VT SH</titleOfClass>
+    <cusip>112585104</cusip>
+    <value>4256757</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>128758537</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>BROOKFIELD BUSINESS PARTNERS</nameOfIssuer>
+    <titleOfClass>UNIT LTD LP</titleOfClass>
+    <cusip>G16234109</cusip>
+    <value>45058</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>1495469</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>BROOKFIELD INFRASTRUCTURE CORP</nameOfIssuer>
+    <titleOfClass>COM SB VTG SHS A</titleOfClass>
+    <cusip>11275Q107</cusip>
+    <value>4702</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>84887</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>BROOKFIELD INFRAST PARTNERS</nameOfIssuer>
+    <titleOfClass>LP INT UNIT</titleOfClass>
+    <cusip>G16252101</cusip>
+    <value>36381</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>763986</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>BROOKFIELD PPTY PARTNERS L P</nameOfIssuer>
+    <titleOfClass>UNIT LTD PARTN</titleOfClass>
+    <cusip>G16249107</cusip>
+    <value>43470</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>3613446</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>SEADRILL LTD</nameOfIssuer>
+    <titleOfClass>COM</titleOfClass>
+    <cusip>G7998G106</cusip>
+    <value>73</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>349931</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>CHESAPEAKE ENERGY CORP</nameOfIssuer>
+    <titleOfClass>PFD CONV</titleOfClass>
+    <cusip>165167842</cusip>
+    <value>50</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>31724</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>FORD MTR CO DEL</nameOfIssuer>
+    <titleOfClass>COM</titleOfClass>
+    <cusip>345370860</cusip>
+    <value>4883</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>733250</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>iShares 0-5 Year High Yield Corporate Bond</nameOfIssuer>
+    <titleOfClass>0-5YR HI YL CP</titleOfClass>
+    <cusip>46434V407</cusip>
+    <value>10605</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>241302</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>ISHARES TR</nameOfIssuer>
+    <titleOfClass>IBOXX INV CP ETF</titleOfClass>
+    <cusip>464287242</cusip>
+    <value>4919</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>36515</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>0</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+</informationTable>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

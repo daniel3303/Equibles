@@ -76,7 +76,13 @@ internal static class Filing13FSubmissionParser
             || filing.Holdings.Sum(h => h.Value) != filing.TableValueTotal
             || (filing.Holdings.Count == 0 && !filing.IsAmendment)
         )
-            return fallback;
+            // Nonempty originals can use their filed rows if the standalone table is
+            // unavailable. Unreconciled totals cannot prove an empty book or an amendment.
+            return fallback with
+            {
+                OriginalFallback =
+                    !filing.IsAmendment && filing.Holdings.Any(h => h.Shares > 0) ? filing : null,
+            };
         filing.CompleteSubmissionVerified = true;
         return fallback with { Filing = filing };
     }
@@ -106,4 +112,7 @@ internal static class Filing13FSubmissionParser
     }
 }
 
-internal sealed record Parsed13FSubmission(Parsed13FFiling Filing, List<string> ArtifactNames);
+internal sealed record Parsed13FSubmission(Parsed13FFiling Filing, List<string> ArtifactNames)
+{
+    public Parsed13FFiling OriginalFallback { get; init; }
+}
