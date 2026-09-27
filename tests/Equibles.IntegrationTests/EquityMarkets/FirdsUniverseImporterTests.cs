@@ -18,8 +18,12 @@ namespace Equibles.IntegrationTests.EquityMarkets;
 [Collection(ParadeDbCollection.Name)]
 public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
 {
-    private static readonly DateOnly FirstFull = new(2026, 9, 12);
-    private static readonly DateOnly SecondFull = new(2026, 9, 19);
+    // Publication dates must stay inside the importer's initial index lookback.
+    private static readonly DateOnly FirstFull = DateOnly
+        .FromDateTime(DateTime.UtcNow)
+        .AddDays(-10);
+    private static readonly DateOnly SecondFull = FirstFull.AddDays(7);
+    private static readonly DateOnly DeltaDate = FirstFull.AddDays(3);
 
     private static string Fixture(string name) =>
         File.ReadAllText(
@@ -52,7 +56,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var full = Fixture("FULINS_E_sample.xml");
         var index = new FakeIndex();
         index.AddFull(FirstFull, full, EmptyFull(full));
-        index.AddDelta(new DateOnly(2026, 9, 15), 1, 1, Fixture("DLTINS_sample.xml"));
+        index.AddDelta(DeltaDate, 1, 1, Fixture("DLTINS_sample.xml"));
 
         await Importer(index).Import(CancellationToken.None);
 
@@ -78,9 +82,9 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         runs.Select(run => (run.FileName, run.Kind, run.RowsRead, run.RowsStored))
             .Should()
             .Equal(
-                ("DLTINS_20260915_01of01.zip", FirdsFileKind.Delta, 4, 3),
-                ("FULINS_E_20260912_01of02.zip", FirdsFileKind.Full, 8, 7),
-                ("FULINS_E_20260912_02of02.zip", FirdsFileKind.Full, 0, 0)
+                ($"DLTINS_{DeltaDate:yyyyMMdd}_01of01.zip", FirdsFileKind.Delta, 4, 3),
+                ($"FULINS_E_{FirstFull:yyyyMMdd}_01of02.zip", FirdsFileKind.Full, 8, 7),
+                ($"FULINS_E_{FirstFull:yyyyMMdd}_02of02.zip", FirdsFileKind.Full, 0, 0)
             );
         runs.Should().AllSatisfy(run => run.Checksum.Should().Be(index.Checksum(run.FileName)));
         var records = new FirdsInstrumentRecordRepository(DbContext);
@@ -165,7 +169,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var full = Fixture("FULINS_E_sample.xml");
         var index = new FakeIndex();
         index.AddFull(FirstFull, full, EmptyFull(full));
-        index.AddDelta(new DateOnly(2026, 9, 15), 1, 1, Fixture("DLTINS_sample.xml"));
+        index.AddDelta(DeltaDate, 1, 1, Fixture("DLTINS_sample.xml"));
         await Importer(index).Import(CancellationToken.None);
         index.Downloads.Should().HaveCount(3);
 
@@ -185,7 +189,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var full = Fixture("FULINS_E_sample.xml");
         var index = new FakeIndex();
         index.AddFull(FirstFull, full, EmptyFull(full));
-        index.AddDelta(new DateOnly(2026, 9, 15), 1, 1, Fixture("DLTINS_sample.xml"));
+        index.AddDelta(DeltaDate, 1, 1, Fixture("DLTINS_sample.xml"));
         await Importer(index).Import(CancellationToken.None);
         var before = (await Rows()).Single(row => row.Isin == "PTSLB0AM0010").ObservedAt;
         index.AddFull(SecondFull, OnlyFirstRecord(full));
@@ -269,7 +273,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var undated = Fixture("DLTINS_sample.xml")
             .Replace("<TermntnDt>2020-12-31T22:59:59Z</TermntnDt>", "");
         undated.Should().NotBe(Fixture("DLTINS_sample.xml"));
-        index.AddDelta(new DateOnly(2026, 9, 15), 1, 1, undated);
+        index.AddDelta(DeltaDate, 1, 1, undated);
 
         await Importer(index).Import(CancellationToken.None);
 
