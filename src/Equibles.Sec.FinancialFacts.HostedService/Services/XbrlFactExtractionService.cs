@@ -194,11 +194,18 @@ public class XbrlFactExtractionService
         }
         else if (document.XbrlType is null or XbrlType.InlineIxbrl)
         {
-            var result = _inlineParser.ParseEnvelope(envelope);
-            parsed = result.Facts;
-            // Before the numeric early-return: a filing whose numeric facts
-            // are all API-covered still states the 12(b) table.
-            await PersistCoverListings(document, result.CoverListings, cancellationToken);
+            if (document.DocumentType?.IsEsef() == true)
+            {
+                parsed = EsefInlineXbrlParser.Parse(envelope);
+            }
+            else
+            {
+                var result = _inlineParser.ParseEnvelope(envelope);
+                parsed = result.Facts;
+                // Before the numeric early-return: a filing whose numeric facts
+                // are all API-covered still states the 12(b) table.
+                await PersistCoverListings(document, result.CoverListings, cancellationToken);
+            }
         }
         else
         {

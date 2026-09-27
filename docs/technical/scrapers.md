@@ -18,7 +18,8 @@
 - xBRL-JSON values are already scaled; `decimals` describes precision, and midnight instant/end timestamps map to the preceding inclusive calendar date.
 - Recovery is recurring reconciliation, not a one-time script; no extraction-version bump replays already captured HTML documents.
 - An ESEF index entry does not establish annual reporting: tagged interim reports use the same format.
-- Validate inline XML namespaces in scope before annual classification; ambiguous rebindings, spoofed instance namespaces and aliases unsupported by the shared parser keep the general type.
+- Validate inline XML namespaces in scope before annual classification and fact extraction; ambiguous rebindings, spoofed instance namespaces and aliases unsupported by the shared parser keep the general type and refuse financial-fact publication.
+- Retain refused originals for diagnosis; the extraction guard prevents new unsupported facts but does not remove previously stored rows or replay the completed corpus.
 - Classify a captured report as annual only with matching unqualified, conflict-free IFRS annual-duration and instant facts at its indexed end, and no later supported issuer facts.
 - Keep other captured reports as the general `EsefReport` type; preserve their envelope, financial extraction, normalization replay and history deduplication.
 - Initialize a missing fiscal calendar only when the currently captured report proves the latest indexed annual period; an unread latest report or an older backfill cannot supply that evidence.
