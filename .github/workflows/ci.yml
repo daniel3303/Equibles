@@ -68,7 +68,7 @@ jobs:
         run: dotnet test Equibles.sln --no-build -c Release --filter "Category!=Functional&Category!=Live" --logger trx --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./coverage
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v6
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/**/coverage.cobertura.xml
