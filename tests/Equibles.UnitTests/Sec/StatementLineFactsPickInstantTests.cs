@@ -7,6 +7,38 @@ namespace Equibles.UnitTests.Sec;
 
 public class StatementLineFactsPickInstantTests
 {
+    [Theory]
+    [InlineData(FactPeriodType.Instant)]
+    [InlineData(FactPeriodType.Duration)]
+    public void PickCurrentlyReported_YearEndRecastInQuarterlyFiling_UsesCurrentPeriodicBasis(
+        FactPeriodType periodType
+    )
+    {
+        // The same 2025-12-31 balance date is recast in the later quarterly filing.
+        // A later current-report disclosure and an earlier balance date cannot override it.
+        var date = new DateOnly(2025, 12, 31);
+        var annual = Instant(date, 1590m);
+        annual.Form = DocumentType.TenK;
+        annual.FiledDate = new DateOnly(2026, 2, 12);
+        var recast = Instant(date, 1409m);
+        recast.Form = DocumentType.TenQ;
+        recast.FiledDate = new DateOnly(2026, 8, 6);
+        var currentReport = Instant(date, 999m);
+        currentReport.Form = DocumentType.EightK;
+        currentReport.FiledDate = new DateOnly(2026, 9, 1);
+        var priorDate = Instant(new DateOnly(2025, 9, 30), 555m);
+        priorDate.Form = DocumentType.TenQ;
+        priorDate.FiledDate = new DateOnly(2026, 9, 20);
+        var facts = new[] { currentReport, annual, priorDate, recast };
+        foreach (var fact in facts)
+            fact.PeriodType = periodType;
+
+        StatementLineFacts
+            .PickCurrentlyReported(facts, SecFiscalPeriod.FullYear)
+            .Should()
+            .BeSameAs(recast);
+    }
+
     // Instants span zero days, so they qualify for every period — correct for a balance
     // sheet, but it also admits a flow concept's point disclosure into an annual bucket,
     // where its later date beats the year's own column on period end.

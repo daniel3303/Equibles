@@ -239,9 +239,15 @@ public static class StatementLineFacts
         if (spans.Count > 0)
             candidates = spans;
 
+        // A quarterly filing can recast the same balance date. Annual-form preference
+        // applies to measured yearly flows, not to a point-in-time balance.
         return candidates
             .OrderByDescending(f => f.PeriodEnd)
-            .ThenBy(f => FinancialFactSourcePriority.StatementRank(f.Form, fiscalPeriod))
+            .ThenBy(f =>
+                f.PeriodStart == f.PeriodEnd
+                    ? FinancialFactSourcePriority.Rank(f.Form)
+                    : FinancialFactSourcePriority.StatementRank(f.Form, fiscalPeriod)
+            )
             .ThenByDescending(f => f.FiledDate)
             .ThenByDescending(f => f.AccessionNumber)
             .FirstOrDefault();

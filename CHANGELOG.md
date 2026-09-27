@@ -38,6 +38,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Read a balance-sheet instant from its latest canonical periodic filing, including quarterly recasts of a prior year end, while preserving annual-report priority for full-year flows.
+
 - Keep bounded index ranking for filing searches with issuer or filing-date filters, refill candidates until the requested scope is complete, and preserve the search deadline across scope checks.
 
 - Fund profiles read the directory-selected report with database paging, consistent filing facts and stored counts, and count-based full, partial or unknown portfolio coverage.
