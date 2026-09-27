@@ -144,7 +144,7 @@ public class CongressTools
         [Description("Maximum number of trades to return (default: 50, max: 500, newest first)")]
             int maxResults = 50,
         [Description(
-            "Number of trades to skip before returning rows — pass the previous call's shown count to page past the maxResults cap (default: 0)"
+            "Number of trades to skip before returning rows (default: 0, clamped to 0-100000). For the next page, add the returned row count to the clamped current offset; if the next offset exceeds 100000, narrow the filters instead. Stop when fewer than the effective page size (maxResults clamped to 1-500) are returned, or the response's total has been reached."
         )]
             int offset = 0,
         [Description("Optional stock ticker to combine with the member filter (e.g., AAPL)")]

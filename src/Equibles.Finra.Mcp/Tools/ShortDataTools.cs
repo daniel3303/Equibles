@@ -326,7 +326,7 @@ public class ShortDataTools
         [Description("Maximum number of results to return (default: 50, max: 500)")]
             int maxResults = 50,
         [Description(
-            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap (default: 0)"
+            "Number of ranked results to skip before returning rows (default: 0, clamped to 0-100000). For the next page, add the returned row count to the clamped current offset; if the next offset exceeds 100000, narrow the filters instead. Stop when fewer than the effective page size (maxResults clamped to 1-500) are returned, or the response's total has been reached."
         )]
             int offset = 0,
         [Description(
@@ -504,7 +504,7 @@ public class ShortDataTools
         [Description("Maximum number of results to return (default: 50, max: 500)")]
             int maxResults = 50,
         [Description(
-            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap (default: 0)"
+            "Number of ranked results to skip before returning rows (default: 0, clamped to 0-100000). For the next page, add the returned row count to the clamped current offset; if the next offset exceeds 100000, narrow the filters instead. Stop when fewer than the effective page size (maxResults clamped to 1-500) are returned, or the response's total has been reached."
         )]
             int offset = 0,
         [Description(
@@ -830,7 +830,7 @@ public class ShortDataTools
         )]
             string ticker = null,
         [Description(
-            "Number of ranked results to skip before returning rows — pass the previous call's last rank to page past the maxResults cap (default: 0; ignored for a single-ticker lookup)"
+            "Number of ranked results to skip before returning rows (default: 0, clamped to 0-100000; ignored for a single-ticker lookup). For the next page, add the returned row count to the clamped current offset; if the next offset exceeds 100000, narrow the filters instead. Stop when fewer than the effective page size (maxResults clamped to 1-200) are returned, or the response's total has been reached."
         )]
             int offset = 0
     )
