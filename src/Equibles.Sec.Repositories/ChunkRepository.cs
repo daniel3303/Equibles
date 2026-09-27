@@ -109,23 +109,6 @@ public class ChunkRepository : BaseRepository<Chunk>
             .ToJson();
 
         var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
-        if (ticker != null)
-        {
-            var documents = DbContext
-                .Set<Document>()
-                .ForUsTicker(ticker)
-                .Select(document => document.Id);
-            query = query.Where(chunk => documents.Contains(chunk.DocumentId));
-        }
-
-        // Document.ReportingDate is the filing/source date surfaced everywhere else. The chunk's
-        // denormalized copy is only an indexed cache and legacy transcript chunks can trail a
-        // corrected document date, so it must never decide date-window membership (#7049).
-        if (startDate is { } windowStart)
-            query = query.Where(c => c.Document.ReportingDate >= windowStart);
-
-        if (endDate is { } windowEnd)
-            query = query.Where(c => c.Document.ReportingDate <= windowEnd);
 
         // Set a hard CommandTimeout for this call so Postgres aborts the
         // statement independently of pdb.parse / pdb.score honouring the
@@ -135,15 +118,32 @@ public class ChunkRepository : BaseRepository<Chunk>
         var originalTimeout = DbContext.Database.GetCommandTimeout();
         DbContext.Database.SetCommandTimeout(timeoutSeconds);
         var stopwatch = Stopwatch.StartNew();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
             return await LeaderOnlyScan(
                 scan =>
-                    query
-                        .OrderByDescending(c => EF.Functions.Score(c.Id))
-                        .Take(maxResults)
-                        .ToListAsync(scan),
-                cancellationToken
+                    ChunkRankedScope.Read(
+                        DbContext,
+                        query,
+                        maxResults,
+                        ticker,
+                        startDate,
+                        endDate,
+                        stopwatch,
+                        timeoutSeconds,
+                        scan
+                    ),
+                deadline.Token
+            );
+        }
+        catch (OperationCanceledException exception)
+            when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+        {
+            throw new ChunkSearchTimeoutException(
+                $"BM25 chunk search exceeded its {timeoutSeconds}s statement budget.",
+                exception
             );
         }
         catch (Exception exception)

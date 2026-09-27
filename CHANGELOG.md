@@ -38,6 +38,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Keep bounded index ranking for filing searches with issuer or filing-date filters, refill candidates until the requested scope is complete, and preserve the search deadline across scope checks.
+
 - Fund profiles read the directory-selected report with database paging, consistent filing facts and stored counts, and count-based full, partial or unknown portfolio coverage.
 - Discover 13F report dates through indexed date seeks so snapshot startup and recent-quarter rebuilds avoid scanning every historical position.
 - Cover N-PORT equity identifier aggregation with an index on ISIN, CUSIP, LEI and filing identity.

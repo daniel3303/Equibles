@@ -254,6 +254,7 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
             _commands.LastOrDefault(c =>
                 c.StartsWith("SELECT", StringComparison.Ordinal)
                 && c.Contains("\"Chunk\"", StringComparison.Ordinal)
+                && c.Contains("@@@", StringComparison.Ordinal)
             );
 
         public override InterceptionResult<DbDataReader> ReaderExecuting(
