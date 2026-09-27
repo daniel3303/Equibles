@@ -57,7 +57,7 @@ public class CongressionalTradeSyncService
     // maturity date in its row, skips exchange rows by policy, and records every deterministic
     // verdict — reopening the filings v6 refused every cycle and the stored rows whose names
     // still carry the scrambled "F ILING S TATUS : New" suffix.
-    private const int CurrentHouseTradeParserVersion = 7;
+    private const int CurrentHouseTradeParserVersion = 8;
     private const int CurrentSenateTradeParserVersion = 6;
     private const int ReprocessPerCycleLimit = 1_000;
 
@@ -390,7 +390,7 @@ public class CongressionalTradeSyncService
         int parserVersion
     ) =>
         $"{kind} {filing.SourceId} filed {filing.FilingDate:yyyy-MM-dd}: {filing.RejectedRowCount} "
-        + $"transaction rows could not be parsed and were not stored ({filing.ItemCount} stored); "
+        + $"transaction rows could not be parsed and were not stored ({filing.ItemCount} parsed); "
         + $"recorded at parser version {parserVersion}";
 
     private static readonly CongressionalFilingKind[] PeriodicTransactionKinds =

@@ -400,24 +400,14 @@ public partial class HouseDisclosureClient
         DateOnly filingDate
     )
     {
-        // Scrub the reprinted column-header block from every line first. The word clustering
-        // can merge the page-break header into a row's own visual line (or into a wrapped
-        // continuation), where the line-level IsTableHeaderFragment guard never sees it —
-        // production stored 707 asset names carrying the verbatim "ID Owner Asset Transaction
-        // Date Notification Amount Cap. Type Date Gains >" block, and its "$200?" threshold
-        // corrupted amount ranges into impossible brackets. Lines the scrub empties entirely
-        // are dropped, so a row's wrapped remainder on the next page keeps flowing into it
-        // instead of being cut off at the header.
-        var lines = new List<string>(rawLines.Count);
-        foreach (var rawLine in rawLines)
-        {
-            // Some official House PDFs encode the spaced field labels with null-padded
-            // glyphs (for example "S\0... O\0:"). Remove those source artifacts before
-            // any label or metadata regex runs; cleaning only at persistence is too late.
-            var line = StripReprintedHeader(rawLine.Replace("\0", "", StringComparison.Ordinal));
-            if (!string.IsNullOrWhiteSpace(line))
-                lines.Add(line);
-        }
+        // Reprinted headers can span several visual lines or share a row's own line.
+        // Remove the complete block (including its $200 threshold) before joining a
+        // continued asset/amount, retaining the surrounding transaction boundaries.
+        // Null-padded small-cap glyphs must be removed before matching field labels.
+        var text = string.Join("\n", rawLines).Replace("\0", "", StringComparison.Ordinal);
+        var lines = StripReprintedHeader(text)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
 
         var transactions = new List<DisclosureTransaction>();
         var rejectedSourceRowCount = 0;
@@ -711,7 +701,9 @@ public partial class HouseDisclosureClient
     private static partial Regex OwnerCodeRegex();
 
     private static string StripReprintedHeader(string line) =>
-        ReprintedHeaderBlockRegex().Replace(line, " ").Trim();
+        ReprintedHeaderBlockRegex()
+            .Replace(line, match => match.Value.Contains('\n') ? "\n" : " ")
+            .Trim();
 
     // The reprinted page-break column-header block as the word clustering renders it —
     // observed verbatim in every polluted production row. Optional leading "ID" (older
@@ -719,7 +711,7 @@ public partial class HouseDisclosureClient
     // cluster onto a separate line) cover the variants. Case-insensitive because the
     // small-caps font (below) scrambles the header's case too ("iD owner asset ...").
     [GeneratedRegex(
-        @"\s*(?:ID\s+)?Owner Asset Transaction Date Notification Amount Cap\. Type Date Gains >(?:\s*\$200\?)?\s*",
+        @"\s*(?:ID\s+)?Owner\s+Asset\s+Transaction\s+Date\s+Notification\s+Amount\s+Cap\.\s+Type\s+Date\s+Gains\s+>(?:\s*\$200\?)?\s*",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex ReprintedHeaderBlockRegex();
