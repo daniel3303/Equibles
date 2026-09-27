@@ -402,9 +402,12 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
     }
 
     [Theory]
-    [InlineData("529900G4A1IKOKC22K56", 2)]
-    [InlineData("529900S21EQ1BO4ESM68", 0)]
+    [InlineData("EsefAnnualReport", "529900G4A1IKOKC22K56", 2)]
+    [InlineData("EsefAnnualReport", "529900S21EQ1BO4ESM68", 0)]
+    [InlineData("EsefReport", "529900G4A1IKOKC22K56", 2)]
+    [InlineData("EsefReport", "529900S21EQ1BO4ESM68", 0)]
     public async Task Extract_CapturedJson_PersistsOnlyExactIssuerFacts(
+        string form,
         string issuerLei,
         int expected
     )
@@ -418,7 +421,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             )
         );
         var document = await SeedDocument(json);
-        document.DocumentType = DocumentType.EsefAnnualReport;
+        document.DocumentType = DocumentType.FromValue(form);
         document.XbrlType = XbrlType.JsonXbrl;
         document.ReportingForDate = new DateOnly(2022, 12, 31);
         document.ReportingDate = new DateOnly(2023, 9, 5);
@@ -445,7 +448,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             .Should()
             .OnlyContain(fact =>
                 fact.Unit == "EUR"
-                && fact.Form == DocumentType.EsefAnnualReport
+                && fact.Form == document.DocumentType
                 && fact.DocumentId == document.Id
                 && fact.DimensionsKey == ""
                 && fact.AccessionNumber == Accession
