@@ -39,6 +39,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Company Facts retries retain a durable cooldown after interrupted persistence and avoid rewriting unchanged facts; successful checkpoints remain all-or-nothing (#4579).
+- CUSIP changes scan source archives and recover affected managers without clearing the quarterly import ledger; archive progress survives restarts (#4602).
+
 - Read a balance-sheet instant from its latest canonical periodic filing, including quarterly recasts of a prior year end, while preserving annual-report priority for full-year flows.
 
 - Keep bounded index ranking for filing searches with issuer or filing-date filters, refill candidates until the requested scope is complete, and preserve the search deadline across scope checks.

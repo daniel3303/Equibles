@@ -67,7 +67,8 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
         var coverage = new Equibles.Holdings.BusinessLogic.HoldingsImportCoverage(
             new HoldingsImportFailureRepository(db),
             processed,
-            new RealtimeSweepStateRepository(db)
+            new RealtimeSweepStateRepository(db),
+            new HoldingsCusipRescanRepository(db)
         );
         (await coverage.GetIncompleteReason(new DateOnly(2026, 6, 30)))
             .Should()

@@ -10,7 +10,8 @@ namespace Equibles.Holdings.BusinessLogic;
 public class HoldingsImportCoverage(
     HoldingsImportFailureRepository failures,
     ProcessedDataSetRepository dataSets,
-    RealtimeSweepStateRepository states
+    RealtimeSweepStateRepository states,
+    HoldingsCusipRescanRepository cusipRescans
 )
 {
     public async Task<string> GetIncompleteReason(
@@ -27,7 +28,12 @@ public class HoldingsImportCoverage(
                     || row.FileName == ProcessedDataSet.CoverageAuditPendingFileName,
                 cancellationToken
             );
-        if (replayPending)
+        if (
+            replayPending
+            || await cusipRescans
+                .GetAll()
+                .AnyAsync(row => row.CompletedAt == null, cancellationToken)
+        )
             return "Institutional holdings are being reconciled with SEC filings. Holder totals and changes may be incomplete until reconciliation finishes.";
         var sweptThrough = await states
             .GetByWorker("Holdings13FRealtime")

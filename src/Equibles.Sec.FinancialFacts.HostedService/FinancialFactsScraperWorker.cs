@@ -56,6 +56,7 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
         List<Guid> allStockIds;
         Dictionary<Guid, DateTime> lastCheckedByStock;
         Dictionary<Guid, int> importerVersionByStock;
+        Dictionary<Guid, DateTime?> nextAttemptByStock;
         using (var scope = ScopeFactory.CreateScope())
         {
             EquityIssuerRepository stockRepo =
@@ -76,6 +77,7 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
                     s.EquityIssuerId,
                     s.LastCheckedAt,
                     s.ImporterVersion,
+                    s.NextAttemptAt,
                 })
                 .ToListAsync(stoppingToken);
             lastCheckedByStock = syncStatuses.ToDictionary(
@@ -85,6 +87,10 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
             importerVersionByStock = syncStatuses.ToDictionary(
                 s => s.EquityIssuerId,
                 s => s.ImporterVersion
+            );
+            nextAttemptByStock = syncStatuses.ToDictionary(
+                s => s.EquityIssuerId,
+                s => s.NextAttemptAt
             );
         }
 
@@ -107,7 +113,9 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
             allStockIds,
             lastCheckedByStock,
             importerVersionByStock,
-            DateTime.UtcNow - _recheckInterval
+            DateTime.UtcNow - _recheckInterval,
+            nextAttemptByStock,
+            DateTime.UtcNow
         );
 
         Logger.LogInformation(
@@ -144,9 +152,17 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
         List<Guid> stockIds,
         Dictionary<Guid, DateTime> lastCheckedByStock,
         Dictionary<Guid, int> importerVersionByStock,
-        DateTime cutoff
+        DateTime cutoff,
+        Dictionary<Guid, DateTime?> nextAttemptByStock = null,
+        DateTime? now = null
     ) =>
         stockIds
+            .Where(id =>
+                nextAttemptByStock == null
+                || !nextAttemptByStock.TryGetValue(id, out var next)
+                || next == null
+                || next <= (now ?? DateTime.UtcNow)
+            )
             .Where(id =>
                 !lastCheckedByStock.TryGetValue(id, out var lastChecked)
                 || !importerVersionByStock.TryGetValue(id, out var importerVersion)

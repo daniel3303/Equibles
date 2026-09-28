@@ -141,6 +141,23 @@ public class HoldingsScraperWorker : BaseScraperWorker
         if (failedDataSets.Count > 0)
             await RetryFailedDataSets(failedDataSets, minReportDate, stoppingToken);
 
+        // Scan retained source archives only after the bulk walk; recovery replays each
+        // affected manager's full later filing tail so amendments keep their ordering.
+        try
+        {
+            await using var rescanScope = ScopeFactory.CreateAsyncScope();
+            await rescanScope
+                .ServiceProvider.GetRequiredService<HoldingsCusipRescanService>()
+                .Scan(minReportDate, stoppingToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            Logger.LogError(
+                exception,
+                "CUSIP source rescan failed; archive progress remains queued"
+            );
+        }
+
         // Bulk files contain older captures than the live filings already in the store.
         // Reapply their later tail only after the entire oldest-first bulk pass has finished.
         await ApplyPendingRealtimeReplay(stoppingToken);

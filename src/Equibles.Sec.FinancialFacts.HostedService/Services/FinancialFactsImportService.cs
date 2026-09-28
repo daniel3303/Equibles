@@ -44,6 +44,7 @@ public class FinancialFactsImportService
     private readonly ErrorReporter _errorReporter;
     private readonly FiscalCalendarEvidenceReader _calendarReader;
     private readonly int _insertBatchSize;
+    private readonly FinancialFactsImportAttempts _attempts;
 
     public FinancialFactsImportService(
         IServiceScopeFactory scopeFactory,
@@ -51,10 +52,15 @@ public class FinancialFactsImportService
         ILogger<FinancialFactsImportService> logger,
         ErrorReporter errorReporter,
         FiscalCalendarEvidenceReader calendarReader = null,
-        IOptions<FinancialFactsPersistenceOptions> persistenceOptions = null
+        IOptions<FinancialFactsPersistenceOptions> persistenceOptions = null,
+        TimeProvider timeProvider = null
     )
     {
         _scopeFactory = scopeFactory;
+        _attempts = new FinancialFactsImportAttempts(
+            scopeFactory,
+            timeProvider ?? TimeProvider.System
+        );
         _secEdgarClient = secEdgarClient;
         _logger = logger;
         _errorReporter = errorReporter;
@@ -69,6 +75,37 @@ public class FinancialFactsImportService
         if (string.IsNullOrEmpty(stock.Cik))
             return;
 
+        var status = await GetSyncStatus(stock, cancellationToken);
+        if (_attempts.IsDeferred(status))
+            return;
+
+        try
+        {
+            await ImportAttempt(stock, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error importing financial facts for {Ticker} (CIK {Cik})",
+                stock.Presentation?.Listing?.Ticker,
+                stock.Cik
+            );
+            await _errorReporter.Report(
+                ErrorSource.FinancialFactsScraper,
+                "FinancialFactsImport.Import",
+                ex,
+                $"ticker: {stock.Presentation?.Listing?.Ticker}, cik: {stock.Cik}"
+            );
+        }
+    }
+
+    private async Task ImportAttempt(EquityIssuer stock, CancellationToken cancellationToken)
+    {
         // Every attached CIK contributes to ONE fact set: a holdco reorganisation
         // moves the ticker to a NEW registrant while the entire XBRL history stays
         // on the predecessor CIK (Exxon's 2026 reorg left XOM with six documents
@@ -113,6 +150,11 @@ public class FinancialFactsImportService
             );
             return;
         }
+
+        var claim = await _attempts.TryBegin(stock.Id, cancellationToken);
+        if (claim == null)
+            return;
+        var attemptId = claim.Value;
 
         var incomingAnnualPeriods = responses
             .SelectMany(response => response.Facts.Values)
@@ -159,7 +201,13 @@ public class FinancialFactsImportService
 
         if (parsed.Count == 0)
         {
-            await UpsertSyncStatus(stock, null, calendar.Fingerprint, cancellationToken);
+            await _attempts.Complete(
+                stock.Id,
+                attemptId,
+                null,
+                calendar.Fingerprint,
+                cancellationToken
+            );
             return;
         }
 
@@ -178,34 +226,26 @@ public class FinancialFactsImportService
             // and skip the (expensive) re-upsert of the full history. Still re-source the share
             // count: an already-ingested cover-page fact may post-date the stale Yahoo figure
             // (and this corrects existing rows the first cycle after the change ships).
-            await UpsertSyncStatus(stock, lastSeen, calendar.Fingerprint, cancellationToken);
             await UpdateSharesOutstanding(stock, cancellationToken);
+            await _attempts.Complete(
+                stock.Id,
+                attemptId,
+                lastSeen,
+                calendar.Fingerprint,
+                cancellationToken
+            );
             return;
         }
 
-        try
-        {
-            await PersistFacts(stock, parsed, maxFiled, calendar.Fingerprint, cancellationToken);
-            await UpdateSharesOutstanding(stock, cancellationToken);
-        }
-        // Per-company fault isolation (mirrors FtdImportService): one company's
-        // failure is reported and skipped so the worker cycle continues for the
-        // rest of the universe.
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error importing financial facts for {Ticker} (CIK {Cik})",
-                stock.Presentation?.Listing?.Ticker,
-                stock.Cik
-            );
-            await _errorReporter.Report(
-                ErrorSource.FinancialFactsScraper,
-                "FinancialFactsImport.Import",
-                ex,
-                $"ticker: {stock.Presentation?.Listing?.Ticker}, cik: {stock.Cik}"
-            );
-        }
+        await PersistFacts(stock, parsed, cancellationToken);
+        await UpdateSharesOutstanding(stock, cancellationToken);
+        await _attempts.Complete(
+            stock.Id,
+            attemptId,
+            maxFiled,
+            calendar.Fingerprint,
+            cancellationToken
+        );
     }
 
     // Sets the stock's share count from the authoritative SEC cover-page fact the import just
@@ -294,8 +334,6 @@ public class FinancialFactsImportService
     private async Task PersistFacts(
         EquityIssuer stock,
         List<ParsedFact> parsed,
-        DateOnly maxFiled,
-        string calendarFingerprint,
         CancellationToken cancellationToken
     )
     {
@@ -334,11 +372,11 @@ public class FinancialFactsImportService
 
         var facts = CollapseToNaturalKey(quality.Accepted.ToList());
 
-        // SyncStatus is advanced only here, after a successful persist, so a
-        // failure leaves the checkpoint un-advanced and the company is
-        // retried in full next cycle.
-        await BatchPersister.Persist(facts, _insertBatchSize, FlushFacts);
-        await UpsertSyncStatus(stock, maxFiled, calendarFingerprint, cancellationToken);
+        await BatchPersister.Persist(
+            facts,
+            _insertBatchSize,
+            items => FlushFacts(items, cancellationToken)
+        );
 
         _logger.LogInformation(
             "Imported {Count} financial facts for {Ticker} (CIK {Cik})",
@@ -671,7 +709,7 @@ public class FinancialFactsImportService
             .AnyAsync(s => s.Id == stock.Id, cancellationToken);
     }
 
-    private async Task FlushFacts(List<FinancialFact> items)
+    private async Task FlushFacts(List<FinancialFact> items, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -705,7 +743,22 @@ public class FinancialFactsImportService
                         DocumentId = incoming.DocumentId,
                     }
             )
-            .RunAsync();
+            .UpdateIf(
+                (existing, incoming) =>
+                    existing.Value != incoming.Value
+                    || existing.PeriodType != incoming.PeriodType
+                    || existing.FiscalYear != incoming.FiscalYear
+                    || existing.FiscalPeriod != incoming.FiscalPeriod
+                    || existing.Form != incoming.Form
+                    || existing.Frame != incoming.Frame
+                    || (existing.Frame == null && incoming.Frame != null)
+                    || (existing.Frame != null && incoming.Frame == null)
+                    || existing.FiledDate != incoming.FiledDate
+                    || existing.DocumentId != incoming.DocumentId
+                    || (existing.DocumentId == null && incoming.DocumentId != null)
+                    || (existing.DocumentId != null && incoming.DocumentId == null)
+            )
+            .RunAsync(cancellationToken);
     }
 
     private async Task<FinancialFactsSyncStatus> GetSyncStatus(
@@ -716,43 +769,6 @@ public class FinancialFactsImportService
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<FinancialFactsSyncStatusRepository>();
         return await repo.GetByIssuerId(stock.Id).FirstOrDefaultAsync(cancellationToken);
-    }
-
-    private async Task UpsertSyncStatus(
-        EquityIssuer stock,
-        DateOnly? lastFiledSeen,
-        string calendarFingerprint,
-        CancellationToken cancellationToken
-    )
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-
-        var status = new FinancialFactsSyncStatus
-        {
-            EquityIssuerId = stock.Id,
-            LastCheckedAt = DateTime.UtcNow,
-            LastFiledDateSeen = lastFiledSeen,
-            ImporterVersion = CurrentImporterVersion,
-            CalendarEvidenceFingerprint = calendarFingerprint,
-        };
-
-        await dbContext
-            .Set<FinancialFactsSyncStatus>()
-            .UpsertRange(status)
-            .On(s => s.EquityIssuerId)
-            .WhenMatched(
-                (existing, incoming) =>
-                    new FinancialFactsSyncStatus
-                    {
-                        LastCheckedAt = incoming.LastCheckedAt,
-                        LastFiledDateSeen =
-                            incoming.LastFiledDateSeen ?? existing.LastFiledDateSeen,
-                        ImporterVersion = incoming.ImporterVersion,
-                        CalendarEvidenceFingerprint = incoming.CalendarEvidenceFingerprint,
-                    }
-            )
-            .RunAsync(cancellationToken);
     }
 
     private async Task DeleteRejectedFacts(

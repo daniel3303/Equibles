@@ -1,9 +1,14 @@
 using System.Net;
+using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models.Responses;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
+using Equibles.Sec.FinancialFacts.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -63,10 +68,25 @@ public class FinancialFactsImportServiceMultiCikTests
     public async Task Import_SecondaryCikFetchFails_WritesNothing()
     {
         // Primary answers (no data), the attached CIK's download fails: the whole
-        // cycle must abort BEFORE any repository scope is opened. If a refactor
-        // turns the failure `return` into a `continue`, the import persists a
-        // partial union and advances the checkpoint — this pins the early return.
+        // cycle must abort before persistence; reading the retry checkpoint is safe.
+        await using var db = new EquiblesFinancialDbContext(
+            new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options,
+            new IModuleConfiguration[]
+            {
+                new CommonStocksModuleConfiguration(),
+                new RetryStatusModule(),
+            }
+        );
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var provider = Substitute.For<IServiceProvider>();
+        provider
+            .GetService(typeof(FinancialFactsSyncStatusRepository))
+            .Returns(new FinancialFactsSyncStatusRepository(db));
+        var scope = Substitute.For<IServiceScope>();
+        scope.ServiceProvider.Returns(provider);
+        scopeFactory.CreateScope().Returns(scope);
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient.GetCompanyFacts("2115436").Returns((CompanyFactsResponse)null);
         secEdgarClient
@@ -92,6 +112,13 @@ public class FinancialFactsImportServiceMultiCikTests
         await sut.Import(stock, CancellationToken.None);
 
         await secEdgarClient.Received(1).GetCompanyFacts("34088");
-        scopeFactory.DidNotReceive().CreateScope();
+        (await db.Set<FinancialFactsSyncStatus>().CountAsync()).Should().Be(0);
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+    }
+
+    private sealed class RetryStatusModule : IModuleConfiguration
+    {
+        public void ConfigureEntities(ModelBuilder builder) =>
+            builder.Entity<FinancialFactsSyncStatus>();
     }
 }

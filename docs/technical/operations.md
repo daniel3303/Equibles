@@ -65,6 +65,13 @@ Each scraper has its own option section. All scraper option binds live in [`src/
 
 Read the matching `<Module>.HostedService/Configuration/<Module>ScraperOptions.cs` for the exact keys each section supports — they vary by source and don't share a common schema.
 
+## Import recovery
+
+- Company Facts reserves an attempt before parsing and database persistence. Interrupted attempts back off from one hour to one day; only a completed import advances the success checkpoint. Lower `FinancialFactsPersistence__InsertBatchSize` if the host still cannot finish a batch.
+- CUSIP discoveries retain old/new identifiers in `HoldingsCusipRescan`. The worker scans retained SEC archives, checkpoints each completed archive, and queues affected managers through the ordered filing recovery path. Quarterly import markers remain intact; the unpublished filing window uses the existing realtime replay.
+- Pending identity scans: `SELECT count(*) FROM "HoldingsCusipRescan" WHERE "CompletedAt" IS NULL;`. Completed scans can still have pending imports: `SELECT count(*) FROM "HoldingsImportFailure" WHERE "ResolvedAt" IS NULL;`.
+- Legacy `__rescan-pending__` requests have no saved CUSIPs and still require one conservative full replay. Recovery remains recurring reconciliation; an empty queue is not a reason to remove it.
+
 ## Embedding override (opt-in)
 
 Vector embeddings power semantic search over SEC documents. Disabled by default to keep the base install lean.

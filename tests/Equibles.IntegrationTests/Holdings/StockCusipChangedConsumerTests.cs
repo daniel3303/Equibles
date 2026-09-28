@@ -33,13 +33,9 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
         return ctx;
     }
 
-    // Contract (EquiblesCommercial#7163): a CUSIP change QUEUES a rescan
-    // sentinel and wakes the worker — it must NOT clear the real quarterly
-    // rows itself. An inline clear restarts the scraper's multi-hour walk from
-    // the oldest data set, and near-daily identity discoveries starved the
-    // walk so the newest quarters never healed.
+    // Identity discovery must preserve the bulk import progress.
     [Fact]
-    public async Task Consume_QueuesRescanSentinel_AndLeavesRealRowsIntact()
+    public async Task Consume_QueuesSourceIdentities_AndLeavesRealRowsIntact()
     {
         await using (var seed = _fixture.CreateDbContext())
         {
@@ -62,7 +58,7 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
         await using (var ctx = _fixture.CreateDbContext())
         {
             var sut = new StockCusipChangedConsumer(
-                new ProcessedDataSetRepository(ctx),
+                new HoldingsCusipRescanRepository(ctx),
                 _signal,
                 Substitute.For<ILogger<StockCusipChangedConsumer>>()
             );
@@ -74,23 +70,21 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var rows = await verify.Set<ProcessedDataSet>().Select(r => r.FileName).ToListAsync();
         rows.Should()
-            .BeEquivalentTo(
-                "01mar2025-31may2025_form13f.zip",
-                "01dec2025-28feb2026_form13f.zip",
-                ProcessedDataSet.RescanPendingFileName
-            );
+            .BeEquivalentTo("01mar2025-31may2025_form13f.zip", "01dec2025-28feb2026_form13f.zip");
 
-        // GH-852: queuing must wake the Holdings worker now.
+        var request = await verify.Set<HoldingsCusipRescan>().SingleAsync();
+        request.Cusip.Should().Be("037833100");
+        request.CompletedAt.Should().BeNull();
+        // Queuing must wake the Holdings worker now.
         var wait = _signal.WaitAsync(CancellationToken.None);
         (await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(1))))
             .Should()
             .Be(wait, "the consumer must signal a rescan after queuing the sentinel");
     }
 
-    // Idempotent: once a rescan is queued, further events coalesce into it
-    // (the FTD cold-start seeding burst publishes one event per stock).
+    // Pre-upgrade markers do not contain identities and cannot absorb new requests.
     [Fact]
-    public async Task Consume_RescanAlreadyQueued_IsNoOp()
+    public async Task Consume_LegacyRescanAlreadyQueued_RetainsNewIdentityAndWakesWorker()
     {
         await using (var seed = _fixture.CreateDbContext())
         {
@@ -102,7 +96,7 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
         await using (var ctx = _fixture.CreateDbContext())
         {
             var sut = new StockCusipChangedConsumer(
-                new ProcessedDataSetRepository(ctx),
+                new HoldingsCusipRescanRepository(ctx),
                 _signal,
                 Substitute.For<ILogger<StockCusipChangedConsumer>>()
             );
@@ -111,15 +105,17 @@ public class StockCusipChangedConsumerTests : IAsyncLifetime
             );
         }
 
-        // No new queue happened (already pending) → no rescan signalled: the
-        // event that queued the sentinel already woke the worker.
+        // Retain the new identity independently of an older global rescan.
         var wait = _signal.WaitAsync(CancellationToken.None);
         (await Task.WhenAny(wait, Task.Delay(TimeSpan.FromMilliseconds(300))))
             .Should()
-            .NotBe(wait, "an already-queued no-op must not trigger a rescan");
+            .Be(wait, "new identity work must wake the worker even if a legacy marker exists");
 
         await using var verify = _fixture.CreateDbContext();
         var rows = await verify.Set<ProcessedDataSet>().Select(r => r.FileName).ToListAsync();
         rows.Should().ContainSingle().Which.Should().Be(ProcessedDataSet.RescanPendingFileName);
+        var request = await verify.Set<HoldingsCusipRescan>().SingleAsync();
+        request.Cusip.Should().Be("594918104");
+        request.PreviousCusip.Should().Be("abc");
     }
 }

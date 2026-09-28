@@ -19,6 +19,22 @@ public class FinancialFactsScraperWorkerSelectDueStocksTests
     private static readonly DateTime Cutoff = Now.AddHours(-20);
 
     [Fact]
+    public void FailedNeverCompletedAndOldVersionImportsRespectRetryCooldown()
+    {
+        var failed = Guid.NewGuid();
+        var expired = Guid.NewGuid();
+        var due = FinancialFactsScraperWorker.SelectDueStocks(
+            [failed, expired],
+            new() { [failed] = DateTime.MinValue, [expired] = DateTime.MinValue },
+            new() { [failed] = 0, [expired] = 0 },
+            Cutoff,
+            new() { [failed] = Now.AddMinutes(1), [expired] = Now },
+            Now
+        );
+        due.Should().Equal(expired);
+    }
+
+    [Fact]
     public void NeverCheckedStocksComeFirst()
     {
         var neverChecked = Guid.NewGuid();

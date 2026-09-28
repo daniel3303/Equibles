@@ -286,7 +286,8 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         var coverage = new HoldingsImportCoverage(
             failures,
             new ProcessedDataSetRepository(db),
-            new RealtimeSweepStateRepository(db)
+            new RealtimeSweepStateRepository(db),
+            new HoldingsCusipRescanRepository(db)
         );
         (await coverage.GetIncompleteReason(Quarter)).Should().Contain("not finished importing");
         await failures.Resolve("original", CancellationToken.None);

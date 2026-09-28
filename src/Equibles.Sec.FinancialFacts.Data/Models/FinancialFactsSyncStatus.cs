@@ -24,6 +24,12 @@ public class FinancialFactsSyncStatus
 
     public DateTime LastCheckedAt { get; set; }
 
+    // Written before importing, independently of the successful checkpoint. A killed
+    // process therefore leaves a durable cooldown rather than immediately retrying.
+    public int ImportAttempts { get; set; }
+    public DateTime? NextAttemptAt { get; set; }
+    public Guid? ImportAttemptId { get; set; }
+
     /// <summary>Newest filed date ingested so far; null until the first run.</summary>
     public DateOnly? LastFiledDateSeen { get; set; }
 
