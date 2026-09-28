@@ -57,7 +57,9 @@ public class CongressionalTradeSyncService
     // maturity date in its row, skips exchange rows by policy, and records every deterministic
     // verdict — reopening the filings v6 refused every cycle and the stored rows whose names
     // still carry the scrambled "F ILING S TATUS : New" suffix.
-    private const int CurrentHouseTradeParserVersion = 8;
+    // v9 (House): recovers rows with unpadded transaction months or days; these already
+    // consumed source row indices as rejected rows, so replay preserves later identities.
+    private const int CurrentHouseTradeParserVersion = 9;
     private const int CurrentSenateTradeParserVersion = 6;
     private const int ReprocessPerCycleLimit = 1_000;
 
