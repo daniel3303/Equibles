@@ -201,6 +201,8 @@ public class HoldingsCusipRescanTests(ParadeDbFixture fixture) : IAsyncLifetime
     [InlineData("bad-header", "CUSIP\nNEW\n")]
     [InlineData("missing-accession", "ACCESSION_NUMBER\tCUSIP\nabsent\tNEW\n")]
     [InlineData("short-row", "ACCESSION_NUMBER\tCUSIP\noriginal\n")]
+    [InlineData("blank-accession", "ACCESSION_NUMBER\tCUSIP\n\tNEW\n")]
+    [InlineData("duplicate-column", "ACCESSION_NUMBER\tCUSIP\tcusip\noriginal\tOTHER\tNEW\n")]
     public async Task MalformedSource_NeverAdvancesArchiveCursor(string _, string info)
     {
         await Seed();
@@ -214,6 +216,23 @@ public class HoldingsCusipRescanTests(ParadeDbFixture fixture) : IAsyncLifetime
         await using var verify = fixture.CreateDbContext();
         (await verify.Set<HoldingsCusipRescan>().SingleAsync()).ScannedThrough.Should().BeNull();
         (await verify.Set<HoldingsImportFailure>().CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("ACCESSION_NUMBER\tCUSIP\noriginal\tNEW\textra\n")]
+    [InlineData("UNUSED\taccession_number\tcusip\tOPTIONAL\n\toriginal\tNEW\n")]
+    public async Task UnusedColumns_DoNotBlockValidSourceRecovery(string info)
+    {
+        await Seed();
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar.DownloadStream(Arg.Any<string>()).Returns(_ => Source("NEW", info));
+        await using (var db = fixture.CreateDbContext())
+            await Service(db, edgar).Scan(Floor, CancellationToken.None);
+        await using var verify = fixture.CreateDbContext();
+        (await verify.Set<HoldingsCusipRescan>().SingleAsync()).CompletedAt.Should().NotBeNull();
+        (await verify.Set<HoldingsImportFailure>().SingleAsync())
+            .AccessionNumber.Should()
+            .Be("original");
     }
 
     private sealed class FailSave(EquiblesFinancialDbContext db) : HoldingsCusipRescanRepository(db)

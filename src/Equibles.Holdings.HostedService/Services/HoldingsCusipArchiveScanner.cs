@@ -94,19 +94,38 @@ internal static class HoldingsCusipArchiveScanner
         using var reader = new StreamReader(stream);
         var header = await reader.ReadLineAsync(cancellationToken);
         var columns = header?.Split('\t').Select(column => column.Trim()).ToArray() ?? [];
-        if (required.Any(column => !columns.Contains(column, StringComparer.OrdinalIgnoreCase)))
-            throw new InvalidDataException($"Missing required columns in {name}.");
+        var selected = required
+            .Select(column =>
+            {
+                var matches = Enumerable
+                    .Range(0, columns.Length)
+                    .Where(index =>
+                        columns[index].Equals(column, StringComparison.OrdinalIgnoreCase)
+                    )
+                    .ToArray();
+                if (matches.Length != 1)
+                    throw new InvalidDataException(
+                        $"Missing or duplicate {column} column in {name}."
+                    );
+                return (Name: column, Index: matches[0]);
+            })
+            .ToArray();
+        var lastRequiredIndex = selected.Max(column => column.Index);
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(line))
                 continue;
             var values = line.Split('\t');
-            if (values.Length != columns.Length)
-                throw new InvalidDataException($"Malformed row in {name}.");
-            var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < columns.Length; i++)
-                row[columns[i]] = values[i].Trim();
+            if (values.Length <= lastRequiredIndex)
+                throw new InvalidDataException($"Missing required fields in {name}.");
+            // Match the importer’s tolerance for extra columns and omitted unused suffixes;
+            // empty positional fields must not shift the accession or CUSIP column.
+            var row = selected.ToDictionary(
+                column => column.Name,
+                column => values[column.Index].Trim(),
+                StringComparer.OrdinalIgnoreCase
+            );
             yield return row;
         }
     }
