@@ -6,6 +6,7 @@ using Equibles.Integrations.XbrlFilings;
 using Equibles.Integrations.XbrlFilings.Models;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
@@ -19,8 +20,8 @@ using Microsoft.Extensions.Options;
 namespace Equibles.Sec.HostedService.Services;
 
 /// <summary>
-/// Stores European annual report history for every verified issuer we hold, as documents carrying the
-/// report's own XBRL envelope. Nothing here extracts a fact: the extraction sweep selects any captured
+/// Stores European ESEF report history for every verified issuer we hold, as documents carrying the
+/// report's own XBRL envelope. Only period evidence is parsed here: the extraction sweep selects any captured
 /// envelope, so storing the document is the whole of this lane's work.
 /// </summary>
 [Service]
@@ -165,7 +166,7 @@ public class EsefReportImportService(
                 failed++;
                 logger.LogWarning(
                     exception,
-                    "Could not capture the European annual report {Reference} for issuer {IssuerId}.",
+                    "Could not capture the European ESEF report {Reference} for issuer {IssuerId}.",
                     reference,
                     issuer.Id
                 );
@@ -227,7 +228,10 @@ public class EsefReportImportService(
         var references = await documentRepository
             .GetAll()
             .Where(document =>
-                document.DocumentType == DocumentType.EsefAnnualReport
+                (
+                    document.DocumentType == DocumentType.EsefAnnualReport
+                    || document.DocumentType == DocumentType.EsefReport
+                )
                 && document.AccessionNumber != null
             )
             .Select(document => document.AccessionNumber)
@@ -342,12 +346,15 @@ public class EsefReportImportService(
         CancellationToken cancellationToken
     )
     {
+        if (filing.PeriodEnd is not { } periodEnd)
+            return EsefCaptureOutcome.Skipped;
+
         var sourceUrl = captureAddress.ToString();
         var isJson = captureAddress == filing.JsonUrl && captureAddress != filing.ReportUrl;
         if (sourceUrl.Length > MaxSourceUrlLength)
         {
             logger.LogWarning(
-                "Skipping the European annual report {Reference}: its address is {Length} characters, "
+                "Skipping the European ESEF report {Reference}: its address is {Length} characters, "
                     + "past the {Limit} the document records.",
                 reference,
                 sourceUrl.Length,
@@ -360,7 +367,7 @@ public class EsefReportImportService(
         if (issuer == null)
         {
             logger.LogWarning(
-                "Skipping the European annual report {Reference}: issuer {IssuerId} is gone.",
+                "Skipping the European ESEF report {Reference}: issuer {IssuerId} is gone.",
                 reference,
                 candidate.Id
             );
@@ -378,7 +385,7 @@ public class EsefReportImportService(
         {
             logger.LogWarning(
                 exception,
-                "Refusing the European annual report {Reference}: it is past the {Limit}-byte ceiling "
+                "Refusing the European ESEF report {Reference}: it is past the {Limit}-byte ceiling "
                     + "the extraction sweep parses.",
                 reference,
                 MaxReportBytes
@@ -389,10 +396,16 @@ public class EsefReportImportService(
 
         var report = payload.Bytes;
         var html = SameOriginTextReader.Decode(payload.CharSet, report);
+        var annual = isJson
+            ? EsefAnnualPeriod.IsProven(
+                new JsonXbrlParser().Parse(html, candidate.LegalEntityIdentifier, periodEnd),
+                candidate.LegalEntityIdentifier,
+                periodEnd
+            )
+            : EsefAnnualPeriod.IsProvenInline(html, candidate.LegalEntityIdentifier, periodEnd);
         byte[] content;
         if (isJson)
         {
-            new JsonXbrlParser().Parse(html, candidate.LegalEntityIdentifier, filing.PeriodEnd);
             content = [];
         }
         else
@@ -402,24 +415,22 @@ public class EsefReportImportService(
         if (!isJson && content.Length == 0)
         {
             logger.LogWarning(
-                "The European annual report {Reference} is stored with no retrieval text: its readable "
+                "The European ESEF report {Reference} is stored with no retrieval text: its readable "
                     + "half is {Size} characters. Its facts are unaffected.",
                 reference,
                 html.Length
             );
         }
-        var periodEnd = filing.PeriodEnd.Value;
-
-        // Before the document, not after. The extraction sweep selects any captured envelope and reads the
-        // issuer fresh, so a document stored first could be labelled from a missing calendar; and a save
-        // that then failed would leave a stored report whose issuer never gets stamped at all.
-        await StampFiscalYearEnd(issuer, latestPeriodEnd);
+        // Stamp before publishing the envelope to extraction. An unread latest report or an
+        // older backfill cannot prove the current calendar; ESEF also carries interim reports.
+        if (annual && periodEnd == latestPeriodEnd)
+            await StampFiscalYearEnd(issuer, periodEnd);
 
         await documentPersistence.Save(
             issuer,
             content,
             $"{reference}.txt",
-            DocumentType.EsefAnnualReport,
+            annual ? DocumentType.EsefAnnualReport : DocumentType.EsefReport,
             // The index states when it received the report, not when the issuer filed it. It is the only
             // date the source gives beyond the period, and it is never earlier than the filing.
             DateOnly.FromDateTime(filing.AddedAt?.Date ?? periodEnd.ToDateTime(TimeOnly.MinValue)),
@@ -506,7 +517,7 @@ public class EsefReportImportService(
         {
             logger.LogWarning(
                 exception,
-                "Could not clear the refusal recorded for the European annual report {Reference}.",
+                "Could not clear the refusal recorded for the European ESEF report {Reference}.",
                 reference
             );
         }

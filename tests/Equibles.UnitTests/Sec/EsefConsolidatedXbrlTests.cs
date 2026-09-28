@@ -14,6 +14,9 @@ public class EsefConsolidatedXbrlTests
 
     [Theory]
     [InlineData("EsefAnnualReport", Lei, true)]
+    [InlineData("EsefReport", Lei, true)]
+    [InlineData("EsefReport", "529900S21EQ1BO4ESM60", false)]
+    [InlineData("EsefReport", "", false)]
     [InlineData("EsefAnnualReport", "529900S21EQ1BO4ESM60", false)]
     [InlineData("EsefAnnualReport", "", false)]
     // The report form decides which identity arm runs, so an SEC form never admits an LEI context.

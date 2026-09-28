@@ -199,10 +199,16 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         document.NormalizedContentVersion.Should().Be(0);
     }
 
-    [Fact]
-    public async Task Backfill_EsefWithoutCik_ReplaysCapturedEnvelopeAndPreservesOriginal()
+    [Theory]
+    [InlineData("EsefAnnualReport")]
+    [InlineData("EsefReport")]
+    public async Task Backfill_EsefWithoutCik_ReplaysCapturedEnvelopeAndPreservesOriginal(
+        string form
+    )
     {
         var document = SeedEsef();
+        document.DocumentType = DocumentType.FromValue(form);
+        _dbContext.SaveChanges();
         var originalId = document.XbrlContentId;
         var originalBytes = document.XbrlContent.FileContent.Bytes.ToArray();
         _fileManager

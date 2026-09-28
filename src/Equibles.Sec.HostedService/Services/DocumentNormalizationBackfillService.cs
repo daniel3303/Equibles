@@ -118,17 +118,14 @@ public class DocumentNormalizationBackfillService
             document.NormalizedContentAttempts++;
             var currentAttempt = document.NormalizedContentAttempts;
             if (
-                document.DocumentType != DocumentType.EsefAnnualReport
+                document.DocumentType?.IsEsef() != true
                 && string.IsNullOrEmpty(document.AccessionNumber)
             )
             {
                 document.AccessionNumber = DeriveAccessionNumber(document.SourceUrl);
             }
 
-            if (
-                document.DocumentType != DocumentType.EsefAnnualReport
-                && document.AccessionNumber == null
-            )
+            if (document.DocumentType?.IsEsef() != true && document.AccessionNumber == null)
             {
                 result.Failed++;
                 _logger.LogWarning(
@@ -210,7 +207,7 @@ public class DocumentNormalizationBackfillService
         CancellationToken cancellationToken
     )
     {
-        if (document.DocumentType != DocumentType.EsefAnnualReport)
+        if (document.DocumentType?.IsEsef() != true)
         {
             var source = await _secEdgarClient.GetDocumentContent(
                 document.AccessionNumber,

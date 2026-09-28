@@ -186,19 +186,24 @@ public class XbrlFactExtractionService
         }
         else if (document.XbrlType == XbrlType.JsonXbrl)
         {
-            if (document.DocumentType != DocumentType.EsefAnnualReport)
-                throw new InvalidOperationException(
-                    "xBRL-JSON recovery requires an ESEF annual report."
-                );
+            if (document.DocumentType?.IsEsef() != true)
+                throw new InvalidOperationException("xBRL-JSON recovery requires an ESEF report.");
             parsed = new JsonXbrlParser().Parse(envelope);
         }
         else if (document.XbrlType is null or XbrlType.InlineIxbrl)
         {
-            var result = _inlineParser.ParseEnvelope(envelope);
-            parsed = result.Facts;
-            // Before the numeric early-return: a filing whose numeric facts
-            // are all API-covered still states the 12(b) table.
-            await PersistCoverListings(document, result.CoverListings, cancellationToken);
+            if (document.DocumentType?.IsEsef() == true)
+            {
+                parsed = EsefInlineXbrlParser.Parse(envelope);
+            }
+            else
+            {
+                var result = _inlineParser.ParseEnvelope(envelope);
+                parsed = result.Facts;
+                // Before the numeric early-return: a filing whose numeric facts
+                // are all API-covered still states the 12(b) table.
+                await PersistCoverListings(document, result.CoverListings, cancellationToken);
+            }
         }
         else
         {
@@ -328,7 +333,7 @@ public class XbrlFactExtractionService
         if (document == null)
             return false;
         var form = document.DocumentType;
-        var esef = form == DocumentType.EsefAnnualReport;
+        var esef = form?.IsEsef() == true;
         if (
             !esef
             && form != DocumentType.SixK
@@ -347,7 +352,7 @@ public class XbrlFactExtractionService
         )
             return false;
 
-        // A European annual report states its filer under ISO 17442 rather than as a CIK, so the same
+        // A European ESEF report states its filer under ISO 17442 rather than as a CIK, so the same
         // unqualified-context test is made against the issuer's LEI. The comparison is exact: an LEI is one
         // fixed-width identifier with no leading-zero convention to trim.
         if (esef)
