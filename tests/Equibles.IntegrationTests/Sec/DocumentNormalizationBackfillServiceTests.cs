@@ -202,7 +202,9 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [Theory]
     [InlineData("EsefAnnualReport")]
     [InlineData("EsefReport")]
-    public async Task Backfill_EsefWithoutCik_ReplaysCapturedEnvelopeAndPreservesOriginal(string form)
+    public async Task Backfill_EsefWithoutCik_ReplaysCapturedEnvelopeAndPreservesOriginal(
+        string form
+    )
     {
         var document = SeedEsef();
         document.DocumentType = DocumentType.FromValue(form);

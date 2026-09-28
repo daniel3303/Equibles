@@ -266,39 +266,57 @@ public class EsefReportImportServiceTests
     [InlineData("utf8-bom", true)]
     [InlineData("unbound-unit", false)]
     [InlineData("spoofed-unit", false)]
-    public async Task Import_AnnualEvidencePreservesBomAndRequiresUnitNamespaces(string shape, bool annual)
+    public async Task Import_AnnualEvidencePreservesBomAndRequiresUnitNamespaces(
+        string shape,
+        bool annual
+    )
     {
-        var report = File.ReadAllText(Path.Combine(
-            AppContext.BaseDirectory, "TestAssets", "Esef", "ennogie-2025-annual-excerpt.xhtml"
-        )).Replace("549300JUGBT2EH17X827", Lei);
+        var report = File.ReadAllText(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestAssets",
+                    "Esef",
+                    "ennogie-2025-annual-excerpt.xhtml"
+                )
+            )
+            .Replace("549300JUGBT2EH17X827", Lei);
         report = shape switch
         {
             "utf8-bom" => "\uFEFF" + report,
             "unbound-unit" => report.Replace("iso4217:DKK", "undeclared:DKK"),
-            _ => report.Replace("iso4217:DKK", "ifrs-full:DKK")
+            _ => report.Replace("iso4217:DKK", "ifrs-full:DKK"),
         };
         var harness = await Harness.Create(Issuer("FR"), htmlReport: report);
 
         await harness.Service.Import(CancellationToken.None);
 
         var saved = harness.Saved.Should().ContainSingle().Subject;
-        saved.DocumentType.Should().Be(annual ? DocumentType.EsefAnnualReport : DocumentType.EsefReport);
+        saved
+            .DocumentType.Should()
+            .Be(annual ? DocumentType.EsefAnnualReport : DocumentType.EsefReport);
         saved.Xbrl.RawBytes.Should().Equal(System.Text.Encoding.UTF8.GetBytes(report));
         harness.Context.ChangeTracker.Clear();
-        (await harness.Context.Set<EquityIssuer>().SingleAsync()).FiscalYearEndMonth
-            .Should().Be(annual ? 12 : null);
+        (await harness.Context.Set<EquityIssuer>().SingleAsync())
+            .FiscalYearEndMonth.Should()
+            .Be(annual ? 12 : null);
     }
 
     [Fact]
     public async Task Import_TaggedInterimKeepsItsEnvelopeWithoutInventingAnAnnualCalendar()
     {
-        var report = File.ReadAllText(Path.Combine(
-            AppContext.BaseDirectory, "TestAssets", "Esef", "ennogie-2026-interim-excerpt.xhtml"
-        )).Replace("549300JUGBT2EH17X827", Lei);
+        var report = File.ReadAllText(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestAssets",
+                    "Esef",
+                    "ennogie-2026-interim-excerpt.xhtml"
+                )
+            )
+            .Replace("549300JUGBT2EH17X827", Lei);
         var harness = await Harness.Create(
             Issuer("FR"),
-            rewriteIndex: index => index.Replace("2025-12-31", "2026-06-30")
-                .Replace("2026-04-07", "2026-09-02"),
+            rewriteIndex: index =>
+                index.Replace("2025-12-31", "2026-06-30").Replace("2026-04-07", "2026-09-02"),
             htmlReport: report
         );
 
@@ -319,21 +337,26 @@ public class EsefReportImportServiceTests
     {
         var issuer = Issuer("FR");
         var harness = await Harness.Create(issuer);
-        harness.Context.Add(new Document
-        {
-            EquityIssuerId = issuer.Id,
-            DocumentType = DocumentType.EsefReport,
-            AccessionNumber = "529900S21EQ1BO4ESM68-20251231-FR",
-            ReportingDate = new DateOnly(2026, 4, 7),
-            ReportingForDate = new DateOnly(2025, 12, 31),
-            Content = new Equibles.Media.Data.Models.File { Name = "stored.txt" }
-        });
+        harness.Context.Add(
+            new Document
+            {
+                EquityIssuerId = issuer.Id,
+                DocumentType = DocumentType.EsefReport,
+                AccessionNumber = "529900S21EQ1BO4ESM68-20251231-FR",
+                ReportingDate = new DateOnly(2026, 4, 7),
+                ReportingForDate = new DateOnly(2025, 12, 31),
+                Content = new Equibles.Media.Data.Models.File { Name = "stored.txt" },
+            }
+        );
         await harness.Context.SaveChangesAsync();
 
         await harness.Service.Import(CancellationToken.None);
 
-        harness.Saved.Should().ContainSingle().Which.ReportingForDate
-            .Should().Be(new DateOnly(2024, 12, 31));
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.ReportingForDate.Should()
+            .Be(new DateOnly(2024, 12, 31));
         harness.Handler.Requests.Should().NotContain(uri => uri.AbsolutePath == LatestFrenchReport);
     }
 
@@ -345,11 +368,15 @@ public class EsefReportImportServiceTests
 
         await harness.Service.Import(CancellationToken.None);
 
-        harness.Saved.Should().ContainSingle().Which.DocumentType
-            .Should().Be(DocumentType.EsefReport);
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.DocumentType.Should()
+            .Be(DocumentType.EsefReport);
         harness.Context.ChangeTracker.Clear();
         (await harness.Context.Set<EquityIssuer>().SingleAsync())
-            .FiscalYearEndMonth.Should().BeNull();
+            .FiscalYearEndMonth.Should()
+            .BeNull();
     }
 
     [Theory]
@@ -370,19 +397,23 @@ public class EsefReportImportServiceTests
                 ["concept"] = "ifrs-full:ProfitLoss",
                 ["entity"] = "scheme:" + Lei,
                 ["period"] = periodStart + "/2026-01-01T00:00:00",
-                ["unit"] = "iso4217:EUR"
-            }
+                ["unit"] = "iso4217:EUR",
+            },
         };
         var harness = await Harness.Create(Issuer("FR"), jsonReport: json.ToString());
         await SeedHtmlRefusal(harness);
 
         await harness.Service.Import(CancellationToken.None);
 
-        harness.Saved.Should().ContainSingle().Which.DocumentType
-            .Should().Be(annual ? DocumentType.EsefAnnualReport : DocumentType.EsefReport);
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.DocumentType.Should()
+            .Be(annual ? DocumentType.EsefAnnualReport : DocumentType.EsefReport);
         harness.Context.ChangeTracker.Clear();
         (await harness.Context.Set<EquityIssuer>().SingleAsync())
-            .FiscalYearEndMonth.Should().Be(annual ? 12 : null);
+            .FiscalYearEndMonth.Should()
+            .Be(annual ? 12 : null);
     }
 
     [Fact]
@@ -956,7 +987,8 @@ public class EsefReportImportServiceTests
             <xbrli:context id="annual-test"><xbrli:entity><xbrli:identifier scheme="http://standards.iso.org/iso/17442">{lei}</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>{start}</xbrli:startDate><xbrli:endDate>{current}</xbrli:endDate></xbrli:period></xbrli:context>
             <ix:nonFraction name="ifrs-full:ProfitLoss" contextRef="annual-test" unitRef="PLN" decimals="0">100</ix:nonFraction>
             """;
-        return source.Replace(SecondLei, lei)
+        return source
+            .Replace(SecondLei, lei)
             .Replace("2022-12-31", current)
             .Replace("2021-12-31", previous)
             .Replace("</body>", proof + "</body>");
@@ -1029,7 +1061,8 @@ public class EsefReportImportServiceTests
                 )
             );
             var sourceText = System.Text.Encoding.UTF8.GetString(report);
-            var reportText = htmlReport ?? AnnualReport(sourceText, Lei, new DateOnly(2025, 12, 31));
+            var reportText =
+                htmlReport ?? AnnualReport(sourceText, Lei, new DateOnly(2025, 12, 31));
             report = System.Text.Encoding.UTF8.GetBytes(reportText);
             var pages = SplitPages(index, splitAcrossPages);
             var bodies = new Dictionary<string, string>
@@ -1045,7 +1078,8 @@ public class EsefReportImportServiceTests
                     .Filings
             )
             {
-                bodies[filing.ReportUrl.PathAndQuery] = htmlReport
+                bodies[filing.ReportUrl.PathAndQuery] =
+                    htmlReport
                     ?? AnnualReport(sourceText, filing.EntityIdentifier, filing.PeriodEnd.Value);
                 if (jsonReport != null && filing.JsonUrl != null)
                     bodies[filing.JsonUrl.PathAndQuery] = jsonReport;

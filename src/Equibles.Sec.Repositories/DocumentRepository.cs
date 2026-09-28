@@ -179,8 +179,10 @@ public class DocumentRepository : BaseRepository<Document>
                 && d.NormalizedContentAttempts < Document.MaxNormalizedContentAttempts
                 && (
                     (
-                        (d.DocumentType == DocumentType.EsefAnnualReport
-                            || d.DocumentType == DocumentType.EsefReport)
+                        (
+                            d.DocumentType == DocumentType.EsefAnnualReport
+                            || d.DocumentType == DocumentType.EsefReport
+                        )
                         && d.XbrlStatus == XbrlCaptureStatus.Captured
                         && d.XbrlType == XbrlType.InlineIxbrl
                         && d.XbrlContentId != null

@@ -187,9 +187,7 @@ public class XbrlFactExtractionService
         else if (document.XbrlType == XbrlType.JsonXbrl)
         {
             if (document.DocumentType?.IsEsef() != true)
-                throw new InvalidOperationException(
-                    "xBRL-JSON recovery requires an ESEF report."
-                );
+                throw new InvalidOperationException("xBRL-JSON recovery requires an ESEF report.");
             parsed = new JsonXbrlParser().Parse(envelope);
         }
         else if (document.XbrlType is null or XbrlType.InlineIxbrl)

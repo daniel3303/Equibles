@@ -475,25 +475,32 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         string shape
     )
     {
-        var envelope = await System.IO.File.ReadAllTextAsync(Path.Combine(
-            AppContext.BaseDirectory, "TestAssets", "Esef", "ennogie-2025-annual-excerpt.xhtml"
-        ));
+        var envelope = await System.IO.File.ReadAllTextAsync(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Esef",
+                "ennogie-2025-annual-excerpt.xhtml"
+            )
+        );
         envelope = shape switch
         {
             "utf8-bom" => "\uFEFF" + envelope,
             "unbound-unit" => envelope.Replace("iso4217:DKK", "undeclared:DKK"),
             "spoofed-unit" => envelope.Replace("iso4217:DKK", "ifrs-full:DKK"),
             "spoofed-instance" => envelope.Replace(
-                "http://www.xbrl.org/2003/instance", "https://example.org/instance"
+                "http://www.xbrl.org/2003/instance",
+                "https://example.org/instance"
             ),
             "aliased-scenario" => envelope.Replace(
                 "</xbrli:context>",
                 "<q:scenario xmlns:q=\"http://www.xbrl.org/2003/instance\"><qualifier xmlns=\"https://example.org/qualifier\">segment</qualifier></q:scenario></xbrli:context>"
             ),
             "rebound-taxonomy" => envelope.Replace(
-                "<body>", "<body xmlns:ifrs-full=\"https://example.org/ifrs-full\">"
+                "<body>",
+                "<body xmlns:ifrs-full=\"https://example.org/ifrs-full\">"
             ),
-            _ => envelope
+            _ => envelope,
         };
         var document = await SeedDocument(envelope);
         document.DocumentType = DocumentType.FromValue(form);
@@ -507,11 +514,18 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         {
             (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(2);
             (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(2);
-            var facts = await DbContext.Set<FinancialFact>()
-                .Where(fact => fact.DocumentId == document.Id).ToListAsync();
-            facts.Should().HaveCount(2).And.OnlyContain(fact =>
-                fact.Unit == "DKK" && fact.DimensionsKey == "" && fact.Form == document.DocumentType
-            );
+            var facts = await DbContext
+                .Set<FinancialFact>()
+                .Where(fact => fact.DocumentId == document.Id)
+                .ToListAsync();
+            facts
+                .Should()
+                .HaveCount(2)
+                .And.OnlyContain(fact =>
+                    fact.Unit == "DKK"
+                    && fact.DimensionsKey == ""
+                    && fact.Form == document.DocumentType
+                );
             facts.Select(fact => fact.Value).Should().BeEquivalentTo([52_789_000m, 18_296_000m]);
         }
         else
@@ -519,8 +533,13 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             await Assert.ThrowsAsync<InvalidDataException>(() =>
                 BuildSut().Extract(document, CancellationToken.None)
             );
-            (await DbContext.Set<FinancialFact>().CountAsync(fact => fact.DocumentId == document.Id))
-                .Should().Be(0);
+            (
+                await DbContext
+                    .Set<FinancialFact>()
+                    .CountAsync(fact => fact.DocumentId == document.Id)
+            )
+                .Should()
+                .Be(0);
         }
     }
 

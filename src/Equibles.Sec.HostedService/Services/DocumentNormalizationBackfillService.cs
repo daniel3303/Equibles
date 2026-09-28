@@ -125,10 +125,7 @@ public class DocumentNormalizationBackfillService
                 document.AccessionNumber = DeriveAccessionNumber(document.SourceUrl);
             }
 
-            if (
-                document.DocumentType?.IsEsef() != true
-                && document.AccessionNumber == null
-            )
+            if (document.DocumentType?.IsEsef() != true && document.AccessionNumber == null)
             {
                 result.Failed++;
                 _logger.LogWarning(

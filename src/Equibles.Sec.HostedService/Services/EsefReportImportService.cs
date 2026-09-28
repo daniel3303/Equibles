@@ -228,8 +228,10 @@ public class EsefReportImportService(
         var references = await documentRepository
             .GetAll()
             .Where(document =>
-                (document.DocumentType == DocumentType.EsefAnnualReport
-                    || document.DocumentType == DocumentType.EsefReport)
+                (
+                    document.DocumentType == DocumentType.EsefAnnualReport
+                    || document.DocumentType == DocumentType.EsefReport
+                )
                 && document.AccessionNumber != null
             )
             .Select(document => document.AccessionNumber)

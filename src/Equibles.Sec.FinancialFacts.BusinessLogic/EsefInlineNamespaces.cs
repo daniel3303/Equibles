@@ -10,19 +10,26 @@ internal static class EsefInlineNamespaces
         try
         {
             using var input = new StringReader(html);
-            using var reader = XmlReader.Create(input, new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Ignore,
-                XmlResolver = null,
-                MaxCharactersInDocument = 50 * 1024 * 1024
-            });
+            using var reader = XmlReader.Create(
+                input,
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Ignore,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = 300 * 1024 * 1024,
+                }
+            );
             while (reader.Read())
             {
                 if (reader.NodeType != XmlNodeType.Element)
                     continue;
-                if (reader.Depth == 0
-                    && (reader.LocalName != "html"
-                        || reader.NamespaceURI != "http://www.w3.org/1999/xhtml"))
+                if (
+                    reader.Depth == 0
+                    && (
+                        reader.LocalName != "html"
+                        || reader.NamespaceURI != "http://www.w3.org/1999/xhtml"
+                    )
+                )
                     return false;
 
                 // The shared HTML parser has one prefix map for the entire document.
@@ -37,17 +44,28 @@ internal static class EsefInlineNamespaces
                         return false;
                     if (prefix.Length == 0)
                         continue;
-                    if ((bindings.TryGetValue(prefix, out var previous) && previous != value)
-                        || !ValidReservedBinding(prefix, value))
+                    if (
+                        (bindings.TryGetValue(prefix, out var previous) && previous != value)
+                        || !ValidReservedBinding(prefix, value)
+                    )
                         return false;
                     bindings[prefix] = value;
                 }
                 reader.MoveToElement();
-                if (reader.NamespaceURI == "http://www.xbrl.org/2003/instance"
-                    && reader.LocalName == "measure" && !HasSupportedMeasure(reader))
+                if (
+                    reader.NamespaceURI == "http://www.xbrl.org/2003/instance"
+                    && reader.LocalName == "measure"
+                    && !HasSupportedMeasure(reader)
+                )
                     return false;
-                if (string.Equals(reader.Prefix, "ix", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(reader.LocalName, "nonFraction", StringComparison.OrdinalIgnoreCase))
+                if (
+                    string.Equals(reader.Prefix, "ix", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(
+                        reader.LocalName,
+                        "nonFraction",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 {
                     var name = reader.GetAttribute("name")?.Split(':');
                     if (name?.Length != 2 || string.IsNullOrEmpty(reader.LookupNamespace(name[0])))
@@ -64,7 +82,9 @@ internal static class EsefInlineNamespaces
 
     private static bool HasSupportedMeasure(XmlReader reader)
     {
-        var namespaces = ((IXmlNamespaceResolver)reader).GetNamespacesInScope(XmlNamespaceScope.All);
+        var namespaces = ((IXmlNamespaceResolver)reader).GetNamespacesInScope(
+            XmlNamespaceScope.All
+        );
         using var measure = reader.ReadSubtree();
         measure.MoveToContent();
         var parts = measure.ReadElementContentAsString().Trim().Split(':');
@@ -88,18 +108,21 @@ internal static class EsefInlineNamespaces
             "http://www.xbrl.org/2003/instance" => "xbrli",
             "http://xbrl.org/2006/xbrldi" => "xbrldi",
             "http://www.xbrl.org/2003/iso4217" => "iso4217",
-            _ => null
+            _ => null,
         };
-        return expected == null || string.Equals(prefix, expected, StringComparison.OrdinalIgnoreCase);
+        return expected == null
+            || string.Equals(prefix, expected, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool ValidReservedBinding(string prefix, string value) => prefix.ToLowerInvariant() switch
-    {
-        "ix" => value is "http://www.xbrl.org/2013/inlineXBRL"
-            or "http://www.xbrl.org/2008/inlineXBRL",
-        "xbrli" => value == "http://www.xbrl.org/2003/instance",
-        "xbrldi" => value == "http://xbrl.org/2006/xbrldi",
-        "iso4217" => value == "http://www.xbrl.org/2003/iso4217",
-        _ => true
-    };
+    private static bool ValidReservedBinding(string prefix, string value) =>
+        prefix.ToLowerInvariant() switch
+        {
+            "ix" => value
+                is "http://www.xbrl.org/2013/inlineXBRL"
+                    or "http://www.xbrl.org/2008/inlineXBRL",
+            "xbrli" => value == "http://www.xbrl.org/2003/instance",
+            "xbrldi" => value == "http://xbrl.org/2006/xbrldi",
+            "iso4217" => value == "http://www.xbrl.org/2003/iso4217",
+            _ => true,
+        };
 }
