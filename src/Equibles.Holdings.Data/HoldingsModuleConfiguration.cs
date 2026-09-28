@@ -252,6 +252,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<UnmappedCusip>();
         builder.Entity<FilingOtherManager>();
         builder.Entity<ProcessedDataSet>();
+        builder.Entity<HoldingsCusipRescan>();
         builder.Entity<ProcessedFiling>();
         builder.Entity<HoldingsImportFailure>();
         builder.Entity<HoldingLabelConvergenceState>();

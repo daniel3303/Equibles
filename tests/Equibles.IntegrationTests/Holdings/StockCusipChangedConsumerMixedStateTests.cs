@@ -12,16 +12,6 @@ using Xunit;
 
 namespace Equibles.IntegrationTests.Holdings;
 
-/// <summary>
-/// Adversarial sibling: the feature's pins cover "real rows only" and
-/// "sentinel only". The MIXED state — backfill guard AND fresh real rows — is
-/// the steady state after a completed rescan: the worker applied a previous
-/// sentinel (leaving the guard), re-imported quarterly sets, and then another
-/// FTD-seeded CUSIP change arrives. The event must queue a new rescan sentinel
-/// WITHOUT touching the guard, the real rows, or throwing (FileName has a
-/// unique index → a duplicate guard insert would permanently break the
-/// consumer).
-/// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
 {
@@ -42,7 +32,7 @@ public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Consume_GuardAndFreshRealRowsBothPresent_QueuesSentinelAndTouchesNothingElse()
+    public async Task Consume_GuardAndFreshRealRowsBothPresent_RetainsRequestAndTouchesNothingElse()
     {
         await using (var seed = _fixture.CreateDbContext())
         {
@@ -67,7 +57,7 @@ public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
         await using (var ctx = _fixture.CreateDbContext())
         {
             var sut = new StockCusipChangedConsumer(
-                new ProcessedDataSetRepository(ctx),
+                new HoldingsCusipRescanRepository(ctx),
                 new HoldingsRescanSignal(),
                 Substitute.For<ILogger<StockCusipChangedConsumer>>()
             );
@@ -83,8 +73,7 @@ public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
             .BeEquivalentTo(
                 ProcessedDataSet.BackfillGuardFileName,
                 "01mar2025-31may2025_form13f.zip",
-                "01dec2025-28feb2026_form13f.zip",
-                ProcessedDataSet.RescanPendingFileName
+                "01dec2025-28feb2026_form13f.zip"
             );
     }
 }

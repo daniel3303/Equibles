@@ -36,7 +36,8 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
         string accession,
         string cik,
         DateOnly filed,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool supersedesActiveAttempt = false
     ) =>
         DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
@@ -49,7 +50,7 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
             ON CONFLICT ("AccessionNumber") DO UPDATE SET
               "ResolvedAt" = NULL, "LastAttemptAt" = clock_timestamp(),
               "NextAttemptAt" = clock_timestamp()
-            WHERE "HoldingsImportFailure"."ResolvedAt" IS NOT NULL
+            WHERE "HoldingsImportFailure"."ResolvedAt" IS NOT NULL OR {supersedesActiveAttempt}
             """,
             cancellationToken
         );

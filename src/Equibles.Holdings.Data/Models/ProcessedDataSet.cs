@@ -13,14 +13,9 @@ public class ProcessedDataSet
     // the real rows for a backfill.
     public const string BackfillGuardFileName = "__backfill-guard__";
 
-    // Sentinel row name marking a CUSIP-identity rescan as QUEUED but not yet
-    // applied. StockCusipChangedConsumer only adds this row; the actual ledger
-    // clear happens at the start of HoldingsScraperWorker's next cycle. Clearing
-    // inline restarted the multi-hour oldest-first walk on every identity
-    // discovery, and the FTD sweeps discover identities near-daily — so the walk
-    // never reached the newest quarters and they never healed
-    // (EquiblesCommercial#7163). Deferring the clear lets every walk complete;
-    // events arriving mid-walk coalesce into one queued rescan for the next one.
+    // Legacy CUSIP rescan marker. Older writers did not retain the triggering identity,
+    // so these requests still require a conservative full replay during an upgrade.
+    // New requests live in HoldingsCusipRescan and never clear the bulk ledger.
     public const string RescanPendingFileName = "__rescan-pending__";
 
     // Written before a bulk import can replace holdings; survives a worker restart until

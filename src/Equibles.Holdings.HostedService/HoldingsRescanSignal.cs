@@ -10,7 +10,7 @@ namespace Equibles.Holdings.HostedService;
 /// 24h <c>SleepInterval</c> (and risking a same-cycle skip). Singleton so the
 /// scoped consumer and the singleton hosted worker share one instance.
 /// Requests coalesce: many CUSIP-change events in one FTD burst trigger a
-/// single rescan (which re-imports every quarter for all tracked CUSIPs).
+/// single source scan for the queued CUSIP identities.
 /// </summary>
 [Service(ServiceLifetime.Singleton)]
 public class HoldingsRescanSignal
