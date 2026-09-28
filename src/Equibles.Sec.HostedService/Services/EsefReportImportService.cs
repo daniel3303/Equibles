@@ -346,6 +346,9 @@ public class EsefReportImportService(
         CancellationToken cancellationToken
     )
     {
+        if (filing.PeriodEnd is not { } periodEnd)
+            return EsefCaptureOutcome.Skipped;
+
         var sourceUrl = captureAddress.ToString();
         var isJson = captureAddress == filing.JsonUrl && captureAddress != filing.ReportUrl;
         if (sourceUrl.Length > MaxSourceUrlLength)
@@ -393,7 +396,6 @@ public class EsefReportImportService(
 
         var report = payload.Bytes;
         var html = SameOriginTextReader.Decode(payload.CharSet, report);
-        var periodEnd = filing.PeriodEnd.Value;
         var annual = isJson
             ? EsefAnnualPeriod.IsProven(
                 new JsonXbrlParser().Parse(html, candidate.LegalEntityIdentifier, periodEnd),
