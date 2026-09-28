@@ -179,7 +179,10 @@ public class DocumentRepository : BaseRepository<Document>
                 && d.NormalizedContentAttempts < Document.MaxNormalizedContentAttempts
                 && (
                     (
-                        d.DocumentType == DocumentType.EsefAnnualReport
+                        (
+                            d.DocumentType == DocumentType.EsefAnnualReport
+                            || d.DocumentType == DocumentType.EsefReport
+                        )
                         && d.XbrlStatus == XbrlCaptureStatus.Captured
                         && d.XbrlType == XbrlType.InlineIxbrl
                         && d.XbrlContentId != null
@@ -193,6 +196,7 @@ public class DocumentRepository : BaseRepository<Document>
                             )
                         )
                         && d.DocumentType != DocumentType.EsefAnnualReport
+                        && d.DocumentType != DocumentType.EsefReport
                     )
                 )
             );
@@ -211,6 +215,7 @@ public class DocumentRepository : BaseRepository<Document>
                 d.DocumentType == DocumentType.TenK
                 || d.DocumentType == DocumentType.TenQ
                 || d.DocumentType == DocumentType.EsefAnnualReport
+                || d.DocumentType == DocumentType.EsefReport
             );
         }
 

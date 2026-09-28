@@ -15,3 +15,15 @@
 ## Nostrum 2025 empty title
 
 `nostrum-2025-empty-title.xhtml` retains the namespace declarations, XBRL header and first three numeric facts from the [2025 Nostrum report](https://filings.xbrl.org/2138007VWEP4MM3J8B29/2025-12-31/ESEF/GB/0/2138007VWEP4MM3J8B29-2025-12-31/reports/2138007VWEP4MM3J8B29-2025-12-31.xhtml). Layout, styles, images and all other facts were omitted. The original self-closing title is retained: HTML parsing without XHTML normalization treats the following report as title text and yields zero facts. Values, contexts, units and identifiers are unchanged.
+
+## Ennogie interim annual-comparative regression
+
+- `ennogie-2026-interim-excerpt.xhtml` retains four numeric facts, their unchanged contexts/units, namespace declarations and three reporting metadata facts from the [June 2026 report](https://filings.xbrl.org/549300JUGBT2EH17X827/2026-06-30/ESEF/DK/0/Ennogie_Solar_Group-2026-06-30-1-en/reports/Ennogie%20Solar%20Group-2026-06-30-1-en.xhtml), downloaded 2026-09-27.
+- The report states `Interim report (6 months)`; its January–June duration and June instant coexist with a January–December comparative and December instant.
+- Layout, all other facts and encoded media are omitted; the XHTML body/header wrappers and title are minimal replacements.
+- Original SHA-256: `a02907d00f4caba1e5051a5f06761fa13f0d304ec4905d27db9d0cb38218c3b4` (15,682,921 bytes).
+- Excerpt SHA-256: `443be29cd58b1c7b2c45656283e1201a783e088d23f1e06cf9efe9f8b63c58e8` (3,524 bytes).
+- Importer orchestration tests adapt the existing Izostal rendering cassette to each index identity and period and add one explicit annual flow; the source cassette itself is unchanged.
+
+- `ennogie-2025-annual-excerpt.xhtml` retains two unchanged numeric facts, their contexts/units and namespace declarations from the [2025 annual report](https://filings.xbrl.org/549300JUGBT2EH17X827/2025-12-31/ESEF/DK/0/EnnogieSolarGroup-2025-12-31-en/reports/EnnogieSolarGroup-2025-12-31-en.xhtml), downloaded 2026-09-27; layout and all other facts are omitted, with minimal XHTML wrappers.
+- Annual original SHA-256: `2b2802e87aa09436ce8a8a897385a930ce9dee5293c6adc2461c229ba48f6cf9` (37,153,490 bytes); excerpt SHA-256: `7f1a66cceb6af903701187baabcbe58608de09e0b83f47164a24db71ca86dd08` (1,880 bytes).

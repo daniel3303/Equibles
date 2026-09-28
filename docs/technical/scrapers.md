@@ -1,12 +1,12 @@
 # Scrapers and Integrations
 
-## European annual report history
+## European ESEF report history
 
 - ESEF capture matches source LEIs to verified issuers without a SEC CIK.
 - Future reporting periods in index metadata are rejected before selection; completed reports must not be masked by an erroneous future date.
 - A reporting period later than the index's stated receipt date remains invalid even after that period becomes historical.
 - Future receipt dates are excluded before selection and cannot become stored filing dates.
-- Select one report per source-stated annual period, newest first, using the existing deterministic country and validation ordering.
+- Select one report per source-stated reporting period, newest first, using the existing deterministic country and validation ordering.
 - Capture at most one missing period per issuer per cycle; issuers missing their latest report take priority over historical backfill.
 - Stored reports and terminal size refusals do not block earlier periods or consume download budget.
 - An HTML size refusal makes the index's exact `json_url` eligible on the next cycle; the refused HTML is not downloaded again.
@@ -17,7 +17,13 @@
 - Structured recovery publishes only unqualified standard IFRS facts with an exact ISO 17442 issuer identity; dimensional, custom, unsupported numeric and timezone-bearing period shapes remain unavailable.
 - xBRL-JSON values are already scaled; `decimals` describes precision, and midnight instant/end timestamps map to the preceding inclusive calendar date.
 - Recovery is recurring reconciliation, not a one-time script; no extraction-version bump replays already captured HTML documents.
-- Initialize missing fiscal-calendar metadata from the latest indexed annual period, never from an older backfill report.
+- An ESEF index entry does not establish annual reporting: tagged interim reports use the same format.
+- Validate inline XML namespaces in scope before annual classification and fact extraction; ambiguous rebindings, spoofed instance namespaces and aliases unsupported by the shared parser keep the general type and refuse financial-fact publication.
+- Retain refused originals for diagnosis; the extraction guard prevents new unsupported facts but does not remove previously stored rows or replay the completed corpus.
+- Classify a captured report as annual only with matching unqualified, conflict-free IFRS annual-duration and instant facts at its indexed end, and no later supported issuer facts.
+- Keep other captured reports as the general `EsefReport` type; preserve their envelope, financial extraction, normalization replay and history deduplication.
+- Initialize a missing fiscal calendar only when the currently captured report proves the latest indexed annual period; an unread latest report or an older backfill cannot supply that evidence.
+- Existing fiscal metadata remains unchanged; correcting historical report types, fiscal calendars and fact labels requires a separate source-backed repair.
 - Historical ingestion is recurring reconciliation: subsequent cycles discover missing periods, and a fully captured issuer makes no report requests.
 - Capturing an XBRL envelope queues existing financial-fact extraction; capture counts alone do not prove published financial coverage.
 

@@ -61,6 +61,15 @@ public sealed class DocumentType
         hiddenFromFilingLists: true
     );
 
+    // ESEF identifies a reporting format, not an annual reporting period.
+    public static readonly DocumentType EsefReport = new(
+        "EsefReport",
+        "ESEF Report",
+        hiddenFromFilingLists: true
+    );
+
+    public bool IsEsef() => this == EsefAnnualReport || this == EsefReport;
+
     public static readonly DocumentType Other = new("Other", "Other");
 
     private static readonly ConcurrentDictionary<string, DocumentType> AllByValue = new(
@@ -93,6 +102,7 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(NportPa.Value, NportPa),
             new KeyValuePair<string, DocumentType>(Def14A.Value, Def14A),
             new KeyValuePair<string, DocumentType>(EsefAnnualReport.Value, EsefAnnualReport),
+            new KeyValuePair<string, DocumentType>(EsefReport.Value, EsefReport),
             new KeyValuePair<string, DocumentType>(Other.Value, Other),
         },
         StringComparer.OrdinalIgnoreCase
@@ -128,6 +138,7 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(NportPa.DisplayName, NportPa),
             new KeyValuePair<string, DocumentType>(Def14A.DisplayName, Def14A),
             new KeyValuePair<string, DocumentType>(EsefAnnualReport.DisplayName, EsefAnnualReport),
+            new KeyValuePair<string, DocumentType>(EsefReport.DisplayName, EsefReport),
             new KeyValuePair<string, DocumentType>(Other.DisplayName, Other),
         },
         StringComparer.OrdinalIgnoreCase

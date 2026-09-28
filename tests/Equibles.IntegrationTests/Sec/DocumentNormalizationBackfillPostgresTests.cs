@@ -209,8 +209,10 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         saved.ChunkedAt.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Backfill_EsefReplacesOnlyDerivedContentAndFinishesItsQueueEntry()
+    [Theory]
+    [InlineData("EsefAnnualReport")]
+    [InlineData("EsefReport")]
+    public async Task Backfill_EsefReplacesOnlyDerivedContentAndFinishesItsQueueEntry(string form)
     {
         var document = await SeedLegacyDocument("ESEF");
         var original = GzipCompressor.Compress(
@@ -218,7 +220,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
                 "<html xmlns='http://www.w3.org/1999/xhtml'><head><title/></head><body><p>Retained annual report</p></body></html>"
             )
         );
-        document.DocumentType = DocumentType.EsefAnnualReport;
+        document.DocumentType = DocumentType.FromValue(form);
         document.Issuer.Cik = null;
         document.AccessionNumber = "esef:retained";
         document.XbrlType = XbrlType.InlineIxbrl;

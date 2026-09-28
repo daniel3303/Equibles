@@ -26,6 +26,11 @@
       CopyToOutputDirectory="PreserveNewest"
     />
     <Content
+      Include="../Equibles.UnitTests/TestAssets/Esef/ennogie-2025-annual-excerpt.xhtml"
+      Link="TestAssets/Esef/ennogie-2025-annual-excerpt.xhtml"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
       Include="../Equibles.UnitTests/TestAssets/InsiderTrading/InvalidDates/oprx.xml"
       Link="TestAssets/oprx-invalid-dates.xml"
       CopyToOutputDirectory="PreserveNewest"
