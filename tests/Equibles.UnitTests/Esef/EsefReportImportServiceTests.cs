@@ -262,6 +262,33 @@ public class EsefReportImportServiceTests
         stored.FiscalYearEndDay.Should().Be(31);
     }
 
+    [Theory]
+    [InlineData("utf8-bom", true)]
+    [InlineData("unbound-unit", false)]
+    [InlineData("spoofed-unit", false)]
+    public async Task Import_AnnualEvidencePreservesBomAndRequiresUnitNamespaces(string shape, bool annual)
+    {
+        var report = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory, "TestAssets", "Esef", "ennogie-2025-annual-excerpt.xhtml"
+        )).Replace("549300JUGBT2EH17X827", Lei);
+        report = shape switch
+        {
+            "utf8-bom" => "\uFEFF" + report,
+            "unbound-unit" => report.Replace("iso4217:DKK", "undeclared:DKK"),
+            _ => report.Replace("iso4217:DKK", "ifrs-full:DKK")
+        };
+        var harness = await Harness.Create(Issuer("FR"), htmlReport: report);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        var saved = harness.Saved.Should().ContainSingle().Subject;
+        saved.DocumentType.Should().Be(annual ? DocumentType.EsefAnnualReport : DocumentType.EsefReport);
+        saved.Xbrl.RawBytes.Should().Equal(System.Text.Encoding.UTF8.GetBytes(report));
+        harness.Context.ChangeTracker.Clear();
+        (await harness.Context.Set<EquityIssuer>().SingleAsync()).FiscalYearEndMonth
+            .Should().Be(annual ? 12 : null);
+    }
+
     [Fact]
     public async Task Import_TaggedInterimKeepsItsEnvelopeWithoutInventingAnAnnualCalendar()
     {

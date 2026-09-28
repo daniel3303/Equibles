@@ -458,6 +458,12 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
     [Theory]
     [InlineData("EsefAnnualReport", "valid")]
     [InlineData("EsefReport", "valid")]
+    [InlineData("EsefAnnualReport", "utf8-bom")]
+    [InlineData("EsefReport", "utf8-bom")]
+    [InlineData("EsefAnnualReport", "unbound-unit")]
+    [InlineData("EsefReport", "unbound-unit")]
+    [InlineData("EsefAnnualReport", "spoofed-unit")]
+    [InlineData("EsefReport", "spoofed-unit")]
     [InlineData("EsefAnnualReport", "spoofed-instance")]
     [InlineData("EsefReport", "spoofed-instance")]
     [InlineData("EsefAnnualReport", "aliased-scenario")]
@@ -474,6 +480,9 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         ));
         envelope = shape switch
         {
+            "utf8-bom" => "\uFEFF" + envelope,
+            "unbound-unit" => envelope.Replace("iso4217:DKK", "undeclared:DKK"),
+            "spoofed-unit" => envelope.Replace("iso4217:DKK", "ifrs-full:DKK"),
             "spoofed-instance" => envelope.Replace(
                 "http://www.xbrl.org/2003/instance", "https://example.org/instance"
             ),
@@ -494,7 +503,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         document.Issuer.LegalEntityIdentifier = "549300JUGBT2EH17X827";
         await DbContext.SaveChangesAsync();
 
-        if (shape == "valid")
+        if (shape is "valid" or "utf8-bom")
         {
             (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(2);
             (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(2);

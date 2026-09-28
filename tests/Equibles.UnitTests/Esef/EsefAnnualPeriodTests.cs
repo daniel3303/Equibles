@@ -93,6 +93,9 @@ public class EsefAnnualPeriodTests
 
     [Theory]
     [InlineData("valid", true)]
+    [InlineData("utf8-bom", true)]
+    [InlineData("unbound-unit", false)]
+    [InlineData("spoofed-unit", false)]
     [InlineData("instance", false)]
     [InlineData("inline", false)]
     [InlineData("rebound", false)]
@@ -109,6 +112,9 @@ public class EsefAnnualPeriodTests
         var html = AnnualInline();
         html = shape switch
         {
+            "utf8-bom" => "\uFEFF" + html,
+            "unbound-unit" => html.Replace("iso4217:DKK", "undeclared:DKK"),
+            "spoofed-unit" => html.Replace("iso4217:DKK", "ifrs-full:DKK"),
             "instance" => html.Replace("http://www.xbrl.org/2003/instance", "https://example.org/instance"),
             "inline" => html.Replace("http://www.xbrl.org/2013/inlineXBRL", "https://example.org/inline"),
             "rebound" => html.Replace("<div>", "<div xmlns:ifrs-full=\"https://example.org/ifrs-full\">"),
@@ -124,6 +130,38 @@ public class EsefAnnualPeriodTests
         };
 
         EsefAnnualPeriod.IsProvenInline(html, Lei, End).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("xbrli:pure", "pure")]
+    [InlineData("xbrli:shares", "shares")]
+    [InlineData("iso4217:EUR", "EUR")]
+    public void Parse_ResolvesSupportedMeasureNamespaces(string measure, string unit)
+    {
+        var facts = EsefInlineXbrlParser.Parse(AnnualInline().Replace("iso4217:DKK", measure));
+
+        facts.Should().HaveCount(2);
+        facts.Should().OnlyContain(fact => fact.Unit == unit);
+    }
+
+    [Theory]
+    [InlineData("xbrli:shares", true)]
+    [InlineData("undeclared:shares", false)]
+    [InlineData("ifrs-full:shares", false)]
+    public void TryParse_ValidatesDividedUnitDenominator(string denominator, bool expected)
+    {
+        var html = AnnualInline().Replace("<xbrli:measure>iso4217:DKK</xbrli:measure>", $"""
+            <xbrli:divide>
+              <xbrli:unitNumerator><xbrli:measure>iso4217:DKK</xbrli:measure></xbrli:unitNumerator>
+              <xbrli:unitDenominator><xbrli:measure>{denominator}</xbrli:measure></xbrli:unitDenominator>
+            </xbrli:divide>
+            """);
+
+        EsefInlineXbrlParser.TryParse(html, out var facts).Should().Be(expected);
+        if (expected)
+            facts.Should().OnlyContain(fact => fact.Unit == "DKK/shares");
+        else
+            facts.Should().BeEmpty();
     }
 
     private static string AnnualInline() => $"""

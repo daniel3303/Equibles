@@ -18,6 +18,9 @@ public static class EsefInlineXbrlParser
     public static bool TryParse(string html, out List<ParsedXbrlFact> facts)
     {
         facts = [];
+        // UTF-8 byte decoders preserve the signature; StringReader expects XML text.
+        if (html?.StartsWith('\uFEFF') == true)
+            html = html[1..];
         if (string.IsNullOrWhiteSpace(html) || !EsefInlineNamespaces.AreUnambiguous(html))
             return false;
         facts = new InlineXbrlParser().Parse(html);

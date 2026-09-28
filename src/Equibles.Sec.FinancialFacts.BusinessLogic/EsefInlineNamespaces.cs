@@ -43,6 +43,9 @@ internal static class EsefInlineNamespaces
                     bindings[prefix] = value;
                 }
                 reader.MoveToElement();
+                if (reader.NamespaceURI == "http://www.xbrl.org/2003/instance"
+                    && reader.LocalName == "measure" && !HasSupportedMeasure(reader))
+                    return false;
                 if (string.Equals(reader.Prefix, "ix", StringComparison.OrdinalIgnoreCase)
                     && string.Equals(reader.LocalName, "nonFraction", StringComparison.OrdinalIgnoreCase))
                 {
@@ -57,6 +60,22 @@ internal static class EsefInlineNamespaces
         {
             return false;
         }
+    }
+
+    private static bool HasSupportedMeasure(XmlReader reader)
+    {
+        var namespaces = ((IXmlNamespaceResolver)reader).GetNamespacesInScope(XmlNamespaceScope.All);
+        using var measure = reader.ReadSubtree();
+        measure.MoveToContent();
+        var parts = measure.ReadElementContentAsString().Trim().Split(':');
+        if (parts.Length != 2 || !namespaces.TryGetValue(parts[0], out var ns))
+            return false;
+        XmlConvert.VerifyNCName(parts[0]);
+        XmlConvert.VerifyNCName(parts[1]);
+        // The shared parser drops unit prefixes. Only these namespaces give that
+        // abbreviated unit an unambiguous currency, ratio or share-count identity.
+        return ns == "http://www.xbrl.org/2003/iso4217"
+            || (ns == "http://www.xbrl.org/2003/instance" && parts[1] is "pure" or "shares");
     }
 
     // The HTML parser identifies these elements by their literal prefixes. An alias
