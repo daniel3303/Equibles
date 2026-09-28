@@ -728,7 +728,7 @@ public partial class HouseDisclosureClient
     // transaction date. The sale marker also matches "s": a small-caps font in some official
     // PDFs extracts it in lower case ("s (partial) 03/22/2019"); every other letter is exact.
     [GeneratedRegex(
-        @"(?<=\s|^)([Ss] \((?i:partial|full)\)|[Ss]|P|E)\s+(\d{2}/\d{2}/\d{4})\s+\d{1,2}/\d{1,2}/\d{4}"
+        @"(?<=\s|^)([Ss] \((?i:partial|full)\)|[Ss]|P|E)\s+(\d{1,2}/\d{1,2}/\d{4})\s+\d{1,2}/\d{1,2}/\d{4}"
     )]
     private static partial Regex TransactionAnchorRegex();
 

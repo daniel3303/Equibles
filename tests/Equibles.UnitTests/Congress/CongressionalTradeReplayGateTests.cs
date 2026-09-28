@@ -15,7 +15,7 @@ public class CongressionalTradeReplayGateTests
     [InlineData(House, true, false, 4)]
     [InlineData(House, true, true, 4)]
     [InlineData(House, false, true, 4)]
-    [InlineData(House, false, false, 8)]
+    [InlineData(House, false, false, 9)]
     [InlineData(Senate, true, false, 4)]
     [InlineData(Senate, false, true, 4)]
     [InlineData(Senate, false, false, 6)]
