@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories.Models;
 using Equibles.EquityMarkets.Data.Catalog;
@@ -12,17 +13,27 @@ internal static class YahooListingSource
     // and the quotation unit the chart reports must be the one the verified listing states.
     internal static EquityMarket Market(PriceSeriesTarget target)
     {
-        if (target.IsUs || string.IsNullOrWhiteSpace(target.Isin))
+        if (
+            target.IsUs
+            || string.IsNullOrWhiteSpace(target.Isin)
+                && (target.EquitySecurityId == null || target.EquitySecurityId == Guid.Empty)
+        )
             return null;
         var market = EquityMarketCatalog.ByMarketIdentifierCode(target.MarketIdentifierCode);
-        return market?.CountryCode == target.MarketCountryCode ? market : null;
+        return
+            market?.CountryCode == target.MarketCountryCode
+            && !string.IsNullOrWhiteSpace(market.YahooSuffix)
+            && !string.IsNullOrWhiteSpace(market.YahooExchangeCode)
+            && Symbol(target.Ticker, market) != null
+            ? market
+            : null;
     }
 
     internal static string EvidenceSource(EquityMarket market) => $"yahoo-{market.Code}-chart-v1";
 
     internal static string ProviderSymbol(PriceSeriesTarget target) =>
         target.IsUs ? target.Ticker
-        : Market(target) is { } market ? target.Ticker + market.YahooSuffix
+        : Market(target) is { } market ? Symbol(target.Ticker, market)
         : null;
 
     // The provider symbol for a listing named by its venue alone; a market outside the catalog has no Yahoo identity.
@@ -37,7 +48,27 @@ internal static class YahooListingSource
         if (marketCountryCode == "US")
             return ticker;
         var market = EquityMarketCatalog.ByMarketIdentifierCode(marketIdentifierCode);
-        return market?.CountryCode == marketCountryCode ? ticker + market.YahooSuffix : null;
+        return market?.CountryCode == marketCountryCode ? Symbol(ticker, market) : null;
+    }
+
+    private static string Symbol(string ticker, EquityMarket market)
+    {
+        if (string.IsNullOrWhiteSpace(ticker) || string.IsNullOrWhiteSpace(market.YahooSuffix))
+            return null;
+        if (market.NumericTickerWidth is { } sourceWidth && ticker.Length != sourceWidth)
+            return null;
+        if (market.YahooNumericSymbolWidth is not { } width)
+            return ticker + market.YahooSuffix;
+        // Exchange numeric codes and provider symbols can have different leading-zero widths.
+        return
+            ticker.All(char.IsAsciiDigit)
+            && int.TryParse(ticker, NumberStyles.None, CultureInfo.InvariantCulture, out var code)
+            && code > 0
+            ? code.ToString(
+                "D" + width.ToString(CultureInfo.InvariantCulture),
+                CultureInfo.InvariantCulture
+            ) + market.YahooSuffix
+            : null;
     }
 
     internal static bool MatchesListing(PriceSeriesTarget target, EquityListing listing) =>
@@ -57,6 +88,10 @@ internal static class YahooListingSource
                 && listing.IdentityState == EquityIdentityState.Verified
                 && listing.MarketIdentifierCode == target.MarketIdentifierCode
                 && listing.Security.Isin == target.Isin
+                && (
+                    target.EquitySecurityId == null
+                    || listing.EquitySecurityId == target.EquitySecurityId
+                )
                 && listing.TradingCurrency != null
                 && listing.TradingCurrency == target.TradingCurrency
                 && listing.QuoteUnitMultiplier != null
@@ -96,7 +131,8 @@ internal static class YahooListingSource
                 ?? throw new InvalidOperationException(
                     "A catalog binding needs the listing's verified quotation unit."
                 ),
-            market.MarketIdentifierCodes.ToArray()
+            market.MarketIdentifierCodes.ToArray(),
+            target.EquitySecurityId
         );
     }
 
@@ -114,6 +150,7 @@ internal static class YahooListingSource
                 {
                     target.EquityIssuerId,
                     target.EquityListingId,
+                    target.EquitySecurityId,
                     target.Ticker,
                     target.MarketIdentifierCode,
                     target.Isin,

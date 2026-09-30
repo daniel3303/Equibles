@@ -23,16 +23,7 @@ public class EquityDirectorySnapshotManager(IServiceScopeFactory scopeFactory)
             || input.ObservedAt.Kind != DateTimeKind.Utc
             || string.IsNullOrWhiteSpace(input.MarketCountryCode)
             || input.MarketIdentifierCodes.Count == 0
-            || input.Listings.Count == 0
-            || input.Listings.Any(row =>
-                string.IsNullOrWhiteSpace(row.Isin)
-                || string.IsNullOrWhiteSpace(row.Ticker)
-                || !input.MarketIdentifierCodes.Contains(row.MarketIdentifierCode)
-            )
-            || input.Listings.DistinctBy(row => (row.Isin, row.MarketIdentifierCode)).Count()
-                != input.Listings.Count
-            || input.Listings.DistinctBy(row => (row.MarketIdentifierCode, row.Ticker)).Count()
-                != input.Listings.Count
+            || !EquityDirectorySnapshotIdentity.ValidListings(input)
         )
             throw new InvalidDataException(
                 "A complete, unambiguous directory snapshot is required."
@@ -67,7 +58,9 @@ public class EquityDirectorySnapshotManager(IServiceScopeFactory scopeFactory)
             && state.SourceRecordId != recordId
         )
             throw new InvalidDataException("Equal-time directory snapshots disagree.");
-        var current = input.Listings.ToHashSet();
+        var current = input
+            .Listings.Select(row => (row.Isin, row.MarketIdentifierCode, row.Ticker))
+            .ToHashSet();
         var existing = await listings
             .GetAll()
             .Where(row =>
@@ -78,12 +71,22 @@ public class EquityDirectorySnapshotManager(IServiceScopeFactory scopeFactory)
             )
             .Include(row => row.Security)
             .ToListAsync(token);
+        var retained = EquityDirectorySnapshotIdentity.UsesSourceIdentifiers(input)
+            ? await EquityDirectorySnapshotIdentity.CurrentSourceListings(
+                input,
+                issuers,
+                existing,
+                token
+            )
+            : null;
         foreach (var listing in existing)
         {
             if (
-                current.Contains(
-                    new(listing.Security.Isin, listing.MarketIdentifierCode, listing.Ticker)
-                )
+                retained != null
+                    ? retained.Contains(listing.Id)
+                    : current.Contains(
+                        (listing.Security.Isin, listing.MarketIdentifierCode, listing.Ticker)
+                    )
             )
                 continue;
             // Absence withdraws current capture eligibility; it supplies no effective delisting date.

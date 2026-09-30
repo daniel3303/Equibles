@@ -41,7 +41,8 @@ public class EquityMarketCatalogTests
             .Should()
             .OnlyHaveUniqueItems("a venue cannot be the home of two markets");
         EquityMarketCatalog
-            .All.Select(market => market.CountryCode)
+            .All.Where(market => market.FirdsAuthority != null)
+            .Select(market => market.CountryCode)
             .Should()
             .OnlyHaveUniqueItems(
                 "the gate's competent-authority escape assumes one catalog market per country"
@@ -60,7 +61,9 @@ public class EquityMarketCatalogTests
                 market.HomeVenueCodes.Should().Equal(market.MarketIdentifierCodes);
             }
         }
-        foreach (var market in EquityMarketCatalog.All)
+        foreach (
+            var market in EquityMarketCatalog.All.Where(market => market.FirdsAuthority != null)
+        )
             market
                 .FirdsAuthority.Should()
                 .Be(
@@ -114,10 +117,11 @@ public class EquityMarketCatalogTests
     }
 
     [Fact]
-    public void DirectorySources_ServeEveryMarketAndLondonRunsLast()
+    public void DirectorySources_ServeEveryFirdsMarketAndLondonRunsLast()
     {
         EquityMarketCatalog
-            .All.Should()
+            .All.Where(market => market.FirdsAuthority != null)
+            .Should()
             .AllSatisfy(market => market.DirectorySource.Should().NotBeNull());
         EquityMarketCatalog
             .All.Last()
@@ -127,7 +131,8 @@ public class EquityMarketCatalogTests
                 "the EEA directories hold an issuer's presentation before its London line arrives"
             );
         EquityMarketCatalog
-            .All.Select(market => market.DirectorySource)
+            .All.Where(market => market.FirdsAuthority != null)
+            .Select(market => market.DirectorySource)
             .Distinct()
             .Should()
             .BeEquivalentTo(["euronext", "xetra", "nasdaq-nordic", "bme", "gpw", "lse"]);
@@ -143,10 +148,36 @@ public class EquityMarketCatalogTests
         london.HomeVenueCodes.Should().Equal("XLON", "AIMX");
         london.Currency.Should().Be("GBP");
         EquityMarketCatalog
-            .All.Where(market => market.FirdsAuthority != "ESMA")
+            .All.Where(market => market.FirdsAuthority != null && market.FirdsAuthority != "ESMA")
             .Select(market => market.Code)
             .Should()
             .Equal("lse");
+    }
+
+    [Theory]
+    [InlineData("shanghai", "XSHG", "CN", "CNY", ".SS", "SHH", "Asia/Shanghai")]
+    [InlineData("shenzhen", "XSHE", "CN", "CNY", ".SZ", "SHZ", "Asia/Shanghai")]
+    [InlineData("hong-kong", "XHKG", "HK", "HKD", ".HK", "HKG", "Asia/Hong_Kong")]
+    public void NativeMarketsRequireHostDirectoryEvidenceWithoutFirds(
+        string code,
+        string mic,
+        string country,
+        string currency,
+        string suffix,
+        string exchange,
+        string timeZone
+    )
+    {
+        var market = EquityMarketCatalog.TryGet(code);
+        market.MarketIdentifierCodes.Should().Equal(mic);
+        market.CountryCode.Should().Be(country);
+        market.Currency.Should().Be(currency);
+        market.YahooSuffix.Should().Be(suffix);
+        market.YahooExchangeCode.Should().Be(exchange);
+        market.TimeZoneId.Should().Be(timeZone);
+        market.FirdsAuthority.Should().BeNull();
+        market.DirectorySource.Should().BeNull();
+        market.YahooNumericSymbolWidth.Should().Be(code == "hong-kong" ? 4 : null);
     }
 
     [Fact]

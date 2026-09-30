@@ -15,6 +15,7 @@ public class EquityListingSourceIdentifier
 
     [Required, MaxLength(128)]
     public string Identifier { get; set; }
+    public bool IsDirectoryListed { get; set; }
     public Guid SourceRecordId { get; set; }
     public virtual EquityDirectorySourceRecord SourceRecord { get; set; }
 }

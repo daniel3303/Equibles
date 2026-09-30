@@ -21,6 +21,13 @@ internal static class EquityDirectoryListingInputValidator
 
     private static bool Instruments(EquityDirectoryListingInput input)
     {
+        if (
+            input.SecurityType.HasValue
+            && (!Enum.IsDefined(input.SecurityType.Value) || input.SecurityType.Value == 0)
+        )
+            return false;
+        if (input.ListedOn == DateOnly.MinValue)
+            return false;
         if (input.Isin != null && !InternationalSecurityIdentifiers.IsValidIsin(input.Isin))
             return false;
         if (input.Isin == null && input.SourceSecurityIdentifier == null)

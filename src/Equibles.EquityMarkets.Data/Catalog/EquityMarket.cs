@@ -18,7 +18,9 @@ public sealed record EquityMarket(
     string DelayedTradeLocationCode,
     IReadOnlyList<string> FirdsVenueCodes = null,
     IReadOnlyList<string> HomeVenueCodes = null,
-    string FirdsAuthority = "ESMA"
+    string FirdsAuthority = "ESMA",
+    int? YahooNumericSymbolWidth = null,
+    int? NumericTickerWidth = null
 )
 {
     // The venue codes FIRDS records this market's lines under; a regulator files Xetra by segment, never as XETR.
