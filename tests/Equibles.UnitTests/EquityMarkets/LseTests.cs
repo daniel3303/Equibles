@@ -173,6 +173,31 @@ public class LseTests
     }
 
     [Fact]
+    public async Task EditionWalk_ContinuesPastTheOldFixedHorizon()
+    {
+        var handler = Handler(await InstrumentList(), Enumerable.Range(81, 42).ToArray());
+        using var http = new HttpClient(handler);
+        var edition = await new LseInstrumentListClient(http).FindLatestEdition(
+            CancellationToken.None
+        );
+        edition.Should().Be(122);
+        handler.Requests.Should().HaveCount(42 + LseInstrumentListClient.MissesBeforeStop);
+    }
+
+    [Fact]
+    public async Task EditionWalk_RefusesAnUnfinishedSearchInsteadOfImportingAnOldEdition()
+    {
+        var handler = Handler(
+            await InstrumentList(),
+            Enumerable.Range(81, LseInstrumentListClient.MaximumProbes).ToArray()
+        );
+        using var http = new HttpClient(handler);
+        var search = () =>
+            new LseInstrumentListClient(http).FindLatestEdition(CancellationToken.None);
+        await search.Should().ThrowAsync<InvalidDataException>().WithMessage("*exhausted*");
+    }
+
+    [Fact]
     public async Task AnEditionThatServesAPageOrNothingAtAll_IsNotAnEdition()
     {
         using var page = new HttpClient(

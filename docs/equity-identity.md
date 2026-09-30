@@ -117,3 +117,5 @@
 - Native import preflight retains the stored full-grain/CUSIP observation key before assembling both position and manager writes.
 - A permanent insert guard refuses incompatible keys from unprepared writers before they can alter either positions or another security’s allocations.
 - Both generations serialize on native issuer locks; original position IDs, source facts and attribution IDs remain intact through replay and final storage retirement.
+
+- London directory discovery resumes from the edition in its last committed snapshot, crosses publication gaps, and fails if its search budget ends before the terminal gap; an incomplete search must never reconcile an older workbook as current.
