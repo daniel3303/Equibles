@@ -129,6 +129,15 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
             throw new InvalidDataException(
                 "Directory quotation units conflict with the existing listing."
             );
+        if (
+            input.ListedOn.HasValue
+            && listing.ListedOn.HasValue
+            && input.ListedOn != listing.ListedOn
+        )
+            throw new InvalidDataException(
+                "Directory admission date conflicts with the recorded listing."
+            );
+        listing.ListedOn ??= input.ListedOn;
         listing.MarketCountryCode ??= input.MarketCountryCode;
         listing.Ticker = input.Ticker;
         listing.TradingCurrency ??= input.TradingCurrency;

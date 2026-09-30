@@ -16,6 +16,8 @@ public static class EquityQuotationUnits
         ["PLN"] = ("PLN", 1m),
         ["CHF"] = ("CHF", 1m),
         ["USD"] = ("USD", 1m),
+        ["CNY"] = ("CNY", 1m),
+        ["HKD"] = ("HKD", 1m),
         ["GBP"] = ("GBP", 1m),
         ["GBp"] = ("GBP", 0.01m),
         ["GBX"] = ("GBP", 0.01m),

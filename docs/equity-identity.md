@@ -97,7 +97,10 @@
 ## Market capture
 
 - Every catalog market with a directory adapter is captured; there is no per-market switch. `EquityMarketDirectoryWorker` runs each such market's directory pass within a minute of start-up, once `FirdsUniverseWorker` has stored a full set for the market's authority, and again once a day.
-- Prices, quotation evidence and corporate actions are captured for every verified listing on a catalog market; a verified listing only exists because a directory pass created it.
+- Prices, quotation evidence and corporate actions are captured for every verified listing on a catalog market. An instrument without an ISIN also requires paired security/listing identifiers from the same authoritative directory; price writes bind its immutable security ID.
+- Shanghai, Shenzhen and Hong Kong have quotation metadata in the catalog; their official directories are supplied by the host rather than FIRDS. Catalog registration alone creates no active listings. Hong Kong requires its canonical five-digit numeric exchange code before converting to the provider’s four-digit minimum width; alternate spellings are ineligible, so two source tickers cannot normalize to one price symbol.
+- Complete source-identified snapshots validate every referenced binding, including withdrawn listings, before changing current claims. Each listing identifier records its own directory claim; a shared listing remains active until its last current claim disappears, preserving separate currency counters and other directories’ listings. Withdrawal revokes capture eligibility without inventing a delisting date; reappearance and renaming preserve the original listing identity.
+- Optional authoritative security type and admission date enrich unknown metadata; contradictory values reject the complete row transaction.
 - `EquityMarketRegistration` holds one row per catalog market recording pass state only: the last refresh, the last directory counts, the last error, and a refresh request. Setting `DirectoryRefreshRequestedAt = now()` on an adapter market's row runs its pass on the next control tick.
 - The `Enabled` column is retired and unread; a later migration drops it.
 

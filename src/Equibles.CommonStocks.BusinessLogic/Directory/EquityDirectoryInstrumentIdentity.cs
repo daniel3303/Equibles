@@ -65,6 +65,17 @@ internal sealed class EquityDirectoryInstrumentIdentity(
             security = new EquitySecurity { Issuer = issuer, IdentitySourceUrl = input.SourceUrl };
             issuer.Securities.Add(security);
         }
+        if (input.SecurityType.HasValue)
+        {
+            if (
+                security.SecurityType != EquitySecurityKind.Unknown
+                && security.SecurityType != input.SecurityType.Value
+            )
+                throw new InvalidDataException(
+                    "Directory security type conflicts with the recorded instrument."
+                );
+            security.SecurityType = input.SecurityType.Value;
+        }
         security.Isin ??= input.Isin;
         return security;
     }
@@ -125,11 +136,14 @@ internal sealed class EquityDirectoryInstrumentIdentity(
                     SourceRecordId = recordId,
                 }
             );
+        if (listingIdentifier != null)
+            listingIdentifier.IsDirectoryListed = true;
         if (listingIdentifier == null)
             repository.AddListingIdentifier(
                 new EquityListingSourceIdentifier
                 {
                     Listing = listing,
+                    IsDirectoryListed = true,
                     Source = input.Source,
                     Identifier = input.SourceListingIdentifier,
                     SourceRecordId = recordId,

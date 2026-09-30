@@ -8,6 +8,7 @@ namespace Equibles.CommonStocks.Data.Models;
 public class EquitySecurity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public virtual List<EquitySecuritySourceIdentifier> SourceIdentifiers { get; set; } = [];
     public Guid EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

@@ -15,7 +15,8 @@ internal readonly record struct PriceSeriesTarget(
     string Isin = null,
     string TradingCurrency = null,
     decimal? QuoteUnitMultiplier = null,
-    DateTime? YahooPriceSyncAttemptedAt = null
+    DateTime? YahooPriceSyncAttemptedAt = null,
+    Guid? EquitySecurityId = null
 )
 {
     public bool IsUs => MarketCountryCode == "US";

@@ -9,5 +9,6 @@ public sealed record EquityListingSourceBinding(
     string Isin,
     string Currency,
     decimal QuoteUnitMultiplier,
-    string[] SourceMarketIdentifierCodes
+    string[] SourceMarketIdentifierCodes,
+    Guid? EquitySecurityId = null
 );

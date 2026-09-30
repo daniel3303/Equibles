@@ -70,7 +70,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         {
             identifier
                 .HasOne(row => row.Security)
-                .WithMany()
+                .WithMany(row => row.SourceIdentifiers)
                 .HasForeignKey(row => row.EquitySecurityId)
                 .OnDelete(DeleteBehavior.Restrict);
             identifier
@@ -83,7 +83,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         {
             identifier
                 .HasOne(row => row.Listing)
-                .WithMany()
+                .WithMany(row => row.SourceIdentifiers)
                 .HasForeignKey(row => row.EquityListingId)
                 .OnDelete(DeleteBehavior.Restrict);
             identifier

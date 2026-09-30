@@ -2,6 +2,7 @@ using System.Data;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Calendars;
 using Equibles.Core.Configuration;
@@ -255,7 +256,7 @@ public class YahooPriceImportService
     private static bool IsCatalogMarket(PriceSeriesTarget target) =>
         target.IsUs || YahooListingSource.Market(target) != null;
 
-    private async Task<List<PriceSeriesTarget>> BuildCatalogPriceTargets(
+    internal async Task<List<PriceSeriesTarget>> BuildCatalogPriceTargets(
         CancellationToken cancellationToken
     )
     {
@@ -267,11 +268,11 @@ public class YahooPriceImportService
             var claims = MarketClaims(repository, market);
             rows.AddRange(
                 await claims
+                    .WithDirectoryInstrumentIdentity()
                     .Where(listing =>
                         listing.IdentityState == EquityIdentityState.Verified
                         && listing.TradingCurrency != null
                         && listing.QuoteUnitMultiplier != null
-                        && listing.Security.Isin != null
                         && claims.Count(other => other.Ticker == listing.Ticker) == 1
                     )
                     // The presentation listing is the issuer's enrichment target and carries the
@@ -291,11 +292,13 @@ public class YahooPriceImportService
                         listing.Security.Isin,
                         listing.TradingCurrency,
                         listing.QuoteUnitMultiplier,
-                        listing.YahooPriceSyncAttemptedAt
+                        listing.YahooPriceSyncAttemptedAt,
+                        listing.EquitySecurityId
                     ))
                     .ToListAsync(cancellationToken)
             );
         }
+        rows.RemoveAll(target => target.ProviderSymbol == null);
         if (_workerOptions.TickersToSync.Count == 0)
             return rows;
         var requested = _workerOptions.TickersToSync.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -339,7 +342,13 @@ public class YahooPriceImportService
             .Include(listing => listing.Security)
             .Take(2)
             .ToListAsync(token);
-        return claims.Count == 1 && YahooListingSource.MatchesListing(target, claims[0]);
+        return claims.Count == 1
+            && YahooListingSource.MatchesListing(target, claims[0])
+            && await repository
+                .GetSecurities()
+                .SelectMany(security => security.Listings)
+                .WithDirectoryInstrumentIdentity()
+                .AnyAsync(listing => listing.Id == target.EquityListingId, token);
     }
 
     private async Task<List<PriceSeriesTarget>> BuildHistoricalPriceTargets(
@@ -923,7 +932,7 @@ public class YahooPriceImportService
         }
     }
 
-    private async Task ReconcileStock(
+    internal async Task ReconcileStock(
         PendingPriceReconciliationSeries selectedSeries,
         DateOnly floor,
         DateOnly today,
@@ -970,7 +979,8 @@ public class YahooPriceImportService
                 MarketIdentifierCode: listing.MarketIdentifierCode,
                 Isin: listing.Security.Isin,
                 TradingCurrency: listing.TradingCurrency,
-                QuoteUnitMultiplier: listing.QuoteUnitMultiplier
+                QuoteUnitMultiplier: listing.QuoteUnitMultiplier,
+                EquitySecurityId: listing.EquitySecurityId
             );
             if (
                 !IsCatalogMarket(target)
@@ -1104,6 +1114,11 @@ public class YahooPriceImportService
             .All.SelectMany(market => market.MarketIdentifierCodes)
             .ToList();
 
+        var identityRepository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        var identifiedListings = identityRepository
+            .GetSecurities()
+            .SelectMany(security => security.Listings)
+            .WithDirectoryInstrumentIdentity();
         var boundaries = await splitRepository
             .GetAll()
             .Where(split =>
@@ -1112,7 +1127,7 @@ public class YahooPriceImportService
                 && (
                     split.Listing.MarketCountryCode == "US"
                     || catalogMics.Contains(split.Listing.MarketIdentifierCode)
-                        && split.Listing.Security.Isin != null
+                        && identifiedListings.Any(listing => listing.Id == split.EquityListingId)
                 )
                 && split.EffectiveDate < today
                 && split.Numerator > 0m

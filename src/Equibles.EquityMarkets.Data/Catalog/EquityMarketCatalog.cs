@@ -199,6 +199,60 @@ public static class EquityMarketCatalog
             DelayedTradeSource: null,
             DelayedTradeLocationCode: null
         ),
+        // These markets use official instrument identifiers, independently of the European FIRDS universe.
+        new(
+            "shanghai",
+            "Shanghai Stock Exchange",
+            "CN",
+            ["XSHG"],
+            "CNY",
+            ".SS",
+            "SHH",
+            "Asia/Shanghai",
+            new(9, 30),
+            new(14, 57),
+            new(15, 0),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null
+        ),
+        new(
+            "shenzhen",
+            "Shenzhen Stock Exchange",
+            "CN",
+            ["XSHE"],
+            "CNY",
+            ".SZ",
+            "SHZ",
+            "Asia/Shanghai",
+            new(9, 30),
+            new(14, 57),
+            new(15, 0),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null
+        ),
+        new(
+            "hong-kong",
+            "Hong Kong Stock Exchange",
+            "HK",
+            ["XHKG"],
+            "HKD",
+            ".HK",
+            "HKG",
+            "Asia/Hong_Kong",
+            new(9, 30),
+            new(16, 0),
+            new(16, 10),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null,
+            YahooNumericSymbolWidth: 4,
+            NumericTickerWidth: 5
+        ),
         // Last on purpose: the FCA register homes the EEA issuers' London lines too, so their EEA directories
         // run first and hold the presentation before a London listing of the same share arrives. AIM is its own
         // venue code, so the growth market is a market identifier here rather than a segment of XLON.

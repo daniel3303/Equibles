@@ -3,5 +3,8 @@ namespace Equibles.CommonStocks.BusinessLogic.Directory;
 public sealed record EquityDirectoryListingKey(
     string Isin,
     string MarketIdentifierCode,
-    string Ticker
+    string Ticker,
+    string TradingCurrency = null,
+    string SourceSecurityIdentifier = null,
+    string SourceListingIdentifier = null
 );
