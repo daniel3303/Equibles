@@ -103,6 +103,7 @@
 
 - Every catalog market with a directory adapter is captured; there is no per-market switch. `EquityMarketDirectoryWorker` runs each such market's directory pass within a minute of start-up, once `FirdsUniverseWorker` has stored a full set for the market's authority, and again once a day.
 - Prices, quotation evidence and corporate actions are captured for every verified listing on a catalog market. An instrument without an ISIN also requires paired security/listing identifiers from the same authoritative directory; price writes bind its immutable security ID.
+- Catalog daily-price imports admit a session thirty minutes after the later of its configured continuous close and closing-auction end, in the venue's timezone. Forward imports and complete history replacements use the same exclusive date cutoff; US and retired-series rules remain unchanged. A returned bar is still required, so weekends and holidays never create observations.
 - Shanghai, Shenzhen and Hong Kong have quotation metadata in the catalog; their official directories are supplied by the host rather than FIRDS. Catalog registration alone creates no active listings. Hong Kong requires its canonical five-digit numeric exchange code before converting to the provider’s four-digit minimum width; alternate spellings are ineligible, so two source tickers cannot normalize to one price symbol.
 - Complete source-identified snapshots validate every referenced binding, including withdrawn listings, before changing current claims. Each listing identifier records its own directory claim; a shared listing remains active until its last current claim disappears, preserving separate currency counters and other directories’ listings. Withdrawal revokes capture eligibility without inventing a delisting date; reappearance and renaming preserve the original listing identity.
 - Optional authoritative security type and admission date enrich unknown metadata; contradictory values reject the complete row transaction.
@@ -122,4 +123,3 @@
 - Native import preflight retains the stored full-grain/CUSIP observation key before assembling both position and manager writes.
 - A permanent insert guard refuses incompatible keys from unprepared writers before they can alter either positions or another security’s allocations.
 - Both generations serialize on native issuer locks; original position IDs, source facts and attribution IDs remain intact through replay and final storage retirement.
-

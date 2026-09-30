@@ -9,6 +9,25 @@ namespace Equibles.Yahoo.HostedService.Services;
 
 internal static class YahooListingSource
 {
+    // The cutoff is exclusive. Catalog venues finish their own session, not the UTC day;
+    // the grace period lets the provider publish its closing auction before the first daily read.
+    internal static DateOnly SettledBefore(PriceSeriesTarget target, DateTime utcNow)
+    {
+        if (target.IsUs || target.IsHistorical || Market(target) is not { } market)
+            return DateOnly.FromDateTime(utcNow);
+        var local = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(utcNow, DateTimeKind.Utc),
+            TimeZoneInfo.FindSystemTimeZoneById(market.TimeZoneId)
+        );
+        var day = DateOnly.FromDateTime(local);
+        var close =
+            market.ClosingAuctionEnd > market.SessionClose
+                ? market.ClosingAuctionEnd
+                : market.SessionClose;
+        var publishAfter = day.ToDateTime(close).AddMinutes(30);
+        return local >= publishAfter ? day.AddDays(1) : day;
+    }
+
     // The catalog's suffix is only a candidate symbol: returned chart metadata must also pass MatchesChart,
     // and the quotation unit the chart reports must be the one the verified listing states.
     internal static EquityMarket Market(PriceSeriesTarget target)
