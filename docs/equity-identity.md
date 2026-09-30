@@ -96,6 +96,9 @@
 
 ## Market capture
 
+- Beijing uses the ISO [BJSE market identifier](https://www.iso20022.org/sites/default/files/ISO10383_MIC/ISO10383_MIC.csv), CNY quotations and Asia/Shanghai time. Continuous trading ends at 14:57 and the closing auction ends at 15:00 under [BSE trading rules section 2.3.2](https://www.bse.cn/jygl_list/200028217.html).
+- A registered market can lack an available price provider; absent symbol suffix and exchange-code fields must remain null together, and no provider identity may be guessed from the venue name. Split-basis audits must retain applied markers when that provider cannot reconcile the market.
+
 - London directory discovery resumes from the edition in its last committed snapshot, crosses publication gaps, and fails if its search budget ends before the terminal gap; an incomplete search must never reconcile an older workbook as current.
 
 - Every catalog market with a directory adapter is captured; there is no per-market switch. `EquityMarketDirectoryWorker` runs each such market's directory pass within a minute of start-up, once `FirdsUniverseWorker` has stored a full set for the market's authority, and again once a day.

@@ -1111,7 +1111,8 @@ public class YahooPriceImportService
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var appliedSince = DateTime.UtcNow.AddDays(-AppliedSplitBasisAuditLookbackDays);
         var catalogMics = EquityMarketCatalog
-            .All.SelectMany(market => market.MarketIdentifierCodes)
+            .All.Where(market => market.YahooSuffix != null && market.YahooExchangeCode != null)
+            .SelectMany(market => market.MarketIdentifierCodes)
             .ToList();
 
         var identityRepository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();

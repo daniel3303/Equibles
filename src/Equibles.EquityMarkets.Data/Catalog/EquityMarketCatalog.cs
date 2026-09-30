@@ -235,6 +235,23 @@ public static class EquityMarketCatalog
             FirdsAuthority: null
         ),
         new(
+            "beijing",
+            "Beijing Stock Exchange",
+            "CN",
+            ["BJSE"],
+            "CNY",
+            YahooSuffix: null,
+            YahooExchangeCode: null,
+            "Asia/Shanghai",
+            new(9, 30),
+            new(14, 57),
+            new(15, 0),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null
+        ),
+        new(
             "hong-kong",
             "Hong Kong Stock Exchange",
             "HK",

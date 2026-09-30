@@ -28,6 +28,29 @@ public class YahooListingSourceTests
         );
 
     [Fact]
+    public void BeijingDoesNotInventAPriceProviderIdentity()
+    {
+        var target = Target("920000", "CN", "BJSE", "CNE1000048X1", "CNY");
+        YahooListingSource.Market(target).Should().BeNull();
+        YahooListingSource.ProviderSymbol(target).Should().BeNull();
+        YahooListingSource.ProviderSymbol("920000", "CN", "BJSE").Should().BeNull();
+        YahooListingSource
+            .MatchesChart(
+                target,
+                new YahooChartSourceIdentity
+                {
+                    Symbol = "920000.BJ",
+                    Currency = "CNY",
+                    ExchangeCode = "BSE",
+                    InstrumentType = "EQUITY",
+                    ExchangeTimeZone = "Asia/Shanghai",
+                }
+            )
+            .Should()
+            .BeFalse();
+    }
+
+    [Fact]
     public void LondonQuotesInPenceAndAFewOfItsLinesInAnotherCurrency()
     {
         var pence = Target("BT-A", "GB", "XLON", "GB0030913577", "GBP", 0.01m);
