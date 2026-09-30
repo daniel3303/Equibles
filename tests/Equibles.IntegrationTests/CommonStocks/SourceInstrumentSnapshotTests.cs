@@ -8,9 +8,12 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Integrations.Yahoo.Contracts;
+using Equibles.Integrations.Yahoo.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.HostedService.Services;
+using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -27,6 +30,7 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
             .AddScoped<EquiblesFinancialDbContext>(_ => Fixture.CreateDbContext())
             .AddScoped<EquityIssuerRepository>()
             .AddScoped<EquityListingRepository>()
+            .AddScoped<EquityDailyStockPriceRepository>()
             .AddScoped<StockSplitRepository>()
             .AddScoped<CashDividendRepository>()
             .AddScoped<CorporateActionPriceReconciliationCursorRepository>()
@@ -88,6 +92,81 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
                 ))
                 .ToList(),
         };
+
+    [Theory]
+    [InlineData(39, false)]
+    [InlineData(40, true)]
+    public async Task VenueReplacementUsesTheSamePostAuctionCutoffAsForwardPrices(
+        int minute,
+        bool currentDayEligible
+    )
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var listingId = await new EquityDirectoryIdentityImporter(factory).ImportListing(Listing());
+        var listing = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+            .SingleAsync(row => row.Id == listingId);
+        var day = new DateOnly(2026, 9, 30);
+        var client = Substitute.For<IYahooFinanceClient>();
+        client
+            .GetChart("0001.HK", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                new YahooChartData
+                {
+                    SourceIdentity = new YahooChartSourceIdentity
+                    {
+                        Symbol = "0001.HK",
+                        Currency = "HKD",
+                        ExchangeCode = "HKG",
+                        InstrumentType = "EQUITY",
+                        ExchangeTimeZone = "Asia/Hong_Kong",
+                    },
+                    Prices = new[] { day.AddDays(-1), day }
+                        .Select(date => new HistoricalPrice
+                        {
+                            Date = date,
+                            Open = 10m,
+                            High = 11m,
+                            Low = 9m,
+                            Close = 10m,
+                            AdjustedClose = 10m,
+                            Volume = 100,
+                        })
+                        .ToList(),
+                }
+            );
+        var service = new YahooPriceImportService(
+            factory,
+            NullLogger<YahooPriceImportService>(),
+            client,
+            null,
+            null,
+            Options.Create(new WorkerOptions()),
+            Options.Create(new YahooPriceScraperOptions())
+        );
+        await service.ReconcileStock(
+            new PendingPriceReconciliationSeries(
+                listing.Security.EquityIssuerId,
+                listing.Ticker,
+                [],
+                [],
+                listing.Id
+            ),
+            day.AddDays(-1),
+            day,
+            CancellationToken.None,
+            new DateTime(2026, 9, 30, 8, minute, 0, DateTimeKind.Utc)
+        );
+        var dates = await DbContext
+            .Set<EquityDailyStockPrice>()
+            .AsNoTracking()
+            .OrderBy(row => row.Date)
+            .Select(row => row.Date)
+            .ToArrayAsync();
+        dates.Should().Equal(currentDayEligible ? [day.AddDays(-1), day] : [day.AddDays(-1)]);
+    }
 
     [Fact]
     public async Task WithdrawalAndReturnPreserveSeparateCurrencyCountersAndRejectStaleImports()

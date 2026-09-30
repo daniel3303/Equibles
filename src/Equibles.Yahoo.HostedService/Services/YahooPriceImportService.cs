@@ -492,11 +492,9 @@ public class YahooPriceImportService
             var ticker = target.Ticker;
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Resolved per ticker, not once per cycle: a multi-hour crawl straddles the UTC
-            // midnight rollover, and a cycle-start snapshot would keep excluding the just-settled
-            // bar for every stock processed after midnight — a cycle starting 23:50 UTC used to
-            // ship a whole day late for the entire universe.
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            // Resolve per ticker: a long crawl can cross either a venue's post-close boundary
+            // or UTC midnight. US and historical series retain their original UTC-date rule.
+            var today = YahooListingSource.SettledBefore(target, DateTime.UtcNow);
 
             try
             {
@@ -900,7 +898,7 @@ public class YahooPriceImportService
 
             try
             {
-                await ReconcileStock(series, floor, today, cancellationToken);
+                await ReconcileStock(series, floor, today, cancellationToken, DateTime.UtcNow);
             }
             catch (HttpRequestException ex)
             {
@@ -936,7 +934,8 @@ public class YahooPriceImportService
         PendingPriceReconciliationSeries selectedSeries,
         DateOnly floor,
         DateOnly today,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        DateTime? asOfUtc = null
     )
     {
         PriceSeriesTarget target;
@@ -990,6 +989,10 @@ public class YahooPriceImportService
                 return;
         }
 
+        // A replacement must admit the same settled venue session as the forward writer,
+        // or reconciliation after close would erase the newly stored current-day bar.
+        if (asOfUtc is { } now && !target.IsUs && !target.IsHistorical)
+            today = YahooListingSource.SettledBefore(target, now);
         var historyEndDate = target.HistoryEndDate ?? today;
         if (target.IsHistorical)
         {
