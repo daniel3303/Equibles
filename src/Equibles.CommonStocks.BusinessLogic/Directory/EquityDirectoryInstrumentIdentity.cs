@@ -56,14 +56,7 @@ internal sealed class EquityDirectoryInstrumentIdentity(
                 ? null
                 : issuer.Securities.SingleOrDefault(row => row.Isin == input.Isin);
         var security = securityIdentifier?.Security ?? byIsin;
-        if (
-            security != null
-            && (
-                security.EquityIssuerId != issuer.Id
-                || byIsin != null && byIsin.Id != security.Id
-                || security.Isin != null && input.Isin != null && security.Isin != input.Isin
-            )
-        )
+        if (security != null && ConflictsWithSecurity(security, byIsin, issuer.Id))
             throw new InvalidDataException(
                 "Directory security identifiers conflict with the recorded instrument."
             );
@@ -92,17 +85,30 @@ internal sealed class EquityDirectoryInstrumentIdentity(
             return bound;
         }
         var candidates = security
-            .Listings.Where(row =>
-                row.MarketIdentifierCode == input.MarketIdentifierCode
-                && (row.Active || input.DirectorySnapshotId.HasValue && row.DelistedOn == null)
-                && (input.SourceListingIdentifier == null || row.Ticker == input.Ticker)
+            .Listings.Where(row => row.MarketIdentifierCode == input.MarketIdentifierCode)
+            .Where(row =>
+                row.Active || input.DirectorySnapshotId.HasValue && row.DelistedOn == null
             )
+            .Where(row => input.SourceListingIdentifier == null || row.Ticker == input.Ticker)
             .ToList();
         if (candidates.Count > 1)
             throw new InvalidDataException(
                 "Directory security has multiple eligible listing identities on this venue."
             );
         return candidates.SingleOrDefault();
+    }
+
+    private bool ConflictsWithSecurity(
+        EquitySecurity security,
+        EquitySecurity byIsin,
+        Guid issuerId
+    )
+    {
+        if (security.EquityIssuerId != issuerId)
+            return true;
+        if (byIsin != null && byIsin.Id != security.Id)
+            return true;
+        return security.Isin != null && input.Isin != null && security.Isin != input.Isin;
     }
 
     public void Bind(EquityIssuerRepository repository, EquityListing listing, Guid recordId)
