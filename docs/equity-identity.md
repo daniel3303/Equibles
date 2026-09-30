@@ -96,6 +96,8 @@
 
 ## Market capture
 
+- London directory discovery resumes from the edition in its last committed snapshot, crosses publication gaps, and fails if its search budget ends before the terminal gap; an incomplete search must never reconcile an older workbook as current.
+
 - Every catalog market with a directory adapter is captured; there is no per-market switch. `EquityMarketDirectoryWorker` runs each such market's directory pass within a minute of start-up, once `FirdsUniverseWorker` has stored a full set for the market's authority, and again once a day.
 - Prices, quotation evidence and corporate actions are captured for every verified listing on a catalog market. An instrument without an ISIN also requires paired security/listing identifiers from the same authoritative directory; price writes bind its immutable security ID.
 - Shanghai, Shenzhen and Hong Kong have quotation metadata in the catalog; their official directories are supplied by the host rather than FIRDS. Catalog registration alone creates no active listings. Hong Kong requires its canonical five-digit numeric exchange code before converting to the provider’s four-digit minimum width; alternate spellings are ineligible, so two source tickers cannot normalize to one price symbol.
@@ -118,4 +120,3 @@
 - A permanent insert guard refuses incompatible keys from unprepared writers before they can alter either positions or another security’s allocations.
 - Both generations serialize on native issuer locks; original position IDs, source facts and attribution IDs remain intact through replay and final storage retirement.
 
-- London directory discovery resumes from the edition in its last committed snapshot, crosses publication gaps, and fails if its search budget ends before the terminal gap; an incomplete search must never reconcile an older workbook as current.
