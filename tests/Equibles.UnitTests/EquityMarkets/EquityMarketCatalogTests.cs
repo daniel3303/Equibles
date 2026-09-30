@@ -8,7 +8,7 @@ namespace Equibles.UnitTests.EquityMarkets;
 public class EquityMarketCatalogTests
 {
     [Fact]
-    public void EveryMarket_HasUniqueCodeDisjointVenuesAndACompleteYahooIdentity()
+    public void EveryMarket_HasUniqueCodeDisjointVenuesAndPairedPriceIdentity()
     {
         EquityMarketCatalog.All.Select(market => market.Code).Should().OnlyHaveUniqueItems();
         EquityMarketCatalog
@@ -24,8 +24,13 @@ public class EquityMarketCatalogTests
             market
                 .MarketIdentifierCodes.Should()
                 .AllSatisfy(mic => mic.Should().MatchRegex("^[A-Z0-9]{4}$"));
-            market.YahooSuffix.Should().StartWith(".");
-            market.YahooExchangeCode.Should().NotBeNullOrWhiteSpace();
+            if (market.YahooSuffix == null)
+                market.YahooExchangeCode.Should().BeNull();
+            else
+            {
+                market.YahooSuffix.Should().StartWith(".");
+                market.YahooExchangeCode.Should().NotBeNullOrWhiteSpace();
+            }
             TimeZoneInfo.FindSystemTimeZoneById(market.TimeZoneId).Should().NotBeNull();
             market.SessionOpen.Should().BeBefore(market.SessionClose);
             market.SessionClose.Should().BeOnOrBefore(market.ClosingAuctionEnd);
@@ -155,6 +160,7 @@ public class EquityMarketCatalogTests
     }
 
     [Theory]
+    [InlineData("beijing", "BJSE", "CN", "CNY", null, null, "Asia/Shanghai")]
     [InlineData("shanghai", "XSHG", "CN", "CNY", ".SS", "SHH", "Asia/Shanghai")]
     [InlineData("shenzhen", "XSHE", "CN", "CNY", ".SZ", "SHZ", "Asia/Shanghai")]
     [InlineData("hong-kong", "XHKG", "HK", "HKD", ".HK", "HKG", "Asia/Hong_Kong")]

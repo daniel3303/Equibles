@@ -309,13 +309,16 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
     }
 
     [Theory]
-    [InlineData(true, false, true)]
-    [InlineData(false, true, true)]
-    [InlineData(true, true, false)]
+    [InlineData(true, false, true, null)]
+    [InlineData(false, true, true, null)]
+    [InlineData(true, true, false, null)]
+    [InlineData(true, false, true, "BJSE")]
+    [InlineData(true, false, true, "XSHG")]
     public async Task SplitBoundaryAudit_UsesOnlyAttributedListingAcrossSourceRenames(
         bool originalDiscontinuous,
         bool siblingDiscontinuous,
-        bool attributed
+        bool attributed,
+        string mic
     )
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -328,6 +331,13 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .Single(listing => listing.Ticker == "SIBLING");
         var effective = new DateOnly(2025, 1, 10);
         var applied = DateTime.UtcNow;
+        if (mic != null)
+        {
+            original.MarketCountryCode = "CN";
+            original.MarketIdentifierCode = mic;
+            original.TradingCurrency = "CNY";
+            original.Security.Isin = "CNE1000048X1";
+        }
         var split = new StockSplit
         {
             Issuer = issuer,
@@ -374,7 +384,7 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
 
         await using var read = Fixture.CreateDbContext();
         var stored = await read.Set<StockSplit>().SingleAsync();
-        if (attributed && originalDiscontinuous)
+        if (attributed && originalDiscontinuous && mic != "BJSE")
             stored.PriceAdjustmentAppliedTime.Should().BeNull();
         else
             stored
