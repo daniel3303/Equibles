@@ -16,18 +16,19 @@ public class LseInstrumentListClient(HttpClient httpClient)
 
     // The edition published when this build was written; editions only ever count up.
     internal const int FirstEdition = 81;
-    internal const int MaxEditionsAhead = 36;
+    internal const int MaximumProbes = 4096;
     internal const int MissesBeforeStop = 4;
     private const int MaxWorkbookBytes = 64_000_000;
     private const long MaxPartBytes = 64_000_000;
 
     public async Task<LseInstrumentList> GetInstruments(
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int? firstEdition = null
     )
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
-        var edition = await FindLatestEdition(timeout.Token);
+        var edition = await FindLatestEdition(timeout.Token, firstEdition);
         var source = EditionUrl(edition);
         var payload = await SameOriginBinaryReader.Read(
             httpClient,
@@ -49,27 +50,34 @@ public class LseInstrumentListClient(HttpClient httpClient)
 
     // Editions are not published monthly and the series has gaps, so the walk carries on over a few missing
     // numbers and keeps the highest that answers; finding none is a failure, never an empty market.
-    internal async Task<int> FindLatestEdition(CancellationToken cancellationToken)
+    internal async Task<int> FindLatestEdition(
+        CancellationToken cancellationToken,
+        int? firstEdition = null
+    )
     {
+        var first = firstEdition ?? FirstEdition;
+        if (first < 1 || first > int.MaxValue - MaximumProbes)
+            throw new ArgumentOutOfRangeException(nameof(firstEdition));
         var latest = 0;
         var misses = 0;
-        for (
-            var edition = FirstEdition;
-            edition < FirstEdition + MaxEditionsAhead && misses < MissesBeforeStop;
-            edition++
-        )
+        for (var offset = 0; offset < MaximumProbes; offset++)
+        {
+            var edition = first + offset;
             if (await Exists(EditionUrl(edition), cancellationToken))
             {
                 latest = edition;
                 misses = 0;
             }
-            else
-                misses++;
-        return latest > 0
-            ? latest
-            : throw new InvalidDataException(
-                "The London instrument list is no longer published where this build looks for it."
-            );
+            else if (++misses >= MissesBeforeStop)
+                return latest > 0
+                    ? latest
+                    : throw new InvalidDataException(
+                        "The London instrument list is no longer published at its last known edition."
+                    );
+        }
+        throw new InvalidDataException(
+            "London edition discovery exhausted its budget before reaching the latest publication."
+        );
     }
 
     private async Task<bool> Exists(Uri uri, CancellationToken cancellationToken)

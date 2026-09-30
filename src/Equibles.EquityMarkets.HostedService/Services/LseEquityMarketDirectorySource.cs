@@ -1,15 +1,19 @@
 using System.Text.Json;
+using Equibles.CommonStocks.Repositories;
 using Equibles.EquityMarkets.BusinessLogic.Directory;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 using Equibles.Integrations.Lse;
 using Equibles.Integrations.Lse.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.EquityMarkets.HostedService.Services;
 
 // London publishes one workbook that is both the directory and the product; the issuer identity comes from FIRDS.
-public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
-    : IEquityMarketDirectorySource
+public class LseEquityMarketDirectorySource(
+    LseInstrumentListClient client,
+    EquityDirectorySourceRecordRepository records
+) : IEquityMarketDirectorySource
 {
     public const string Key = "lse";
 
@@ -23,7 +27,16 @@ public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
         CancellationToken cancellationToken
     )
     {
-        var list = await client.GetInstruments(cancellationToken);
+        var previous = await records
+            .GetSnapshotStates()
+            .AsNoTracking()
+            .Where(row =>
+                row.Source == Key
+                && row.SourceRecordKey == LseInstrumentListClient.PublisherPage.AbsoluteUri
+            )
+            .Select(row => row.SourceRecord.PayloadJson)
+            .SingleOrDefaultAsync(cancellationToken);
+        var list = await client.GetInstruments(cancellationToken, PreviousEdition(previous));
         var shares = list
             .Instruments.Where(row =>
                 row.MifirIdentifier == "SHRS"
@@ -90,6 +103,23 @@ public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
             Rows = rows,
             Excluded = excluded,
         };
+    }
+
+    internal static int? PreviousEdition(string payload)
+    {
+        if (payload == null)
+            return null;
+        using var document = JsonDocument.Parse(payload);
+        if (
+            document.RootElement.ValueKind != JsonValueKind.Object
+            || !document.RootElement.TryGetProperty("Edition", out var value)
+            || !value.TryGetInt32(out var edition)
+            || edition <= 0
+        )
+            throw new InvalidDataException(
+                "Stored London directory does not identify its publication edition."
+            );
+        return edition;
     }
 
     public Task<EquityMarketDirectoryProduct> Resolve(
