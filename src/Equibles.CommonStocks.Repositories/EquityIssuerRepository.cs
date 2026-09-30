@@ -64,6 +64,18 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
     public void AddSourceIdentifier(EquityIssuerSourceIdentifier identifier) =>
         DbContext.Set<EquityIssuerSourceIdentifier>().Add(identifier);
 
+    public IQueryable<EquitySecuritySourceIdentifier> GetSecurityIdentifiers() =>
+        DbContext.Set<EquitySecuritySourceIdentifier>();
+
+    public void AddSecurityIdentifier(EquitySecuritySourceIdentifier identifier) =>
+        DbContext.Set<EquitySecuritySourceIdentifier>().Add(identifier);
+
+    public IQueryable<EquityListingSourceIdentifier> GetListingIdentifiers() =>
+        DbContext.Set<EquityListingSourceIdentifier>();
+
+    public void AddListingIdentifier(EquityListingSourceIdentifier identifier) =>
+        DbContext.Set<EquityListingSourceIdentifier>().Add(identifier);
+
     public IQueryable<EquitySecurity> GetSecurities() =>
         GetAll().SelectMany(issuer => issuer.Securities);
 

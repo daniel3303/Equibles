@@ -66,6 +66,32 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
                 .HasForeignKey(row => row.SourceRecordId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+        builder.Entity<EquitySecuritySourceIdentifier>(identifier =>
+        {
+            identifier
+                .HasOne(row => row.Security)
+                .WithMany()
+                .HasForeignKey(row => row.EquitySecurityId)
+                .OnDelete(DeleteBehavior.Restrict);
+            identifier
+                .HasOne(row => row.SourceRecord)
+                .WithMany()
+                .HasForeignKey(row => row.SourceRecordId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<EquityListingSourceIdentifier>(identifier =>
+        {
+            identifier
+                .HasOne(row => row.Listing)
+                .WithMany()
+                .HasForeignKey(row => row.EquityListingId)
+                .OnDelete(DeleteBehavior.Restrict);
+            identifier
+                .HasOne(row => row.SourceRecord)
+                .WithMany()
+                .HasForeignKey(row => row.SourceRecordId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
         builder.Entity<EquityIssuer>().Property(issuer => issuer.Id).ValueGeneratedNever();
         builder.Entity<EquitySecurity>().Property(security => security.Id).ValueGeneratedNever();
         builder.Entity<EquityListing>().Property(listing => listing.Id).ValueGeneratedNever();

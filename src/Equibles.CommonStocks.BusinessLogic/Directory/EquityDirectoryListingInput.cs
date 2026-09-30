@@ -6,6 +6,10 @@ public class EquityDirectoryListingInput
     public string Source { get; set; }
     public Guid? DirectorySnapshotId { get; set; }
     public string SourceIssuerIdentifier { get; set; }
+
+    // Supply both when the source identifies instruments without ISINs or publishes separate currency counters.
+    public string SourceSecurityIdentifier { get; set; }
+    public string SourceListingIdentifier { get; set; }
     public string IssuerName { get; set; }
     public string LegalEntityIdentifier { get; set; }
     public List<string> RelatedIsins { get; set; } = [];
