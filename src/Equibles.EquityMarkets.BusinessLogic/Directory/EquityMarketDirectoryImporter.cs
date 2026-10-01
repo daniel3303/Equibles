@@ -279,6 +279,7 @@ public class EquityMarketDirectoryImporter(
             SourceIssuerIdentifier = product.SourceIssuerIdentifier,
             IssuerName = confirmedIssuer.LegalName ?? product.Name ?? row.Name,
             IssuerNameAliases = new[] { row.Name, product.Name }
+                .Concat(product.NameAliases)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .ToList(),
             LegalEntityIdentifier = confirmedIssuer.LegalEntityIdentifier,

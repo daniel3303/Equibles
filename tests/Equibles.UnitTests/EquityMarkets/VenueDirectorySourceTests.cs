@@ -455,6 +455,7 @@ public class VenueDirectorySourceTests
             CancellationToken.None
         );
 
+        product.NameAliases.Should().Contain("GRIFOLS CL.B");
         product.SourceIssuerIdentifier.Should().Be("71996");
         product.Name.Should().Be("GRIFOLS CLASE B");
         product.SourceUrl.Should().Be(row.SourceUrl);

@@ -71,6 +71,7 @@ public class EquityMarketDirectoryImporterInputTests
         row.Name = "Exchange display name";
         var product = Product();
         product.Name = "Official product name";
+        product.NameAliases = ["Official abbreviation"];
         var input = EquityMarketDirectoryImporter.CreateInput(
             Paris,
             "euronext",
@@ -80,7 +81,9 @@ public class EquityMarketDirectoryImporterInputTests
             Issuer()
         );
         input.IssuerName.Should().Be("TotalEnergies SE");
-        input.IssuerNameAliases.Should().Equal("Exchange display name", "Official product name");
+        input
+            .IssuerNameAliases.Should()
+            .Equal("Exchange display name", "Official product name", "Official abbreviation");
     }
 
     [Fact]
