@@ -71,6 +71,7 @@ public class YahooPriceImportService
     private readonly YahooPriceScraperOptions _scraperOptions;
 
     public bool HasEnrichmentBacklog { get; private set; }
+    public bool HasCatalogPriceBacklog { get; private set; }
 
     public YahooPriceImportService(
         IServiceScopeFactory scopeFactory,
@@ -102,7 +103,17 @@ public class YahooPriceImportService
     /// persisted attempt time is due receives the key-statistics + company-profile calls (2 extra
     /// Yahoo calls per stock, the bulk of a cycle's traffic).
     /// </summary>
-    public async Task Import(bool includeEnrichment, CancellationToken cancellationToken)
+    public Task Import(bool includeEnrichment, CancellationToken cancellationToken) =>
+        ImportUniverse(includeEnrichment, includeCatalog: true, cancellationToken);
+
+    public Task ImportUsPrices(CancellationToken cancellationToken) =>
+        ImportUniverse(includeEnrichment: true, includeCatalog: false, cancellationToken);
+
+    private async Task ImportUniverse(
+        bool includeEnrichment,
+        bool includeCatalog,
+        CancellationToken cancellationToken
+    )
     {
         HasEnrichmentBacklog = false;
         var tickerMap = await _tickerMapService.Build(
@@ -114,7 +125,8 @@ public class YahooPriceImportService
             cancellationToken
         );
         priceTargets.AddRange(await BuildHistoricalPriceTargets(cancellationToken));
-        priceTargets.AddRange(await BuildCatalogPriceTargets(cancellationToken));
+        if (includeCatalog)
+            priceTargets.AddRange(await BuildCatalogPriceTargets(cancellationToken));
         _logger.LogInformation(
             "Starting Yahoo price sync for {SeriesCount} listed symbols across {StockCount} stocks (enrichment: {Enrichment})",
             priceTargets.Count,
@@ -157,6 +169,49 @@ public class YahooPriceImportService
                 .ToList();
             await ImportEnrichment(primaryOrder, cancellationToken);
         }
+    }
+
+    public async Task ImportCatalogPrices(
+        CancellationToken cancellationToken,
+        bool includeEnrichment = true
+    )
+    {
+        HasCatalogPriceBacklog = false;
+        HasEnrichmentBacklog = false;
+        var targets = await BuildCatalogPriceTargets(cancellationToken);
+        using var scope = _scopeFactory.CreateScope();
+        var listings = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+        var prices = scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
+        var ids = targets.Select(target => target.EquityListingId).ToArray();
+        // Each indexed latest-row lookup avoids rescanning the complete price history per batch.
+        var lastDates = await listings
+            .GetAll()
+            .Where(listing => ids.Contains(listing.Id))
+            .Select(listing => new
+            {
+                listing.Id,
+                Date = prices
+                    .GetAllSeries()
+                    .Where(price => price.EquityListingId == listing.Id)
+                    .OrderByDescending(price => price.Date)
+                    .Select(price => (DateOnly?)price.Date)
+                    .FirstOrDefault(),
+            })
+            .ToDictionaryAsync(row => row.Id, row => row.Date, cancellationToken);
+        var order = YahooCatalogPriceQueue.Order(targets, lastDates, DateTime.UtcNow);
+        var result = await ImportPriceBatch(order, cancellationToken, 200);
+        HasCatalogPriceBacklog = result.HasMore;
+        _logger.LogInformation(
+            "Yahoo catalog price batch complete: {Count} inserted; more prices: {HasMore}",
+            result.Inserted,
+            result.HasMore
+        );
+        if (includeEnrichment)
+            await ImportEnrichment(
+                targets.Where(target => target.IsPrimary).ToList(),
+                cancellationToken,
+                maximumBatchSize: 25
+            );
     }
 
     private async Task<List<PriceSeriesTarget>> BuildPriceSeriesTargets(
@@ -481,14 +536,23 @@ public class YahooPriceImportService
     private async Task<int> ImportPrices(
         List<PriceSeriesTarget> crawlOrder,
         CancellationToken cancellationToken
+    ) => (await ImportPriceBatch(crawlOrder, cancellationToken, int.MaxValue)).Inserted;
+
+    private async Task<(int Inserted, bool HasMore)> ImportPriceBatch(
+        List<PriceSeriesTarget> crawlOrder,
+        CancellationToken cancellationToken,
+        int attemptLimit
     )
     {
         var totalInserted = 0;
         var fetched = 0;
         var fetchedWithNothingNew = 0;
+        var attempted = 0;
 
         foreach (var target in crawlOrder)
         {
+            if (attempted >= attemptLimit)
+                return (totalInserted, true);
             var ticker = target.Ticker;
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -502,6 +566,7 @@ public class YahooPriceImportService
                 totalInserted += result.Inserted;
                 if (result.Fetched)
                 {
+                    attempted++;
                     fetched++;
                     if (result.Inserted == 0)
                         fetchedWithNothingNew++;
@@ -509,6 +574,7 @@ public class YahooPriceImportService
             }
             catch (HttpRequestException ex)
             {
+                attempted++;
                 _logger.LogWarning(ex, "Failed to fetch prices for {Ticker}, skipping", ticker);
                 await StampFailedAttempt(target, cancellationToken);
             }
@@ -520,6 +586,7 @@ public class YahooPriceImportService
             }
             catch (Exception ex)
             {
+                attempted++;
                 _logger.LogError(ex, "Error importing prices for {Ticker}", ticker);
                 await StampFailedAttempt(target, cancellationToken);
                 await _errorReporter.Report(
@@ -531,7 +598,7 @@ public class YahooPriceImportService
         }
 
         WarnIfUpstreamServedNothing(crawlOrder.Count, fetched, fetchedWithNothingNew);
-        return totalInserted;
+        return (totalInserted, false);
     }
 
     // A barren fetch — one that called the provider and inserted nothing — is only evidence of an
@@ -592,7 +659,8 @@ public class YahooPriceImportService
     // cycle's traffic, which is why it runs in restart-safe batches AND strictly after prices.
     private async Task ImportEnrichment(
         List<PriceSeriesTarget> crawlOrder,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        int maximumBatchSize = int.MaxValue
     )
     {
         var interval = TimeSpan.FromHours(Math.Max(0, _scraperOptions.EnrichmentIntervalHours));
@@ -600,7 +668,7 @@ public class YahooPriceImportService
             crawlOrder,
             DateTime.UtcNow,
             interval,
-            Math.Max(1, _scraperOptions.EnrichmentBatchSize)
+            Math.Min(maximumBatchSize, Math.Max(1, _scraperOptions.EnrichmentBatchSize))
         );
         HasEnrichmentBacklog = selection.Remaining > 0;
         if (selection.Targets.Count == 0)
@@ -1449,6 +1517,19 @@ public class YahooPriceImportService
                 : target.EquityListingId;
             var priceListingId = target.EquityListingId;
             if (recordedSymbolListingId != priceListingId)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+            // Another price worker can cross the local settlement boundary while this fetch is
+            // in flight. Keep the complete newer series and retry with a current response rather
+            // than mixing its new session with a replacement fetched on the previous basis.
+            if (
+                !target.IsUs
+                && !target.IsHistorical
+                && await repo.GetByListing(priceListingId)
+                    .AnyAsync(row => row.Date >= settledBefore, cancellationToken)
+            )
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return false;
