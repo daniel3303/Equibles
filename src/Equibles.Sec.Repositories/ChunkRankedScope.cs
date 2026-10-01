@@ -73,7 +73,7 @@ internal static class ChunkRankedScope
     {
         IQueryable<Document> documents = context.Set<Document>();
         if (ticker != null)
-            documents = documents.ForUsTicker(ticker);
+            documents = documents.ForUsTicker(ticker, context);
         if (startDate is { } start)
             documents = documents.Where(document => document.ReportingDate >= start);
         if (endDate is { } end)

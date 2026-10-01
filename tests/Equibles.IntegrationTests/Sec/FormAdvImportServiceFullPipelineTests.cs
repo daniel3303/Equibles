@@ -71,12 +71,17 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
         return scopeFactory;
     }
 
-    private FormAdvImportService CreateSut(string csv)
+    private FormAdvImportService CreateSut(string csv, ISecEdgarClient secEdgarClient = null)
     {
-        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient ??= Substitute.For<ISecEdgarClient>();
+        var catalogue = Encoding.UTF8.GetBytes(
+            "<a href='/files/published-registered_1.zip'>Registered Investment Advisers, September 2026</a>"
+        );
         secEdgarClient
-            .DownloadStream(Arg.Any<string>())
-            // Fresh stream per call — ZipArchive consumes/disposes the input on read.
+            .DownloadStream(FormAdvSnapshotCatalog.PageUrl)
+            .Returns(_ => Task.FromResult<Stream>(new MemoryStream(catalogue)));
+        secEdgarClient
+            .DownloadStream("https://www.sec.gov/files/published-registered_1.zip")
             .Returns(_ => Task.FromResult<Stream>(BuildZipStream(csv)));
 
         return new FormAdvImportService(
@@ -107,13 +112,7 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
         adviser.TotalRegulatoryAum.Should().Be(1_000_000L);
         adviser.ChargesPercentageOfAum.Should().BeTrue();
         adviser.ChargesPerformanceBased.Should().BeTrue();
-        // The snapshot date is the first of the current month (the newest candidate the importer probes).
-        var firstOfMonth = new DateOnly(
-            DateOnly.FromDateTime(DateTime.UtcNow).Year,
-            DateOnly.FromDateTime(DateTime.UtcNow).Month,
-            1
-        );
-        adviser.ReportDate.Should().Be(firstOfMonth);
+        adviser.ReportDate.Should().Be(new DateOnly(2026, 9, 1));
     }
 
     [Fact]
@@ -146,6 +145,32 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
             .HaveCount(1, "upsert must update the existing row rather than duplicate it");
         advisers[0].LegalName.Should().Be("ACME ADVISORS");
         advisers[0].TotalRegulatoryAum.Should().Be(1_000_000L);
+    }
+
+    [Fact]
+    public async Task Import_PublishedSnapshotAlreadyStored_DoesNotDownloadArchive()
+    {
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<FormAdvAdviser>()
+                .Add(
+                    new FormAdvAdviser
+                    {
+                        Crd = 111,
+                        LegalName = "CURRENT ADVISER",
+                        ReportDate = new DateOnly(2026, 9, 1),
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+        var client = Substitute.For<ISecEdgarClient>();
+
+        await CreateSut(SampleCsv, client).Import(CancellationToken.None);
+
+        await client.Received(1).DownloadStream(FormAdvSnapshotCatalog.PageUrl);
+        await client
+            .DidNotReceive()
+            .DownloadStream("https://www.sec.gov/files/published-registered_1.zip");
     }
 
     private const string SampleCsv =

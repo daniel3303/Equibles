@@ -6,6 +6,7 @@ Equibles builds a directory of SEC-registered investment advisers from the Form 
 
 - Connect an AI assistant to the MCP server first — see [Connect an AI assistant](tutorial-connect-ai-assistant.md).
 - Let the worker run after startup so the Form ADV adviser data has been imported.
+- The importer follows the newest registered-adviser ZIP linked by the SEC catalogue; the report date identifies its published month.
 
 ## Find an adviser by name
 

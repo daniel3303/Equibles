@@ -83,7 +83,7 @@ public class EmbeddingRepository : BaseRepository<Embedding>
             var normalizedTicker = ticker.ToUpperInvariant();
             var documents = DbContext
                 .Set<Document>()
-                .ForUsTicker(ticker)
+                .ForUsTicker(ticker, DbContext)
                 .Select(document => document.Id);
             query = query.Where(e =>
                 e.Chunk.Ticker == normalizedTicker && documents.Contains(e.Chunk.DocumentId)
