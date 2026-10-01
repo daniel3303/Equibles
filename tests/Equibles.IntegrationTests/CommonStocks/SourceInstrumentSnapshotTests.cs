@@ -169,6 +169,183 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
     }
 
     [Fact]
+    public async Task ConcurrentSettledBarDefersAnOlderHistoryReplacement()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var listingId = await new EquityDirectoryIdentityImporter(factory).ImportListing(Listing());
+        var listing = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+            .SingleAsync(row => row.Id == listingId);
+        var day = new DateOnly(2026, 9, 30);
+        var requested = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var response = new TaskCompletionSource<YahooChartData>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var client = Substitute.For<IYahooFinanceClient>();
+        client
+            .GetChart("0001.HK", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(_ =>
+            {
+                requested.TrySetResult();
+                return response.Task;
+            });
+        var service = new YahooPriceImportService(
+            factory,
+            NullLogger<YahooPriceImportService>(),
+            client,
+            null,
+            null,
+            Options.Create(new WorkerOptions()),
+            Options.Create(new YahooPriceScraperOptions())
+        );
+        var replacement = service.ReconcileStock(
+            new PendingPriceReconciliationSeries(
+                listing.Security.EquityIssuerId,
+                listing.Ticker,
+                [],
+                [],
+                listing.Id
+            ),
+            day.AddDays(-1),
+            day,
+            CancellationToken.None,
+            new DateTime(2026, 9, 30, 8, 39, 0, DateTimeKind.Utc)
+        );
+        await requested.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        DbContext.AddRange(
+            new[] { day.AddDays(-1), day }.Select(date => new EquityDailyStockPrice
+            {
+                EquityListingId = listingId,
+                SourceTicker = listing.Ticker,
+                Date = date,
+                Open = 10m,
+                High = 11m,
+                Low = 9m,
+                Close = 10m,
+                AdjustedClose = 10m,
+                Volume = 123,
+            })
+        );
+        await DbContext.SaveChangesAsync();
+        response.SetResult(
+            new YahooChartData
+            {
+                SourceIdentity = new YahooChartSourceIdentity
+                {
+                    Symbol = "0001.HK",
+                    Currency = "HKD",
+                    ExchangeCode = "HKG",
+                    InstrumentType = "EQUITY",
+                    ExchangeTimeZone = "Asia/Hong_Kong",
+                },
+                Prices =
+                [
+                    new HistoricalPrice
+                    {
+                        Date = day.AddDays(-1),
+                        Open = 5m,
+                        High = 6m,
+                        Low = 4m,
+                        Close = 5m,
+                        AdjustedClose = 5m,
+                        Volume = 100,
+                    },
+                ],
+            }
+        );
+        await replacement;
+        var retained = await DbContext
+            .Set<EquityDailyStockPrice>()
+            .AsNoTracking()
+            .OrderBy(row => row.Date)
+            .ToArrayAsync();
+        retained.Select(row => row.Date).Should().Equal(day.AddDays(-1), day);
+        retained.Should().OnlyContain(row => row.Close == 10m && row.Volume == 123);
+    }
+
+    [Fact]
+    public async Task CatalogBatchesRunWithoutUsInitializationAndResumePastFailedAttempts()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        for (var index = 1; index <= 201; index++)
+        {
+            var listing = Listing(
+                "share-" + index,
+                index.ToString("D5", System.Globalization.CultureInfo.InvariantCulture)
+            );
+            listing.SourceSecurityIdentifier = "security-" + index;
+            listing.SourceIssuerIdentifier = "issuer-" + index;
+            await importer.ImportListing(listing);
+        }
+        var client = Substitute.For<IYahooFinanceClient>();
+        client
+            .GetChart(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns<YahooChartData>(_ =>
+                throw new HttpRequestException("Unavailable source symbol")
+            );
+        var service = new YahooPriceImportService(
+            factory,
+            NullLogger<YahooPriceImportService>(),
+            client,
+            null,
+            null,
+            Options.Create(new WorkerOptions()),
+            Options.Create(new YahooPriceScraperOptions { EnrichmentBatchSize = 2 })
+        );
+        await service.ImportCatalogPrices(CancellationToken.None, includeEnrichment: false);
+        service.HasCatalogPriceBacklog.Should().BeTrue();
+        await client.ReceivedWithAnyArgs(200).GetChart(default, default, default);
+        (
+            await DbContext
+                .Set<EquityListing>()
+                .CountAsync(row => row.YahooPriceSyncAttemptedAt != null)
+        )
+            .Should()
+            .Be(200);
+        await service.ImportCatalogPrices(CancellationToken.None, includeEnrichment: false);
+        service.HasCatalogPriceBacklog.Should().BeFalse();
+        await client.ReceivedWithAnyArgs(201).GetChart(default, default, default);
+        (
+            await DbContext
+                .Set<EquityListing>()
+                .CountAsync(row => row.YahooPriceSyncAttemptedAt != null)
+        )
+            .Should()
+            .Be(201);
+
+        client
+            .GetKeyStatistics(Arg.Any<string>())
+            .Returns<KeyStatistics>(_ => throw new HttpRequestException("Unavailable enrichment"));
+        for (var cycle = 0; cycle < 2; cycle++)
+        {
+            await DbContext
+                .Set<EquityListing>()
+                .ExecuteUpdateAsync(setters =>
+                    setters.SetProperty(
+                        row => row.YahooPriceSyncAttemptedAt,
+                        DateTime.UtcNow.AddHours(-2)
+                    )
+                );
+            await service.ImportCatalogPrices(CancellationToken.None);
+            service.HasCatalogPriceBacklog.Should().BeTrue();
+        }
+        (
+            await DbContext
+                .Set<EquityListing>()
+                .AsNoTracking()
+                .CountAsync(row => row.YahooEnrichmentAttemptedAt != null)
+        )
+            .Should()
+            .Be(4);
+    }
+
+    [Fact]
     public async Task WithdrawalAndReturnPreserveSeparateCurrencyCountersAndRejectStaleImports()
     {
         await using var services = Services();
