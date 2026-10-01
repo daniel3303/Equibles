@@ -27,7 +27,11 @@ internal static class YahooCatalogPriceQueue
         var current = new Queue<PriceSeriesTarget>(
             RotateMarkets(
                 due.Where(Active)
-                    .OrderBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
+                    .OrderBy(target =>
+                        lastDates.GetValueOrDefault(target.EquityListingId)
+                        >= YahooListingSource.SettledBefore(target, now).AddDays(-1)
+                    )
+                    .ThenBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
                     .ThenBy(target => lastDates.GetValueOrDefault(target.EquityListingId))
                     .ThenBy(target => target.EquityListingId)
             )

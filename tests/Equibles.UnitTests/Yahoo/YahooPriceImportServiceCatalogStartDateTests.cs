@@ -7,7 +7,7 @@ namespace Equibles.UnitTests.Yahoo;
 /// <summary>
 /// Pins the catalog-market start-date rule. Uncovered listings keep today's behaviour: forward-only
 /// from the Yahoo-owned latest date, widened over the resettle and heal window, no fetch once
-/// current. A listing a venue keeps current (a venue bar newer than any Yahoo bar) fetches the
+/// current. A listing a venue keeps current through the latest settled date fetches the
 /// bounded recent window at most once per interval, stamped on the attempt, and still fetches from
 /// the floor while it has no Yahoo-owned rows. The leading-edge gate is the only completeness check
 /// on a catalog listing's first history.
@@ -98,6 +98,23 @@ public class YahooPriceImportServiceCatalogStartDateTests
             )
             .Should()
             .Be(Today.AddDays(-10));
+    }
+
+    [Fact]
+    public void StaleVenueCannotSuppressTheNextSettledSession()
+    {
+        Resolve(new DateOnly(2026, 8, 1), Today.AddDays(-2), Now.AddHours(-1))
+            .Should()
+            .Be(Today.AddDays(-15));
+        Resolve(null, Today.AddDays(-2), Now.AddHours(-1)).Should().Be(Floor);
+    }
+
+    [Fact]
+    public void StaleVenueGapStartsAfterItsLatestObservation()
+    {
+        Resolve(Today.AddDays(-80), Today.AddDays(-40), Now.AddHours(-1))
+            .Should()
+            .Be(Today.AddDays(-39));
     }
 
     private static YahooChartData Chart(DateOnly? firstTrade, params DateOnly[] dates) =>
