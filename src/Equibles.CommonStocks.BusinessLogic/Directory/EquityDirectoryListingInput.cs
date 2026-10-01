@@ -13,6 +13,7 @@ public class EquityDirectoryListingInput
     public string SourceSecurityIdentifier { get; set; }
     public string SourceListingIdentifier { get; set; }
     public string IssuerName { get; set; }
+    public List<string> IssuerNameAliases { get; set; } = [];
     public string LegalEntityIdentifier { get; set; }
     public List<string> RelatedIsins { get; set; } = [];
     public string Isin { get; set; }

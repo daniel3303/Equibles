@@ -23,6 +23,20 @@ public class CommonStockRepositorySearchRankingTests : ParadeDbMcpTestBase
         Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: ticker, Name: name, Cik: ticker);
 
     [Fact]
+    public async Task Search_OfficialAliasesMatchEveryWordAndEscapeWildcards()
+    {
+        var stock = Stock("TEST", "Local company name");
+        stock.NameAliases = ["CSI SOLAR", "100%_official"];
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        var repository = new EquityIssuerRepository(DbContext);
+        Assert.Equal(stock.Id, Assert.Single(repository.Search("csi solar")).Id);
+        Assert.Empty(repository.Search("csi missing"));
+        Assert.Equal(stock.Id, Assert.Single(repository.Search("%_")).Id);
+        Assert.Empty(repository.Search("100__official"));
+    }
+
+    [Fact]
     public async Task Search_ExactTickerMatch_RanksFirstEvenWhenAlphabeticallyLast()
     {
         // All four match the term "are" (ARE by exact ticker; the rest only in their name), and ARE

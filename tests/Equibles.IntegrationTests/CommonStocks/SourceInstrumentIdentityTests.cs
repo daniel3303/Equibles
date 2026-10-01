@@ -59,6 +59,37 @@ public class SourceInstrumentIdentityTests(ParadeDbFixture fixture) : ParadeDbMc
         new(services.GetRequiredService<IServiceScopeFactory>());
 
     [Fact]
+    public async Task OfficialNamesSurviveReplayWithoutMergingUnrelatedIssuers()
+    {
+        await using var services = Services();
+        var importer = Importer(services);
+        var input = Input();
+        input.IssuerNameAliases = ["CSI SOLAR", " CSI Solar ", "CSI SOLAR CO., LTD."];
+        var listingId = await importer.ImportListing(input);
+        input.IssuerNameAliases = ["Another official name"];
+        (await importer.ImportListing(input)).Should().Be(listingId);
+        var other = Input(security: "other", listing: "other", ticker: "OTHER", issuer: "other");
+        other.IssuerNameAliases = ["CSI SOLAR"];
+        await importer.ImportListing(other);
+        DbContext.ChangeTracker.Clear();
+        var listing = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+                .ThenInclude(row => row.Issuer)
+            .SingleAsync(row => row.Id == listingId);
+        listing.Security.Issuer.Name.Should().Be("Source company");
+        listing
+            .Security.Issuer.NameAliases.Should()
+            .BeEquivalentTo(
+                "CSI SOLAR",
+                "CSI SOLAR CO., LTD.",
+                "Source company",
+                "Another official name"
+            );
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
     public async Task MissingIsinPreservesSourceShareClassesWithoutMatchingOtherNullIsins()
     {
         DbContext.Add(

@@ -5,6 +5,7 @@ public sealed class EquityMarketDirectoryProduct
 {
     public string SourceIssuerIdentifier { get; set; }
     public string Name { get; set; }
+    public List<string> NameAliases { get; set; } = [];
     public Uri SourceUrl { get; set; }
     public string ReportedCurrency { get; set; }
     public object Evidence { get; set; }

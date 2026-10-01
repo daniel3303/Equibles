@@ -116,6 +116,7 @@ public class BmeEquityMarketDirectorySource(BmeClient client) : IEquityMarketDir
         {
             SourceIssuerIdentifier = details.IssuerCode,
             Name = details.Name,
+            NameAliases = [details.ShortName],
             SourceUrl = details.SourceUrl,
             ReportedCurrency = details.Currency,
             Evidence = Evidence(details),

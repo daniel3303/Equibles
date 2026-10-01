@@ -93,6 +93,11 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
                 .OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<EquityIssuer>().Property(issuer => issuer.Id).ValueGeneratedNever();
+        // Old hosts omit this column during rolling deployment.
+        builder
+            .Entity<EquityIssuer>()
+            .Property(issuer => issuer.NameAliases)
+            .HasDefaultValueSql("ARRAY[]::text[]");
         builder.Entity<EquitySecurity>().Property(security => security.Id).ValueGeneratedNever();
         builder.Entity<EquityListing>().Property(listing => listing.Id).ValueGeneratedNever();
         builder

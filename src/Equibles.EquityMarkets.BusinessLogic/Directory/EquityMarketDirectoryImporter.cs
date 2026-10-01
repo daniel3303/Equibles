@@ -188,21 +188,26 @@ public class EquityMarketDirectoryImporter(
     {
         var listings = services.GetRequiredService<EquityListingRepository>();
         var url = row.SourceUrl.AbsoluteUri;
+        var directoryName = row.Name?.Trim();
         var canResolveLei = InternationalSecurityIdentifiers.IsValidLei(firdsLei);
         var verified = await listings
             .GetAll()
-            .AnyAsync(
-                listing =>
-                    listing.Active
-                    && listing.IdentityState == EquityIdentityState.Verified
-                    && listing.MarketIdentifierCode == row.MarketIdentifierCode
-                    && listing.Ticker == row.Symbol
-                    && listing.Security.Isin == row.Isin
-                    && (!canResolveLei || listing.Security.Issuer.LegalEntityIdentifier != null)
-                    && listing.IdentitySourceUrl == url,
-                cancellationToken
-            );
-        if (!verified)
+            .Where(listing =>
+                listing.Active
+                && listing.IdentityState == EquityIdentityState.Verified
+                && listing.MarketIdentifierCode == row.MarketIdentifierCode
+                && listing.Ticker == row.Symbol
+                && listing.Security.Isin == row.Isin
+                && (!canResolveLei || listing.Security.Issuer.LegalEntityIdentifier != null)
+                && listing.IdentitySourceUrl == url
+            )
+            .Select(listing => new { listing.Security.Issuer.NameAliases })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (
+            verified == null
+            || directoryName != null
+                && !verified.NameAliases.Contains(directoryName, StringComparer.OrdinalIgnoreCase)
+        )
             return false;
         var evidence = services.GetRequiredService<EquityDirectorySourceRecordRepository>();
         var lastCapture = await evidence
@@ -273,6 +278,10 @@ public class EquityMarketDirectoryImporter(
             Source = sourceKey,
             SourceIssuerIdentifier = product.SourceIssuerIdentifier,
             IssuerName = confirmedIssuer.LegalName ?? product.Name ?? row.Name,
+            IssuerNameAliases = new[] { row.Name, product.Name }
+                .Concat(product.NameAliases)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .ToList(),
             LegalEntityIdentifier = confirmedIssuer.LegalEntityIdentifier,
             RelatedIsins = firdsIssuer == null ? issuer.RelatedIsins : [row.Isin],
             Isin = row.Isin,
