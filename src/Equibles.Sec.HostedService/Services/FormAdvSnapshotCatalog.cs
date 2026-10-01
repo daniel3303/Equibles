@@ -54,7 +54,10 @@ internal static class FormAdvSnapshotCatalog
             .ToArray();
         if (
             latest.Length != 1
-            || !new Uri(latest[0].Url).AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            || !new Uri(latest[0].Url).AbsolutePath.EndsWith(
+                ".zip",
+                StringComparison.OrdinalIgnoreCase
+            )
         )
             throw new InvalidDataException(
                 "The newest SEC Form ADV snapshot is ambiguous or is not a ZIP archive."
