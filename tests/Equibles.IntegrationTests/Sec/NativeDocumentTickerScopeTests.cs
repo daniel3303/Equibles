@@ -27,6 +27,16 @@ public class NativeDocumentTickerScopeTests(ParadeDbFixture fixture) : ParadeDbM
             Name: "U.S. co-registrant",
             SecondaryTickers: ["SAME"]
         );
+        us.Presentation.Listing.IsDirectoryListed = false;
+        us.Presentation.Listing.IsReferenceListed = false;
+        coRegistrant.Presentation = null;
+        var unlisted = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SAME",
+            Name: "Unlisted issuer"
+        );
+        unlisted.Presentation.Listing.IsDirectoryListed = false;
+        unlisted.Presentation.Listing.IsReferenceListed = false;
+        unlisted.Presentation = null;
         var foreign = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "SAME",
             Name: "Lisbon issuer"
@@ -44,10 +54,19 @@ public class NativeDocumentTickerScopeTests(ParadeDbFixture fixture) : ParadeDbM
         var usChunk = AddDocument(us);
         var coRegistrantChunk = AddDocument(coRegistrant);
         var foreignChunk = AddDocument(foreign);
+        AddDocument(unlisted);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
         var documents = new DocumentRepository(DbContext);
+        documents
+            .GetByTicker("same")
+            .ToQueryString()
+            .Should()
+            .Contain(
+                "UNION",
+                "ticker claims must be resolved before the filing-date scan rather than correlated per document"
+            );
         var expected = new[] { usChunk.DocumentId, coRegistrantChunk.DocumentId };
         (await documents.GetByTicker("same").Select(d => d.Id).ToListAsync())
             .Should()

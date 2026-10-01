@@ -276,7 +276,7 @@ public class ChunkRepository : BaseRepository<Chunk>
             var normalizedTicker = ticker.ToUpperInvariant();
             var documents = DbContext
                 .Set<Document>()
-                .ForUsTicker(ticker)
+                .ForUsTicker(ticker, DbContext)
                 .Select(document => document.Id);
             query = query.Where(c =>
                 c.Ticker == normalizedTicker && documents.Contains(c.DocumentId)

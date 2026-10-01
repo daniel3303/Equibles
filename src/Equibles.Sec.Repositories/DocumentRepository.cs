@@ -58,7 +58,8 @@ public class DocumentRepository : BaseRepository<Document>
         return GetAll().Where(d => d.EquityIssuerId == issuerId);
     }
 
-    public IQueryable<Document> GetByTicker(string ticker) => GetAll().ForUsTicker(ticker);
+    public IQueryable<Document> GetByTicker(string ticker) =>
+        GetAll().ForUsTicker(ticker, DbContext);
 
     public IQueryable<Document> GetByDocumentType(DocumentType documentType)
     {
