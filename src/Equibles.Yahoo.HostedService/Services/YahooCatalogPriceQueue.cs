@@ -25,15 +25,19 @@ internal static class YahooCatalogPriceQueue
             )
             .ToArray();
         var current = new Queue<PriceSeriesTarget>(
-            due.Where(Active)
-                .OrderBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
-                .ThenBy(target => lastDates.GetValueOrDefault(target.EquityListingId))
-                .ThenBy(target => target.EquityListingId)
+            RotateMarkets(
+                due.Where(Active)
+                    .OrderBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
+                    .ThenBy(target => lastDates.GetValueOrDefault(target.EquityListingId))
+                    .ThenBy(target => target.EquityListingId)
+            )
         );
         var backfill = new Queue<PriceSeriesTarget>(
-            due.Where(target => !Active(target))
-                .OrderBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
-                .ThenBy(target => target.EquityListingId)
+            RotateMarkets(
+                due.Where(target => !Active(target))
+                    .OrderBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
+                    .ThenBy(target => target.EquityListingId)
+            )
         );
         var result = new List<PriceSeriesTarget>(due.Length);
         while (current.Count > 0 || backfill.Count > 0)
@@ -48,5 +52,23 @@ internal static class YahooCatalogPriceQueue
                 result.Add(next);
         }
         return result;
+    }
+
+    private static IEnumerable<PriceSeriesTarget> RotateMarkets(
+        IEnumerable<PriceSeriesTarget> ordered
+    )
+    {
+        // A large newly admitted venue must not consume every bounded batch before other markets.
+        var markets = new Queue<Queue<PriceSeriesTarget>>(
+            ordered
+                .GroupBy(target => (target.MarketCountryCode, target.MarketIdentifierCode))
+                .Select(group => new Queue<PriceSeriesTarget>(group))
+        );
+        while (markets.TryDequeue(out var market))
+        {
+            yield return market.Dequeue();
+            if (market.Count > 0)
+                markets.Enqueue(market);
+        }
     }
 }

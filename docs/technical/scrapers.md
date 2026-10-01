@@ -144,6 +144,9 @@ These sources publish a continuous time series rather than discrete filings. Eac
 
 The cursor pattern means re-running is cheap (a single query for `max(date)` per cycle); duplicate ingestion is prevented by the per-source unique index (`[Index(nameof(CommonStockId), nameof(Date), IsUnique = true)]` etc.).
 
+- Catalog prices rotate across venue identities inside both the recent-price and historical queues; a larger market cannot fill each bounded request batch ahead of smaller markets.
+- Each venue retains oldest-attempt ordering across restarts, with four recent-price candidates per historical candidate and unchanged retry intervals.
+
 ### FDA catalysts — watermark-less re-read + upsert
 
 [`FdaCatalystScraperWorker`](../../src/Equibles.FdaCatalysts.HostedService/FdaCatalystScraperWorker.cs) reconciles the forward-looking FDA advisory-committee calendar, which carries no historical watermark — every cycle re-reads the whole calendar rather than resuming from a `max(date)` cursor.

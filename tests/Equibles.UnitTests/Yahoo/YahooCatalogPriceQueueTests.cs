@@ -50,6 +50,73 @@ public class YahooCatalogPriceQueueTests
             .And.Contain(recent);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LargeVenueCannotFillTheBatchBeforeOtherMarkets(bool hasRecentPrices)
+    {
+        var large = Enumerable
+            .Range(0, 1000)
+            .Select(index =>
+                Target("LARGE" + index) with
+                {
+                    YahooPriceSyncAttemptedAt = Now.AddHours(-4),
+                }
+            )
+            .ToArray();
+        var smaller = Target("SMALL") with
+        {
+            MarketCountryCode = "DK",
+            MarketIdentifierCode = "XCSE",
+            YahooPriceSyncAttemptedAt = Now.AddHours(-2),
+        };
+        var other = Target("OTHER") with
+        {
+            MarketCountryCode = "PL",
+            MarketIdentifierCode = "XWAR",
+            YahooPriceSyncAttemptedAt = Now.AddHours(-3),
+        };
+        var targets = large.Append(smaller).Append(other).ToArray();
+        var dates = targets.ToDictionary(
+            target => target.EquityListingId,
+            _ => hasRecentPrices ? (DateOnly?)new(2026, 9, 29) : null
+        );
+        var ordered = YahooCatalogPriceQueue.Order(targets, dates, Now);
+
+        large.Should().Contain(ordered[0]);
+        ordered[1].Should().Be(other);
+        ordered[2].Should().Be(smaller);
+        ordered.Should().BeEquivalentTo(targets);
+        ordered.Select(target => target.EquityListingId).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void RestartPreservesOldestAttemptFirstInsideEachMarket()
+    {
+        var older = Target("OLDER") with { YahooPriceSyncAttemptedAt = Now.AddHours(-3) };
+        var newer = Target("NEWER") with { YahooPriceSyncAttemptedAt = Now.AddHours(-2) };
+        var justServed = Target("SERVED") with { YahooPriceSyncAttemptedAt = Now };
+        var other = Target("OTHER") with
+        {
+            MarketCountryCode = "DK",
+            MarketIdentifierCode = "XCSE",
+            YahooPriceSyncAttemptedAt = Now.AddHours(-1),
+        };
+        var targets = new[] { newer, justServed, other, older };
+        var dates = targets.ToDictionary(
+            target => target.EquityListingId,
+            _ => (DateOnly?)new(2026, 9, 29)
+        );
+
+        YahooCatalogPriceQueue.Order(targets, dates, Now).Should().Equal(older, other, newer);
+        targets = targets
+            .Select(target =>
+                target == older ? target with { YahooPriceSyncAttemptedAt = Now } : target
+            )
+            .ToArray();
+        YahooCatalogPriceQueue.Order(targets, dates, Now).Should().Equal(newer, other);
+    }
+
     private static PriceSeriesTarget Target(string ticker) =>
         new(
             ticker,
