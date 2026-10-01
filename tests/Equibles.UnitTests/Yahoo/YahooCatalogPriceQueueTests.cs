@@ -126,4 +126,42 @@ public class YahooCatalogPriceQueueTests
             MarketCountryCode: "HK",
             MarketIdentifierCode: "XHKG"
         );
+
+    [Fact]
+    public void MissingClosePrecedesAlreadyCurrentSymbolsAcrossRestarts()
+    {
+        var current = Enumerable
+            .Range(0, 30)
+            .Select(index =>
+                Target("CURRENT" + index) with
+                {
+                    MarketCountryCode = "DE",
+                    MarketIdentifierCode = "XETR",
+                    EquitySecurityId = Guid.NewGuid(),
+                    YahooPriceSyncAttemptedAt = Now.AddDays(-1),
+                }
+            )
+            .ToArray();
+        var missing = current[0] with
+        {
+            EquityListingId = Guid.NewGuid(),
+            Ticker = "MISSING",
+            YahooPriceSyncAttemptedAt = Now.AddHours(-1),
+        };
+        var dates = current.ToDictionary(
+            target => target.EquityListingId,
+            _ => (DateOnly?)new(2026, 9, 29)
+        );
+        dates[missing.EquityListingId] = new(2026, 9, 28);
+        var targets = current.Append(missing).ToArray();
+
+        YahooCatalogPriceQueue.Order(targets, dates, Now).First().Should().Be(missing);
+        YahooCatalogPriceQueue
+            .Order(targets, dates, Now.AddMinutes(5))
+            .First()
+            .Should()
+            .Be(missing);
+        dates[missing.EquityListingId] = new(2026, 9, 29);
+        current.Should().Contain(YahooCatalogPriceQueue.Order(targets, dates, Now).First());
+    }
 }

@@ -3342,7 +3342,7 @@ public class YahooPriceImportService
         var covered =
             latestVenueOwned != null
             && (latestYahooOwned == null || latestVenueOwned > latestYahooOwned);
-        if (covered)
+        if (covered && latestVenueOwned >= today.AddDays(-1))
         {
             var interval = TimeSpan.FromHours(
                 Math.Max(1, options.CoveredListingFetchIntervalHours)
@@ -3356,10 +3356,10 @@ public class YahooPriceImportService
             ResettleWindowStart(today, options.VolumeResettleWindowDays),
             today.AddDays(-GapHealWindowDays)
         );
-        // A covered listing's feed rows are only ever the pre-venue tail, so its fetch is the recent
-        // window alone instead of everything since the frozen latest date.
+        // Start from the newer venue observation, but a stale venue cannot suppress a
+        // missing settled session or shorten the uncovered gap to the resettle window.
         if (covered)
-            return bounded;
+            return Min(latestVenueOwned.Value.AddDays(1), bounded);
         var forwardOnly = latestYahooOwned.Value.AddDays(1);
         return forwardOnly < today ? Min(forwardOnly, bounded) : forwardOnly;
     }
