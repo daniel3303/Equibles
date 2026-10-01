@@ -48,7 +48,10 @@ internal static class FormAdvSnapshotCatalog
                 "The SEC Form ADV catalogue contains no registered-adviser snapshots."
             );
         var newest = snapshots.Max(snapshot => snapshot.ReportDate);
-        var latest = snapshots.Where(snapshot => snapshot.ReportDate == newest).Distinct().ToArray();
+        var latest = snapshots
+            .Where(snapshot => snapshot.ReportDate == newest)
+            .Distinct()
+            .ToArray();
         if (
             latest.Length != 1
             || !new Uri(latest[0].Url).AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
