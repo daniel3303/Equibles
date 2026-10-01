@@ -156,7 +156,11 @@ public class YahooCatalogPriceQueueTests
         var targets = current.Append(missing).ToArray();
 
         YahooCatalogPriceQueue.Order(targets, dates, Now).First().Should().Be(missing);
-        YahooCatalogPriceQueue.Order(targets, dates, Now.AddMinutes(5)).First().Should().Be(missing);
+        YahooCatalogPriceQueue
+            .Order(targets, dates, Now.AddMinutes(5))
+            .First()
+            .Should()
+            .Be(missing);
         dates[missing.EquityListingId] = new(2026, 9, 29);
         current.Should().Contain(YahooCatalogPriceQueue.Order(targets, dates, Now).First());
     }
