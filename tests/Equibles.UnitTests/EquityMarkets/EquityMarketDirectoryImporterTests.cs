@@ -127,7 +127,12 @@ public class EquityMarketDirectoryImporterTests
     )
     {
         using var context = NewContext(options);
-        var issuer = new EquityIssuer { Name = row.Name, NameAliases = [row.Name], LegalEntityIdentifier = lei };
+        var issuer = new EquityIssuer
+        {
+            Name = row.Name,
+            NameAliases = [row.Name],
+            LegalEntityIdentifier = lei,
+        };
         var security = new EquitySecurity { Issuer = issuer, Isin = row.Isin };
         issuer.Securities.Add(security);
         security.Listings.Add(

@@ -72,11 +72,20 @@ public class SourceInstrumentIdentityTests(ParadeDbFixture fixture) : ParadeDbMc
         other.IssuerNameAliases = ["CSI SOLAR"];
         await importer.ImportListing(other);
         DbContext.ChangeTracker.Clear();
-        var listing = await DbContext.Set<EquityListing>().Include(row => row.Security)
-            .ThenInclude(row => row.Issuer).SingleAsync(row => row.Id == listingId);
+        var listing = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+                .ThenInclude(row => row.Issuer)
+            .SingleAsync(row => row.Id == listingId);
         listing.Security.Issuer.Name.Should().Be("Source company");
-        listing.Security.Issuer.NameAliases.Should().BeEquivalentTo(
-            "CSI SOLAR", "CSI SOLAR CO., LTD.", "Source company", "Another official name");
+        listing
+            .Security.Issuer.NameAliases.Should()
+            .BeEquivalentTo(
+                "CSI SOLAR",
+                "CSI SOLAR CO., LTD.",
+                "Source company",
+                "Another official name"
+            );
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(2);
     }
 
