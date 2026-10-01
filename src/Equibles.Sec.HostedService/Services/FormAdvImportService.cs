@@ -1,6 +1,4 @@
-using System.Globalization;
 using System.IO.Compression;
-using System.Net;
 using System.Text;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
@@ -17,19 +15,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.HostedService.Services;
 
-/// <summary>
-/// Imports the SEC's bulk Form ADV adviser download. The SEC publishes one snapshot per month
-/// as <c>ia&lt;MMDDYY&gt;.zip</c> (always the first of the month, a month or two in arrears), so
-/// the importer probes recent months newest-first, downloads the most recent one available, and
-/// upserts every adviser keyed by Organization CRD number. Re-running once a snapshot is already
-/// stored is a no-op.
-/// </summary>
 [Service]
 public class FormAdvImportService : IImporter
 {
-    private const string BaseUrl =
-        "https://www.sec.gov/files/investment/data/other/information-about-registered-investment-advisers-exempt-reporting-advisers";
-    private const int MonthsToProbe = 4;
     private const int UpsertBatchSize = 1000;
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -54,55 +42,28 @@ public class FormAdvImportService : IImporter
     {
         var storedLatest = await GetStoredLatestReportDate(cancellationToken);
 
-        foreach (var fileDate in GetCandidateFileDates())
+        await using var catalogStream = await _secEdgarClient.DownloadStream(
+            FormAdvSnapshotCatalog.PageUrl
+        );
+        using var reader = new StreamReader(catalogStream, Encoding.UTF8);
+        var catalog = await reader.ReadToEndAsync(cancellationToken);
+        var snapshot = FormAdvSnapshotCatalog.Latest(catalog);
+        if (storedLatest.HasValue && storedLatest.Value >= snapshot.ReportDate)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var fileName = $"ia{fileDate.ToString("MMddyy", CultureInfo.InvariantCulture)}.zip";
-            Stream zipStream;
-            try
-            {
-                zipStream = await _secEdgarClient.DownloadStream($"{BaseUrl}/{fileName}");
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-            {
-                // This month's snapshot is not published yet — try the previous one.
-                continue;
-            }
-
-            await using (zipStream)
-            {
-                // The newest snapshot that exists. If it is already stored, nothing to do.
-                if (storedLatest.HasValue && storedLatest.Value >= fileDate)
-                {
-                    _logger.LogInformation(
-                        "Form ADV data is up to date (latest snapshot {Date})",
-                        fileDate
-                    );
-                    return;
-                }
-
-                _logger.LogInformation("Importing Form ADV snapshot {Date}", fileDate);
-                var imported = await ImportSnapshot(zipStream, fileDate, cancellationToken);
-                _logger.LogInformation(
-                    "Form ADV {Date}: upserted {Count} advisers",
-                    fileDate,
-                    imported
-                );
-            }
-
+            _logger.LogInformation(
+                "Form ADV data is up to date (latest snapshot {Date})",
+                snapshot.ReportDate
+            );
             return;
         }
 
-        _logger.LogWarning(
-            "No Form ADV snapshot found in the last {Months} months — SEC URL or schedule may have changed",
-            MonthsToProbe
-        );
-        await _errorReporter.Report(
-            ErrorSource.FormAdvScraper,
-            "FormAdvImport.NoSnapshot",
-            $"No Form ADV snapshot found in the last {MonthsToProbe} months — SEC URL or schedule may have changed",
-            null
+        cancellationToken.ThrowIfCancellationRequested();
+        await using var zipStream = await _secEdgarClient.DownloadStream(snapshot.Url);
+        var imported = await ImportSnapshot(zipStream, snapshot.ReportDate, cancellationToken);
+        _logger.LogInformation(
+            "Form ADV {Date}: upserted {Count} advisers",
+            snapshot.ReportDate,
+            imported
         );
     }
 
@@ -223,18 +184,4 @@ public class FormAdvImportService : IImporter
             CreationTime = now,
             UpdateTime = now,
         };
-
-    /// <summary>The first of the month for the current month and the prior months, newest first.</summary>
-    internal static IEnumerable<DateOnly> GetCandidateFileDates()
-    {
-        var firstOfThisMonth = new DateOnly(
-            DateOnly.FromDateTime(DateTime.UtcNow).Year,
-            DateOnly.FromDateTime(DateTime.UtcNow).Month,
-            1
-        );
-        for (var i = 0; i < MonthsToProbe; i++)
-        {
-            yield return firstOfThisMonth.AddMonths(-i);
-        }
-    }
 }
