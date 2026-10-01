@@ -17,7 +17,9 @@ internal static class EquityDirectoryListingInputValidator
     private static bool Source(EquityDirectoryListingInput input) =>
         Text(input.Source, 64)
         && Text(input.SourceIssuerIdentifier, 128)
-        && Text(input.IssuerName, 500);
+        && Text(input.IssuerName, 500)
+        && input.IssuerNameAliases != null
+        && input.IssuerNameAliases.All(name => Text(name, 500));
 
     private static bool Instruments(EquityDirectoryListingInput input)
     {

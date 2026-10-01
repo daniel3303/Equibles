@@ -207,6 +207,7 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
             query = query.Where(c =>
                 EF.Functions.ILike(c.Presentation.Listing.Ticker, pattern, LikePattern.EscapeChar)
                 || EF.Functions.ILike(c.Name, pattern, LikePattern.EscapeChar)
+                || c.NameAliases.Any(name => EF.Functions.ILike(name, pattern, LikePattern.EscapeChar))
                 || EF.Functions.ILike(c.Description, pattern, LikePattern.EscapeChar)
                 || EF.Functions.ILike(c.Industry.Name, pattern, LikePattern.EscapeChar)
             );

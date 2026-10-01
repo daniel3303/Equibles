@@ -13,6 +13,10 @@ public class EquityIssuer
     [MaxLength(500)]
     public string Name { get; set; }
 
+    // Official source names aid discovery only; they never resolve issuer identity.
+    [Required]
+    public List<string> NameAliases { get; set; } = [];
+
     [MaxLength(2000)]
     public string Description { get; set; }
 

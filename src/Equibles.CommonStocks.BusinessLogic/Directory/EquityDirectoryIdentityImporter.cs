@@ -88,6 +88,12 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
             if (string.IsNullOrWhiteSpace(issuer.Name))
                 issuer.Name = input.IssuerName;
         }
+        issuer.NameAliases = issuer.NameAliases
+            .Concat(input.IssuerNameAliases)
+            .Append(input.IssuerName)
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var security = instruments.Security(issuer);
         var listing = instruments.Listing(security);
         var existingListingId = listing?.Id ?? Guid.Empty;

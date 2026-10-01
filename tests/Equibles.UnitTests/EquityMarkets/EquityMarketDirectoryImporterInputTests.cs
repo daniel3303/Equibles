@@ -65,6 +65,18 @@ public class EquityMarketDirectoryImporterInputTests
         };
 
     [Fact]
+    public void OfficialProductAndDirectoryNamesRemainSearchableAlongsideTheLegalName()
+    {
+        var row = Row();
+        row.Name = "Exchange display name";
+        var product = Product();
+        product.Name = "Official product name";
+        var input = EquityMarketDirectoryImporter.CreateInput(Paris, "euronext", row, product, Firds(), Issuer());
+        input.IssuerName.Should().Be("TotalEnergies SE");
+        input.IssuerNameAliases.Should().Equal("Exchange display name", "Official product name");
+    }
+
+    [Fact]
     public void AgreeingSources_ProduceAVerifiableListingInputCarryingEveryPieceOfEvidence()
     {
         var input = EquityMarketDirectoryImporter.CreateInput(
@@ -78,6 +90,7 @@ public class EquityMarketDirectoryImporterInputTests
         input.Source.Should().Be("euronext");
         input.SourceIssuerIdentifier.Should().Be("002816");
         input.IssuerName.Should().Be("TotalEnergies SE");
+        input.IssuerNameAliases.Should().Contain("TOTALENERGIES");
         input.LegalEntityIdentifier.Should().Be(Lei);
         input.RelatedIsins.Should().Equal("FR0000120271", "US89151E1091");
         input.Isin.Should().Be("FR0000120271");

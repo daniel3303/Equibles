@@ -13,6 +13,8 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
 
     public void ConfigureEntities(ModelBuilder builder)
     {
+        builder.Entity<EquityIssuer>().Ignore(issuer => issuer.NameAliases);
+
         // Added by 20260916043012_AddDelayedTrades.
         builder.Entity<EquityListing>().Ignore(listing => listing.YahooPriceSyncAttemptedAt);
 
