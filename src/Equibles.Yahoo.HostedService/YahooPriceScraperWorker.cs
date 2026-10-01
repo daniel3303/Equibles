@@ -50,7 +50,7 @@ public class YahooPriceScraperWorker : BaseScraperWorker
         }
 
         var importService = scope.ServiceProvider.GetRequiredService<YahooPriceImportService>();
-        await importService.Import(stoppingToken);
+        await importService.ImportUsPrices(stoppingToken);
 
         // Historical corruption is repaired in bounded batches after current prices, so cleanup
         // never queues the time-sensitive daily pass behind old work. Once a scan finds no more

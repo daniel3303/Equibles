@@ -30,6 +30,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWebsiteSource, YahooWebsiteSource>();
 
         services.AddHostedService<YahooPriceScraperWorker>();
+        services.AddHostedService<YahooCatalogPriceScraperWorker>();
 
         return services;
     }
