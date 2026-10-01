@@ -58,6 +58,56 @@ public class UsaSpendingClientRecipientProfileTests
         profile.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetRecipientProfile_MissingRecipientBadRequest_IsNullNotAFault()
+    {
+        const string recipientId = "00000000-0000-0000-0000-000000000000-C";
+        var sut = NewClient(
+            new CapturingHandler(
+                HttpStatusCode.BadRequest,
+                """{"detail":"Recipient ID not found: '00000000-0000-0000-0000-000000000000-C'."}"""
+            )
+        );
+
+        var profile = await sut.GetRecipientProfile(recipientId);
+
+        profile.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("<html>Bad Request</html>")]
+    [InlineData("{\"detail\":\"Invalid Recipient-Level: 'X'\"}")]
+    [InlineData("{\"detail\":\"Recipient ID not found: 'different-C'.\"}")]
+    [InlineData("{\"detail\":42}")]
+    public async Task GetRecipientProfile_OtherBadRequestsRemainFaults(string body)
+    {
+        var sut = NewClient(new CapturingHandler(HttpStatusCode.BadRequest, body));
+
+        var act = () => sut.GetRecipientProfile("00000000-0000-0000-0000-000000000000-C");
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task GetContractAwards_MissingRecipientMessageCannotHideASearchFailure()
+    {
+        var sut = NewClient(
+            new CapturingHandler(
+                HttpStatusCode.BadRequest,
+                """{"detail":"Recipient ID not found: '00000000-0000-0000-0000-000000000000-C'."}"""
+            )
+        );
+
+        var act = () => sut.GetContractAwards(new(2026, 9, 1), new(2026, 9, 2), 1000m);
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.BadRequest);
+    }
+
     private static UsaSpendingClient NewClient(HttpMessageHandler handler) =>
         new(new HttpClient(handler), Substitute.For<ILogger<UsaSpendingClient>>());
 

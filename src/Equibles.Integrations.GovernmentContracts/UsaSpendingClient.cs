@@ -136,7 +136,8 @@ public class UsaSpendingClient : IUsaSpendingClient
                     request.Headers.ConnectionClose = true;
                     return await _httpClient.SendAsync(request, cancellationToken);
                 },
-                cancellationToken
+                cancellationToken,
+                profileRecipientId: recipientId
             );
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -147,7 +148,9 @@ public class UsaSpendingClient : IUsaSpendingClient
             return null;
         }
 
-        return JsonConvert.DeserializeObject<UsaSpendingRecipientProfile>(content);
+        return content == null
+            ? null
+            : JsonConvert.DeserializeObject<UsaSpendingRecipientProfile>(content);
     }
 
     /// <summary>
@@ -368,7 +371,8 @@ public class UsaSpendingClient : IUsaSpendingClient
 
     private async Task<string> SendWithRetry(
         Func<Task<HttpResponseMessage>> sendRequest,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string profileRecipientId = null
     )
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
@@ -445,12 +449,42 @@ public class UsaSpendingClient : IUsaSpendingClient
                     continue;
                 }
 
+                // The recipient endpoint reports an absent profile as 400, including for
+                // recipient IDs returned by award search. Other validation failures stay faults.
+                if (
+                    response.StatusCode == HttpStatusCode.BadRequest
+                    && profileRecipientId != null
+                    && IsMissingRecipient(
+                        await response.Content.ReadAsStringAsync(cancellationToken),
+                        profileRecipientId
+                    )
+                )
+                    return null;
+
                 response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStringAsync(cancellationToken);
             }
         }
 
         throw new HttpRequestException("Max retries exceeded for USAspending API request");
+    }
+
+    private static bool IsMissingRecipient(string content, string recipientId)
+    {
+        try
+        {
+            var error = JsonConvert.DeserializeObject<RecipientError>(content);
+            return error?.Detail == $"Recipient ID not found: '{recipientId}'.";
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private sealed class RecipientError
+    {
+        public string Detail { get; set; }
     }
 
     // Thin forwarder so reflection-based backoff tests can find the method.
