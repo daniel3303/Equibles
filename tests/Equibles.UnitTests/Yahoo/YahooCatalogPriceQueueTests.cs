@@ -55,11 +55,14 @@ public class YahooCatalogPriceQueueTests
     [InlineData(false)]
     public void LargeVenueCannotFillTheBatchBeforeOtherMarkets(bool hasRecentPrices)
     {
-        var large = Enumerable.Range(0, 1000)
-            .Select(index => Target("LARGE" + index) with
-            {
-                YahooPriceSyncAttemptedAt = Now.AddHours(-4),
-            })
+        var large = Enumerable
+            .Range(0, 1000)
+            .Select(index =>
+                Target("LARGE" + index) with
+                {
+                    YahooPriceSyncAttemptedAt = Now.AddHours(-4),
+                }
+            )
             .ToArray();
         var smaller = Target("SMALL") with
         {
@@ -80,7 +83,7 @@ public class YahooCatalogPriceQueueTests
         );
         var ordered = YahooCatalogPriceQueue.Order(targets, dates, Now);
 
-        ordered[0].Should().BeOneOf(large);
+        large.Should().Contain(ordered[0]);
         ordered[1].Should().Be(other);
         ordered[2].Should().Be(smaller);
         ordered.Should().BeEquivalentTo(targets);
@@ -106,9 +109,11 @@ public class YahooCatalogPriceQueueTests
         );
 
         YahooCatalogPriceQueue.Order(targets, dates, Now).Should().Equal(older, other, newer);
-        targets = targets.Select(target => target == older
-            ? target with { YahooPriceSyncAttemptedAt = Now }
-            : target).ToArray();
+        targets = targets
+            .Select(target =>
+                target == older ? target with { YahooPriceSyncAttemptedAt = Now } : target
+            )
+            .ToArray();
         YahooCatalogPriceQueue.Order(targets, dates, Now).Should().Equal(newer, other);
     }
 
