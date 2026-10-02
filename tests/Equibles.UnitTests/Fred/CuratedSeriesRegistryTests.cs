@@ -75,6 +75,10 @@ public class CuratedSeriesRegistryTests
     [InlineData("M2SL", FredSeriesCategory.MoneySupply)]
     [InlineData("UMCSENT", FredSeriesCategory.Sentiment)]
     [InlineData("DTWEXBGS", FredSeriesCategory.ExchangeRates)]
+    [InlineData("DEXHKUS", FredSeriesCategory.ExchangeRates)]
+    [InlineData("DEXDNUS", FredSeriesCategory.ExchangeRates)]
+    [InlineData("DEXSDUS", FredSeriesCategory.ExchangeRates)]
+    [InlineData("DEXNOUS", FredSeriesCategory.ExchangeRates)]
     public void WellKnownSeries_HasExpectedCategory(
         string seriesId,
         FredSeriesCategory expectedCategory

@@ -156,6 +156,11 @@ public static class CuratedSeriesRegistry
         new("DTWEXAFEGS", FredSeriesCategory.ExchangeRates),
         new("DEXSZUS", FredSeriesCategory.ExchangeRates),
         new("DEXBZUS", FredSeriesCategory.ExchangeRates),
+        // Trading currencies of the European and Hong Kong venues, so their quotes convert to dollars.
+        new("DEXHKUS", FredSeriesCategory.ExchangeRates),
+        new("DEXDNUS", FredSeriesCategory.ExchangeRates),
+        new("DEXSDUS", FredSeriesCategory.ExchangeRates),
+        new("DEXNOUS", FredSeriesCategory.ExchangeRates),
         // The other two headline indices, both crude benchmarks, retail gasoline, and the
         // adjusted financial-conditions index that pairs with NFCI.
         new("DCOILWTICO", FredSeriesCategory.Market),
