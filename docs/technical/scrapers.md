@@ -19,6 +19,7 @@
 - Recovery is recurring reconciliation, not a one-time script; no extraction-version bump replays already captured HTML documents.
 - An ESEF index entry does not establish annual reporting: tagged interim reports use the same format.
 - Validate inline XML namespaces in scope before annual classification and fact extraction; ambiguous rebindings, spoofed instance namespaces and aliases unsupported by the shared parser keep the general type and refuse financial-fact publication.
+- Unit measures resolve only from ISO 4217, `xbrli:pure`/`xbrli:shares`, or the XBRL Unit Type Registry (`utr`); a registry name that reads as a currency code, `pure` or `shares` still refuses the report.
 - Retain refused originals for diagnosis; the extraction guard prevents new unsupported facts but does not remove previously stored rows or replay the completed corpus.
 - Classify a captured report as annual only with matching unqualified, conflict-free IFRS annual-duration and instant facts at its indexed end, and no later supported issuer facts.
 - Keep other captured reports as the general `EsefReport` type; preserve their envelope, financial extraction, normalization replay and history deduplication.

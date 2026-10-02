@@ -216,6 +216,50 @@ public class EsefAnnualPeriodTests
             facts.Should().BeEmpty();
     }
 
+    // An emissions or energy disclosure tagged in a registry unit must not refuse the whole report.
+    [Theory]
+    [InlineData("http://www.xbrl.org/2009/utr", "tCO2e", true)]
+    [InlineData("http://www.xbrl.org/2009/utr", "MWh", true)]
+    [InlineData("http://www.xbrl.org/2009/utr", "MVA", false)]
+    [InlineData("http://www.xbrl.org/2009/utr", "eur", false)]
+    [InlineData("http://www.xbrl.org/2009/utr", "Usd", false)]
+    [InlineData("http://www.xbrl.org/2009/utr", "shares", false)]
+    [InlineData("http://www.xbrl.org/2009/utr", "Pure", false)]
+    [InlineData("https://example.org/units", "tCO2e", false)]
+    public void TryParse_AcceptsRegistryUnitsThatCannotReadAsReservedUnits(
+        string unitNamespace,
+        string unit,
+        bool expected
+    )
+    {
+        var html = AnnualInline()
+            .Replace(
+                "</ix:resources>",
+                $"""
+                <xbrli:unit id="emissions"><xbrli:measure xmlns:utr="{unitNamespace}">utr:{unit}</xbrli:measure></xbrli:unit>
+                </ix:resources>
+                """
+            )
+            .Replace(
+                "</div>",
+                """
+                <ix:nonFraction xmlns:esg="https://example.org/esg" name="esg:GrossEmissions" contextRef="year" unitRef="emissions" decimals="0">1500</ix:nonFraction></div>
+                """
+            );
+
+        EsefInlineXbrlParser.TryParse(html, out var facts).Should().Be(expected);
+        EsefAnnualPeriod.IsProvenInline(html, Lei, End).Should().Be(expected);
+        if (expected)
+        {
+            facts.Should().HaveCount(3);
+            facts.Should().ContainSingle(fact => fact.Unit == unit).Which.Value.Should().Be(1500);
+        }
+        else
+        {
+            facts.Should().BeEmpty();
+        }
+    }
+
     private static string AnnualInline() =>
         $"""
             <html xmlns="http://www.w3.org/1999/xhtml"
