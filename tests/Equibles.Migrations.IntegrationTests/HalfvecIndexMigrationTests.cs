@@ -190,6 +190,105 @@ public class HalfvecIndexMigrationTests(HalfvecDatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task LargeTableWithoutIndex_RequiresPrebuildThenAdoptsIt()
+    {
+        // Null vectors keep the prebuild instant: the guard counts rows, not graph entries.
+        await Execute(
+            $"""
+            TRUNCATE public."Embedding";
+            INSERT INTO public."Embedding"
+            SELECT n, NULL, 'qwen3-embedding:0.6b', 1024
+            FROM generate_series(1, {QwenHalfvecIndex20260930.MaxInlineBuildRows + 1}) n;
+            """
+        );
+
+        var refusal = await Assert.ThrowsAsync<PostgresException>(() =>
+            _context.Database.MigrateAsync(Token)
+        );
+
+        Assert.Contains("too large", refusal.MessageText, StringComparison.Ordinal);
+        Assert.Equal(DBNull.Value, await Scalar($"SELECT to_regclass('public.\"{Index}\"')::text"));
+        Assert.Empty(await _context.Database.GetAppliedMigrationsAsync(Token));
+
+        await Execute(QwenHalfvecIndex20260930.CreateSql);
+        var before = await IndexIdentity();
+        await _context.Database.MigrateAsync(Token);
+
+        Assert.Equal(before, await IndexIdentity());
+        Assert.Single(await _context.Database.GetAppliedMigrationsAsync(Token));
+    }
+
+    [Fact]
+    public async Task TableAtInlineLimit_BuildsInsideMigration()
+    {
+        await Execute(
+            $"""
+            TRUNCATE public."Embedding";
+            INSERT INTO public."Embedding"
+            SELECT n, NULL, 'qwen3-embedding:0.6b', 1024
+            FROM generate_series(1, {QwenHalfvecIndex20260930.MaxInlineBuildRows}) n;
+            INSERT INTO public."Embedding"
+            SELECT n, NULL, 'other-model', 1024
+            FROM generate_series(200001, 200100) n;
+            """
+        );
+
+        await _context.Database.MigrateAsync(Token);
+
+        Assert.Single(await _context.Database.GetAppliedMigrationsAsync(Token));
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("varchar(64)")]
+    public async Task ModelColumnType_DoesNotChangeTheDefinitionProof(string type)
+    {
+        await Execute($"ALTER TABLE public.\"Embedding\" ALTER COLUMN \"Model\" TYPE {type}");
+
+        await _context.Database.MigrateAsync(Token);
+
+        Assert.Single(await _context.Database.GetAppliedMigrationsAsync(Token));
+    }
+
+    [Fact]
+    public async Task Rollback_RemovesInvalidLeftover()
+    {
+        await _context.Database.MigrateAsync(Token);
+        // Isolated disposable database: emulate an index invalidated after it was recorded.
+        await Execute(
+            $"UPDATE pg_index SET indisvalid=false WHERE indexrelid='public.\"{Index}\"'::regclass"
+        );
+
+        await _context.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase, Token);
+
+        Assert.Equal(DBNull.Value, await Scalar($"SELECT to_regclass('public.\"{Index}\"')::text"));
+        Assert.Empty(await _context.Database.GetAppliedMigrationsAsync(Token));
+    }
+
+    [Fact]
+    public async Task Rollback_IsRefusedWhileBuilderHoldsTheLock()
+    {
+        await _context.Database.MigrateAsync(Token);
+        await using var builder = new NpgsqlConnection(_connectionString);
+        await builder.OpenAsync(Token);
+        await using var acquire = new NpgsqlCommand(
+            "SELECT pg_advisory_lock(837421,1024)",
+            builder
+        );
+        await acquire.ExecuteNonQueryAsync(Token);
+
+        await Assert.ThrowsAsync<PostgresException>(() =>
+            _context.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase, Token)
+        );
+
+        Assert.NotEqual(
+            DBNull.Value,
+            await Scalar($"SELECT to_regclass('public.\"{Index}\"')::text")
+        );
+        Assert.Single(await _context.Database.GetAppliedMigrationsAsync(Token));
+    }
+
+    [Fact]
     public async Task Rollback_RemovesOnlyThisIndexAndCanReapply()
     {
         await _context.Database.MigrateAsync(Token);
