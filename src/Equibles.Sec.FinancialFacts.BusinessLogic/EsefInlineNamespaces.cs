@@ -94,9 +94,19 @@ internal static class EsefInlineNamespaces
         XmlConvert.VerifyNCName(parts[1]);
         // The shared parser drops unit prefixes. Only these namespaces give that
         // abbreviated unit an unambiguous currency, ratio or share-count identity.
-        return ns == "http://www.xbrl.org/2003/iso4217"
-            || (ns == "http://www.xbrl.org/2003/instance" && parts[1] is "pure" or "shares");
+        if (ns == "http://www.xbrl.org/2003/iso4217")
+            return true;
+        if (ns == "http://www.xbrl.org/2003/instance")
+            return parts[1] is "pure" or "shares";
+        // A registry unit such as tCO2e keeps its identity without the prefix, unless the
+        // bare name would read downstream as a currency code, ratio or share count.
+        return ns == "http://www.xbrl.org/2009/utr" && !ReadsAsReservedUnit(parts[1]);
     }
+
+    private static bool ReadsAsReservedUnit(string name) =>
+        name.Equals("pure", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("shares", StringComparison.OrdinalIgnoreCase)
+        || (name.Length == 3 && name.All(char.IsAsciiLetterUpper));
 
     // The HTML parser identifies these elements by their literal prefixes. An alias
     // could hide a segment/scenario qualifier and turn it into consolidated evidence.
