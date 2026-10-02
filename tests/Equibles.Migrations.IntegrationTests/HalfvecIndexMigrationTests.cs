@@ -236,6 +236,35 @@ public class HalfvecIndexMigrationTests(HalfvecDatabaseFixture fixture)
         await _context.Database.MigrateAsync(Token);
 
         Assert.Single(await _context.Database.GetAppliedMigrationsAsync(Token));
+        Assert.True(
+            (bool)
+                await Scalar(
+                    $"SELECT indisvalid FROM pg_index WHERE indexrelid='public.\"{Index}\"'::regclass"
+                )
+        );
+    }
+
+    [Fact]
+    public async Task SameNamedIndexOnAnotherTable_IsPreservedAndNeverRecorded()
+    {
+        await Execute(
+            """
+            CREATE TABLE public."OtherEmbedding" (LIKE public."Embedding");
+            """
+        );
+        await Execute(
+            QwenHalfvecIndex20260930.CreateSql.Replace(
+                "public.\"Embedding\"",
+                "public.\"OtherEmbedding\"",
+                StringComparison.Ordinal
+            )
+        );
+        var before = await IndexIdentity();
+
+        await Assert.ThrowsAsync<PostgresException>(() => _context.Database.MigrateAsync(Token));
+
+        Assert.Equal(before, await IndexIdentity());
+        Assert.Empty(await _context.Database.GetAppliedMigrationsAsync(Token));
     }
 
     [Theory]
@@ -263,6 +292,37 @@ public class HalfvecIndexMigrationTests(HalfvecDatabaseFixture fixture)
 
         Assert.Equal(DBNull.Value, await Scalar($"SELECT to_regclass('public.\"{Index}\"')::text"));
         Assert.Empty(await _context.Database.GetAppliedMigrationsAsync(Token));
+    }
+
+    [Fact]
+    public async Task Rollback_KeepsUnfinishedIndexWhileAnotherSessionMayBeBuildingIt()
+    {
+        await _context.Database.MigrateAsync(Token);
+        await Execute(
+            $"UPDATE pg_index SET indisvalid=false WHERE indexrelid='public.\"{Index}\"'::regclass"
+        );
+        // A concurrent build holds this table lock for its whole duration, visible to every role.
+        await using var builder = new NpgsqlConnection(_connectionString);
+        await builder.OpenAsync(Token);
+        await using var transaction = await builder.BeginTransactionAsync(Token);
+        await using var hold = new NpgsqlCommand(
+            "LOCK TABLE public.\"Embedding\" IN SHARE UPDATE EXCLUSIVE MODE",
+            builder,
+            transaction
+        );
+        await hold.ExecuteNonQueryAsync(Token);
+
+        await Assert.ThrowsAsync<PostgresException>(() =>
+            _context.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase, Token)
+        );
+        Assert.NotEqual(
+            DBNull.Value,
+            await Scalar($"SELECT to_regclass('public.\"{Index}\"')::text")
+        );
+
+        await transaction.RollbackAsync(Token);
+        await _context.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase, Token);
+        Assert.Equal(DBNull.Value, await Scalar($"SELECT to_regclass('public.\"{Index}\"')::text"));
     }
 
     [Fact]

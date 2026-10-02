@@ -5,8 +5,8 @@ namespace Equibles.Migrations.Infrastructure;
 // Versioned SQL is migration history: a different index definition needs a new migration.
 public static class QwenHalfvecIndex20260930
 {
-    // A larger table outlives the migration command timeout, and a cancelled build leaves an invalid index.
-    public const int MaxInlineBuildRows = 100_000;
+    // Builds in about ten seconds within default maintenance_work_mem, inside the 30-second default command timeout.
+    public const int MaxInlineBuildRows = 10_000;
 
     private const string Predicate = """
         "Model" = 'qwen3-embedding:0.6b' AND "VectorDimension" = 1024
@@ -32,6 +32,17 @@ public static class QwenHalfvecIndex20260930
         IF EXISTS (SELECT FROM pg_stat_progress_create_index
                    WHERE relid = 'public."Embedding"'::regclass) THEN
             RAISE EXCEPTION 'Embedding has an active index build; retry the migration after it completes';
+        END IF;
+        """;
+
+    // The progress view hides another role's build from an unprivileged role; its table lock stays visible.
+    private const string RefuseUnfinishedBuild = """
+        IF EXISTS (SELECT FROM pg_index WHERE indexrelid = target AND NOT indisvalid)
+           AND EXISTS (SELECT FROM pg_locks
+                       WHERE locktype = 'relation' AND relation = 'public."Embedding"'::regclass
+                         AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+                         AND mode = 'ShareUpdateExclusiveLock' AND granted AND pid <> pg_backend_pid()) THEN
+            RAISE EXCEPTION 'Embedding has an unfinished halfvec index and a session that may be building it; retry the rollback after it completes';
         END IF;
         """;
 
@@ -83,7 +94,15 @@ public static class QwenHalfvecIndex20260930
     public static void Down(MigrationBuilder migration)
     {
         // Rollback also clears an invalid leftover, which is safe once no builder owns it.
-        migration.Sql(Block(RefuseActiveBuild), suppressTransaction: true);
+        migration.Sql(
+            Block(
+                $"""
+                {RefuseActiveBuild}
+                {RefuseUnfinishedBuild}
+                """
+            ),
+            suppressTransaction: true
+        );
         migration.Sql(
             """
             DROP INDEX CONCURRENTLY IF EXISTS public."IX_Embedding_Qwen3_Halfvec1024_Hnsw";
