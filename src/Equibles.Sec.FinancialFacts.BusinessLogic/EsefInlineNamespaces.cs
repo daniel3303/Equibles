@@ -103,7 +103,8 @@ internal static class EsefInlineNamespaces
         return ns == "http://www.xbrl.org/2009/utr" && !ReadsAsReservedUnit(parts[1]);
     }
 
-    // ISO 4217 list one, published 2026-09-17. Readers uppercase units, so a code matches in any case.
+    // ISO 4217 list one (2026-09-17) plus retired codes ICU still recognises. Readers uppercase units,
+    // so a code matches in any case.
     private static readonly HashSet<string> CurrencyCodes = new(
         (
             "AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT BHD BIF BMD BND BOB BOV BRL BSD BTN BWP "
@@ -114,7 +115,7 @@ internal static class EsefInlineNamespaces
             + "PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP "
             + "SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD USN UYI UYU UYW UZS VED VES VND VUV "
             + "WST XAD XAF XAG XAU XBA XBB XBC XBD XCD XCG XDR XOF XPD XPF XPT XSU XTS XUA XXX YER ZAR "
-            + "ZMW ZWG"
+            + "ZMW ZWG ANG BGN BYR CUC HRK MRO SLL STD VEF ZWL"
         ).Split(' '),
         StringComparer.OrdinalIgnoreCase
     );
