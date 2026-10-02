@@ -103,10 +103,27 @@ internal static class EsefInlineNamespaces
         return ns == "http://www.xbrl.org/2009/utr" && !ReadsAsReservedUnit(parts[1]);
     }
 
+    // ISO 4217 list one, published 2026-09-17. Readers uppercase units, so a code matches in any case.
+    private static readonly HashSet<string> CurrencyCodes = new(
+        (
+            "AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT BHD BIF BMD BND BOB BOV BRL BSD BTN BWP "
+            + "BYN BZD CAD CDF CHE CHF CHW CLF CLP CNY COP COU CRC CUP CVE CZK DJF DKK DOP DZD EGP ERN "
+            + "ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD IRR ISK "
+            + "JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD "
+            + "MMK MNT MOP MRU MUR MVR MWK MXN MXV MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP "
+            + "PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP "
+            + "SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD USN UYI UYU UYW UZS VED VES VND VUV "
+            + "WST XAD XAF XAG XAU XBA XBB XBC XBD XCD XCG XDR XOF XPD XPF XPT XSU XTS XUA XXX YER ZAR "
+            + "ZMW ZWG"
+        ).Split(' '),
+        StringComparer.OrdinalIgnoreCase
+    );
+
     private static bool ReadsAsReservedUnit(string name) =>
         name.Equals("pure", StringComparison.OrdinalIgnoreCase)
         || name.Equals("shares", StringComparison.OrdinalIgnoreCase)
-        || (name.Length == 3 && name.All(char.IsAsciiLetterUpper));
+        || (name.Length == 3 && name.All(char.IsAsciiLetterUpper))
+        || CurrencyCodes.Contains(name);
 
     // The HTML parser identifies these elements by their literal prefixes. An alias
     // could hide a segment/scenario qualifier and turn it into consolidated evidence.

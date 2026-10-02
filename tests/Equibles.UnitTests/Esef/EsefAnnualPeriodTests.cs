@@ -221,6 +221,8 @@ public class EsefAnnualPeriodTests
     [InlineData("http://www.xbrl.org/2009/utr", "tCO2e", true)]
     [InlineData("http://www.xbrl.org/2009/utr", "MWh", true)]
     [InlineData("http://www.xbrl.org/2009/utr", "MVA", false)]
+    [InlineData("http://www.xbrl.org/2009/utr", "eur", false)]
+    [InlineData("http://www.xbrl.org/2009/utr", "Usd", false)]
     [InlineData("http://www.xbrl.org/2009/utr", "shares", false)]
     [InlineData("http://www.xbrl.org/2009/utr", "Pure", false)]
     [InlineData("https://example.org/units", "tCO2e", false)]
