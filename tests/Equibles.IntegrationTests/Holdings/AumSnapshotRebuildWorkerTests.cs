@@ -536,6 +536,119 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         (await read.Set<AumQuarterlySnapshot>().AnyAsync()).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_RecentSnapshotsFresh_SkipsTheSafetyNetCycle()
+    {
+        // A boot inside the freshness window must not rebuild the recent quarters: the
+        // sentinel rows survive a second of the 1ms loop, which would otherwise have
+        // overwritten them hundreds of times.
+        await SeedTwoQuarters();
+        await SeedFullCoverage(DateTime.UtcNow.AddHours(-1));
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        await worker.StopAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var snapshots = await read.Set<AumQuarterlySnapshot>().ToListAsync();
+        snapshots.Should().HaveCount(2);
+        snapshots
+            .Should()
+            .OnlyContain(s => s.TotalValue == 999_999_999, "fresh quarters are left alone");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RecentSnapshotsStale_RebuildsThem()
+    {
+        await SeedTwoQuarters();
+        await SeedFullCoverage(DateTime.UtcNow.AddHours(-25));
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(cts.Token);
+        await WaitForSnapshots(async ctx =>
+            await ctx.Set<AumQuarterlySnapshot>()
+                .AnyAsync(s => s.ReportDate == Q4 && s.TotalValue == 200_000)
+        );
+        await worker.StopAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var q4 = await read.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Q4);
+        q4.TotalValue.Should().Be(200_000, "a quarter outside the freshness window is rebuilt");
+    }
+
+    // Every snapshot family for both seeded quarters, so the boot backfill sees full
+    // coverage and only the daily cycle's freshness decision remains.
+    private async Task SeedFullCoverage(DateTime computedAt)
+    {
+        await using var seed = FreshContext();
+        var aapl = await seed.Set<EquityIssuer>().SingleAsync();
+        var holder = await seed.Set<InstitutionalHolder>().SingleAsync();
+        foreach (var quarter in new[] { Q3, Q4 })
+        {
+            seed.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = quarter,
+                    TotalValue = 999_999_999,
+                    FilerCount = 99,
+                    PositionCount = 99,
+                    StockCount = 99,
+                    FilingCount = 99,
+                    ComputedAt = computedAt,
+                }
+            );
+            seed.Add(
+                new StockQuarterlyActivity
+                {
+                    EquityIssuerId = aapl.Id,
+                    ReportDate = quarter,
+                    CurrentShares = 1_000,
+                    CurrentValue = 100_000,
+                    CurrentFilerCount = 1,
+                    ComputedAt = computedAt,
+                }
+            );
+            seed.Add(
+                new StockQuarterlyListingActivity
+                {
+                    EquityIssuerId = aapl.Id,
+                    ReportDate = quarter,
+                    PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
+                    CurrentShares = 1_000,
+                    ComputedAt = computedAt,
+                }
+            );
+            seed.Add(
+                new HolderQuarterlySnapshot
+                {
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = quarter,
+                    FilingDate = quarter.AddDays(45),
+                    Aum = 100_000,
+                    PositionCount = 1,
+                    StockCount = 1,
+                    ComputedAt = computedAt,
+                }
+            );
+        }
+        await seed.SaveChangesAsync();
+    }
+
     private async Task SeedTwoQuarters()
     {
         await using var seed = FreshContext();

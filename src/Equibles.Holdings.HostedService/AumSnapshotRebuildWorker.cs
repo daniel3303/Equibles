@@ -25,6 +25,11 @@ namespace Equibles.Holdings.HostedService;
 /// cover every quarter present in the holdings table. The naive "snapshot
 /// tables empty" gate this replaced lost the backfill whenever the
 /// consumer beat the worker to inserting the first row.
+///
+/// Every boot restarts the daily cycle, so a deploy-heavy day would pay the
+/// recent-quarter rebuild once per deploy. A cycle is skipped while every
+/// recent quarter was rebuilt within <see cref="FreshnessWindow"/> and none
+/// is dirty; a missing, stale or dirty quarter rebuilds them all as before.
 /// </summary>
 public class AumSnapshotRebuildWorker : BackgroundService
 {
@@ -38,6 +43,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
     protected virtual TimeSpan SleepInterval => TimeSpan.FromHours(24);
     protected virtual TimeSpan BackfillCommandTimeout => TimeSpan.FromMinutes(30);
     protected virtual int RecentQuartersToRebuild => 4;
+    protected virtual TimeSpan FreshnessWindow => TimeSpan.FromHours(20);
 
     public AumSnapshotRebuildWorker(
         IServiceScopeFactory scopeFactory,
@@ -88,11 +94,21 @@ public class AumSnapshotRebuildWorker : BackgroundService
         {
             try
             {
-                _logger.LogInformation(
-                    "Running daily AUM snapshot safety-net rebuild for last {Quarters} quarter(s)",
-                    RecentQuartersToRebuild
-                );
-                await _refreshService.RebuildRecentAsync(RecentQuartersToRebuild, stoppingToken);
+                if (await IsRecentCoverageFresh(stoppingToken))
+                {
+                    _logger.LogInformation(
+                        "Recent holdings snapshots were rebuilt within {Window}; skipping this safety-net cycle",
+                        FreshnessWindow
+                    );
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Running daily AUM snapshot safety-net rebuild for last {Quarters} quarter(s)",
+                        RecentQuartersToRebuild
+                    );
+                    await _refreshService.RebuildRecentAsync(RecentQuartersToRebuild, stoppingToken);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -115,6 +131,40 @@ public class AumSnapshotRebuildWorker : BackgroundService
                 return;
             }
         }
+    }
+
+    // The AUM row's ComputedAt stands for the whole quarter rebuild: RebuildQuarter writes
+    // every snapshot family in one transaction, and the boot backfill above has already
+    // covered missing families.
+    private async Task<bool> IsRecentCoverageFresh(CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var recentQuarters = await InstitutionalHoldingReportDateQueries
+            .Get13FReportDates(dbContext)
+            .OrderByDescending(d => d)
+            .Take(RecentQuartersToRebuild)
+            .ToListAsync(cancellationToken);
+        var snapshots = await dbContext
+            .Set<AumQuarterlySnapshot>()
+            .Where(s => recentQuarters.Contains(s.ReportDate))
+            .ToListAsync(cancellationToken);
+        return IsRecentCoverageFresh(recentQuarters, snapshots, DateTime.UtcNow, FreshnessWindow);
+    }
+
+    internal static bool IsRecentCoverageFresh(
+        IReadOnlyCollection<DateOnly> recentQuarters,
+        IReadOnlyCollection<AumQuarterlySnapshot> snapshots,
+        DateTime now,
+        TimeSpan freshnessWindow
+    )
+    {
+        var threshold = now - freshnessWindow;
+        return recentQuarters.All(quarter =>
+            snapshots.Any(s =>
+                s.ReportDate == quarter && s.DirtyAt == null && s.ComputedAt >= threshold
+            )
+        );
     }
 
     private async Task TryBackfillIfNeeded(CancellationToken cancellationToken)
