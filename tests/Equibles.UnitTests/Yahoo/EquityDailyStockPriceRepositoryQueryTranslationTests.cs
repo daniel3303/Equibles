@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.Data;
+using Equibles.TestSupport;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Prices;
 using Equibles.Yahoo.Repositories;
@@ -66,5 +67,46 @@ public class EquityDailyStockPriceRepositoryQueryTranslationTests
 
         sql.Should().Contain("\"EquityIssuerPresentation\"");
         sql.Should().Contain("\"MarketCountryCode\" = 'US'");
+    }
+
+    // The issuer-wide join could not use the (listing, date) index order, so PostgreSQL read
+    // every bar and sorted before any LIMIT; the listing id from the loaded graph must reach SQL
+    // as a plain column filter with no security join.
+    [Fact]
+    public void GetByStock_FiltersByThePresentationListingIdWithoutASecurityJoin()
+    {
+        using var ctx = CreateContext();
+        var stock = EquityIssuerSeed.Create(Ticker: "AAPL");
+        var repository = new EquityDailyStockPriceRepository(ctx);
+
+        var series = repository.GetByStock(stock).ToQueryString();
+        var window = repository
+            .GetByStock(stock, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 31))
+            .ToQueryString();
+        var latest = repository.GetLatestDate(stock).ToQueryString();
+
+        // EF names the already-joined listing alias; PostgreSQL carries that equality onto the
+        // price table's listing column, so the (listing, date) index serves the read either way.
+        foreach (var sql in new[] { series, window, latest })
+        {
+            sql.Should().MatchRegex("\"(EquityListingId|Id)\" = @listingId");
+            sql.Should().NotContain("\"EquitySecurity\"");
+            sql.Should().NotContain("\"EquityIssuerId\" = @");
+        }
+    }
+
+    [Fact]
+    public void GetByStock_ExactTicker_FiltersByTheOneListingIdWithoutTheSiblingProof()
+    {
+        using var ctx = CreateContext();
+        var stock = EquityIssuerSeed.Create(Ticker: "BRK-B", SecondaryTickers: ["BRK-A"]);
+
+        var sql = new EquityDailyStockPriceRepository(ctx)
+            .GetByStock(stock, "BRK-A")
+            .ToQueryString();
+
+        sql.Should().MatchRegex("\"(EquityListingId|Id)\" = @listingId");
+        sql.Should().NotContain("NOT EXISTS");
+        sql.Should().NotContain("\"EquitySecurity\"");
     }
 }

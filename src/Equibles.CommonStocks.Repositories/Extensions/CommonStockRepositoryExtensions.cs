@@ -94,23 +94,35 @@ public static class CommonStockRepositoryExtensions
         string listedTicker
     )
     {
-        var directory = repository.GetCurrentUsDirectory();
-        return directory
+        return repository
+            .GetCurrentUsDirectory()
             .Where(candidate => candidate.Presentation.Listing.Ticker == listedTicker)
             .Select(candidate => candidate.Id)
-            .Union(
-                directory
-                    .SelectMany(
-                        candidate => candidate.Securities.SelectMany(security => security.Listings),
-                        (candidate, listing) => new { candidate.Id, Listing = listing }
-                    )
-                    .Where(claim =>
-                        claim.Listing.MarketCountryCode == "US"
-                        && claim.Listing.IsReferenceListed
-                        && claim.Listing.Ticker == listedTicker
-                    )
-                    .Select(claim => claim.Id)
-            );
+            .Union(repository.GetUsReferenceTickerOwnerIds(listedTicker));
+    }
+
+    /// <summary>
+    /// Current US directory issuers holding a US reference listing with exactly this ticker,
+    /// one id per matching listing. The flat join starts from the ticker index; a per-issuer
+    /// membership test over the reference tickers walked the whole directory on every call.
+    /// </summary>
+    public static IQueryable<Guid> GetUsReferenceTickerOwnerIds(
+        this EquityIssuerRepository repository,
+        string listedTicker
+    )
+    {
+        return repository
+            .GetCurrentUsDirectory()
+            .SelectMany(
+                candidate => candidate.Securities.SelectMany(security => security.Listings),
+                (candidate, listing) => new { candidate.Id, Listing = listing }
+            )
+            .Where(claim =>
+                claim.Listing.MarketCountryCode == "US"
+                && claim.Listing.IsReferenceListed
+                && claim.Listing.Ticker == listedTicker
+            )
+            .Select(claim => claim.Id);
     }
 
     public static async Task<(EquityIssuer Stock, string Error)> ResolveByTicker(

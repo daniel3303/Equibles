@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -22,7 +23,25 @@ public class CommonStockRepositoryTickerOwnerQueryTests
 
         sql.Should().Contain("UNION");
         sql.Should().NotContain(" OR ");
-        sql.Split("\"Ticker\" = @listedTicker").Should().HaveCount(3);
+        Regex.Matches(sql, "\"Ticker\" = @listedTicker").Should().HaveCount(2);
+    }
+
+    // A membership test over each issuer's reference tickers (`IN (SELECT ... WHERE issuer)`)
+    // walked the whole directory per call; the reference branch alone must stay the flat join
+    // that starts from the ticker index.
+    [Fact]
+    public void GetUsReferenceTickerOwnerIds_IsOneFlatJoinOnTheListingTicker()
+    {
+        using var context = NewContext();
+        var repository = new EquityIssuerRepository(context);
+
+        var sql = repository.GetUsReferenceTickerOwnerIds("SPY").ToQueryString();
+
+        sql.Should().NotContain("UNION");
+        sql.Should().NotContain(" OR ");
+        sql.Should().NotContain(" IN (");
+        sql.Should().Contain("\"IsReferenceListed\"");
+        Regex.Matches(sql, "\"Ticker\" = @listedTicker").Should().HaveCount(1);
     }
 
     private static EquiblesFinancialDbContext NewContext()

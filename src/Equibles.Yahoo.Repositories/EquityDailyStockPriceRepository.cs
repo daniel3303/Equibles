@@ -68,19 +68,45 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
                     )
             );
 
+    /// <summary>
+    /// The issuer's US presentation series, filtered by the listing id the loaded graph names,
+    /// so a newest-bars read walks the (listing, date) index instead of sorting every bar the
+    /// issuer-wide join returned.
+    /// </summary>
     public IQueryable<EquityDailyStockPrice> GetByStock(EquityIssuer stock)
     {
-        return GetPrimarySeries().Where(p => p.Listing.Security.EquityIssuerId == stock.Id);
+        var listing = stock.Presentation?.Listing;
+        if (listing == null)
+            return GetPrimarySeries().Where(p => p.Listing.Security.EquityIssuerId == stock.Id);
+        if (listing.MarketCountryCode != "US")
+            return GetAllSeries().Where(_ => false);
+        var listingId = listing.Id;
+        return GetPrimarySeries().Where(p => p.Listing.Id == listingId);
     }
 
-    /// <summary>Prices for the exact listed ticker requested on a filer's row.</summary>
+    /// <summary>
+    /// Prices for the exact listed ticker requested on a filer's row. The loaded graph names the
+    /// listing; a ticker two of the filer's US listings share has no series, as before.
+    /// </summary>
     public IQueryable<EquityDailyStockPrice> GetByStock(EquityIssuer stock, string ticker)
     {
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
         if (resolvedTicker == null)
             return GetAllSeries().Where(_ => false);
 
-        return GetUsSeries(stock.Id, resolvedTicker);
+        var listings = stock.Securities.SelectMany(security => security.Listings);
+        if (stock.Presentation?.Listing is { } primary)
+            listings = listings.Append(primary);
+        var listingIds = listings
+            .Where(listing => listing.MarketCountryCode == "US" && listing.Ticker == resolvedTicker)
+            .Select(listing => listing.Id)
+            .Distinct()
+            .Take(2)
+            .ToList();
+        if (listingIds.Count != 1)
+            return GetAllSeries().Where(_ => false);
+        var listingId = listingIds[0];
+        return GetUsSeries().Where(p => p.Listing.Id == listingId);
     }
 
     public IQueryable<EquityDailyStockPrice> GetByStock(
@@ -89,12 +115,7 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
         DateOnly endDate
     )
     {
-        return GetPrimarySeries()
-            .Where(p =>
-                p.Listing.Security.EquityIssuerId == stock.Id
-                && p.Date >= startDate
-                && p.Date <= endDate
-            );
+        return GetByStock(stock).Where(p => p.Date >= startDate && p.Date <= endDate);
     }
 
     public IQueryable<EquityDailyStockPrice> GetByStock(
@@ -166,9 +187,7 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
 
     public IQueryable<DateOnly> GetLatestDate(EquityIssuer stock)
     {
-        return GetPrimarySeries()
-            .Where(p => p.Listing.Security.EquityIssuerId == stock.Id)
-            .LatestValue(p => p.Date);
+        return GetByStock(stock).LatestValue(p => p.Date);
     }
 
     public IQueryable<DateOnly> GetLatestDate(EquityIssuer stock, string ticker)
