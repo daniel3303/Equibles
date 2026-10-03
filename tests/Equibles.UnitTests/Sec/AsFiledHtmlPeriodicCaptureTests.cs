@@ -147,15 +147,15 @@ public class AsFiledHtmlPeriodicCaptureTests
 
     private static string Submission(string form, string fileName, string html) =>
         $"""
-        <SEC-DOCUMENT>
-        <DOCUMENT>
-        <TYPE>{form}
-        <SEQUENCE>1
-        <FILENAME>{fileName}
-        <TEXT>
-        {html}
-        </TEXT>
-        </DOCUMENT>
-        </SEC-DOCUMENT>
-        """;
+            <SEC-DOCUMENT>
+            <DOCUMENT>
+            <TYPE>{form}
+            <SEQUENCE>1
+            <FILENAME>{fileName}
+            <TEXT>
+            {html}
+            </TEXT>
+            </DOCUMENT>
+            </SEC-DOCUMENT>
+            """;
 }
