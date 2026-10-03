@@ -566,7 +566,10 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         snapshots
             .Should()
             .OnlyContain(s => s.TotalValue == 999_999_999, "fresh quarters are left alone");
-        snapshots.Select(s => s.ComputedAt).Should().AllSatisfy(c => c.Should().BeCloseTo(computedAt, TimeSpan.FromSeconds(1)));
+        snapshots
+            .Select(s => s.ComputedAt)
+            .Should()
+            .AllSatisfy(c => c.Should().BeCloseTo(computedAt, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]

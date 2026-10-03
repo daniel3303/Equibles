@@ -110,7 +110,10 @@ public class AumSnapshotRebuildWorker : BackgroundService
                         "Running daily AUM snapshot safety-net rebuild for last {Quarters} quarter(s)",
                         RecentQuartersToRebuild
                     );
-                    await _refreshService.RebuildRecentAsync(RecentQuartersToRebuild, stoppingToken);
+                    await _refreshService.RebuildRecentAsync(
+                        RecentQuartersToRebuild,
+                        stoppingToken
+                    );
                 }
             }
             catch (OperationCanceledException)
@@ -181,7 +184,11 @@ public class AumSnapshotRebuildWorker : BackgroundService
     }
 
     // Wake when the oldest recent rebuild turns a cycle old, never earlier than now.
-    internal static TimeSpan NextCycleDelay(DateTime rebuiltAt, DateTime now, TimeSpan sleepInterval)
+    internal static TimeSpan NextCycleDelay(
+        DateTime rebuiltAt,
+        DateTime now,
+        TimeSpan sleepInterval
+    )
     {
         var due = rebuiltAt + sleepInterval - now;
         return due > TimeSpan.Zero ? due : TimeSpan.Zero;

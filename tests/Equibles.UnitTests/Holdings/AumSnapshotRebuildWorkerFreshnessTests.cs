@@ -83,8 +83,14 @@ public class AumSnapshotRebuildWorkerFreshnessTests
     {
         var sleep = TimeSpan.FromHours(24);
 
-        AumSnapshotRebuildWorker.NextCycleDelay(Now.AddHours(-19), Now, sleep).Should().Be(TimeSpan.FromHours(5));
-        AumSnapshotRebuildWorker.NextCycleDelay(Now.AddHours(-25), Now, sleep).Should().Be(TimeSpan.Zero);
+        AumSnapshotRebuildWorker
+            .NextCycleDelay(Now.AddHours(-19), Now, sleep)
+            .Should()
+            .Be(TimeSpan.FromHours(5));
+        AumSnapshotRebuildWorker
+            .NextCycleDelay(Now.AddHours(-25), Now, sleep)
+            .Should()
+            .Be(TimeSpan.Zero);
     }
 
     // The window must stay inside the sleep, or a long-lived process would alternate skip and
