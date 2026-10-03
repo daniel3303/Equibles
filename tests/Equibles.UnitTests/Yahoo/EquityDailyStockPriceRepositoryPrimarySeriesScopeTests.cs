@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
 using Equibles.TestSupport;
 using Equibles.Yahoo.Data;
@@ -38,6 +39,57 @@ public class EquityDailyStockPriceRepositoryPrimarySeriesScopeTests
         byVenueListing.Should().Be(1);
         venueIssuerLevel.Should().Be(0);
         usIssuerLevel.Should().Be(1);
+    }
+
+    // The exact-ticker read names one listing from the loaded graph: the secondary series
+    // never falls through to the primary, and a ticker two of the filer's US listings share
+    // keeps answering with no series.
+    [Fact]
+    public async Task GetByStock_ExactTicker_ReadsTheOneListingAndRefusesASharedTicker()
+    {
+        await using var db = NewDb();
+        EquityIssuer filer = EquityIssuerSeed.Create(
+            Ticker: "BRK-B",
+            Name: "Berkshire Hathaway Inc.",
+            SecondaryTickers: ["BRK-A"]
+        );
+        var primary = filer.Presentation.Listing;
+        var secondary = filer
+            .Securities.SelectMany(security => security.Listings)
+            .Single(listing => listing.Ticker == "BRK-A");
+        db.Add(filer);
+        db.AddRange(Row(primary, Date, "BRK-B"), Row(secondary, Date, "BRK-A"));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var repo = new EquityDailyStockPriceRepository(db);
+
+        var primaryRows = await repo.GetByStock(filer).Select(p => p.SourceTicker).ToListAsync();
+        var secondaryRows = await repo.GetByStock(filer, "BRK-A")
+            .Select(p => p.SourceTicker)
+            .ToListAsync();
+        var latest = await repo.GetLatestDate(filer).ToListAsync();
+
+        var duplicate = new EquityListing
+        {
+            EquitySecurityId = secondary.EquitySecurityId,
+            Ticker = "BRK-A",
+            MarketCountryCode = "US",
+            MarketIdentifierCode = "XNAS",
+            IsDirectoryListed = true,
+        };
+        db.Add(duplicate);
+        db.Add(Row(duplicate, Date, "BRK-A"));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var reloaded = await new EquityIssuerRepository(db)
+            .GetAll()
+            .SingleAsync(issuer => issuer.Id == filer.Id);
+        var shared = await repo.GetByStock(reloaded, "BRK-A").CountAsync();
+
+        primaryRows.Should().Equal("BRK-B");
+        secondaryRows.Should().Equal("BRK-A");
+        latest.Should().Equal(Date);
+        shared.Should().Be(0);
     }
 
     [Fact]
