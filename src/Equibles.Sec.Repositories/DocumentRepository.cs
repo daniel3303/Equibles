@@ -143,20 +143,15 @@ public class DocumentRepository : BaseRepository<Document>
     }
 
     /// <summary>
-    /// The as-filed HTML backfill work-set: EDGAR-sourced 8-K documents whose stitched as-filed
-    /// HTML is below the current builder version (<see cref="Document.AsFiledHtmlBuilderVersion"/>)
-    /// and still under the retry ceiling. Scoped to 8-Ks because that's where the linked exhibits
-    /// (the Exhibit 99.1 press release) and the broken citations live; widen the type set to extend
-    /// coverage. A document qualifies only when it came from an EDGAR filing (the accession is
-    /// stored or recoverable from the submission URL) and its issuer has a CIK, so the backfill
-    /// can re-fetch the submission to stitch. This is the single definition of "pending as-filed
-    /// HTML" shared by the worker and the backoffice dashboard metric.
+    /// Supported SEC filings whose retained originals are below the current builder version
+    /// and under the retry ceiling. Shared by the worker and the backoffice pending metric.
+    /// A known CIK and a stored or recoverable accession are required for recapture.
     /// </summary>
     public IQueryable<Document> GetPendingAsFiledHtml()
     {
         return GetAll()
             .Where(d =>
-                (d.DocumentType == DocumentType.EightK || d.DocumentType == DocumentType.EightKa)
+                AsFiledHtmlDocumentTypes.Supported.Contains(d.DocumentType)
                 && d.AsFiledHtmlVersion < Document.AsFiledHtmlBuilderVersion
                 && d.AsFiledHtmlAttempts < Document.MaxAsFiledHtmlAttempts
                 && (
@@ -164,6 +159,7 @@ public class DocumentRepository : BaseRepository<Document>
                     || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
                 )
                 && d.Issuer.Cik != null
+                && d.Issuer.Cik != ""
             );
     }
 

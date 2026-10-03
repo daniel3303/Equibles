@@ -312,8 +312,8 @@ public static class SecDocumentEnvelopeParser
     /// so it costs no extra EDGAR round-trip.
     /// </summary>
     /// <returns>
-    /// True and the stitched HTML when the filing carries at least one displayable exhibit;
-    /// false when there's nothing to stitch (single document, or no displayable exhibit).
+    /// True for a periodic report's HTML primary or a primary with a displayable exhibit;
+    /// false when the submission has neither supported original shape.
     /// </returns>
     public static bool TryBuildAsFiledHtml(
         string envelope,
@@ -368,14 +368,21 @@ public static class SecDocumentEnvelopeParser
             docs.Add(new AsFiledBlock(blockFileName, blockType, body, isPrimary, isExhibit));
         }
 
-        // Nothing to stitch unless there's a primary AND at least one exhibit to fold in.
-        if (docs.Count < 2 || !docs.Exists(d => d.IsExhibit))
+        var primary =
+            docs.FirstOrDefault(d => d.IsPrimary && !d.IsExhibit)
+            ?? docs.FirstOrDefault(d => !d.IsExhibit);
+        if (primary == null)
             return false;
 
-        // EDGAR lists the primary document first; if none was flagged (e.g. a backfill that
-        // doesn't know the primary's filename), treat the first displayable block as primary.
-        if (!docs.Exists(d => d.IsPrimary))
-            docs[0].IsPrimary = true;
+        // Periodic reports need their referenced images even when no HTML exhibit is attached.
+        var periodicPrimary = AsFiledHtmlDocumentTypes.Periodic.Contains(
+            DocumentType.FromDisplayName(primary.Type)
+        );
+        if (!periodicPrimary && (docs.Count < 2 || !docs.Exists(d => d.IsExhibit)))
+            return false;
+
+        // A backfill may know only the accession; EDGAR puts the primary form before exhibits.
+        primary.IsPrimary = true;
 
         // Primary leads, exhibits follow in envelope order. Assign stable section ids and map
         // each filename to its section so links into the filing can target it.

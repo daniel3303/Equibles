@@ -203,11 +203,11 @@ public class Document
     // Exhibit 99.1 press release — so a citation grounded in an exhibit can be pinpointed and the
     // cover page's exhibit links resolve in-page. Building it as its own artifact keeps display
     // enrichment from ever perturbing fact extraction. Only populated for filings that carry a
-    // displayable exhibit (currently 8-Ks); null otherwise.
+    // displayable exhibit or a periodic report; null otherwise.
 
     /// <summary>
     /// The file holding the gzip-compressed stitched as-filed HTML, or null when none was built
-    /// (no displayable exhibit, or not yet processed). The pre-compression size is
+    /// (no displayable supported original, or not yet processed). The pre-compression size is
     /// <see cref="AsFiledHtmlUncompressedSize"/>.
     /// </summary>
     public Guid? AsFiledHtmlContentId { get; set; }
@@ -218,9 +218,9 @@ public class Document
 
     /// <summary>
     /// Version of the as-filed HTML stitcher that last processed this document. 0 = never built.
-    /// The backfill selects 8-K documents whose version is below the builder's current one, so
+    /// The backfill selects supported SEC documents whose version is below the builder's current one, so
     /// bumping the builder version re-stitches the corpus (same version-stamp redrain as the
-    /// XBRL-facts extractor). A filing examined and found to carry no displayable exhibit is
+    /// XBRL-facts extractor). A filing examined and found to carry no displayable original is
     /// stamped current with a null <see cref="AsFiledHtmlContentId"/> so it isn't re-fetched.
     /// </summary>
     public int AsFiledHtmlVersion { get; set; }
