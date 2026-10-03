@@ -91,6 +91,10 @@ public class AumSnapshotRebuildWorkerFreshnessTests
             .NextCycleDelay(Now.AddHours(-25), Now, sleep)
             .Should()
             .Be(TimeSpan.Zero);
+        AumSnapshotRebuildWorker
+            .NextCycleDelay(Now, Now, sleep)
+            .Should()
+            .Be(sleep, "no quarters on file sleeps a full cycle");
     }
 
     // The window must stay inside the sleep, or a long-lived process would alternate skip and
