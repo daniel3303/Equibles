@@ -15,6 +15,15 @@ public interface ISecEdgarClient
     Task<List<FundClassTicker>> GetFundClassTickers();
     Task<string> GetEntityType(string cik);
     Task<CompanyMetadata> GetCompanyMetadata(string cik);
+
+    /// <summary>
+    /// Returns SEC-reported former names from the requested registrant's submissions payload.
+    /// Rejects a missing or conflicting payload CIK; dates retain SEC's original spelling.
+    /// </summary>
+    Task<List<CompanyFormerName>> GetFormerCompanyNames(
+        string cik,
+        CancellationToken cancellationToken = default
+    );
     Task<List<FilingData>> GetCompanyFilings(
         string cik,
         DocumentTypeFilter? documentType = null,
