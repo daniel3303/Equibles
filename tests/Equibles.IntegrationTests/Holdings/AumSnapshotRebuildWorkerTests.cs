@@ -573,6 +573,45 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ExecuteAsync_RecentSnapshotsFreshButDirty_LeavesThemToTheDrain()
+    {
+        // Imports re-mark every recent quarter within minutes of each drain, so a boot that
+        // read dirty as stale rebuilt on every deploy; the drain owns the flag and clears it.
+        await SeedTwoQuarters();
+        var computedAt = DateTime.UtcNow.AddHours(-1);
+        await SeedFullCoverage(computedAt);
+        var dirtyAt = DateTime.UtcNow.AddMinutes(-5);
+        await using (var mark = FreshContext())
+        {
+            await mark.Set<AumQuarterlySnapshot>()
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.DirtyAt, dirtyAt));
+        }
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        await worker.StopAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var snapshots = await read.Set<AumQuarterlySnapshot>().ToListAsync();
+        snapshots.Should().HaveCount(2);
+        snapshots
+            .Should()
+            .OnlyContain(s => s.TotalValue == 999_999_999, "dirty quarters belong to the drain");
+        snapshots
+            .Select(s => s.DirtyAt)
+            .Should()
+            .AllSatisfy(d => d.Should().BeCloseTo(dirtyAt, TimeSpan.FromSeconds(1)));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_RecentSnapshotsStale_RebuildsThem()
     {
         await SeedTwoQuarters();
