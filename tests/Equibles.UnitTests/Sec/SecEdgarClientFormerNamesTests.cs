@@ -119,10 +119,8 @@ public class SecEdgarClientFormerNamesTests
                 .Build()
         );
 
-    private sealed class SubmissionsHandler(
-        string body,
-        HttpStatusCode status = HttpStatusCode.OK
-    ) : HttpMessageHandler
+    private sealed class SubmissionsHandler(string body, HttpStatusCode status = HttpStatusCode.OK)
+        : HttpMessageHandler
     {
         public List<string> Paths { get; } = [];
 

@@ -327,10 +327,7 @@ public class SecEdgarClient : ISecEdgarClient
             cancellationToken: cancellationToken
         );
         var response = JsonConvert.DeserializeObject<SecApiResponse>(content);
-        if (
-            string.IsNullOrWhiteSpace(response?.Cik)
-            || FormatCik(response.Cik) != formattedCik
-        )
+        if (string.IsNullOrWhiteSpace(response?.Cik) || FormatCik(response.Cik) != formattedCik)
             throw new InvalidDataException("SEC submissions do not identify the requested CIK");
 
         return response.FormerNames ?? [];
