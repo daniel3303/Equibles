@@ -145,7 +145,8 @@ public class AsFiledHtmlPeriodicCaptureTests
         SecDocumentEnvelopeParser.TryBuildAsFiledHtml(envelope, null, out _).Should().BeFalse();
     }
 
-    private static string Submission(string form, string fileName, string html) => $"""
+    private static string Submission(string form, string fileName, string html) =>
+        $"""
         <SEC-DOCUMENT>
         <DOCUMENT>
         <TYPE>{form}
