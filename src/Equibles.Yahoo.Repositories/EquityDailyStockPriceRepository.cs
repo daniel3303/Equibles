@@ -78,8 +78,6 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
         var listing = stock.Presentation?.Listing;
         if (listing == null)
             return GetPrimarySeries().Where(p => p.Listing.Security.EquityIssuerId == stock.Id);
-        if (listing.MarketCountryCode != "US")
-            return GetAllSeries().Where(_ => false);
         var listingId = listing.Id;
         return GetPrimarySeries().Where(p => p.Listing.Id == listingId);
     }
