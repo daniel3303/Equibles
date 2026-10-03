@@ -291,8 +291,8 @@ public class AumSnapshotDrainWorker : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Losing the re-arm only delays this quarter until its next import
-            // event or the daily safety-net rebuild; never abort the drain loop.
+            // Losing the re-arm only delays this quarter until the lease expires past
+            // the cooldown or its next import event; never abort the drain loop.
             _logger.LogWarning(
                 ex,
                 "Failed to re-arm DirtyAt for {ReportDate} after a failed rebuild",

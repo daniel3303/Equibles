@@ -8,7 +8,7 @@ using NSubstitute;
 namespace Equibles.UnitTests.Holdings;
 
 // The daily safety-net cycle restarts on every boot; this pins the rule that lets a boot
-// skip it (every recent quarter rebuilt inside the window and none dirty) and the wake-up
+// skip it (every recent quarter rebuilt inside the window, dirty or not) and the wake-up
 // that keeps the cadence daily afterwards.
 public class AumSnapshotRebuildWorkerFreshnessTests
 {
@@ -62,10 +62,28 @@ public class AumSnapshotRebuildWorkerFreshnessTests
         oldest.Should().BeNull();
     }
 
+    // A dirty quarter belongs to the drain, which clears the flag after its cooldown; the
+    // safety-net rebuild never clears it.
     [Fact]
-    public void OldestFreshRebuild_DirtyQuarter_Rebuilds()
+    public void OldestFreshRebuild_DirtyButRecentlyRebuiltQuarter_LeavesItToTheDrain()
     {
         var dirty = Snapshot(Q4, Now.AddHours(-1));
+        dirty.DirtyAt = Now.AddMinutes(-5);
+
+        var oldest = AumSnapshotRebuildWorker.OldestFreshRebuild(
+            [Q4, Q3],
+            [dirty, Snapshot(Q3, Now.AddHours(-2))],
+            Now,
+            Window
+        );
+
+        oldest.Should().Be(Now.AddHours(-2));
+    }
+
+    [Fact]
+    public void OldestFreshRebuild_DirtyAndStaleQuarter_Rebuilds()
+    {
+        var dirty = Snapshot(Q4, Now.AddHours(-21));
         dirty.DirtyAt = Now.AddMinutes(-5);
 
         var oldest = AumSnapshotRebuildWorker.OldestFreshRebuild(
@@ -76,6 +94,24 @@ public class AumSnapshotRebuildWorkerFreshnessTests
         );
 
         oldest.Should().BeNull();
+    }
+
+    // A quarter's first import inserts a zero-aggregate stub stamped at its event time; the
+    // drain rebuilds it after the cooldown whether or not a boot happens in between.
+    [Fact]
+    public void OldestFreshRebuild_ConsumerStub_WaitsForTheDrain()
+    {
+        var stub = Snapshot(Q4, Now.AddMinutes(-10));
+        stub.DirtyAt = stub.ComputedAt;
+
+        var oldest = AumSnapshotRebuildWorker.OldestFreshRebuild(
+            [Q4, Q3],
+            [stub, Snapshot(Q3, Now.AddHours(-1))],
+            Now,
+            Window
+        );
+
+        oldest.Should().Be(Now.AddHours(-1));
     }
 
     [Fact]

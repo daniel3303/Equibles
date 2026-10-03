@@ -28,9 +28,12 @@ namespace Equibles.Holdings.HostedService;
 ///
 /// Every boot restarts the daily cycle, so a deploy-heavy day would pay the
 /// recent-quarter rebuild once per deploy. A cycle is skipped while every
-/// recent quarter was rebuilt within <see cref="FreshnessWindow"/> and none
-/// is dirty, and the next cycle is due when the oldest of those rebuilds turns
+/// recent quarter was rebuilt within <see cref="FreshnessWindow"/>, and the
+/// next cycle is due when the oldest of those rebuilds turns
 /// <see cref="SleepInterval"/> old, so the daily cadence survives restarts.
+/// The dirty flag plays no part in that decision: the drain owns dirty
+/// quarters through its lease and cooldown, and this rebuild never clears the
+/// flag.
 /// </summary>
 public class AumSnapshotRebuildWorker : BackgroundService
 {
@@ -159,8 +162,9 @@ public class AumSnapshotRebuildWorker : BackgroundService
         return OldestFreshRebuild(recentQuarters, snapshots, DateTime.UtcNow, FreshnessWindow);
     }
 
-    // The oldest recent rebuild when every recent quarter is fresh and clean; null means the
-    // cycle must rebuild. No quarters on file counts as fresh, as the old empty rebuild did.
+    // The oldest recent rebuild when every recent quarter is fresh; null means the cycle must
+    // rebuild. No quarters on file counts as fresh, as the old empty rebuild did; a dirty quarter
+    // or a consumer stub is judged by ComputedAt alone, because the drain owns the flag.
     internal static DateTime? OldestFreshRebuild(
         IReadOnlyCollection<DateOnly> recentQuarters,
         IReadOnlyCollection<AumQuarterlySnapshot> snapshots,
@@ -173,7 +177,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
         foreach (var quarter in recentQuarters)
         {
             var fresh = snapshots.FirstOrDefault(s =>
-                s.ReportDate == quarter && s.DirtyAt == null && s.ComputedAt >= threshold
+                s.ReportDate == quarter && s.ComputedAt >= threshold
             );
             if (fresh == null)
             {
