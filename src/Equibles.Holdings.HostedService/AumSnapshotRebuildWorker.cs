@@ -163,8 +163,8 @@ public class AumSnapshotRebuildWorker : BackgroundService
     }
 
     // The oldest recent rebuild when every recent quarter is fresh; null means the cycle must
-    // rebuild. No quarters on file counts as fresh, as the old empty rebuild did, and so does
-    // a dirty quarter or a consumer stub, because the drain rebuilds those after its cooldown.
+    // rebuild. No quarters on file counts as fresh, as the old empty rebuild did; a dirty quarter
+    // or a consumer stub is judged by ComputedAt alone, because the drain owns the flag.
     internal static DateTime? OldestFreshRebuild(
         IReadOnlyCollection<DateOnly> recentQuarters,
         IReadOnlyCollection<AumQuarterlySnapshot> snapshots,
