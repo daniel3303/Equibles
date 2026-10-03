@@ -272,7 +272,11 @@ public class SecEdgarClient : ISecEdgarClient
     // a different company: drop the previous company's cached pages first so the
     // cache stays bounded to one filer. logCacheHit preserves the cache-hit log
     // line that GetCompanyFilings emitted before this was extracted.
-    private async Task<string> GetCachedSubmissions(string url, bool logCacheHit = false)
+    private async Task<string> GetCachedSubmissions(
+        string url,
+        bool logCacheHit = false,
+        CancellationToken cancellationToken = default
+    )
     {
         if (_submissionsCacheMainUrl != url)
         {
@@ -280,13 +284,18 @@ public class SecEdgarClient : ISecEdgarClient
             _submissionsCacheMainUrl = url;
         }
 
-        return await GetCachedSubmissionsArtifact(url, logCacheHit);
+        return await GetCachedSubmissionsArtifact(url, logCacheHit, cancellationToken);
     }
 
     // Returns any submissions artifact (main JSON or a paginated archive page)
     // within the current company scope, fetching and caching on first use.
-    private async Task<string> GetCachedSubmissionsArtifact(string url, bool logCacheHit = false)
+    private async Task<string> GetCachedSubmissionsArtifact(
+        string url,
+        bool logCacheHit = false,
+        CancellationToken cancellationToken = default
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_submissionsCache.TryGetValue(url, out var cached))
         {
             if (logCacheHit)
@@ -294,9 +303,31 @@ public class SecEdgarClient : ISecEdgarClient
             return cached;
         }
 
-        var content = await FetchStringAsync(url);
+        var content = await FetchStringAsync(url, cancellationToken);
         _submissionsCache[url] = content;
         return content;
+    }
+
+    public async Task<List<CompanyFormerName>> GetFormerCompanyNames(
+        string cik,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(cik) || cik.Length > 10
+            || cik.Any(c => c is < '0' or > '9') || cik.All(c => c == '0'))
+            throw new ArgumentException("A numeric SEC CIK is required", nameof(cik));
+
+        var formattedCik = FormatCik(cik);
+        var content = await GetCachedSubmissions(
+            BuildUrl($"/submissions/CIK{formattedCik}.json"),
+            cancellationToken: cancellationToken
+        );
+        var response = JsonConvert.DeserializeObject<SecApiResponse>(content);
+        if (string.IsNullOrWhiteSpace(response?.Cik)
+            || FormatCik(response.Cik) != formattedCik)
+            throw new InvalidDataException("SEC submissions do not identify the requested CIK");
+
+        return response.FormerNames ?? [];
     }
 
     public async Task<List<FilingData>> GetCompanyFilings(

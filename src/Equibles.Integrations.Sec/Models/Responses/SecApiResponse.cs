@@ -35,6 +35,9 @@ internal class SecApiResponse
     [JsonProperty("website")]
     public string Website { get; set; }
 
+    [JsonProperty("formerNames")]
+    public List<CompanyFormerName> FormerNames { get; set; } = [];
+
     [JsonProperty("filings")]
     public FilingsContainer Filings { get; set; } = new();
 }
