@@ -575,8 +575,8 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     [Fact]
     public async Task ExecuteAsync_RecentSnapshotsFreshButDirty_LeavesThemToTheDrain()
     {
-        // Imports re-mark every recent quarter within minutes of each drain, so a boot that
-        // read dirty as stale rebuilt on every deploy; the drain owns the flag and clears it.
+        // Dirty quarters belong to the drain; a boot inside the window leaves them and their
+        // flag alone.
         await SeedTwoQuarters();
         var computedAt = DateTime.UtcNow.AddHours(-1);
         await SeedFullCoverage(computedAt);

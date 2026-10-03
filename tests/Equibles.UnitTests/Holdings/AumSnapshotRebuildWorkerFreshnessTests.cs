@@ -62,9 +62,8 @@ public class AumSnapshotRebuildWorkerFreshnessTests
         oldest.Should().BeNull();
     }
 
-    // In filing season every recent quarter is re-marked within minutes of each drain, and
-    // the safety-net rebuild never clears the flag, so a guard that read dirty as stale
-    // rebuilt on every boot and the drain then repeated the work after its cooldown.
+    // A dirty quarter belongs to the drain, which clears the flag after its cooldown; the
+    // safety-net rebuild never clears it.
     [Fact]
     public void OldestFreshRebuild_DirtyButRecentlyRebuiltQuarter_LeavesItToTheDrain()
     {
