@@ -14,7 +14,7 @@ namespace Equibles.Holdings.HostedService;
 /// (<see cref="Consumers.Filings13FImportedConsumer"/> marks dirty,
 /// <see cref="AumSnapshotDrainWorker"/> rebuilds after cooldown). This
 /// worker rebuilds the <see cref="RecentQuartersToRebuild"/> most recent
-/// quarters unconditionally once a day — a belt-and-suspenders pass that
+/// quarters once a day — a belt-and-suspenders pass that
 /// reconciles snapshots even if a bus message was lost AND the dirty flag
 /// was never set. Older quarters are effectively frozen: 13F amendments
 /// after a few quarters are rare and trigger their own consumer event
@@ -98,11 +98,12 @@ public class AumSnapshotRebuildWorker : BackgroundService
             {
                 if (await LoadOldestFreshRebuild(stoppingToken) is { } rebuiltAt)
                 {
-                    _logger.LogInformation(
-                        "Recent holdings snapshots were rebuilt within {Window}; skipping this safety-net cycle",
-                        FreshnessWindow
-                    );
                     delay = NextCycleDelay(rebuiltAt, DateTime.UtcNow, SleepInterval);
+                    _logger.LogInformation(
+                        "Recent holdings snapshots were rebuilt within {Window}; skipping this safety-net cycle, next in {Delay}",
+                        FreshnessWindow,
+                        delay
+                    );
                 }
                 else
                 {
