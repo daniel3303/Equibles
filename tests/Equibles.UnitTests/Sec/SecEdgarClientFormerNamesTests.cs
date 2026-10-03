@@ -8,9 +8,10 @@ namespace Equibles.UnitTests.Sec;
 public class SecEdgarClientFormerNamesTests
 {
     // Identity fields recorded from data.sec.gov/submissions/CIK0000101594.json.
-    private static string RecordedIdentity => File.ReadAllText(
-        Path.Combine(AppContext.BaseDirectory, "TestAssets", "Sec", "big-sky-former-names.json")
-    );
+    private static string RecordedIdentity =>
+        File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Sec", "big-sky-former-names.json")
+        );
 
     [Fact]
     public async Task GetFormerCompanyNames_RecordedPayload_PreservesNamesAndSourceDates()
@@ -38,9 +39,9 @@ public class SecEdgarClientFormerNamesTests
         var otherIssuer = () => client.GetFormerCompanyNames("123456");
 
         await otherIssuer.Should().ThrowAsync<InvalidDataException>();
-        handler.Paths.Should().Equal(
-            "/submissions/CIK0000101594.json", "/submissions/CIK0000123456.json"
-        );
+        handler
+            .Paths.Should()
+            .Equal("/submissions/CIK0000101594.json", "/submissions/CIK0000123456.json");
     }
 
     [Theory]
@@ -107,30 +108,33 @@ public class SecEdgarClientFormerNamesTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
-    private static SecEdgarClient BuildClient(SubmissionsHandler handler) => new(
-        new HttpClient(handler),
-        NullLogger<SecEdgarClient>.Instance,
-        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>
-        {
-            ["Sec:ContactEmail"] = "test@example.com"
-        }).Build()
-    );
+    private static SecEdgarClient BuildClient(SubmissionsHandler handler) =>
+        new(
+            new HttpClient(handler),
+            NullLogger<SecEdgarClient>.Instance,
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(
+                    new Dictionary<string, string> { ["Sec:ContactEmail"] = "test@example.com" }
+                )
+                .Build()
+        );
 
     private sealed class SubmissionsHandler(
-        string body, HttpStatusCode status = HttpStatusCode.OK
+        string body,
+        HttpStatusCode status = HttpStatusCode.OK
     ) : HttpMessageHandler
     {
         public List<string> Paths { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
         )
         {
             Paths.Add(request.RequestUri.AbsolutePath);
-            return Task.FromResult(new HttpResponseMessage(status)
-            {
-                Content = new StringContent(body)
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(status) { Content = new StringContent(body) }
+            );
         }
     }
 }

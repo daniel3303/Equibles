@@ -313,8 +313,12 @@ public class SecEdgarClient : ISecEdgarClient
         CancellationToken cancellationToken = default
     )
     {
-        if (string.IsNullOrWhiteSpace(cik) || cik.Length > 10
-            || cik.Any(c => c is < '0' or > '9') || cik.All(c => c == '0'))
+        if (
+            string.IsNullOrWhiteSpace(cik)
+            || cik.Length > 10
+            || cik.Any(c => c is < '0' or > '9')
+            || cik.All(c => c == '0')
+        )
             throw new ArgumentException("A numeric SEC CIK is required", nameof(cik));
 
         var formattedCik = FormatCik(cik);
@@ -323,8 +327,10 @@ public class SecEdgarClient : ISecEdgarClient
             cancellationToken: cancellationToken
         );
         var response = JsonConvert.DeserializeObject<SecApiResponse>(content);
-        if (string.IsNullOrWhiteSpace(response?.Cik)
-            || FormatCik(response.Cik) != formattedCik)
+        if (
+            string.IsNullOrWhiteSpace(response?.Cik)
+            || FormatCik(response.Cik) != formattedCik
+        )
             throw new InvalidDataException("SEC submissions do not identify the requested CIK");
 
         return response.FormerNames ?? [];
