@@ -14,7 +14,7 @@ namespace Equibles.Holdings.HostedService;
 /// (<see cref="Consumers.Filings13FImportedConsumer"/> marks dirty,
 /// <see cref="AumSnapshotDrainWorker"/> rebuilds after cooldown). This
 /// worker rebuilds the <see cref="RecentQuartersToRebuild"/> most recent
-/// quarters unconditionally once a day — a belt-and-suspenders pass that
+/// quarters once a day — a belt-and-suspenders pass that
 /// reconciles snapshots even if a bus message was lost AND the dirty flag
 /// was never set. Older quarters are effectively frozen: 13F amendments
 /// after a few quarters are rare and trigger their own consumer event
@@ -25,6 +25,12 @@ namespace Equibles.Holdings.HostedService;
 /// cover every quarter present in the holdings table. The naive "snapshot
 /// tables empty" gate this replaced lost the backfill whenever the
 /// consumer beat the worker to inserting the first row.
+///
+/// Every boot restarts the daily cycle, so a deploy-heavy day would pay the
+/// recent-quarter rebuild once per deploy. A cycle is skipped while every
+/// recent quarter was rebuilt within <see cref="FreshnessWindow"/> and none
+/// is dirty, and the next cycle is due when the oldest of those rebuilds turns
+/// <see cref="SleepInterval"/> old, so the daily cadence survives restarts.
 /// </summary>
 public class AumSnapshotRebuildWorker : BackgroundService
 {
@@ -38,6 +44,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
     protected virtual TimeSpan SleepInterval => TimeSpan.FromHours(24);
     protected virtual TimeSpan BackfillCommandTimeout => TimeSpan.FromMinutes(30);
     protected virtual int RecentQuartersToRebuild => 4;
+    protected virtual TimeSpan FreshnessWindow => TimeSpan.FromHours(20);
 
     public AumSnapshotRebuildWorker(
         IServiceScopeFactory scopeFactory,
@@ -86,13 +93,29 @@ public class AumSnapshotRebuildWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var delay = SleepInterval;
             try
             {
-                _logger.LogInformation(
-                    "Running daily AUM snapshot safety-net rebuild for last {Quarters} quarter(s)",
-                    RecentQuartersToRebuild
-                );
-                await _refreshService.RebuildRecentAsync(RecentQuartersToRebuild, stoppingToken);
+                if (await LoadOldestFreshRebuild(stoppingToken) is { } rebuiltAt)
+                {
+                    delay = NextCycleDelay(rebuiltAt, DateTime.UtcNow, SleepInterval);
+                    _logger.LogInformation(
+                        "Recent holdings snapshots were rebuilt within {Window}; skipping this safety-net cycle, next in {Delay}",
+                        FreshnessWindow,
+                        delay
+                    );
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Running daily AUM snapshot safety-net rebuild for last {Quarters} quarter(s)",
+                        RecentQuartersToRebuild
+                    );
+                    await _refreshService.RebuildRecentAsync(
+                        RecentQuartersToRebuild,
+                        stoppingToken
+                    );
+                }
             }
             catch (OperationCanceledException)
             {
@@ -108,13 +131,68 @@ public class AumSnapshotRebuildWorker : BackgroundService
 
             try
             {
-                await Task.Delay(SleepInterval, stoppingToken);
+                await Task.Delay(delay, stoppingToken);
             }
             catch (OperationCanceledException)
             {
                 return;
             }
         }
+    }
+
+    // The AUM row's ComputedAt stands for the whole quarter rebuild: RebuildQuarter writes
+    // every snapshot family in one transaction, and the boot backfill above has already
+    // covered missing families.
+    private async Task<DateTime?> LoadOldestFreshRebuild(CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var recentQuarters = await InstitutionalHoldingReportDateQueries
+            .Get13FReportDates(dbContext)
+            .OrderByDescending(d => d)
+            .Take(RecentQuartersToRebuild)
+            .ToListAsync(cancellationToken);
+        var snapshots = await dbContext
+            .Set<AumQuarterlySnapshot>()
+            .Where(s => recentQuarters.Contains(s.ReportDate))
+            .ToListAsync(cancellationToken);
+        return OldestFreshRebuild(recentQuarters, snapshots, DateTime.UtcNow, FreshnessWindow);
+    }
+
+    // The oldest recent rebuild when every recent quarter is fresh and clean; null means the
+    // cycle must rebuild. No quarters on file counts as fresh, as the old empty rebuild did.
+    internal static DateTime? OldestFreshRebuild(
+        IReadOnlyCollection<DateOnly> recentQuarters,
+        IReadOnlyCollection<AumQuarterlySnapshot> snapshots,
+        DateTime now,
+        TimeSpan freshnessWindow
+    )
+    {
+        var threshold = now - freshnessWindow;
+        var rebuilds = new List<DateTime>();
+        foreach (var quarter in recentQuarters)
+        {
+            var fresh = snapshots.FirstOrDefault(s =>
+                s.ReportDate == quarter && s.DirtyAt == null && s.ComputedAt >= threshold
+            );
+            if (fresh == null)
+            {
+                return null;
+            }
+            rebuilds.Add(fresh.ComputedAt);
+        }
+        return rebuilds.Count == 0 ? now : rebuilds.Min();
+    }
+
+    // Wake when the oldest recent rebuild turns a cycle old, never earlier than now.
+    internal static TimeSpan NextCycleDelay(
+        DateTime rebuiltAt,
+        DateTime now,
+        TimeSpan sleepInterval
+    )
+    {
+        var due = rebuiltAt + sleepInterval - now;
+        return due > TimeSpan.Zero ? due : TimeSpan.Zero;
     }
 
     private async Task TryBackfillIfNeeded(CancellationToken cancellationToken)
