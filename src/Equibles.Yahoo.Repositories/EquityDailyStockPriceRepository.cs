@@ -69,9 +69,8 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
             );
 
     /// <summary>
-    /// The issuer's US presentation series, filtered by the listing id the loaded graph names,
-    /// so a newest-bars read walks the (listing, date) index instead of sorting every bar the
-    /// issuer-wide join returned.
+    /// The issuer's US presentation series, filtered by the listing id the loaded graph names so
+    /// a newest-bars read walks the (listing, date) index.
     /// </summary>
     public IQueryable<EquityDailyStockPrice> GetByStock(EquityIssuer stock)
     {
@@ -83,8 +82,8 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     }
 
     /// <summary>
-    /// Prices for the exact listed ticker requested on a filer's row. The loaded graph names the
-    /// listing; a ticker two of the filer's US listings share has no series, as before.
+    /// Prices for the exact listed ticker requested on a filer's row, read from the one US listing
+    /// the loaded graph names; a ticker two of the filer's US listings share has no series.
     /// </summary>
     public IQueryable<EquityDailyStockPrice> GetByStock(EquityIssuer stock, string ticker)
     {

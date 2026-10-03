@@ -102,9 +102,8 @@ public static class CommonStockRepositoryExtensions
     }
 
     /// <summary>
-    /// Current US directory issuers holding a US reference listing with exactly this ticker,
-    /// one id per matching listing. The flat join starts from the ticker index; a per-issuer
-    /// membership test over the reference tickers walked the whole directory on every call.
+    /// Current US directory issuers holding a US reference listing with exactly this ticker, one
+    /// id per issuer. A flat join from the ticker index keeps the lookup off the whole directory.
     /// </summary>
     public static IQueryable<Guid> GetUsReferenceTickerOwnerIds(
         this EquityIssuerRepository repository,
@@ -122,7 +121,8 @@ public static class CommonStockRepositoryExtensions
                 && claim.Listing.IsReferenceListed
                 && claim.Listing.Ticker == listedTicker
             )
-            .Select(claim => claim.Id);
+            .Select(claim => claim.Id)
+            .Distinct();
     }
 
     public static async Task<(EquityIssuer Stock, string Error)> ResolveByTicker(

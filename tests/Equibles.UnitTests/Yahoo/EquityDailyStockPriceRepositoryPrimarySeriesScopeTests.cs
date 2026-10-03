@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
 using Equibles.TestSupport;
 using Equibles.Yahoo.Data;
@@ -68,16 +69,22 @@ public class EquityDailyStockPriceRepositoryPrimarySeriesScopeTests
             .ToListAsync();
         var latest = await repo.GetLatestDate(filer).ToListAsync();
 
-        var duplicate = new EquityListing
-        {
-            Security = secondary.Security,
-            EquitySecurityId = secondary.EquitySecurityId,
-            Ticker = "BRK-A",
-            MarketCountryCode = "US",
-            IsDirectoryListed = true,
-        };
-        secondary.Security.Listings.Add(duplicate);
-        var shared = await repo.GetByStock(filer, "BRK-A").CountAsync();
+        db.Add(
+            new EquityListing
+            {
+                EquitySecurityId = secondary.EquitySecurityId,
+                Ticker = "BRK-A",
+                MarketCountryCode = "US",
+                MarketIdentifierCode = "XNAS",
+                IsDirectoryListed = true,
+            }
+        );
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var reloaded = await new EquityIssuerRepository(db)
+            .GetAll()
+            .SingleAsync(issuer => issuer.Id == filer.Id);
+        var shared = await repo.GetByStock(reloaded, "BRK-A").CountAsync();
 
         primaryRows.Should().Equal("BRK-B");
         secondaryRows.Should().Equal("BRK-A");
