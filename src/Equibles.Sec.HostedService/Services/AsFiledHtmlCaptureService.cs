@@ -16,15 +16,14 @@ namespace Equibles.Sec.HostedService.Services;
 /// already-fetched submission envelope — see <see cref="SecDocumentEnvelopeParser.TryBuildAsFiledHtml"/>.
 /// Then downloads the images that page references (8-K deck slides, logos) from EDGAR so the
 /// viewer can serve them from our own origin instead of hotlinking SEC (which 403s browsers).
-/// Only the forms that carry the linked exhibits citations break on are stitched today (8-Ks,
-/// where the Exhibit 99.1 press release lives); other forms are skipped (<see cref="AppliesTo"/>).
+/// Periodic reports also retain their primary HTML and images, including reports without exhibits.
 /// The HTML stitch costs no extra EDGAR round-trip; the image download does one fetch per image,
 /// through the shared rate-limited SEC client.
 /// </summary>
 public class AsFiledHtmlCaptureService
 {
     /// <summary>
-    /// Stitcher version stamped onto a processed document. The backfill re-stitches 8-K
+    /// Stitcher version stamped onto a processed document. The backfill re-stitches supported
     /// documents whose <c>AsFiledHtmlVersion</c> is below this, so bumping it after a stitcher
     /// change reprocesses the corpus (same version-stamp redrain as the XBRL-facts extractor).
     /// Forwards to <see cref="Document.AsFiledHtmlBuilderVersion"/> — the single source of truth
@@ -53,14 +52,14 @@ public class AsFiledHtmlCaptureService
         _logger = logger;
     }
 
-    /// <summary>The document types we stitch exhibits for. Widen this to extend coverage.</summary>
+    /// <summary>The same form scope is used by live ingestion and the original-document backfill.</summary>
     public static bool AppliesTo(DocumentType documentType) =>
-        documentType == DocumentType.EightK || documentType == DocumentType.EightKa;
+        AsFiledHtmlDocumentTypes.Supported.Contains(documentType);
 
     /// <summary>
     /// Builds the as-filed HTML from a full submission envelope and downloads the images it
     /// references. Returns <see cref="AsFiledHtmlCaptureResult.None"/> when capture is disabled or
-    /// the filing carries no displayable exhibit. Throws on a malformed envelope — the caller
+    /// the filing has no displayable supported original. Throws on a malformed envelope — the caller
     /// decides whether that's a swallowed best-effort miss (live ingest) or a counted retry
     /// (backfill). A per-image download failure is swallowed (the image is skipped), so one bad
     /// asset never loses the stitched page.

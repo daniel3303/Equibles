@@ -30,6 +30,14 @@
 
 How the `*.HostedService` workers ingest data, how the `Equibles.Integrations.*` HTTP clients talk to upstream APIs, and how the deduplication ledgers keep re-runs idempotent.
 
+## Retained SEC originals
+
+- Live capture and the original-document backfill share `AsFiledHtmlDocumentTypes.Supported`: 8-K, 10-K, 10-Q, 20-F, 40-F, 6-K and their amendments.
+- Periodic reports retain their primary HTML and referenced images even without an HTML exhibit; 8-K stitching still requires a displayable exhibit.
+- The backfill selects supported reports below the current builder version, with a known CIK, a stored or recoverable accession, and fewer than five failed attempts.
+- Reporting dates do not limit the backfill; completed captures stay complete when a new form is added to the supported set.
+- Original capture preserves the separate XBRL envelope and derived financial facts; image requests retain the shared SEC pacing and existing count/byte limits.
+
 ## Two-layer shape
 
 - **HostedService** — orchestration. Inherits `BaseScraperWorker`, decides what to fetch and when, persists rows through repositories / managers.
