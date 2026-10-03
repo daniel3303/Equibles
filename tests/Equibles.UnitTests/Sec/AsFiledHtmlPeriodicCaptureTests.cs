@@ -39,7 +39,12 @@ public class AsFiledHtmlPeriodicCaptureTests
         var client = Substitute.For<ISecEdgarClient>();
         byte[] image = [1, 2, 3];
         client
-            .GetDocumentFileBytes("1367644", accession, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .GetDocumentFileBytes(
+                "1367644",
+                accession,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(image);
         var service = new AsFiledHtmlCaptureService(
             Options.Create(new AsFiledHtmlCaptureOptions()),
@@ -50,11 +55,17 @@ public class AsFiledHtmlPeriodicCaptureTests
         AsFiledHtmlCaptureService.AppliesTo(DocumentType.FromDisplayName(form)).Should().BeTrue();
         var captured = await service.Capture(
             envelope,
-            new FilingData { Cik = "1367644", AccessionNumber = accession, PrimaryDocument = fileName }
+            new FilingData
+            {
+                Cik = "1367644",
+                AccessionNumber = accession,
+                PrimaryDocument = fileName,
+            }
         );
 
         captured.Html.Should().NotBeNullOrEmpty();
-        Encoding.UTF8.GetString(captured.Html).Should().Contain($"data-asfiled-file=\"{fileName}\"");
+        var capturedHtml = Encoding.UTF8.GetString(captured.Html);
+        capturedHtml.Should().Contain($"data-asfiled-file=\"{fileName}\"");
         captured.Images.Should().HaveCount(expectedImages);
         captured.Images.Should().OnlyContain(value => value.Bytes.SequenceEqual(image));
         var prefix = fileName[..^4];
@@ -83,7 +94,7 @@ public class AsFiledHtmlPeriodicCaptureTests
     [InlineData("40-F/A")]
     [InlineData("6-K")]
     [InlineData("6-K/A")]
-    public void TryBuildAsFiledHtml_PeriodicFormsWithoutExhibits_PreserveImageReferences(string form)
+    public void TryBuildAsFiledHtml_PeriodicPrimary_RetainsImages(string form)
     {
         var envelope = Submission(
             form,
