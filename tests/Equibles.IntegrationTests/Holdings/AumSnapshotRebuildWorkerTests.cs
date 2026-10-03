@@ -428,6 +428,8 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                         PositionCount = 1,
                         StockCount = 1,
                         FilingCount = 1,
+                        // Older than the freshness window, so the safety net rebuilds the recent quarters.
+                        ComputedAt = DateTime.UtcNow.AddHours(-25),
                     }
                 );
                 seed.Add(
@@ -543,7 +545,8 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         // sentinel rows survive a second of the 1ms loop, which would otherwise have
         // overwritten them hundreds of times.
         await SeedTwoQuarters();
-        await SeedFullCoverage(DateTime.UtcNow.AddHours(-1));
+        var computedAt = DateTime.UtcNow.AddHours(-1);
+        await SeedFullCoverage(computedAt);
 
         var scopeFactory = ScopeFactory();
         var refreshService = new HoldingsAggregateRefreshService(
@@ -563,6 +566,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         snapshots
             .Should()
             .OnlyContain(s => s.TotalValue == 999_999_999, "fresh quarters are left alone");
+        snapshots.Select(s => s.ComputedAt).Should().AllSatisfy(c => c.Should().BeCloseTo(computedAt, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]

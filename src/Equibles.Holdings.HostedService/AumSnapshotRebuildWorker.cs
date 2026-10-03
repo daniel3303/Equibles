@@ -29,7 +29,8 @@ namespace Equibles.Holdings.HostedService;
 /// Every boot restarts the daily cycle, so a deploy-heavy day would pay the
 /// recent-quarter rebuild once per deploy. A cycle is skipped while every
 /// recent quarter was rebuilt within <see cref="FreshnessWindow"/> and none
-/// is dirty; a missing, stale or dirty quarter rebuilds them all as before.
+/// is dirty, and the next cycle is due when the oldest of those rebuilds turns
+/// <see cref="SleepInterval"/> old, so the daily cadence survives restarts.
 /// </summary>
 public class AumSnapshotRebuildWorker : BackgroundService
 {
@@ -92,14 +93,16 @@ public class AumSnapshotRebuildWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var delay = SleepInterval;
             try
             {
-                if (await IsRecentCoverageFresh(stoppingToken))
+                if (await LoadOldestFreshRebuild(stoppingToken) is { } rebuiltAt)
                 {
                     _logger.LogInformation(
                         "Recent holdings snapshots were rebuilt within {Window}; skipping this safety-net cycle",
                         FreshnessWindow
                     );
+                    delay = NextCycleDelay(rebuiltAt, DateTime.UtcNow, SleepInterval);
                 }
                 else
                 {
@@ -124,7 +127,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
 
             try
             {
-                await Task.Delay(SleepInterval, stoppingToken);
+                await Task.Delay(delay, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -136,7 +139,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
     // The AUM row's ComputedAt stands for the whole quarter rebuild: RebuildQuarter writes
     // every snapshot family in one transaction, and the boot backfill above has already
     // covered missing families.
-    private async Task<bool> IsRecentCoverageFresh(CancellationToken cancellationToken)
+    private async Task<DateTime?> LoadOldestFreshRebuild(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -149,10 +152,12 @@ public class AumSnapshotRebuildWorker : BackgroundService
             .Set<AumQuarterlySnapshot>()
             .Where(s => recentQuarters.Contains(s.ReportDate))
             .ToListAsync(cancellationToken);
-        return IsRecentCoverageFresh(recentQuarters, snapshots, DateTime.UtcNow, FreshnessWindow);
+        return OldestFreshRebuild(recentQuarters, snapshots, DateTime.UtcNow, FreshnessWindow);
     }
 
-    internal static bool IsRecentCoverageFresh(
+    // The oldest recent rebuild when every recent quarter is fresh and clean; null means the
+    // cycle must rebuild. No quarters on file counts as fresh, as the old empty rebuild did.
+    internal static DateTime? OldestFreshRebuild(
         IReadOnlyCollection<DateOnly> recentQuarters,
         IReadOnlyCollection<AumQuarterlySnapshot> snapshots,
         DateTime now,
@@ -160,11 +165,26 @@ public class AumSnapshotRebuildWorker : BackgroundService
     )
     {
         var threshold = now - freshnessWindow;
-        return recentQuarters.All(quarter =>
-            snapshots.Any(s =>
+        var rebuilds = new List<DateTime>();
+        foreach (var quarter in recentQuarters)
+        {
+            var fresh = snapshots.FirstOrDefault(s =>
                 s.ReportDate == quarter && s.DirtyAt == null && s.ComputedAt >= threshold
-            )
-        );
+            );
+            if (fresh == null)
+            {
+                return null;
+            }
+            rebuilds.Add(fresh.ComputedAt);
+        }
+        return rebuilds.Count == 0 ? now : rebuilds.Min();
+    }
+
+    // Wake when the oldest recent rebuild turns a cycle old, never earlier than now.
+    internal static TimeSpan NextCycleDelay(DateTime rebuiltAt, DateTime now, TimeSpan sleepInterval)
+    {
+        var due = rebuiltAt + sleepInterval - now;
+        return due > TimeSpan.Zero ? due : TimeSpan.Zero;
     }
 
     private async Task TryBackfillIfNeeded(CancellationToken cancellationToken)
