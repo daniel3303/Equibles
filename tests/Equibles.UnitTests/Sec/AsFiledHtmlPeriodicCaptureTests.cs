@@ -26,7 +26,13 @@ public class AsFiledHtmlPeriodicCaptureTests
     )
     {
         var compressed = File.ReadAllBytes(
-            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Sec", "PeriodicOriginals", fixture)
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Sec",
+                "PeriodicOriginals",
+                fixture
+            )
         );
         var original = Encoding.UTF8.GetString(GzipCompressor.Decompress(compressed));
         var envelope = Submission(form, fileName, original);

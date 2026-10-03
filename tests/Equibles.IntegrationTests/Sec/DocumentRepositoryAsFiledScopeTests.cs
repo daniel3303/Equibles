@@ -77,7 +77,9 @@ public class DocumentRepositoryAsFiledScopeTests : ParadeDbMcpTestBase
 
         actual
             .Should()
-            .BeEquivalentTo(expected.Select(document => document.Id).Append(recoverableAccession.Id));
+            .BeEquivalentTo(
+                expected.Select(document => document.Id).Append(recoverableAccession.Id)
+            );
     }
 
     private static Document NewDocument(EquityIssuer issuer, DocumentType type, int sequence) =>
