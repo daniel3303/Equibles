@@ -69,16 +69,16 @@ public class EquityDailyStockPriceRepositoryPrimarySeriesScopeTests
             .ToListAsync();
         var latest = await repo.GetLatestDate(filer).ToListAsync();
 
-        db.Add(
-            new EquityListing
-            {
-                EquitySecurityId = secondary.EquitySecurityId,
-                Ticker = "BRK-A",
-                MarketCountryCode = "US",
-                MarketIdentifierCode = "XNAS",
-                IsDirectoryListed = true,
-            }
-        );
+        var duplicate = new EquityListing
+        {
+            EquitySecurityId = secondary.EquitySecurityId,
+            Ticker = "BRK-A",
+            MarketCountryCode = "US",
+            MarketIdentifierCode = "XNAS",
+            IsDirectoryListed = true,
+        };
+        db.Add(duplicate);
+        db.Add(Row(duplicate, Date, "BRK-A"));
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var reloaded = await new EquityIssuerRepository(db)
