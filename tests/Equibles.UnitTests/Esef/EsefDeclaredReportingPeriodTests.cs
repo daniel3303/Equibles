@@ -148,8 +148,8 @@ public class EsefDeclaredReportingPeriodTests
 
     private static string Context(string id, string owner) =>
         $"""
-        <xbrli:context id="{id}"><xbrli:entity><xbrli:identifier scheme="http://standards.iso.org/iso/17442">{owner}</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2025-01-01</xbrli:startDate><xbrli:endDate>2025-12-31</xbrli:endDate></xbrli:period></xbrli:context>
-        """;
+            <xbrli:context id="{id}"><xbrli:entity><xbrli:identifier scheme="http://standards.iso.org/iso/17442">{owner}</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2025-01-01</xbrli:startDate><xbrli:endDate>2025-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+            """;
 
     private static string Asset(string name) =>
         Path.Combine(AppContext.BaseDirectory, "TestAssets", "Esef", name);

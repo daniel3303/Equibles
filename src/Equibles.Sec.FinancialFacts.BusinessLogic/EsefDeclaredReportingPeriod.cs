@@ -58,7 +58,9 @@ internal static class EsefDeclaredReportingPeriod
                 var unsupported =
                     reader.GetAttribute("continuedAt") != null
                     || reader.GetAttribute("format") != null
-                    || reader.GetAttribute("nil", "http://www.w3.org/2001/XMLSchema-instance") is "true" or "1";
+                    || reader.GetAttribute("nil", "http://www.w3.org/2001/XMLSchema-instance")
+                        is "true"
+                            or "1";
                 using var subtree = reader.ReadSubtree();
                 var element = XElement.Load(subtree);
                 declarations.Add(
