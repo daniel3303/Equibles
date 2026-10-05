@@ -20,12 +20,15 @@ internal static class EsefDeclaredReportingPeriod
         try
         {
             using var input = new StringReader(html.TrimStart('\uFEFF'));
-            using var reader = XmlReader.Create(input, new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Ignore,
-                XmlResolver = null,
-                MaxCharactersInDocument = 300 * 1024 * 1024,
-            });
+            using var reader = XmlReader.Create(
+                input,
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Ignore,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = 300 * 1024 * 1024,
+                }
+            );
             while (reader.Read())
             {
                 if (reader.NodeType != XmlNodeType.Element)
@@ -35,19 +38,32 @@ internal static class EsefDeclaredReportingPeriod
                     ReadContext(reader, contexts);
                     continue;
                 }
-                if (reader.LocalName != "nonNumeric" || reader.NamespaceURI is not
-                    ("http://www.xbrl.org/2013/inlineXBRL" or "http://www.xbrl.org/2008/inlineXBRL"))
+                if (
+                    reader.LocalName != "nonNumeric"
+                    || reader.NamespaceURI
+                        is not (
+                            "http://www.xbrl.org/2013/inlineXBRL"
+                            or "http://www.xbrl.org/2008/inlineXBRL"
+                        )
+                )
                     continue;
                 var name = reader.GetAttribute("name")?.Split(':');
-                if (name?.Length != 2 || reader.LookupNamespace(name[0]) != DanishGeneral
-                    || name[1] is not (StartField or EndField))
+                if (
+                    name?.Length != 2
+                    || reader.LookupNamespace(name[0]) != DanishGeneral
+                    || name[1] is not (StartField or EndField)
+                )
                     continue;
                 var context = reader.GetAttribute("contextRef");
-                var unsupported = reader.GetAttribute("continuedAt") != null || reader.GetAttribute("format") != null
+                var unsupported =
+                    reader.GetAttribute("continuedAt") != null
+                    || reader.GetAttribute("format") != null
                     || reader.GetAttribute("nil", "http://www.w3.org/2001/XMLSchema-instance") is "true" or "1";
                 using var subtree = reader.ReadSubtree();
                 var element = XElement.Load(subtree);
-                declarations.Add((name[1], context, unsupported || element.HasElements ? null : element.Value));
+                declarations.Add(
+                    (name[1], context, unsupported || element.HasElements ? null : element.Value)
+                );
             }
         }
         catch (XmlException)
@@ -58,21 +74,33 @@ internal static class EsefDeclaredReportingPeriod
         var dates = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
         foreach (var declaration in declarations)
         {
-            if (declaration.Context == null || !contexts.TryGetValue(declaration.Context, out var owner)
-                || owner == null)
+            if (
+                declaration.Context == null
+                || !contexts.TryGetValue(declaration.Context, out var owner)
+                || owner == null
+            )
                 return false;
             if (!string.Equals(owner, issuerLei, StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (!DateOnly.TryParseExact(declaration.Value?.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
-                    DateTimeStyles.None, out var date)
-                || (dates.TryGetValue(declaration.Field, out var previous) && previous != date))
+            if (
+                !DateOnly.TryParseExact(
+                    declaration.Value?.Trim(),
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var date
+                )
+                || (dates.TryGetValue(declaration.Field, out var previous) && previous != date)
+            )
                 return false;
             dates[declaration.Field] = date;
         }
         if (dates.Count == 0)
             return true;
-        return dates.TryGetValue(StartField, out var start) && dates.TryGetValue(EndField, out var end)
-            && end == periodEnd && end.DayNumber - start.DayNumber is >= 350 and <= 380;
+        return dates.TryGetValue(StartField, out var start)
+            && dates.TryGetValue(EndField, out var end)
+            && end == periodEnd
+            && end.DayNumber - start.DayNumber is >= 350 and <= 380;
     }
 
     private static void ReadContext(XmlReader reader, Dictionary<string, string> contexts)
@@ -82,11 +110,15 @@ internal static class EsefDeclaredReportingPeriod
         var id = (string)context.Attribute("id");
         if (string.IsNullOrEmpty(id))
             return;
-        var identifiers = context.Elements(XName.Get("entity", Instance))
-            .SelectMany(entity => entity.Elements(XName.Get("identifier", Instance))).ToList();
-        var owner = identifiers.Count == 1
+        var identifiers = context
+            .Elements(XName.Get("entity", Instance))
+            .SelectMany(entity => entity.Elements(XName.Get("identifier", Instance)))
+            .ToList();
+        var owner =
+            identifiers.Count == 1
             && (string)identifiers[0].Attribute("scheme") == "http://standards.iso.org/iso/17442"
-                ? identifiers[0].Value.Trim() : null;
+                ? identifiers[0].Value.Trim()
+                : null;
         contexts[id] = contexts.ContainsKey(id) || string.IsNullOrWhiteSpace(owner) ? null : owner;
     }
 }

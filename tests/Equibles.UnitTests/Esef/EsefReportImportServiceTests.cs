@@ -310,12 +310,7 @@ public class EsefReportImportServiceTests
     )
     {
         var report = File.ReadAllText(
-                Path.Combine(
-                    AppContext.BaseDirectory,
-                    "TestAssets",
-                    "Esef",
-                    asset
-                )
+                Path.Combine(AppContext.BaseDirectory, "TestAssets", "Esef", asset)
             )
             .Replace(lei, Lei);
         var harness = await Harness.Create(
