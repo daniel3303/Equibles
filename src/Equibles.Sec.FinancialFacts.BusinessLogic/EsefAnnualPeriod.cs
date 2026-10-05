@@ -6,7 +6,9 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 public static class EsefAnnualPeriod
 {
     public static bool IsProvenInline(string html, string issuerLei, DateOnly periodEnd) =>
-        EsefInlineXbrlParser.TryParse(html, out var facts) && IsProven(facts, issuerLei, periodEnd);
+        EsefInlineXbrlParser.TryParse(html, out var facts)
+        && IsProven(facts, issuerLei, periodEnd)
+        && EsefDeclaredReportingPeriod.AllowsAnnual(html, issuerLei, periodEnd);
 
     public static bool IsProven(
         IEnumerable<ParsedXbrlFact> facts,

@@ -301,18 +301,18 @@ public class EsefReportImportServiceTests
             .Be(annual ? 12 : null);
     }
 
-    [Fact]
-    public async Task Import_TaggedInterimKeepsItsEnvelopeWithoutInventingAnAnnualCalendar()
+    [Theory]
+    [InlineData("ennogie-2026-interim-excerpt.xhtml", "549300JUGBT2EH17X827")]
+    [InlineData("dfds-2026-interim-excerpt.xhtml", "549300JZVW1Y1UZ5UK38")]
+    public async Task Import_TaggedInterimKeepsItsEnvelopeWithoutInventingAnAnnualCalendar(
+        string asset,
+        string lei
+    )
     {
         var report = File.ReadAllText(
-                Path.Combine(
-                    AppContext.BaseDirectory,
-                    "TestAssets",
-                    "Esef",
-                    "ennogie-2026-interim-excerpt.xhtml"
-                )
+                Path.Combine(AppContext.BaseDirectory, "TestAssets", "Esef", asset)
             )
-            .Replace("549300JUGBT2EH17X827", Lei);
+            .Replace(lei, Lei);
         var harness = await Harness.Create(
             Issuer("FR"),
             rewriteIndex: index =>
