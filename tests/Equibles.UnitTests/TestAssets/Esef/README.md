@@ -53,3 +53,11 @@
 - Its gzip SHA-256 is `76611d4b227a25cd6fd3a5329903d03fcb52bcbdc8e24161670a47a1f96149fa`; the 34,672,821-character envelope retains the capture's existing binary-asset removal.
 - Repeated span/div layout classes and span ids dominate its size. Removing class metadata changes Markdown paragraph boundaries, so the compact retrieval copy preserves a neutral nonempty class.
 - Full original normalization produces 2,048,711 UTF-8 bytes, SHA-256 `c599cd1356a8f79910cfca43f03dd28d085bf77bd144421d17c36abf703ba474`; recovered text must match exactly, including whitespace.
+
+## DFDS interim report with trailing twelve-month figures
+
+- `dfds-2026-interim-excerpt.xhtml` retains three numeric facts, three reporting metadata facts, and their unchanged contexts, units, and namespace bindings from the [June 2026 interim report](https://filings.xbrl.org/549300JZVW1Y1UZ5UK38/2026-06-30/ESEF/DK/0/DFDS-2026-06-30-1-en/reports/DFDS-2026-06-30-1-en.xhtml), captured from the retained original on 2026-10-05.
+- The report declares January–June 2026 while reporting trailing twelve-month IFRS figures through June; those figures cannot override the declared reporting period.
+- Layout, media and other facts are omitted; body/header wrappers and the title are minimal replacements.
+- Original retained source: 6249827 bytes, SHA-256 `8e69e741597b9d52e219ec142158fc6e0ea1fd46bc05c0d340c6bc3dd6ac34fe`.
+- Excerpt: 3112 bytes, SHA-256 `3709fc83288d8d271848b7890acfefc18e3f45aa8f8101541af36f265cb7613c`.
