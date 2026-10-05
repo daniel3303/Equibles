@@ -38,3 +38,11 @@
 - `teixeira-duarte-2025-envelope.xhtml.gz` is the complete retained extraction envelope from the official [2025 report](https://www.cmvm.pt/PInstitucional/EsefViewer?Input=24CA145C2C924C1A5E8329A11A98F54663B3C16899747C02B3AA47E49B34E4B8); the fixture is unchanged, with the same existing binary-asset compaction as the 2024 envelope.
 - Its gzip SHA-256 is `3e6f41bdd07a21cf8bda720f6d2c643fca15b1bd8544df70fafc130771c97d5f`; the 33,501,816-character envelope also needs unused margin, padding, border and vertical-alignment declarations removed to fit.
 - Full 2025 normalization produces 1,278,650 UTF-8 bytes, SHA-256 `2f5a2f4d5eab330fd42b038982f2a9ed0d4d2cde891a4166d709801a4df418d4`; recovered normalization must match exactly.
+
+## JD Sports 2026 numeric color functions
+
+- `jd-sports-2026-envelope.xhtml.gz` is the complete retained XHTML extraction envelope from the [official FCA report package](https://data.fca.org.uk/artefacts/NSM/DirectUpload/NI-000145262/NI-000145262_213800HROV6Y9MUU8375-2026-01-31.zip).
+- The retained envelope already omits embedded binary assets; the fixture changes no bytes, text, nodes, attributes or whitespace.
+- Gzip SHA-256: `3f8eacf563a80d735f419540f725a19f9e753775340edf5c5ee22383ae7d3c81`.
+- Repeated unused layout declarations share attributes with flat numeric `rgba(...)` functions; preserving those entire attributes leaves 20,768,126 characters above the retrieval limit.
+- Full original normalization produces 929,052 UTF-8 bytes, SHA-256 `2e9284d51b74fa650113d1a5ba215d8e2c0fc3ce9fd624d59484d31a21c6fe9d`; recovered normalization must match exactly.

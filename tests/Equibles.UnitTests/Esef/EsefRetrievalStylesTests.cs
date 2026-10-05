@@ -14,25 +14,32 @@ public class EsefRetrievalStylesTests
 
     [Theory]
     [InlineData(
-        "2024",
+        "teixeira-duarte-2024",
         28_900_183,
         1_134_006,
         "6F653A4287FA07D953873BC045EB337E426C7A382E5D73BFF6EEF8443D77A3D9",
-        "170.332 | 191.788"
+        "| Financiamentos obtidos | 14.2 e 21 | 170.332 | 191.788 |"
     )]
     [InlineData(
-        "2025",
+        "teixeira-duarte-2025",
         33_501_816,
         1_278_650,
         "2F5A2F4D5EAB330FD42B038982F2A9ED0D4D2CDE891A4166D709801A4DF418D4",
-        "227.580 | 170.332"
+        "| Financiamentos obtidos | 14.2 e 21 | 227.580 | 170.332 |"
+    )]
+    [InlineData(
+        "jd-sports-2026",
+        20_768_126,
+        929_052,
+        "2E9284D51B74FA650113D1A5BA215D8E2C0FC3CE9FD624D59484D31A21C6FE9D",
+        "21. Interest-Bearing Loans and Borrowings"
     )]
     public void Build_RecordedOversizedReport_RetainsTheCompleteNormalizedText(
-        string year,
+        string fixture,
         int characters,
         int expectedBytes,
         string expectedHash,
-        string borrowingColumns
+        string expectedBorrowingText
     )
     {
         using var file = File.OpenRead(
@@ -40,7 +47,7 @@ public class EsefRetrievalStylesTests
                 AppContext.BaseDirectory,
                 "TestAssets",
                 "Esef",
-                $"teixeira-duarte-{year}-envelope.xhtml.gz"
+                $"{fixture}-envelope.xhtml.gz"
             )
         );
         using var gzip = new GZipStream(file, CompressionMode.Decompress);
@@ -59,10 +66,7 @@ public class EsefRetrievalStylesTests
 
         bytes.Length.Should().Be(expectedBytes);
         Convert.ToHexString(SHA256.HashData(bytes)).Should().Be(expectedHash);
-        Encoding
-            .UTF8.GetString(bytes)
-            .Should()
-            .Contain($"| Financiamentos obtidos | 14.2 e 21 | {borrowingColumns} |");
+        Encoding.UTF8.GetString(bytes).Should().Contain(expectedBorrowingText);
     }
 
     [Fact]
@@ -118,9 +122,31 @@ public class EsefRetrievalStylesTests
     }
 
     [Theory]
+    [InlineData("rgba(0, 0, 0, 0)")]
+    [InlineData("RGB(10, 20, 30)")]
+    [InlineData("rgba(100%, 0%, 0%, .5)")]
+    public void Prepare_NumericColorFunctions_RemoveOnlyUnusedLayout(string color)
+    {
+        var source = LargeReport(
+            $"<p style=\"font-size:12px;-webkit-text-stroke:0.18px {color};color:{color};display:none;text-decoration:line-through\">Text 42</p>"
+        );
+        var compact = XDocument.Parse(EsefReportContent.PrepareRetrievalMarkup(source));
+        compact
+            .Descendants(XName.Get("p", Namespace))
+            .Single(element => element.Attribute("style") != null)
+            .Attribute("style")
+            .Value.Should()
+            .Be($"color:{color};display:none;text-decoration:line-through");
+    }
+
+    [Theory]
     [InlineData("font-family:'font;name';font-size:9px")]
     [InlineData("left:calc(1px + 2px);font-size:9px")]
     [InlineData("/* comment */font-size:9px")]
+    [InlineData("-webkit-text-stroke:rgba(0,0,0,0;display:none);font-size:9px")]
+    [InlineData("-webkit-text-stroke:rgba(0,0,0,0;font-size:9px")]
+    [InlineData("-webkit-text-stroke:rgba(var(--red),0,0,0);font-size:9px")]
+    [InlineData("-webkit-text-stroke:rgba(0,0,0,0);left:calc(1px + 2px)")]
     [InlineData("--custom:var(--size);font-size:9px")]
     [InlineData("font-family:font\\name;font-size:9px")]
     public void Prepare_ComplexCss_KeepsTheWholeAttribute(string style)

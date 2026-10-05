@@ -328,7 +328,10 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData("EsefAnnualReport", 0, 1, true)]
     [InlineData("EsefReport", 0, 1, true)]
     [InlineData("EsefAnnualReport", 20, 1, false)]
-    [InlineData("EsefAnnualReport", 0, 2, false)]
+    [InlineData("EsefAnnualReport", 20, 2, false)]
+    [InlineData("EsefAnnualReport", 0, 2, true)]
+    [InlineData("EsefReport", 0, 2, true)]
+    [InlineData("EsefAnnualReport", 0, 3, false)]
     [InlineData("TenK", 0, 1, false)]
     public void Pending_EmptyEsefRecovery_DoesNotReopenReadableOrCurrentDocuments(
         string form,
@@ -349,11 +352,15 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .Be(expected);
     }
 
-    [Fact]
-    public async Task Backfill_EmptyEsefAtThePriorVersion_UsesRetainedEnvelopeAndAdvancesGeneration()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task Backfill_EmptyEsefAtThePriorVersion_UsesRetainedEnvelopeAndAdvancesGeneration(
+        int version
+    )
     {
         var document = SeedEsef();
-        document.NormalizedContentVersion = Document.NormalizedContentBuilderVersion;
+        document.NormalizedContentVersion = version;
         document.Content.Size = 0;
         _dbContext.SaveChanges();
         _fileManager

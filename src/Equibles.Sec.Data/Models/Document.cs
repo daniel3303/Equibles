@@ -110,7 +110,7 @@ public class Document
     public const int NormalizedContentBuilderVersion = 1;
 
     // Reopen only empty ESEF text; readable reports and SEC captures keep their existing generation.
-    public const int EsefEmptyContentRecoveryVersion = 2;
+    public const int EsefEmptyContentRecoveryVersion = 3;
 
     public static int ContentBuilderVersion(DocumentType documentType) =>
         documentType?.IsEsef() == true

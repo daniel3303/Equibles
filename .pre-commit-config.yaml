@@ -17,7 +17,7 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=500"]
         # Complete retained reports are required to reproduce the retrieval-size refusal.
-        exclude: '^tests/Equibles.UnitTests/TestAssets/Esef/teixeira-duarte-(2024|2025)-envelope\.xhtml\.gz$'
+        exclude: '^tests/Equibles.UnitTests/TestAssets/Esef/(teixeira-duarte-(2024|2025)|jd-sports-2026)-envelope\.xhtml\.gz$'
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json

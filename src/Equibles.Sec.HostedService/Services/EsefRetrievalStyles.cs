@@ -1,10 +1,11 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml;
 
 namespace Equibles.Sec.HostedService.Services;
 
 // The original keeps its presentation. Retrieval needs only the styles the normalizer reads.
-internal static class EsefRetrievalStyles
+internal static partial class EsefRetrievalStyles
 {
     private const string XhtmlNamespace = "http://www.w3.org/1999/xhtml";
     private static readonly HashSet<string> LayoutProperties = new(StringComparer.OrdinalIgnoreCase)
@@ -145,10 +146,18 @@ internal static class EsefRetrievalStyles
             writer.WriteEndElement();
     }
 
+    [GeneratedRegex(
+        @"\b(?:rgb|rgba)\([0-9.,% +\-]+\)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    )]
+    private static partial Regex NumericColorFunction();
+
     private static string CompactStyle(string style)
     {
-        // Do not interpret strings, functions, escapes, comments, or custom CSS syntax.
-        if (style.IndexOfAny(['\'', '"', '\\', '(', ')', '{', '}', '@', '/']) >= 0)
+        // Flat numeric color functions contain no declaration separators.
+        // All other functions, strings, escapes and comments keep the whole attribute.
+        var syntax = NumericColorFunction().Replace(style, "");
+        if (syntax.IndexOfAny(['\'', '"', '\\', '(', ')', '{', '}', '@', '/']) >= 0)
             return style;
         return string.Join(
             ';',
