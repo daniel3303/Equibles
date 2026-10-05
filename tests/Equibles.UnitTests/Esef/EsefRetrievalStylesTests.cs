@@ -12,21 +12,41 @@ public class EsefRetrievalStylesTests
 {
     private const string Namespace = "http://www.w3.org/1999/xhtml";
 
-    [Fact]
-    public void Build_RecordedOversizedReport_RetainsTheCompleteNormalizedText()
+    [Theory]
+    [InlineData(
+        "2024",
+        28_900_183,
+        1_134_006,
+        "6F653A4287FA07D953873BC045EB337E426C7A382E5D73BFF6EEF8443D77A3D9",
+        "170.332 | 191.788"
+    )]
+    [InlineData(
+        "2025",
+        33_501_816,
+        1_278_650,
+        "2F5A2F4D5EAB330FD42B038982F2A9ED0D4D2CDE891A4166D709801A4DF418D4",
+        "227.580 | 170.332"
+    )]
+    public void Build_RecordedOversizedReport_RetainsTheCompleteNormalizedText(
+        string year,
+        int characters,
+        int expectedBytes,
+        string expectedHash,
+        string borrowingColumns
+    )
     {
         using var file = File.OpenRead(
             Path.Combine(
                 AppContext.BaseDirectory,
                 "TestAssets",
                 "Esef",
-                "teixeira-duarte-2024-envelope.xhtml.gz"
+                $"teixeira-duarte-{year}-envelope.xhtml.gz"
             )
         );
         using var gzip = new GZipStream(file, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, Encoding.UTF8);
         var source = reader.ReadToEnd();
-        source.Length.Should().Be(28_900_183);
+        source.Length.Should().Be(characters);
 
         var compact = EsefReportContent.PrepareRetrievalMarkup(source);
         compact.Length.Should().BeLessThan(EsefReportContent.MaxRetrievalHtmlChars);
@@ -37,15 +57,12 @@ public class EsefRetrievalStylesTests
             new SecDocumentHtmlToMarkdownConverter()
         );
 
-        bytes.Length.Should().Be(1_134_006);
-        Convert
-            .ToHexString(SHA256.HashData(bytes))
-            .Should()
-            .Be("6F653A4287FA07D953873BC045EB337E426C7A382E5D73BFF6EEF8443D77A3D9");
+        bytes.Length.Should().Be(expectedBytes);
+        Convert.ToHexString(SHA256.HashData(bytes)).Should().Be(expectedHash);
         Encoding
             .UTF8.GetString(bytes)
             .Should()
-            .Contain("| Financiamentos obtidos | 14.2 e 21 | 170.332 | 191.788 |");
+            .Contain($"| Financiamentos obtidos | 14.2 e 21 | {borrowingColumns} |");
     }
 
     [Fact]

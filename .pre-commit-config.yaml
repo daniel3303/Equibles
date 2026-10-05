@@ -16,8 +16,8 @@ repos:
         exclude: '\.(svg|min\.js|min\.css|md)$|/Fixtures/'
       - id: check-added-large-files
         args: ["--maxkb=500"]
-        # Complete retained report is required to reproduce the retrieval-size refusal.
-        exclude: '^tests/Equibles.UnitTests/TestAssets/Esef/teixeira-duarte-2024-envelope\.xhtml\.gz$'
+        # Complete retained reports are required to reproduce the retrieval-size refusal.
+        exclude: '^tests/Equibles.UnitTests/TestAssets/Esef/teixeira-duarte-(2024|2025)-envelope\.xhtml\.gz$'
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json
