@@ -160,7 +160,9 @@ public class DocumentNormalizationBackfillService
                         document.XbrlUncompressedSize
                     );
 
-                document.NormalizedContentVersion = Document.NormalizedContentBuilderVersion;
+                document.NormalizedContentVersion = Document.ContentBuilderVersion(
+                    document.DocumentType
+                );
                 document.NormalizedContentAttempts = 0;
 
                 if (await ContentMatches(document, normalizedContent))

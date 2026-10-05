@@ -214,7 +214,8 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
     [InlineData("EsefReport")]
     public async Task Backfill_EsefReplacesOnlyDerivedContentAndFinishesItsQueueEntry(string form)
     {
-        var document = await SeedLegacyDocument("ESEF");
+        var document = await SeedLegacyDocument("ESEF", []);
+        document.NormalizedContentVersion = Document.NormalizedContentBuilderVersion;
         var original = GzipCompressor.Compress(
             Encoding.UTF8.GetBytes(
                 "<html xmlns='http://www.w3.org/1999/xhtml'><head><title/></head><body><p>Retained annual report</p></body></html>"
@@ -260,7 +261,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
             .Should()
             .Contain("Retained annual report");
         saved.ChunkedAt.Should().BeNull();
-        saved.NormalizedContentVersion.Should().Be(Document.NormalizedContentBuilderVersion);
+        saved.NormalizedContentVersion.Should().Be(Document.EsefEmptyContentRecoveryVersion);
         (await sut.Backfill(1)).Processed.Should().Be(0);
         await client.DidNotReceiveWithAnyArgs().GetDocumentContent(default, default, default);
     }

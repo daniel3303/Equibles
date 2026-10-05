@@ -27,3 +27,14 @@
 
 - `ennogie-2025-annual-excerpt.xhtml` retains two unchanged numeric facts, their contexts/units and namespace declarations from the [2025 annual report](https://filings.xbrl.org/549300JUGBT2EH17X827/2025-12-31/ESEF/DK/0/EnnogieSolarGroup-2025-12-31-en/reports/EnnogieSolarGroup-2025-12-31-en.xhtml), downloaded 2026-09-27; layout and all other facts are omitted, with minimal XHTML wrappers.
 - Annual original SHA-256: `2b2802e87aa09436ce8a8a897385a930ce9dee5293c6adc2461c229ba48f6cf9` (37,153,490 bytes); excerpt SHA-256: `7f1a66cceb6af903701187baabcbe58608de09e0b83f47164a24db71ca86dd08` (1,880 bytes).
+
+## Teixeira Duarte retrieval-size regressions
+
+- `teixeira-duarte-2024-envelope.xhtml.gz` is the complete retained XHTML extraction envelope from the official [2024 report](https://www.cmvm.pt/PInstitucional/EsefViewer?Input=2D87F631793517C327F1B0A7CBC8322C2CCB3E58A5EFC1C4CC4701D58B0E3064), captured before this fix.
+- The existing capture removed embedded binary assets; no text, nodes, attributes, or whitespace were changed for the fixture.
+- Gzip SHA-256: `719b5e7c2ada03dd7e497244887aa0cd4841d88a105a68ad540c0d68a2505c0b`.
+- The 28,900,183-character envelope exceeds the 16 Mi-character retrieval ceiling because of repeated layout declarations. Conservative style compaction brings it below the ceiling without changing its normalized report text.
+- Full original normalization and recovered normalization both produce 1,134,006 UTF-8 bytes, SHA-256 `6f653a4287fa07d953873bc045eb337e426c7a382e5d73bff6eef8443d77a3d9`.
+- `teixeira-duarte-2025-envelope.xhtml.gz` is the complete retained extraction envelope from the official [2025 report](https://www.cmvm.pt/PInstitucional/EsefViewer?Input=24CA145C2C924C1A5E8329A11A98F54663B3C16899747C02B3AA47E49B34E4B8); the fixture is unchanged, with the same existing binary-asset compaction as the 2024 envelope.
+- Its gzip SHA-256 is `3e6f41bdd07a21cf8bda720f6d2c643fca15b1bd8544df70fafc130771c97d5f`; the 33,501,816-character envelope also needs unused margin, padding, border and vertical-alignment declarations removed to fit.
+- Full 2025 normalization produces 1,278,650 UTF-8 bytes, SHA-256 `2f5a2f4d5eab330fd42b038982f2a9ed0d4d2cde891a4166d709801a4df418d4`; recovered normalization must match exactly.

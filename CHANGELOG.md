@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Recover searchable text from oversized ESEF reports by removing unused layout styles from the retrieval copy while preserving complete text and original reports. Retry previously empty retained reports through the existing normalization backfill.
+
 ### Added
 
 - Beijing Stock Exchange is registered as BJSE with CNY trading and its official session hours. Price-provider bindings remain absent until a supported source is available.

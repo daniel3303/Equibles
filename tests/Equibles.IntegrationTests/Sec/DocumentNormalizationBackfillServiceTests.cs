@@ -224,7 +224,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(
                 Arg.Is<Document>(d =>
                     d.Id == document.Id
-                    && d.NormalizedContentVersion == Document.NormalizedContentBuilderVersion
+                    && d.NormalizedContentVersion == Document.EsefEmptyContentRecoveryVersion
                 ),
                 Arg.Is<byte[]>(b => Encoding.UTF8.GetString(b).Contains("Retained annual report")),
                 Arg.Any<CancellationToken>()
@@ -259,7 +259,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(
                 Arg.Is<Document>(d =>
                     d.Id == document.Id
-                    && d.NormalizedContentVersion == Document.NormalizedContentBuilderVersion
+                    && d.NormalizedContentVersion == Document.EsefEmptyContentRecoveryVersion
                     && d.NormalizedContentAttempts == 0
                 ),
                 Arg.Is<byte[]>(b => b.Length == 0),
@@ -324,6 +324,64 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         result.Processed.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData("EsefAnnualReport", 0, 1, true)]
+    [InlineData("EsefReport", 0, 1, true)]
+    [InlineData("EsefAnnualReport", 20, 1, false)]
+    [InlineData("EsefAnnualReport", 0, 2, false)]
+    [InlineData("TenK", 0, 1, false)]
+    public void Pending_EmptyEsefRecovery_DoesNotReopenReadableOrCurrentDocuments(
+        string form,
+        long size,
+        int version,
+        bool expected
+    )
+    {
+        var document = SeedEsef();
+        document.DocumentType = DocumentType.FromValue(form);
+        document.NormalizedContentVersion = version;
+        document.Content.Size = size;
+        _dbContext.SaveChanges();
+        new DocumentRepository(_dbContext)
+            .GetPendingNormalizedContent()
+            .Any(row => row.Id == document.Id)
+            .Should()
+            .Be(expected);
+    }
+
+    [Fact]
+    public async Task Backfill_EmptyEsefAtThePriorVersion_UsesRetainedEnvelopeAndAdvancesGeneration()
+    {
+        var document = SeedEsef();
+        document.NormalizedContentVersion = Document.NormalizedContentBuilderVersion;
+        document.Content.Size = 0;
+        _dbContext.SaveChanges();
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(
+                document.XbrlContent.FileContent.Bytes,
+                writable: false
+            ));
+
+        var result = await BuildSut().Backfill(10);
+
+        result.Replaced.Should().Be(1);
+        result.Failed.Should().Be(0);
+        document.NormalizedContentVersion.Should().Be(Document.EsefEmptyContentRecoveryVersion);
+        await _secEdgarClient
+            .DidNotReceiveWithAnyArgs()
+            .GetDocumentContent(default, default, default);
+        await _persistenceService
+            .Received(1)
+            .ReplaceContent(
+                Arg.Is<Document>(row => row.Id == document.Id),
+                Arg.Is<byte[]>(bytes =>
+                    Encoding.UTF8.GetString(bytes).Contains("Retained annual report")
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
     private Document SeedEsef()
     {
         var document = SeedDocument(0);
@@ -378,6 +436,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             Content = new Equibles.Media.Data.Models.File
             {
                 Name = "nvda-20260125",
+                Size = "old normalized filing"u8.Length,
                 Extension = "txt",
                 ContentType = "text/plain",
                 FileContent = new Equibles.Media.Data.Models.FileContent
