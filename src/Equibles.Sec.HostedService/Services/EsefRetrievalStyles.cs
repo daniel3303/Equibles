@@ -1,0 +1,144 @@
+using System.Text;
+using System.Xml;
+
+namespace Equibles.Sec.HostedService.Services;
+
+// The original keeps its presentation. Retrieval needs only the styles the normalizer reads.
+internal static class EsefRetrievalStyles
+{
+    private const string XhtmlNamespace = "http://www.w3.org/1999/xhtml";
+    private static readonly HashSet<string> LayoutProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "font-family",
+        "font-size",
+        "letter-spacing",
+        "word-spacing",
+        "-webkit-text-stroke",
+        "width",
+        "margin-left",
+        "height",
+        "left",
+        "top",
+        "position",
+        "white-space",
+        "line-height",
+    };
+
+    internal static string Compact(string source, int maximumCharacters)
+    {
+        if (string.IsNullOrEmpty(source) || source.Length <= maximumCharacters)
+            return source;
+        try
+        {
+            using var reader = XmlReader.Create(
+                new StringReader(source),
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Ignore,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = 64L * 1024 * 1024,
+                }
+            );
+            reader.MoveToContent();
+            if (reader.LocalName != "html" || reader.NamespaceURI != XhtmlNamespace)
+                return source;
+            var output = new StringBuilder();
+            using var writer = XmlWriter.Create(
+                output,
+                new XmlWriterSettings
+                {
+                    OmitXmlDeclaration = true,
+                    Indent = false,
+                    NewLineHandling = NewLineHandling.Entitize,
+                }
+            );
+            do
+            {
+                CopyNode(reader, writer);
+                writer.Flush();
+                // Output only grows; never pass a prefix to the document normalizer.
+                if (output.Length > maximumCharacters)
+                    return source;
+            } while (reader.Read());
+            writer.Flush();
+            return output.ToString();
+        }
+        catch (XmlException)
+        {
+            // Ambiguous or non-XML input keeps the existing size refusal.
+            return source;
+        }
+    }
+
+    private static void CopyNode(XmlReader reader, XmlWriter writer)
+    {
+        switch (reader.NodeType)
+        {
+            case XmlNodeType.Element:
+                CopyElement(reader, writer);
+                break;
+            case XmlNodeType.EndElement:
+                writer.WriteFullEndElement();
+                break;
+            case XmlNodeType.Text:
+                writer.WriteString(reader.Value);
+                break;
+            case XmlNodeType.Whitespace:
+            case XmlNodeType.SignificantWhitespace:
+                writer.WriteWhitespace(reader.Value);
+                break;
+            case XmlNodeType.CDATA:
+                writer.WriteCData(reader.Value);
+                break;
+            case XmlNodeType.Comment:
+                writer.WriteComment(reader.Value);
+                break;
+            case XmlNodeType.ProcessingInstruction:
+                writer.WriteProcessingInstruction(reader.Name, reader.Value);
+                break;
+        }
+    }
+
+    private static void CopyElement(XmlReader reader, XmlWriter writer)
+    {
+        var isXhtml = reader.NamespaceURI == XhtmlNamespace;
+        var empty = reader.IsEmptyElement;
+        writer.WriteStartElement(reader.Prefix, reader.LocalName, reader.NamespaceURI);
+        if (reader.MoveToFirstAttribute())
+        {
+            do
+            {
+                var value =
+                    isXhtml && reader.NamespaceURI.Length == 0 && reader.LocalName == "style"
+                        ? CompactStyle(reader.Value)
+                        : reader.Value;
+                writer.WriteAttributeString(
+                    reader.Prefix,
+                    reader.LocalName,
+                    reader.NamespaceURI,
+                    value
+                );
+            } while (reader.MoveToNextAttribute());
+            reader.MoveToElement();
+        }
+        if (empty)
+            writer.WriteEndElement();
+    }
+
+    private static string CompactStyle(string style)
+    {
+        // Do not interpret strings, functions, escapes, comments, or custom CSS syntax.
+        if (style.IndexOfAny(['\'', '"', '\\', '(', ')', '{', '}', '@', '/']) >= 0)
+            return style;
+        return string.Join(
+            ';',
+            style
+                .Split(';')
+                .Where(declaration =>
+                {
+                    var colon = declaration.IndexOf(':');
+                    return colon < 0 || !LayoutProperties.Contains(declaration[..colon].Trim());
+                })
+        );
+    }
+}

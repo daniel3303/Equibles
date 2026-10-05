@@ -109,7 +109,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             AccessionNumber = accessionNumber,
             Items = items,
             LineCount = lineCount,
-            NormalizedContentVersion = Document.NormalizedContentBuilderVersion,
+            NormalizedContentVersion = Document.ContentBuilderVersion(documentType),
             ReportedStatementsStatus = reportedStatements,
         };
 

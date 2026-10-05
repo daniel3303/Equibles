@@ -27,3 +27,11 @@
 
 - `ennogie-2025-annual-excerpt.xhtml` retains two unchanged numeric facts, their contexts/units and namespace declarations from the [2025 annual report](https://filings.xbrl.org/549300JUGBT2EH17X827/2025-12-31/ESEF/DK/0/EnnogieSolarGroup-2025-12-31-en/reports/EnnogieSolarGroup-2025-12-31-en.xhtml), downloaded 2026-09-27; layout and all other facts are omitted, with minimal XHTML wrappers.
 - Annual original SHA-256: `2b2802e87aa09436ce8a8a897385a930ce9dee5293c6adc2461c229ba48f6cf9` (37,153,490 bytes); excerpt SHA-256: `7f1a66cceb6af903701187baabcbe58608de09e0b83f47164a24db71ca86dd08` (1,880 bytes).
+
+## Teixeira Duarte 2024 retrieval-size regression
+
+- `teixeira-duarte-2024-envelope.xhtml.gz` is the complete retained XHTML extraction envelope from the official [2024 report](https://www.cmvm.pt/PInstitucional/EsefViewer?Input=2D87F631793517C327F1B0A7CBC8322C2CCB3E58A5EFC1C4CC4701D58B0E3064), captured before this fix.
+- The existing capture removed embedded binary assets; no text, nodes, attributes, or whitespace were changed for the fixture.
+- Gzip SHA-256: `719b5e7c2ada03dd7e497244887aa0cd4841d88a105a68ad540c0d68a2505c0b`.
+- The 28,900,183-character envelope exceeds the 16 Mi-character retrieval ceiling because of repeated layout declarations. Conservative style compaction reduces it to 16,046,571 characters without changing its normalized report text.
+- Full original normalization and recovered normalization both produce 1,134,006 UTF-8 bytes, SHA-256 `6f653a4287fa07d953873bc045eb337e426c7a382e5d73bff6eef8443d77a3d9`.

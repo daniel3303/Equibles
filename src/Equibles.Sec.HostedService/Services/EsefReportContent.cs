@@ -26,7 +26,11 @@ public static class EsefReportContent
     /// <see cref="Build"/> returns no body by design rather than because nothing was readable.
     /// </summary>
     public static bool ExceedsRetrievalLimit(string html) =>
-        StripEmbeddedData(html)?.Length > MaxRetrievalHtmlChars;
+        PrepareRetrievalMarkup(html)?.Length > MaxRetrievalHtmlChars;
+
+    // Small reports stay byte-identical; oversized XHTML sheds only unused layout declarations.
+    public static string PrepareRetrievalMarkup(string html) =>
+        EsefRetrievalStyles.Compact(StripEmbeddedData(html), MaxRetrievalHtmlChars);
 
     /// <summary>
     /// Drops every encoded payload the report embeds in itself. A European report carries its figures and
@@ -89,7 +93,7 @@ public static class EsefReportContent
     {
         ArgumentNullException.ThrowIfNull(normalizer);
         ArgumentNullException.ThrowIfNull(converter);
-        var stripped = StripEmbeddedData(html);
+        var stripped = PrepareRetrievalMarkup(html);
         if (string.IsNullOrEmpty(stripped) || stripped.Length > MaxRetrievalHtmlChars)
             return [];
         var normalized = normalizer.NormalizeFragment(

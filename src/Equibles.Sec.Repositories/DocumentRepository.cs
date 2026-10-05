@@ -172,7 +172,17 @@ public class DocumentRepository : BaseRepository<Document>
     {
         return GetAll()
             .Where(d =>
-                d.NormalizedContentVersion < Document.NormalizedContentBuilderVersion
+                (
+                    d.NormalizedContentVersion < Document.NormalizedContentBuilderVersion
+                    || (
+                        (
+                            d.DocumentType == DocumentType.EsefAnnualReport
+                            || d.DocumentType == DocumentType.EsefReport
+                        )
+                        && d.NormalizedContentVersion < Document.EsefEmptyContentRecoveryVersion
+                        && d.Content.Size == 0
+                    )
+                )
                 && d.NormalizedContentAttempts < Document.MaxNormalizedContentAttempts
                 && (
                     (
