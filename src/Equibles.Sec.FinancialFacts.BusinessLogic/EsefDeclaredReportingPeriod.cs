@@ -91,8 +91,7 @@ internal static class EsefDeclaredReportingPeriod
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.None,
                     out var date
-                )
-                || (dates.TryGetValue(declaration.Field, out var previous) && previous != date)
+                ) || (dates.TryGetValue(declaration.Field, out var previous) && previous != date)
             )
                 return false;
             dates[declaration.Field] = date;
