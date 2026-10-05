@@ -34,6 +34,13 @@ public class EsefRetrievalStylesTests
         "2E9284D51B74FA650113D1A5BA215D8E2C0FC3CE9FD624D59484D31A21C6FE9D",
         "21. Interest-Bearing Loans and Borrowings"
     )]
+    [InlineData(
+        "bff-2025",
+        34_672_821,
+        2_048_711,
+        "C599CD1356A8F79910CFCA43F03DD28D085BF77BD144421D17C36ABF703BA474",
+        "Debiti verso banche"
+    )]
     public void Build_RecordedOversizedReport_RetainsTheCompleteNormalizedText(
         string fixture,
         int characters,
@@ -75,6 +82,73 @@ public class EsefRetrievalStylesTests
         var source =
             $"<html xmlns='{Namespace}'><body><span style='left:1px'>Debt 123.45</span></body></html>";
         EsefReportContent.PrepareRetrievalMarkup(source).Should().Be(source);
+    }
+
+    [Fact]
+    public void Prepare_LayoutMetadataPreservesMarkdownStructureAndSemanticClasses()
+    {
+        const string body = """
+            <div class="layout-one layout-two" id="section"><span class="layout-three layout-four" id="span-id">Debt 123</span></div>
+            <span id="standalone">Interest 456</span><a id="anchor" class="link-style" href="#section">Source</a>
+            <span class="math display" id="equation">x + y</span>
+            <div class="line-block">Line one<br/>Line two</div>
+            <div class="footnotes" role="doc-endnotes"><p>Footnote</p></div>
+            <div class="item-list-element-wrapper"><span>1.</span><div style="display:inline">List item</div></div>
+            <div class="highlight-source-csharp"><pre><code>var debt = 123;</code></pre></div>
+            <div class="language-json"><pre><code>{}</code></pre></div>
+            <div class="lang-text"><pre><code>Debt</code></pre></div>
+            <div class="brush: json"><pre><code>{"debt":123}</code></pre></div>
+            <code class="language-js">value</code>
+            <span xmlns:custom="urn:custom" custom:class="keep-class" custom:id="keep-id">Namespaced</span>
+            <svg xmlns="http://www.w3.org/2000/svg"><span class="keep-svg" id="keep-svg-id">Diagram</span></svg>
+            """;
+        var source = LargeReport(body);
+        var compact = EsefReportContent.PrepareRetrievalMarkup(source);
+        var document = XDocument.Parse(compact);
+        var layoutSpan = document.Descendants(XName.Get("span", Namespace)).First();
+        layoutSpan.Attribute("class").Value.Should().NotBeNullOrWhiteSpace();
+        layoutSpan
+            .Attribute("class")
+            .Value.Length.Should()
+            .BeLessThan("layout-three layout-four".Length);
+        layoutSpan.Attribute("id").Value.Should().BeEmpty();
+        compact.Should().Contain("id=\"section\"").And.Contain("id=\"standalone\"");
+        compact.Should().Contain("id=\"anchor\" class=\"link-style\" href=\"#section\"");
+        foreach (
+            var meaningfulClass in new[]
+            {
+                "math display",
+                "line-block",
+                "footnotes",
+                "item-list-element-wrapper",
+                "highlight-source-csharp",
+                "language-json",
+                "lang-text",
+                "brush: json",
+                "language-js",
+                "keep-svg",
+            }
+        )
+        {
+            compact.Should().Contain($"class=\"{meaningfulClass}\"");
+        }
+        compact
+            .Should()
+            .Contain("custom:class=\"keep-class\"")
+            .And.Contain("custom:id=\"keep-id\"");
+
+        // Removing unused font-size padding produces the same document without crossing the cap.
+        var small = source.Replace(
+            new string('0', EsefReportContent.MaxRetrievalHtmlChars),
+            "0",
+            StringComparison.Ordinal
+        );
+        var normalizer = new SecDocumentHtmlNormalizer();
+        var converter = new SecDocumentHtmlToMarkdownConverter();
+        EsefReportContent
+            .Build(source, normalizer, converter)
+            .Should()
+            .Equal(EsefReportContent.Build(small, normalizer, converter));
     }
 
     [Fact]

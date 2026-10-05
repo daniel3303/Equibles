@@ -214,6 +214,8 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
     [InlineData("EsefReport", 1)]
     [InlineData("EsefAnnualReport", 2)]
     [InlineData("EsefReport", 2)]
+    [InlineData("EsefAnnualReport", 3)]
+    [InlineData("EsefReport", 3)]
     public async Task Backfill_EsefReplacesOnlyDerivedContentAndFinishesItsQueueEntry(
         string form,
         int version
