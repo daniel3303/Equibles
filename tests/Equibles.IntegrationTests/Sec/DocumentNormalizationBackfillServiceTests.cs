@@ -331,7 +331,10 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData("EsefAnnualReport", 20, 2, false)]
     [InlineData("EsefAnnualReport", 0, 2, true)]
     [InlineData("EsefReport", 0, 2, true)]
-    [InlineData("EsefAnnualReport", 0, 3, false)]
+    [InlineData("EsefAnnualReport", 0, 3, true)]
+    [InlineData("EsefReport", 0, 3, true)]
+    [InlineData("EsefAnnualReport", 20, 3, false)]
+    [InlineData("EsefAnnualReport", 0, 4, false)]
     [InlineData("TenK", 0, 1, false)]
     public void Pending_EmptyEsefRecovery_DoesNotReopenReadableOrCurrentDocuments(
         string form,
@@ -355,6 +358,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
+    [InlineData(3)]
     public async Task Backfill_EmptyEsefAtThePriorVersion_UsesRetainedEnvelopeAndAdvancesGeneration(
         int version
     )

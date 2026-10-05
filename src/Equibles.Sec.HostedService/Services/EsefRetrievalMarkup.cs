@@ -4,8 +4,8 @@ using System.Xml;
 
 namespace Equibles.Sec.HostedService.Services;
 
-// The original keeps its presentation. Retrieval needs only the styles the normalizer reads.
-internal static partial class EsefRetrievalStyles
+// The original keeps its presentation. Only the retrieval copy sheds unused layout metadata.
+internal static partial class EsefRetrievalMarkup
 {
     private const string XhtmlNamespace = "http://www.w3.org/1999/xhtml";
     private static readonly HashSet<string> LayoutProperties = new(StringComparer.OrdinalIgnoreCase)
@@ -123,6 +123,8 @@ internal static partial class EsefRetrievalStyles
     private static void CopyElement(XmlReader reader, XmlWriter writer)
     {
         var isXhtml = reader.NamespaceURI == XhtmlNamespace;
+        var elementName = reader.LocalName;
+        var compactClass = isXhtml && CanCompactClass(elementName, reader.GetAttribute("class"));
         var empty = reader.IsEmptyElement;
         writer.WriteStartElement(reader.Prefix, reader.LocalName, reader.NamespaceURI);
         if (reader.MoveToFirstAttribute())
@@ -133,6 +135,15 @@ internal static partial class EsefRetrievalStyles
                     isXhtml && reader.NamespaceURI.Length == 0 && reader.LocalName == "style"
                         ? CompactStyle(reader.Value)
                         : reader.Value;
+                if (compactClass && reader.NamespaceURI.Length == 0)
+                {
+                    // Nonempty class/id metadata changes Markdown paragraph boundaries.
+                    // Retain that branch with one neutral class; a span's id is then redundant.
+                    if (reader.LocalName == "class")
+                        value = "x";
+                    else if (elementName == "span" && reader.LocalName == "id")
+                        value = "";
+                }
                 writer.WriteAttributeString(
                     reader.Prefix,
                     reader.LocalName,
@@ -144,6 +155,32 @@ internal static partial class EsefRetrievalStyles
         }
         if (empty)
             writer.WriteEndElement();
+    }
+
+    private static readonly string[] SemanticClasses =
+    [
+        "item-list-element-wrapper",
+        "math",
+        "footnote",
+        "line-block",
+        "highlight",
+        "language-",
+        "lang-",
+        "brush:",
+    ];
+
+    private static bool CanCompactClass(string element, string value)
+    {
+        if (element is not ("span" or "div") || string.IsNullOrWhiteSpace(value))
+            return false;
+        // These conventions are consumed by the normalizer or ReverseMarkdown readers,
+        // including code-language classes read from a preformatted block's parent.
+        foreach (var fragment in SemanticClasses)
+        {
+            if (value.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
     }
 
     [GeneratedRegex(

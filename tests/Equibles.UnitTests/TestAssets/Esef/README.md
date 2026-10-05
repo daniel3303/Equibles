@@ -46,3 +46,10 @@
 - Gzip SHA-256: `3f8eacf563a80d735f419540f725a19f9e753775340edf5c5ee22383ae7d3c81`.
 - Repeated unused layout declarations share attributes with flat numeric `rgba(...)` functions; preserving those entire attributes leaves 20,768,126 characters above the retrieval limit.
 - Full original normalization produces 929,052 UTF-8 bytes, SHA-256 `2e9284d51b74fa650113d1a5ba215d8e2c0fc3ce9fd624d59484d31a21c6fe9d`; recovered normalization must match exactly.
+
+## BFF 2025 retrieval metadata
+
+- `bff-2025-envelope.xhtml.gz` is the complete retained XHTML envelope from the [official 1INFO report package](https://www.1info.it/PORTALE1INFO/Pdf/Pdf?pdf=167713_oneinfo.zip&data=2025&filetype=documenti&titolo=&download=1); no fixture bytes were changed.
+- Its gzip SHA-256 is `76611d4b227a25cd6fd3a5329903d03fcb52bcbdc8e24161670a47a1f96149fa`; the 34,672,821-character envelope retains the capture's existing binary-asset removal.
+- Repeated span/div layout classes and span ids dominate its size. Removing class metadata changes Markdown paragraph boundaries, so the compact retrieval copy preserves a neutral nonempty class.
+- Full original normalization produces 2,048,711 UTF-8 bytes, SHA-256 `c599cd1356a8f79910cfca43f03dd28d085bf77bd144421d17c36abf703ba474`; recovered text must match exactly, including whitespace.
