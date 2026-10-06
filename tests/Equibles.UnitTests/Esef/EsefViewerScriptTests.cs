@@ -74,6 +74,88 @@ public class EsefViewerScriptTests
         Build(source).Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(
+        "<ix:nonFraction xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\" name=\"Assets\" contextRef=\"C1\" unitRef=\"USD\">1<script>9</script>3</ix:nonFraction>"
+    )]
+    [InlineData(
+        "<ix:continuation xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\" id=\"continued\">1<script>9</script>3</ix:continuation>"
+    )]
+    [InlineData(
+        "<context xmlns=\"http://www.xbrl.org/2003/instance\" id=\"C1\"><entity><identifier scheme=\"urn:lei\">1<script xmlns=\"http://www.w3.org/1999/xhtml\">9</script>3</identifier></entity></context>"
+    )]
+    [InlineData(
+        "<value xmlns=\"urn:financial\">1<script xmlns=\"http://www.w3.org/1999/xhtml\">9</script>3</value>"
+    )]
+    [InlineData("<div>1<script>9</script>3</div>")]
+    [InlineData("<div><body><script>9</script></body></div>")]
+    public void Prepare_ScriptInAnotherScope_PreservesTheOriginalSizeRefusal(string body)
+    {
+        var source = LargeReport(body);
+        EsefReportContent.PrepareRetrievalMarkup(source).Should().Be(source);
+        Build(source).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Prepare_ScriptInsideNumericFact_DoesNotChangeItsValue()
+    {
+        var source = LargeReport(
+            """
+            <div xmlns:xbrli="http://www.xbrl.org/2003/instance"
+                 xmlns:ix="http://www.xbrl.org/2013/inlineXBRL"
+                 xmlns:us-gaap="http://fasb.org/us-gaap/2018-01-31">
+              <ix:header><ix:resources>
+                <xbrli:context id="C1">
+                  <xbrli:entity><xbrli:identifier scheme="x">0</xbrli:identifier></xbrli:entity>
+                  <xbrli:period><xbrli:instant>2025-12-31</xbrli:instant></xbrli:period>
+                </xbrli:context>
+                <xbrli:unit id="USD"><xbrli:measure>USD</xbrli:measure></xbrli:unit>
+              </ix:resources></ix:header>
+              <ix:nonFraction name="us-gaap:Assets" contextRef="C1" unitRef="USD">1<script type="application/json">9</script>3</ix:nonFraction>
+            </div>
+            """
+        );
+        var parser = new InlineXbrlParser();
+        var before = parser.Parse(source);
+        before.Should().ContainSingle().Which.Value.Should().Be(193m);
+        parser
+            .Parse(EsefReportContent.PrepareRetrievalMarkup(source))
+            .Should()
+            .BeEquivalentTo(before);
+    }
+
+    [Theory]
+    [InlineData("<head><script>Hidden 987</script></head><body><p>Loans 123</p></body>", true)]
+    [InlineData("<head/><body><script>Hidden 987</script><p>Loans 123</p></body>", true)]
+    [InlineData("<head/><script>Hidden 987</script><body><p>Loans 123</p></body>", false)]
+    [InlineData(
+        "<body/><value xmlns=\"urn:financial\"><script xmlns=\"http://www.w3.org/1999/xhtml\">987</script></value>",
+        false
+    )]
+    [InlineData(
+        "<body xmlns=\"urn:financial\"><script xmlns=\"http://www.w3.org/1999/xhtml\">987</script></body>",
+        false
+    )]
+    public void Prepare_RootScriptContainer_RequiresDirectXhtmlHeadOrBody(
+        string children,
+        bool compact
+    )
+    {
+        var source =
+            $"<html xmlns=\"{Xhtml}\" style=\"font-size:{new string('0', EsefReportContent.MaxRetrievalHtmlChars)}px\">{children}</html>";
+        var prepared = EsefReportContent.PrepareRetrievalMarkup(source);
+        if (compact)
+        {
+            prepared.Length.Should().BeLessThan(EsefReportContent.MaxRetrievalHtmlChars);
+            Build(source).Should().Contain("Loans 123").And.NotContain("Hidden 987");
+        }
+        else
+        {
+            prepared.Should().Be(source);
+            Build(source).Should().BeEmpty();
+        }
+    }
+
     [Fact]
     public void Prepare_EscapedScriptSpellingInProse_PreservesIt()
     {

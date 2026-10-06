@@ -73,15 +73,23 @@ internal static partial class EsefRetrievalMarkup
                     NewLineHandling = NewLineHandling.Entitize,
                 }
             );
+            var scriptContainer = false;
             do
             {
+                if (reader.Depth == 1)
+                    scriptContainer =
+                        reader.NodeType == XmlNodeType.Element
+                        && reader.NamespaceURI == XhtmlNamespace
+                        && reader.LocalName is "head" or "body";
                 if (
                     reader.NodeType == XmlNodeType.Element
                     && reader.LocalName == "script"
                     && reader.NamespaceURI == XhtmlNamespace
                 )
                 {
-                    if (!SkipScript(reader))
+                    // Only root head/body children are presentation scripts; other
+                    // locations may contribute to a fact, context or continuation.
+                    if (reader.Depth != 2 || !scriptContainer || !SkipScript(reader))
                         return source;
                 }
                 else
