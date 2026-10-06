@@ -98,3 +98,11 @@
 - Uncompressed page: 21,443 bytes, SHA-256 `af4f7e71dfc033aee4dce0cdd925c8dfc65cfb4bbf03504c819f4ce3bf95fda1`.
 - Its borrowing paragraph occupies four same-column lines at bottom coordinates 166, 148, 129 and 111 pixels; a separate table precedes it.
 - The test exercises complete normalization and conversion, preserving that table while removing artificial paragraph breaks inside the loan disclosure.
+
+## Glaston 2025 liquidity disclosure continuation
+
+- `glaston-2025-liquidity-continuation.xhtml.gz` retains the complete `f0__s7__6__114` narrative and both referenced continuations from the [2025 annual report](https://www.oam.fi/cns-web/oam/viewAttachment.action?messageAttachmentId=340873), read on 2026-10-06.
+- The three complete stylesheets follow the retained extraction envelope, with embedded binary payloads removed; other report content and media are omitted. XML serialization preserves equivalent namespace and empty-element syntax.
+- Original: 36,428,122 bytes, SHA-256 `3389c81ae6d0cadbd557ca3958c99014fba8827a7958a9018d3769d6ab8935be`.
+- Uncompressed fixture: 1673240 bytes, SHA-256 `77ab8283722c187202f68144ee50cef099fe09a5d474a77408258b41aa88c4d2`.
+- The issuer sentence ends in `con-`; the next linked fragment continues it with `sists` and the facility amounts. The following complete paragraph and financial tables remain separate.
