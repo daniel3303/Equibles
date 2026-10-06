@@ -20,6 +20,7 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
     {
         _steps =
         [
+            new PositionedProseConversionStep(),
             new XbrlStripStep(),
             new TableNormalizationStep(_parser),
             new PaginationRemovalStep(),

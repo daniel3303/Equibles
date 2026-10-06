@@ -78,3 +78,12 @@
 - A root heading must never replace the document body and discard its table.
 - Original decompressed JSON SHA-256: `289feea2ac743aea37d0a34d629478f3cbe37786037a09a197a857eb1b513323` (1338544 bytes).
 - The fixture is gzip-compressed without changing the captured whitespace; gzip SHA-256: `e803fdb6d57672ca58136d7d75dd866e0d025df7f5f524e78714faf735846400`.
+
+## Hostelworld 2025 positioned borrowing paragraph
+
+- `hostelworld-2025-borrowings-page.xhtml.gz` contains the complete unchanged `DTRTextContainer` element for printed page 203 from the retained [2025 annual report](https://data.fca.org.uk/artefacts/NSM/DirectUpload/NI-000142085/NI-000142085_213800OC94PF2D675H41-2025-12-31.zip), read on 2026-10-06.
+- The fixture omits the surrounding report; the selected element, coordinates, inline XBRL wrappers, tables and whitespace are unchanged.
+- Retained extraction envelope: 3,232,369 UTF-8 bytes, SHA-256 `48f04fb34620d028e426bf9833879c607e34533e39f0a6942144c740a6a3dae8`.
+- Uncompressed page: 21,443 bytes, SHA-256 `af4f7e71dfc033aee4dce0cdd925c8dfc65cfb4bbf03504c819f4ce3bf95fda1`.
+- Its borrowing paragraph occupies four same-column lines at bottom coordinates 166, 148, 129 and 111 pixels; a separate table precedes it.
+- The test exercises complete normalization and conversion, preserving that table while removing artificial paragraph breaks inside the loan disclosure.
