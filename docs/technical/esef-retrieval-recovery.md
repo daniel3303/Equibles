@@ -29,3 +29,14 @@ WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
   AND d."XbrlType" IN (0, 2) -- InlineIxbrl, JsonXbrl
   AND d."XbrlContentId" IS NOT NULL;
 ```
+
+## Positioned prose
+
+- A retained `DTRTextContainer` may reconstruct adjacent inline `div.t` lines before XBRL wrappers are removed; keep every other layout unchanged.
+- Require at least three same-column lines with complete inline pixel coordinates, descending baselines, 4–40 pixel gaps and at most one pixel of gap variation.
+- Inventory all positioned text, including nodes without the line class; keep competing baselines, tables, lists, headings, ended sentences, numeric rows and ambiguous positions separate.
+- Require plain text lines with only the line marker and generated font classes; preserve XBRL, styled or semantic child elements without joining them.
+- Decline stylesheets, nested positioning, coordinate overrides, explicit breaks and unsupported inline layout declarations.
+- Continue only unfinished long prose into lowercase or currency-prefixed text; preserve its original child nodes with explicit line breaks inside one paragraph.
+- Never cross an element wrapper, visible intervening node or page boundary; preserve every non-whitespace character and original source file.
+- This conversion does not globally reopen readable reports; a finite historical repair must identify the affected retained envelopes and use the existing normalization queue.
