@@ -144,7 +144,8 @@ public static class EsefJsonReportContent
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.None,
                     out var start
-                ) && start <= periodEnd
+                )
+                && start <= periodEnd
             );
     }
 }

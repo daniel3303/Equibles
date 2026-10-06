@@ -72,10 +72,7 @@ public class EsefJsonReportContentTests
         "ifrs-full:ConsolidatedAndSeparateFinancialStatementsAxis",
         "ifrs-full:SeparateMember"
     )]
-    public void Build_IneligibleNote_DoesNotBorrowContextFromNumericFacts(
-        string key,
-        string value
-    )
+    public void Build_IneligibleNote_DoesNotBorrowContextFromNumericFacts(string key, string value)
     {
         var report = Report();
         report["facts"][NoteId]["dimensions"][key] = value;
