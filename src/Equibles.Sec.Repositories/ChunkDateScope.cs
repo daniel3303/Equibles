@@ -33,7 +33,10 @@ internal static class ChunkDateScope
             documents = documents.Where(document => document.ReportingDate >= start);
         if (endDate is { } end)
             documents = documents.Where(document => document.ReportingDate <= end);
-        var ids = await documents.Select(document => document.Id).Take(MaximumDocuments + 1).ToArrayAsync(token);
+        var ids = await documents
+            .Select(document => document.Id)
+            .Take(MaximumDocuments + 1)
+            .ToArrayAsync(token);
         // A partial list would silently lose matches; large windows retain ranked-prefix validation.
         return ids.Length <= MaximumDocuments ? ids : null;
     }
