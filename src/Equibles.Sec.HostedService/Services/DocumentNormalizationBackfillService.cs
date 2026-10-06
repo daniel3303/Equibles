@@ -115,6 +115,10 @@ public class DocumentNormalizationBackfillService
                 continue;
 
             result.Processed++;
+            var replayingReadableEsef =
+                document.DocumentType?.IsEsef() == true
+                && document.NormalizedContentVersion >= Document.NormalizedContentBuilderVersion
+                && document.Content?.Size > 0;
             document.NormalizedContentAttempts++;
             var currentAttempt = document.NormalizedContentAttempts;
             if (
@@ -143,6 +147,10 @@ public class DocumentNormalizationBackfillService
                     document,
                     cancellationToken
                 );
+                if (replayingReadableEsef && normalizedContent.Length == 0)
+                    throw new InvalidOperationException(
+                        "ESEF replay cannot replace readable stored text with an empty body."
+                    );
                 if (
                     !emptyByDesign
                     && (
@@ -167,7 +175,13 @@ public class DocumentNormalizationBackfillService
 
                 if (await ContentMatches(document, normalizedContent))
                 {
-                    await _persistenceService.ResetChunks(document, cancellationToken);
+                    if (replayingReadableEsef)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await _documentRepository.SaveChanges();
+                    }
+                    else
+                        await _persistenceService.ResetChunks(document, cancellationToken);
                     result.Unchanged++;
                     continue;
                 }
@@ -224,16 +238,37 @@ public class DocumentNormalizationBackfillService
             );
         }
 
-        const int maxEnvelopeBytes = 50 * 1024 * 1024;
-        if (document.XbrlUncompressedSize > maxEnvelopeBytes)
-            throw new InvalidOperationException(
-                "ESEF envelope exceeds the normalization size limit."
-            );
         var captured = await _documentRepository
             .GetAll()
             .Include(d => d.XbrlContent)
                 .ThenInclude(f => f.FileContent)
+            .Include(d => d.AsFiledHtmlContent)
+                .ThenInclude(f => f.FileContent)
             .SingleAsync(d => d.Id == document.Id, cancellationToken);
+        if (
+            captured.DocumentType == DocumentType.EsefAnnualReport
+            && captured.XbrlType == XbrlType.InlineIxbrl
+            && captured.AsFiledHtmlContentId != null
+        )
+        {
+            var envelope = await EsefRetainedOriginal.ReadEnvelope(
+                captured,
+                _fileManager,
+                cancellationToken
+            );
+            var originalHtml = Encoding.UTF8.GetString(envelope);
+            var originalContent = EsefReportContent.Build(originalHtml, _normalizer, _converter);
+            return (
+                originalContent,
+                originalContent.Length == 0 && EsefReportContent.ExceedsRetrievalLimit(originalHtml)
+            );
+        }
+
+        const int maxEnvelopeBytes = EsefReportEnvelope.MaximumEnvelopeBytes;
+        if (document.XbrlUncompressedSize > maxEnvelopeBytes)
+            throw new InvalidOperationException(
+                "ESEF envelope exceeds the normalization size limit."
+            );
         await using var stream = await _fileManager.OpenRead(captured.XbrlContent);
         await using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var output = new MemoryStream();

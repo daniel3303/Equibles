@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
@@ -29,7 +30,6 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     {
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .EnableServiceProviderCaching(false)
             .Options;
         _dbContext = new EquiblesFinancialDbContext(
             options,
@@ -224,7 +224,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(
                 Arg.Is<Document>(d =>
                     d.Id == document.Id
-                    && d.NormalizedContentVersion == Document.EsefEmptyContentRecoveryVersion
+                    && d.NormalizedContentVersion == Document.EsefContentBuilderVersion
                 ),
                 Arg.Is<byte[]>(b => Encoding.UTF8.GetString(b).Contains("Retained annual report")),
                 Arg.Any<CancellationToken>()
@@ -259,7 +259,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(
                 Arg.Is<Document>(d =>
                     d.Id == document.Id
-                    && d.NormalizedContentVersion == Document.EsefEmptyContentRecoveryVersion
+                    && d.NormalizedContentVersion == Document.EsefContentBuilderVersion
                     && d.NormalizedContentAttempts == 0
                 ),
                 Arg.Is<byte[]>(b => b.Length == 0),
@@ -330,7 +330,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         result.Failed.Should().Be(failed ? 1 : 0);
         document
             .NormalizedContentVersion.Should()
-            .Be(failed ? 4 : Document.EsefEmptyContentRecoveryVersion);
+            .Be(failed ? 4 : Document.EsefContentBuilderVersion);
         document.NormalizedContentAttempts.Should().Be(failed ? 1 : 0);
         document.XbrlContentId.Should().Be(originalId);
         document.XbrlContent.FileContent.Bytes.Should().Equal(original);
@@ -387,19 +387,22 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [Theory]
     [InlineData("EsefAnnualReport", 0, 1, true)]
     [InlineData("EsefReport", 0, 1, true)]
-    [InlineData("EsefAnnualReport", 20, 1, false)]
-    [InlineData("EsefAnnualReport", 20, 2, false)]
+    [InlineData("EsefAnnualReport", 20, 1, true)]
+    [InlineData("EsefAnnualReport", 20, 2, true)]
     [InlineData("EsefAnnualReport", 0, 2, true)]
     [InlineData("EsefReport", 0, 2, true)]
     [InlineData("EsefAnnualReport", 0, 3, true)]
     [InlineData("EsefReport", 0, 3, true)]
-    [InlineData("EsefAnnualReport", 20, 3, false)]
+    [InlineData("EsefAnnualReport", 20, 3, true)]
     [InlineData("EsefAnnualReport", 0, 4, true)]
     [InlineData("EsefReport", 0, 4, true)]
-    [InlineData("EsefAnnualReport", 20, 4, false)]
-    [InlineData("EsefAnnualReport", 0, 5, false)]
+    [InlineData("EsefAnnualReport", 20, 4, true)]
+    [InlineData("EsefAnnualReport", 0, 5, true)]
+    [InlineData("EsefAnnualReport", 20, 5, true)]
+    [InlineData("EsefAnnualReport", 0, 6, false)]
+    [InlineData("EsefReport", 20, 6, false)]
     [InlineData("TenK", 0, 1, false)]
-    public void Pending_EmptyEsefRecovery_DoesNotReopenReadableOrCurrentDocuments(
+    public void Pending_InlineEsefReplay_ReopensStaleTextButKeepsCurrentDocumentsSettled(
         string form,
         long size,
         int version,
@@ -442,7 +445,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
 
         result.Replaced.Should().Be(1);
         result.Failed.Should().Be(0);
-        document.NormalizedContentVersion.Should().Be(Document.EsefEmptyContentRecoveryVersion);
+        document.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
         await _secEdgarClient
             .DidNotReceiveWithAnyArgs()
             .GetDocumentContent(default, default, default);
@@ -455,6 +458,229 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Theory]
+    [InlineData(1, 20, false)]
+    [InlineData(4, 20, false)]
+    [InlineData(4, 0, true)]
+    [InlineData(5, 0, false)]
+    public void Pending_JsonRecovery_RemainsLimitedToPriorEmptyReports(
+        int version,
+        long size,
+        bool expected
+    )
+    {
+        var document = SeedEsef();
+        document.XbrlType = XbrlType.JsonXbrl;
+        document.NormalizedContentVersion = version;
+        document.Content.Size = size;
+        _dbContext.SaveChanges();
+        new DocumentRepository(_dbContext)
+            .GetPendingNormalizedContent()
+            .Any(row => row.Id == document.Id)
+            .Should()
+            .Be(expected);
+    }
+
+    [Fact]
+    public async Task Backfill_ReadableEsefWithUnchangedText_PreservesChunksAndSettlesReplay()
+    {
+        var document = SeedEsef();
+        document.NormalizedContentVersion = 1;
+        document.ChunkedAt = DateTime.UtcNow;
+        document.ChunkAttempts = 2;
+        var chunkedAt = document.ChunkedAt;
+        _dbContext.SaveChanges();
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(
+                document.XbrlContent.FileContent.Bytes,
+                writable: false
+            ));
+        _fileManager.GetContent(document.Content).Returns("Retained annual report"u8.ToArray());
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Unchanged.Should().Be(1);
+        result.Failed.Should().Be(0);
+        _dbContext.ChangeTracker.Clear();
+        var saved = _dbContext.Set<Document>().Single(row => row.Id == document.Id);
+        saved.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
+        saved.NormalizedContentAttempts.Should().Be(0);
+        saved.ChunkedAt.Should().Be(chunkedAt);
+        saved.ChunkAttempts.Should().Be(2);
+        await _persistenceService.DidNotReceiveWithAnyArgs().ResetChunks(default, default);
+        await _persistenceService
+            .DidNotReceiveWithAnyArgs()
+            .ReplaceContent(default, default, default);
+        (await BuildSut().Backfill(1)).Processed.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Backfill_ReadableEsefThatNowExceedsTheCeiling_KeepsExistingTextAndRecordsFailure()
+    {
+        var document = SeedEsef();
+        document.NormalizedContentVersion = 1;
+        var oldContentId = document.ContentId;
+        _dbContext.SaveChanges();
+        var oversized = GzipCompressor.Compress(
+            Encoding.UTF8.GetBytes(
+                "<html><body><p>"
+                    + new string('a', EsefReportContent.MaxRetrievalHtmlChars + 1)
+                    + "</p></body></html>"
+            )
+        );
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(oversized, writable: false));
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Failed.Should().Be(1);
+        _dbContext.ChangeTracker.Clear();
+        var saved = _dbContext.Set<Document>().Single(row => row.Id == document.Id);
+        saved.ContentId.Should().Be(oldContentId);
+        saved.NormalizedContentVersion.Should().Be(1);
+        document.NormalizedContentAttempts.Should().Be(1);
+        await _persistenceService
+            .DidNotReceiveWithAnyArgs()
+            .ReplaceContent(default, default, default);
+    }
+
+    [Fact]
+    public async Task Backfill_ReadableGlastonEnvelope_RejoinsItsCompleteBorrowingDisclosure()
+    {
+        var document = SeedEsef();
+        document.NormalizedContentVersion = 1;
+        var original = System.IO.File.ReadAllBytes(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets/Esef/glaston-2025-legacy-envelope.xhtml.gz"
+            )
+        );
+        Convert
+            .ToHexStringLower(SHA256.HashData(original))
+            .Should()
+            .Be("4cf6823ed339e46502210ec80a7a452d464d332fa623c4be2af837bd6f0469f8");
+        document.XbrlContent.FileContent.Bytes = original;
+        var originalId = document.XbrlContentId;
+        _dbContext.SaveChanges();
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(original, writable: false));
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Replaced.Should().Be(1);
+        result.Failed.Should().Be(0);
+        await _persistenceService
+            .Received(1)
+            .ReplaceContent(
+                document,
+                Arg.Is<byte[]>(bytes =>
+                    bytes.Length == 586181
+                    && Convert.ToHexStringLower(SHA256.HashData(bytes))
+                        == "0741059b65e3784ce64a6a40d3896f09bb037835ef0bffce6b772a8c4a6acd49"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        document.XbrlContentId.Should().Be(originalId);
+        document.XbrlContent.FileContent.Bytes.Should().Equal(original);
+        await _secEdgarClient
+            .DidNotReceiveWithAnyArgs()
+            .GetDocumentContent(default, default, default);
+    }
+
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("wrong-hash")]
+    [InlineData("wrong-size")]
+    [InlineData("wrong-expanded-size")]
+    [InlineData("bad-header")]
+    [InlineData("wrong-issuer")]
+    [InlineData("wrong-period")]
+    [InlineData("future-period")]
+    [InlineData("storage-wrapper")]
+    [InlineData("oversized-source")]
+    [InlineData("oversized-inflated")]
+    public async Task Backfill_RetainedAnnualOriginal_IsPreferredOnlyWithCompleteCaptureAndIdentityProof(
+        string scenario
+    )
+    {
+        var document = SeedEsef();
+        document.NormalizedContentVersion = 1;
+        _company.LegalEntityIdentifier = "969500N6BAT2PU986341";
+        document.ReportingForDate = new DateOnly(2026, 4, 30);
+        document.ReportingDate = new DateOnly(2026, 8, 31);
+        var original = System.IO.File.ReadAllBytes(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets/Esef/dila-tff-2026.xhtml")
+        );
+        var compressed = GzipCompressor.Compress(original);
+        if (scenario == "bad-header")
+            compressed[0] = 0;
+        var file = new Equibles.Media.Data.Models.File
+        {
+            Name = "original",
+            Extension = "gz",
+            ContentType = "application/gzip",
+            Size = compressed.Length,
+            ContentHash = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(compressed)),
+            FileContent = new Equibles.Media.Data.Models.FileContent { Bytes = compressed },
+        };
+        document.AsFiledHtmlContent = file;
+        document.AsFiledHtmlUncompressedSize = original.Length;
+        if (scenario == "wrong-hash")
+            file.ContentHash = "sha256:" + new string('0', 64);
+        if (scenario == "wrong-size")
+            file.Size++;
+        if (scenario == "wrong-expanded-size")
+            document.AsFiledHtmlUncompressedSize++;
+        if (scenario == "wrong-issuer")
+            _company.LegalEntityIdentifier = "2549001EPXH6NK7I2R78";
+        if (scenario == "wrong-period")
+            document.ReportingForDate = new DateOnly(2025, 4, 30);
+        if (scenario == "future-period")
+            document.ReportingDate = new DateOnly(2026, 4, 29);
+        if (scenario == "storage-wrapper")
+            file.StorageProvider = Equibles.Media.Data.Models.StorageProvider.FileSystemGzip;
+        if (scenario == "oversized-source")
+            file.Size = EsefReportEnvelope.MaximumSourceBytes + 1L;
+        if (scenario == "oversized-inflated")
+            document.AsFiledHtmlUncompressedSize = EsefReportEnvelope.MaximumSourceBytes + 1L;
+        _dbContext.Add(file);
+        _dbContext.SaveChanges();
+        var originalId = file.Id;
+        var envelopeId = document.XbrlContentId;
+        _fileManager.OpenRead(file).Returns(_ => new MemoryStream(compressed, writable: false));
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Processed.Should().Be(1);
+        result.Failed.Should().Be(scenario == "valid" ? 0 : 1);
+        result.Replaced.Should().Be(scenario == "valid" ? 1 : 0);
+        document.AsFiledHtmlContentId.Should().Be(originalId);
+        document.XbrlContentId.Should().Be(envelopeId);
+        file.FileContent.Bytes.Should().Equal(compressed);
+        await _fileManager.DidNotReceive().OpenRead(document.XbrlContent);
+        await _secEdgarClient
+            .DidNotReceiveWithAnyArgs()
+            .GetDocumentContent(default, default, default);
+        if (scenario == "valid")
+            await _persistenceService
+                .Received(1)
+                .ReplaceContent(
+                    document,
+                    Arg.Is<byte[]>(bytes =>
+                        bytes.Length > 0
+                        && !Encoding.UTF8.GetString(bytes).Contains("Retained annual report")
+                    ),
+                    Arg.Any<CancellationToken>()
+                );
+        else
+            await _persistenceService
+                .DidNotReceiveWithAnyArgs()
+                .ReplaceContent(default, default, default);
     }
 
     private Document SeedEsef()

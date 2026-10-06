@@ -179,8 +179,17 @@ public class DocumentRepository : BaseRepository<Document>
                             d.DocumentType == DocumentType.EsefAnnualReport
                             || d.DocumentType == DocumentType.EsefReport
                         )
-                        && d.NormalizedContentVersion < Document.EsefEmptyContentRecoveryVersion
-                        && d.Content.Size == 0
+                        && (
+                            (
+                                d.XbrlType == XbrlType.InlineIxbrl
+                                && d.NormalizedContentVersion < Document.EsefContentBuilderVersion
+                            )
+                            || (
+                                d.NormalizedContentVersion
+                                    < Document.EsefEmptyContentRecoveryVersion
+                                && d.Content.Size == 0
+                            )
+                        )
                     )
                 )
                 && d.NormalizedContentAttempts < Document.MaxNormalizedContentAttempts
