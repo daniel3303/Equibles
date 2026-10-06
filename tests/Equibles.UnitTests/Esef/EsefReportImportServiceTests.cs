@@ -818,8 +818,14 @@ public class EsefReportImportServiceTests
     public async Task Import_JsonBorrowingNotes_KeepsOriginalAndAnnualEvidence()
     {
         var json = File.ReadAllText(
-            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Esef", "better-collective-2025-json-notes-excerpt.json")
-        ).Replace("2549001EPXH6NK7I2R78", Lei);
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestAssets",
+                    "Esef",
+                    "better-collective-2025-json-notes-excerpt.json"
+                )
+            )
+            .Replace("2549001EPXH6NK7I2R78", Lei);
         var issuer = Issuer("FR");
         var harness = await Harness.Create(issuer, jsonReport: json);
         await SeedHtmlRefusal(harness);

@@ -301,7 +301,8 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         document.NormalizedContentVersion = 4;
         document.Content.Size = 0;
         _company.LegalEntityIdentifier = "2549001EPXH6NK7I2R78";
-        document.ReportingForDate = scenario == "missing-period" ? default : new DateOnly(2025, 12, 31);
+        document.ReportingForDate =
+            scenario == "missing-period" ? default : new DateOnly(2025, 12, 31);
         var json = """
             {"documentInfo":{"documentType":"https://xbrl.org/2021/xbrl-json",
             "namespaces":{"ifrs-full":"https://xbrl.ifrs.org/taxonomy/2024-03-27/ifrs-full",
@@ -318,22 +319,30 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         document.XbrlContent.FileContent.Bytes = original;
         var originalId = document.XbrlContentId;
         _dbContext.SaveChanges();
-        _fileManager.OpenRead(document.XbrlContent).Returns(_ => new MemoryStream(original, writable: false));
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(original, writable: false));
         _fileManager.GetContent(document.Content).Returns(Array.Empty<byte>());
 
         var result = await BuildSut().Backfill(1);
 
         result.Processed.Should().Be(1);
         result.Failed.Should().Be(failed ? 1 : 0);
-        document.NormalizedContentVersion.Should().Be(failed ? 4 : Document.EsefEmptyContentRecoveryVersion);
+        document
+            .NormalizedContentVersion.Should()
+            .Be(failed ? 4 : Document.EsefEmptyContentRecoveryVersion);
         document.NormalizedContentAttempts.Should().Be(failed ? 1 : 0);
         document.XbrlContentId.Should().Be(originalId);
         document.XbrlContent.FileContent.Bytes.Should().Equal(original);
-        await _persistenceService.DidNotReceiveWithAnyArgs().ReplaceContent(default, default, default);
+        await _persistenceService
+            .DidNotReceiveWithAnyArgs()
+            .ReplaceContent(default, default, default);
         if (!failed)
         {
             result.Unchanged.Should().Be(1);
-            await _persistenceService.Received(1).ResetChunks(document, Arg.Any<CancellationToken>());
+            await _persistenceService
+                .Received(1)
+                .ResetChunks(document, Arg.Any<CancellationToken>());
         }
     }
 

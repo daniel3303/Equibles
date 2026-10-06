@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Xml;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 using Newtonsoft.Json;
@@ -48,9 +49,11 @@ public static class EsefJsonReportContent
                 fact["dimensions"] is not JObject dimensions
                 || fact["value"]?.Type != JTokenType.String
                 || fact["decimals"] != null
-                || dimensions.Properties().Any(property =>
-                    property.Name is not ("concept" or "entity" or "period" or "language")
-                )
+                || dimensions
+                    .Properties()
+                    .Any(property =>
+                        property.Name is not ("concept" or "entity" or "period" or "language")
+                    )
                 || !MatchesIssuer(dimensions, namespaces, issuerLei)
                 || !IsDisclosure(dimensions, namespaces)
                 || !MatchesPeriod(dimensions, periodEnd)
@@ -70,20 +73,21 @@ public static class EsefJsonReportContent
         foreach (var fragment in fragments)
         {
             var text = EsefReportContent.Build(fragment, normalizer, converter);
-            if (text.Length == 0)
-                continue;
+            var disclosure = Encoding.UTF8.GetString(text);
+            if (string.IsNullOrWhiteSpace(disclosure))
+                throw new InvalidDataException(
+                    "An eligible tagged report disclosure produced no readable text."
+                );
             if (output.Length > 0)
                 output.Append("\n\n---\n\n");
-            output.Append(Encoding.UTF8.GetString(text));
+            output.Append(disclosure);
         }
-        if (fragments.Count > 0 && string.IsNullOrWhiteSpace(output.ToString()))
-            throw new InvalidDataException("The tagged report disclosures produced no readable text.");
         return Encoding.UTF8.GetBytes(output.ToString());
     }
 
     private static bool MatchesIssuer(JObject dimensions, JObject namespaces, string issuerLei)
     {
-        var name = QualifiedName(dimensions["entity"]);
+        var name = QualifiedName(dimensions["entity"], verifyLocalName: false);
         return name != null
             && (string)namespaces[name[0]] == "http://standards.iso.org/iso/17442"
             && name[1] == issuerLei;
@@ -100,12 +104,24 @@ public static class EsefJsonReportContent
             && address.AbsolutePath.EndsWith("/ifrs-full", StringComparison.Ordinal);
     }
 
-    private static string[] QualifiedName(JToken value)
+    private static string[] QualifiedName(JToken value, bool verifyLocalName = true)
     {
         if (value?.Type != JTokenType.String)
             return null;
         var parts = ((string)value).Split(':');
-        return parts.Length == 2 && parts.All(part => part.Length > 0) ? parts : null;
+        if (parts.Length != 2 || parts.Any(string.IsNullOrEmpty))
+            return null;
+        try
+        {
+            XmlConvert.VerifyNCName(parts[0]);
+            if (verifyLocalName)
+                XmlConvert.VerifyNCName(parts[1]);
+            return parts;
+        }
+        catch (XmlException)
+        {
+            return null;
+        }
     }
 
     private static bool MatchesPeriod(JObject dimensions, DateOnly periodEnd)
@@ -113,7 +129,9 @@ public static class EsefJsonReportContent
         if (dimensions["period"]?.Type != JTokenType.String || periodEnd == DateOnly.MaxValue)
             return false;
         var parts = ((string)dimensions["period"]).Split('/');
-        var exclusiveEnd = periodEnd.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var exclusiveEnd = periodEnd
+            .AddDays(1)
+            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (parts.Length is < 1 or > 2 || parts[^1] != exclusiveEnd + "T00:00:00")
             return false;
         return parts.Length == 1

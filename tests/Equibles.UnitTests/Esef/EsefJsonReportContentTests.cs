@@ -64,12 +64,38 @@ public class EsefJsonReportContentTests
     [InlineData("period", "2025-01-01T00:00:00/2026-01-01T12:00:00")]
     [InlineData("concept", "BET:DisclosureOfBorrowingsExplanatory")]
     [InlineData("concept", "ifrs-full:Borrowings")]
+    [InlineData("concept", "ifrs-full:Not a valid QNameExplanatory")]
+    [InlineData("concept", "ifrs-full:1Explanatory")]
+    [InlineData("concept", "ifrs-full:extra:DisclosureOfBorrowingsExplanatory")]
     [InlineData("unit", "iso4217:EUR")]
-    [InlineData("ifrs-full:ConsolidatedAndSeparateFinancialStatementsAxis", "ifrs-full:SeparateMember")]
-    public void Build_IneligibleNote_DoesNotBorrowContextFromNumericFacts(string key, string value)
+    [InlineData(
+        "ifrs-full:ConsolidatedAndSeparateFinancialStatementsAxis",
+        "ifrs-full:SeparateMember"
+    )]
+    public void Build_IneligibleNote_DoesNotBorrowContextFromNumericFacts(
+        string key,
+        string value
+    )
     {
         var report = Report();
         report["facts"][NoteId]["dimensions"][key] = value;
+
+        Build(report.ToString()).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("concept", "ifrs-full", "DisclosureOfBorrowingsExplanatory")]
+    [InlineData("entity", "scheme", Lei)]
+    public void Build_InvalidNamespacePrefix_ExcludesTheDisclosure(
+        string dimension,
+        string prefix,
+        string localName
+    )
+    {
+        var report = Report();
+        report["documentInfo"]["namespaces"]["bad prefix"] =
+            report["documentInfo"]["namespaces"][prefix];
+        report["facts"][NoteId]["dimensions"][dimension] = "bad prefix:" + localName;
 
         Build(report.ToString()).Should().BeEmpty();
     }
@@ -82,7 +108,8 @@ public class EsefJsonReportContentTests
     {
         var report = Report();
         report["documentInfo"]["namespaces"]["notes"] = address;
-        report["facts"][NoteId]["dimensions"]["concept"] = "notes:DisclosureOfBorrowingsExplanatory";
+        report["facts"][NoteId]["dimensions"]["concept"] =
+            "notes:DisclosureOfBorrowingsExplanatory";
 
         Build(report.ToString()).Should().BeEmpty();
     }
@@ -93,8 +120,10 @@ public class EsefJsonReportContentTests
     public void Build_TrustedNamespaceAliasAndMatchingPeriod_PreservesDisclosure(string period)
     {
         var report = Report();
-        report["documentInfo"]["namespaces"]["notes"] = report["documentInfo"]["namespaces"]["ifrs-full"];
-        report["facts"][NoteId]["dimensions"]["concept"] = "notes:DisclosureOfBorrowingsExplanatory";
+        report["documentInfo"]["namespaces"]["notes"] =
+            report["documentInfo"]["namespaces"]["ifrs-full"];
+        report["facts"][NoteId]["dimensions"]["concept"] =
+            "notes:DisclosureOfBorrowingsExplanatory";
         report["facts"][NoteId]["dimensions"]["period"] = period;
 
         Build(report.ToString()).Should().Contain("319 mEUR");
@@ -110,7 +139,10 @@ public class EsefJsonReportContentTests
         var json = Report().ToString();
         json = failure switch
         {
-            "duplicate" => json.Replace("\"documentInfo\":", "\"documentInfo\": {}, \"documentInfo\":"),
+            "duplicate" => json.Replace(
+                "\"documentInfo\":",
+                "\"documentInfo\": {}, \"documentInfo\":"
+            ),
             "trailing" => json + "{}",
             "wrong-owner" => json.Replace(Lei, "529900S21EQ1BO4ESM68"),
             _ => json.Replace("2026-01-01T00:00:00", "2027-01-01T00:00:00"),
@@ -118,7 +150,9 @@ public class EsefJsonReportContentTests
 
         var act = () => Build(json);
 
-        act.Should().Throw<Exception>().Where(exception => exception is JsonException || exception is InvalidDataException);
+        act.Should()
+            .Throw<Exception>()
+            .Where(exception => exception is JsonException || exception is InvalidDataException);
     }
 
     [Fact]
@@ -126,7 +160,8 @@ public class EsefJsonReportContentTests
     {
         var report = Report();
         var notes = (JObject)report["facts"];
-        notes[NoteId]["value"] = "<p>" + new string('x', EsefReportContent.MaxRetrievalHtmlChars / 2) + "</p>";
+        notes[NoteId]["value"] =
+            "<p>" + new string('x', EsefReportContent.MaxRetrievalHtmlChars / 2) + "</p>";
         notes["second-note"] = notes[NoteId].DeepClone();
 
         Build(report.ToString()).Should().BeEmpty();
@@ -145,5 +180,27 @@ public class EsefJsonReportContentTests
         );
 
         act.Should().Throw<InvalidDataException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Build_OneConversionFails_DoesNotSettleTheSuccessfulSubset(string failedText)
+    {
+        var report = Report();
+        report["facts"]["second-note"] = report["facts"][NoteId].DeepClone();
+        var converter = Substitute.For<ISecDocumentHtmlToMarkdownConverter>();
+        converter.Convert(Arg.Any<string>()).Returns("First note", failedText);
+        var act = () => EsefJsonReportContent.Build(
+            report.ToString(),
+            Lei,
+            new DateOnly(2025, 12, 31),
+            new SecDocumentHtmlNormalizer(),
+            converter
+        );
+
+        act.Should().Throw<InvalidDataException>();
+        converter.Received(2).Convert(Arg.Any<string>());
     }
 }

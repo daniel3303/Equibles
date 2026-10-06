@@ -232,7 +232,13 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         document.NormalizedContentVersion = version;
         var original = GzipCompressor.Compress(
             Encoding.UTF8.GetBytes(
-                json ? (noNotes ? JsonReport.Replace("DisclosureOfBorrowingsExplanatory", "Borrowings") : JsonReport) : "<html xmlns='http://www.w3.org/1999/xhtml'><head><title/></head><body><p>Retained annual report</p></body></html>"
+                json
+                    ? (
+                        noNotes
+                            ? JsonReport.Replace("DisclosureOfBorrowingsExplanatory", "Borrowings")
+                            : JsonReport
+                    )
+                    : "<html xmlns='http://www.w3.org/1999/xhtml'><head><title/></head><body><p>Retained annual report</p></body></html>"
             )
         );
         document.DocumentType = DocumentType.FromValue(form);
@@ -272,11 +278,15 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
             .SingleAsync(d => d.Id == document.Id);
         saved.XbrlContentId.Should().Be(originalId);
         saved.XbrlContent.FileContent.Bytes.Should().Equal(original);
-        if (noNotes) saved.ContentId.Should().Be(oldTextId);
-        else saved.ContentId.Should().NotBe(oldTextId);
+        if (noNotes)
+            saved.ContentId.Should().Be(oldTextId);
+        else
+            saved.ContentId.Should().NotBe(oldTextId);
         var text = Encoding.UTF8.GetString(saved.Content.FileContent.Bytes);
-        if (noNotes) text.Should().BeEmpty();
-        else text.Should().Contain("Retained annual report");
+        if (noNotes)
+            text.Should().BeEmpty();
+        else
+            text.Should().Contain("Retained annual report");
         saved.ChunkedAt.Should().BeNull();
         saved.NormalizedContentVersion.Should().Be(Document.EsefEmptyContentRecoveryVersion);
         (await sut.Backfill(1)).Processed.Should().Be(0);

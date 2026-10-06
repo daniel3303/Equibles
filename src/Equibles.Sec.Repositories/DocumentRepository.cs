@@ -191,10 +191,7 @@ public class DocumentRepository : BaseRepository<Document>
                             || d.DocumentType == DocumentType.EsefReport
                         )
                         && d.XbrlStatus == XbrlCaptureStatus.Captured
-                        && (
-                            d.XbrlType == XbrlType.InlineIxbrl
-                            || d.XbrlType == XbrlType.JsonXbrl
-                        )
+                        && (d.XbrlType == XbrlType.InlineIxbrl || d.XbrlType == XbrlType.JsonXbrl)
                         && d.XbrlContentId != null
                     )
                     || (
