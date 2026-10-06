@@ -51,3 +51,5 @@ WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
 - Join at least three adjacent unfinished Latin prose lines with consistent fonts and spacing; reject bidirectional characters and ordering controls; retain original inline XBRL and harmless inline elements, words and explicit line breaks.
 - Preserve tables, separate columns, short numeric cells, ended sentences, page boundaries and all uncertain layouts; unsupported reports continue through the existing normalizer unchanged.
 - The importer must retain the bounded stylesheet metadata in its retrieval input; this change does not rewrite original documents or reopen historical extractions.
+
+- Mixed-font positioned lines may reserve a vertical obstacle only when all existing geometry guards pass, every child retains the same font size and its line height stays bounded. Reserve twice the effective font height on both sides; preserve the line and never join it as prose.

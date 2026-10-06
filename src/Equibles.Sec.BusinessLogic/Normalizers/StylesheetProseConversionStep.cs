@@ -79,7 +79,10 @@ internal static class StylesheetProseConversionStep
         // Every directly positioned text sibling participates, including headings and
         // short numeric cells that can never themselves become paragraph candidates.
         var obstacles = children
-            .Where(child => !string.IsNullOrWhiteSpace(child.TextContent))
+            .Where(
+                (child, index) =>
+                    candidates[index] == null && !string.IsNullOrWhiteSpace(child.TextContent)
+            )
             .Select(child => StylesheetProseObstacle.Read(child, page, geometry))
             .Where(value => value != null)
             .ToArray();
@@ -99,7 +102,7 @@ internal static class StylesheetProseConversionStep
                 var owningStyle = geometry.Style(owningLine);
                 if (
                     !StylesheetLineBox.TryPixel(owningStyle, "font-size", out var owningFont)
-                    || !StylesheetProseLine.InlineChild(
+                    || !StylesheetProseInline.IsValid(
                         element,
                         owningLine,
                         geometry,

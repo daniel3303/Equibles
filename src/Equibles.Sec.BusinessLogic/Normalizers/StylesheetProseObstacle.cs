@@ -3,8 +3,8 @@ using AngleSharp.Dom;
 
 namespace Equibles.Sec.BusinessLogic.Normalizers;
 
-// A top-anchored table is never prose. Reserve its full vertical footprint,
-// including a font-height margin, instead of treating its bottom inset as a row.
+// Reserve the vertical footprint of non-prose content, including a font-height
+// margin, without changing it or assuming a horizontal reading order.
 internal sealed record StylesheetProseObstacle(IElement Element, double Bottom, double Top)
 {
     public static StylesheetProseObstacle Read(
@@ -13,10 +13,18 @@ internal sealed record StylesheetProseObstacle(IElement Element, double Bottom, 
         XhtmlStylesheetGeometry geometry
     )
     {
+        if (element.ClassList.Contains("t"))
+        {
+            var line = StylesheetProseLine.ReadObstacle(element, geometry);
+            // The line and each inline child permit at most twice the font size
+            // for their line box. Reserve both sides of the baseline conservatively.
+            return line == null
+                ? null
+                : new(element, line.Bottom - 2 * line.FontSize, line.Bottom + 2 * line.FontSize);
+        }
         var style = geometry.Style(element);
         if (
-            element.ClassList.Contains("t")
-            || style.GetPropertyValue("position") != "absolute"
+            style.GetPropertyValue("position") != "absolute"
             || !Flat(style)
             || !StylesheetLineBox.TryPixel(style, "top", out var top)
             || !StylesheetLineBox.TryPixel(style, "left", out _)

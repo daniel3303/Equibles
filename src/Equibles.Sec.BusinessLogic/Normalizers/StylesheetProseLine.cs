@@ -57,7 +57,21 @@ internal sealed record StylesheetProseLine(
         "-webkit-text-stroke",
     };
 
-    public static StylesheetProseLine Read(IElement element, XhtmlStylesheetGeometry geometry)
+    public static StylesheetProseLine Read(IElement element, XhtmlStylesheetGeometry geometry) =>
+        Read(element, geometry, false);
+
+    // A mixed-font line is never prose. Its unchanged, bounded line box can only
+    // reserve space so unrelated prose elsewhere on the page remains readable.
+    internal static StylesheetProseLine ReadObstacle(
+        IElement element,
+        XhtmlStylesheetGeometry geometry
+    ) => Read(element, geometry, true);
+
+    private static StylesheetProseLine Read(
+        IElement element,
+        XhtmlStylesheetGeometry geometry,
+        bool allowFontVariation
+    )
     {
         // Exported bidi overrides preserve order only for this bounded Latin text
         // subset; mixed scripts and directional controls need a visual reader.
@@ -97,7 +111,16 @@ internal sealed record StylesheetProseLine(
         if (left < 0 || bottom < 0 || effectiveFont is < 6 or > 64)
             return null;
         foreach (var child in element.QuerySelectorAll("*"))
-            if (!InlineChild(child, element, geometry, style, fontSize))
+            if (
+                !StylesheetProseInline.IsValid(
+                    child,
+                    element,
+                    geometry,
+                    style,
+                    fontSize,
+                    allowFontVariation
+                )
+            )
                 return null;
         var font = string.Join(
             "|",
@@ -112,88 +135,6 @@ internal sealed record StylesheetProseLine(
             }.Select(style.GetPropertyValue)
         );
         return new(element, left, bottom, effectiveFont, font);
-    }
-
-    internal static bool InlineChild(
-        IElement child,
-        IElement line,
-        XhtmlStylesheetGeometry geometry,
-        ICssStyleDeclaration parentStyle,
-        double fontSize
-    )
-    {
-        if (child.HasAttribute("hidden"))
-            return false;
-        var name = child.LocalName.ToLowerInvariant();
-        if (
-            name
-            is not (
-                "span"
-                or "a"
-                or "b"
-                or "strong"
-                or "i"
-                or "em"
-                or "ix:continuation"
-                or "ix:nonfraction"
-                or "ix:nonnumeric"
-            )
-        )
-            return false;
-        var style = geometry.Style(child);
-        if (
-            !Known(style)
-            || style.GetPropertyValue("position") is not ("" or "static" or "relative")
-            || !Unshifted(style, "left", "right", "top", "bottom")
-            || style.GetPropertyValue("transform") is not ("" or "none")
-            || style.GetPropertyValue("-webkit-transform") is not ("" or "none")
-            || style.GetPropertyValue("-ms-transform") is not ("" or "none")
-        )
-            return false;
-        var display = style.GetPropertyValue("display");
-        for (
-            var parent = child.ParentElement;
-            display == "inherit" && parent != null;
-            parent = parent.ParentElement
-        )
-        {
-            if (parent == line)
-                return false;
-            display = geometry.Style(parent).GetPropertyValue("display");
-        }
-        if (display is not ("" or "inline" or "inline-block" or "contents"))
-            return false;
-        if (
-            style.GetPropertyValue("white-space") is not ("" or "pre" or "inherit")
-            || !Unshifted(style, "height")
-            || (
-                style.GetPropertyValue("line-height") is not ("" or "inherit")
-                && style.GetPropertyValue("line-height")
-                    != parentStyle.GetPropertyValue("line-height")
-            )
-            || !Spacing(style, "word-spacing", fontSize)
-            || !Spacing(style, "letter-spacing", fontSize / 4)
-        )
-            return false;
-        foreach (var property in new[] { "font-family", "font-size", "font-weight", "font-style" })
-        {
-            var value = style.GetPropertyValue(property);
-            if (value.Length > 0 && value != parentStyle.GetPropertyValue(property))
-                return false;
-        }
-        foreach (var property in new[] { "width", "margin-left", "margin-right" })
-        {
-            var value = style.GetPropertyValue(property);
-            if (value is "" or "auto" or "0" or "0px")
-                continue;
-            if (
-                !string.IsNullOrWhiteSpace(child.TextContent)
-                || !StylesheetLineBox.TryPixel(style, property, out var pixels)
-                || Math.Abs(pixels) > fontSize
-            )
-                return false;
-        }
-        return true;
     }
 
     internal static bool Known(ICssStyleDeclaration style) =>
@@ -218,12 +159,12 @@ internal sealed record StylesheetProseLine(
                 .EndsWith("transparent", StringComparison.Ordinal)
         );
 
-    private static bool Unshifted(ICssStyleDeclaration style, params string[] properties) =>
+    internal static bool Unshifted(ICssStyleDeclaration style, params string[] properties) =>
         properties.All(property =>
             style.GetPropertyValue(property) is "" or "auto" or "0" or "0px"
         );
 
-    private static bool Spacing(ICssStyleDeclaration style, string property, double maximum) =>
+    internal static bool Spacing(ICssStyleDeclaration style, string property, double maximum) =>
         style.GetPropertyValue(property) is "" or "normal" or "0" or "0px"
         || StylesheetLineBox.TryPixel(style, property, out var value) && Math.Abs(value) <= maximum;
 

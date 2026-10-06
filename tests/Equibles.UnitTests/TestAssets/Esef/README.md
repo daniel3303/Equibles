@@ -98,3 +98,12 @@
 - Uncompressed page: 21,443 bytes, SHA-256 `af4f7e71dfc033aee4dce0cdd925c8dfc65cfb4bbf03504c819f4ce3bf95fda1`.
 - Its borrowing paragraph occupies four same-column lines at bottom coordinates 166, 148, 129 and 111 pixels; a separate table precedes it.
 - The test exercises complete normalization and conversion, preserving that table while removing artificial paragraph breaks inside the loan disclosure.
+
+## Awilco 2025 mixed-font table cells
+
+- `awilco-2025-guarantees-page.xhtml.gz` retains complete printed page 59 (`pf3b`), its ancestor attributes and all retained stylesheets from the [official 2025 annual report](https://api3.oslo.oslobors.no/v1/newsreader/attachment?messageId=670628&attachmentId=323333).
+- The retained XHTML envelope removes embedded binary assets; the fixture omits other pages and reporting contexts, without editing page text, geometry or styles.
+- Original: 21,795,024 bytes, SHA-256 `368d60863a7d5d5b689307514d794f2dc2654d83cd683e723047fded7d1255c6`.
+- Derived envelope: 1,400,372 bytes, SHA-256 `42ee7ec800f8e61fc8d9c5e80f7833e04ce52f4878bcf0956afc0b9bf537555e`.
+- Uncompressed fixture: 166,322 bytes, SHA-256 `3af8d215634d2504b8042b379b220b06be65729ea1fd2893ace8439dda87ebea`.
+- Four numeric cells use a different inline font and line height. They remain separate, bounded obstacles while the three-line lessees paragraph retains both named subsidiaries.
