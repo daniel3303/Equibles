@@ -50,4 +50,14 @@ WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
 - Require absolute pixel coordinates, a uniform positive scale, a left-bottom transform origin and unambiguous same-column baselines; reject transformed ancestors and unsupported positioning or visibility.
 - Join at least three adjacent unfinished Latin prose lines with consistent fonts and spacing; reject bidirectional characters and ordering controls; retain original inline XBRL and harmless inline elements, words and explicit line breaks.
 - Preserve tables, separate columns, short numeric cells, ended sentences, page boundaries and all uncertain layouts; unsupported reports continue through the existing normalizer unchanged.
+
+## Inline XBRL prose continuations
+
+- A complete, unique, forward `continuedAt` chain can reconnect an unfinished paragraph across adjacent narrative fragments before XBRL wrappers are removed.
+- Require an escaped `ix:nonNumeric` fact with its declared Inline XBRL namespace, name and context; reject missing, duplicate, shared, cyclic, nested or backward continuation targets.
+- Join only a trailing letter or hyphen into lowercase prose with no intervening content; retain every source character and the printed line break.
+- Keep complete paragraphs, numeric boundaries, tables, lists, excluded content and uncertain chains separate; cap chains at 128 fragments and joined paragraphs at 8,000 characters.
+- Both joined fragments must share the exact enclosing fact objects; keep unrelated nested fact, quotation and deletion scopes separate.
+- Refuse hidden or semantically altered boundary text using bounded local CSS rules; conditional, external, malformed and unsupported styles preserve existing boundaries.
+- This changes derived retrieval text only; preserve originals, tagged financial facts and existing normalization generations.
 - The importer must retain the bounded stylesheet metadata in its retrieval input; this change does not rewrite original documents or reopen historical extractions.

@@ -226,8 +226,9 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DrainOnce_LongRebuildRenewsClaimAndClearsDirtyAt()
+    public async Task DrainOnce_RebuildRenewsClaimBeforeClearingDirtyAt()
     {
+        await SeedHoldings();
         var dirtyAt = DateTime.UtcNow.AddHours(-2);
         await using (var seed = FreshContext())
         {
@@ -235,21 +236,27 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
+        var renewalObserved = false;
         var scopeFactory = BuildScopeFactory();
         var worker = new TestableDrainWorker(
             scopeFactory,
-            new DelayedRefreshService(
+            new RacingRefreshService(
                 scopeFactory,
                 NullLogger<HoldingsAggregateRefreshService>.Instance,
-                TimeSpan.FromMilliseconds(180)
+                async ct =>
+                {
+                    await WaitForClaimRenewal(ct);
+                    renewalObserved = true;
+                }
             ),
             NullLogger<AumSnapshotDrainWorker>.Instance,
             cooldown: TimeSpan.Zero,
-            claimLease: TimeSpan.FromMilliseconds(80),
-            claimRenewInterval: TimeSpan.FromMilliseconds(15)
+            claimLease: TimeSpan.FromMinutes(1),
+            claimRenewInterval: TimeSpan.FromMilliseconds(50)
         );
 
         await worker.DrainOnce(CancellationToken.None);
+        renewalObserved.Should().BeTrue("the rebuild waited for a persisted lease renewal");
 
         await using var read = FreshContext();
         var snapshot = await read.Set<AumQuarterlySnapshot>().SingleAsync();
@@ -267,21 +274,27 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
+        var renewalObserved = false;
         var scopeFactory = BuildScopeFactory();
         var worker = new TestableDrainWorker(
             scopeFactory,
-            new DelayedBeforeCombinedRefreshService(
+            new CallbackBeforeCombinedRefreshService(
                 scopeFactory,
                 NullLogger<HoldingsAggregateRefreshService>.Instance,
-                TimeSpan.FromMilliseconds(180)
+                async ct =>
+                {
+                    await WaitForClaimRenewal(ct);
+                    renewalObserved = true;
+                }
             ),
             NullLogger<AumSnapshotDrainWorker>.Instance,
             cooldown: TimeSpan.Zero,
-            claimLease: TimeSpan.FromMilliseconds(80),
-            claimRenewInterval: TimeSpan.FromMilliseconds(15)
+            claimLease: TimeSpan.FromMinutes(1),
+            claimRenewInterval: TimeSpan.FromMilliseconds(50)
         );
 
         await worker.DrainOnce(CancellationToken.None);
+        renewalObserved.Should().BeTrue("the rebuild waited for a persisted lease renewal");
 
         await using var read = FreshContext();
         var snapshot = await read.Set<AumQuarterlySnapshot>().SingleAsync();
@@ -516,24 +529,41 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
         ) => Task.Delay(_delay, cancellationToken);
     }
 
-    private sealed class DelayedBeforeCombinedRefreshService : HoldingsAggregateRefreshService
+    private async Task WaitForClaimRenewal(CancellationToken cancellationToken)
     {
-        private readonly TimeSpan _delay;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        await using var read = FreshContext();
+        var claims = read.Set<AumQuarterlySnapshot>()
+            .Where(row => row.ReportDate == Q4)
+            .Select(row => row.DirtyAt);
+        var initial = await claims.SingleAsync(timeout.Token);
+        initial.Should().NotBeNull("the drain owns a lease while rebuilding");
+        // Observe the database write itself; a short wall-clock delay is not proof of renewal.
+        while (
+            await claims.SingleAsync(timeout.Token) is not { } renewed || renewed <= initial.Value
+        )
+            await Task.Delay(TimeSpan.FromMilliseconds(20), timeout.Token);
+    }
 
-        public DelayedBeforeCombinedRefreshService(
+    private sealed class CallbackBeforeCombinedRefreshService : HoldingsAggregateRefreshService
+    {
+        private readonly Func<CancellationToken, Task> _beforeCombined;
+
+        public CallbackBeforeCombinedRefreshService(
             IServiceScopeFactory scopeFactory,
             ILogger<HoldingsAggregateRefreshService> logger,
-            TimeSpan delay
+            Func<CancellationToken, Task> beforeCombined
         )
             : base(scopeFactory, logger)
         {
-            _delay = delay;
+            _beforeCombined = beforeCombined;
         }
 
         protected override Task BeforeCombinedLaneRefresh(
             DateOnly reportDate,
             CancellationToken cancellationToken
-        ) => Task.Delay(_delay, cancellationToken);
+        ) => _beforeCombined(cancellationToken);
     }
 
     private sealed class RecordingRefreshService : HoldingsAggregateRefreshService
