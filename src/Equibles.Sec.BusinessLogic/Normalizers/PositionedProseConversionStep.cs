@@ -17,8 +17,11 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
     public void Execute(IHtmlDocument doc)
     {
         // Inline positions are insufficient when a stylesheet can override them.
-        if (doc.QuerySelectorAll("style").Any(style => !string.IsNullOrWhiteSpace(style.TextContent))
-            || doc.QuerySelector("link[rel~='stylesheet']") != null)
+        if (
+            doc.QuerySelectorAll("style")
+                .Any(style => !string.IsNullOrWhiteSpace(style.TextContent))
+            || doc.QuerySelector("link[rel~='stylesheet']") != null
+        )
             return;
         foreach (var page in doc.QuerySelectorAll(".DTRTextContainer"))
         {
@@ -41,9 +44,11 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
                 return;
             if (!isLine && !styles.ContainsKey("left") && !styles.ContainsKey("bottom"))
                 continue;
-            if (!TryCoordinates(element, out var point)
+            if (
+                !TryCoordinates(element, out var point)
                 || (!isLine && element.Children.Length != 0)
-                || element.ParentElement?.Closest(".t") != null)
+                || element.ParentElement?.Closest(".t") != null
+            )
                 return;
             if (isLine && element.LocalName != "div")
                 return;
@@ -59,8 +64,12 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
             {
                 if (node is IText text && string.IsNullOrWhiteSpace(text.Data))
                     continue;
-                if (node is not IElement line || !coordinates.ContainsKey(line)
-                    || ambiguous.Contains(line) || !IsProseLine(line))
+                if (
+                    node is not IElement line
+                    || !coordinates.ContainsKey(line)
+                    || ambiguous.Contains(line)
+                    || !IsProseLine(line)
+                )
                 {
                     Flush(run, coordinates, doc);
                     continue;
@@ -74,7 +83,8 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
     }
 
     private static HashSet<IElement> AmbiguousBaselines(
-        Dictionary<IElement, (double Left, double Bottom)> coordinates)
+        Dictionary<IElement, (double Left, double Bottom)> coordinates
+    )
     {
         var ordered = coordinates.OrderBy(entry => entry.Value.Bottom).ToArray();
         var ambiguous = new HashSet<IElement>();
@@ -90,15 +100,26 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
 
     private static readonly HashSet<string> SupportedStyles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "left", "bottom", "display", "letter-spacing", "word-spacing",
+        "left",
+        "bottom",
+        "display",
+        "letter-spacing",
+        "word-spacing",
     };
 
     private static bool IsProseLine(IElement line)
     {
-        if (line.Children.Length != 0 || !line.ClassList.Contains("t")
-            || line.ClassList.Any(name => !IsLineClass(name)))
+        if (
+            line.Children.Length != 0
+            || !line.ClassList.Contains("t")
+            || line.ClassList.Any(name => !IsLineClass(name))
+        )
             return false;
-        if (line.Closest("table, li, ul, ol, pre, .item-list-element-wrapper, .DTRTextContainer .DTRTextContainer") != null)
+        if (
+            line.Closest(
+                "table, li, ul, ol, pre, .item-list-element-wrapper, .DTRTextContainer .DTRTextContainer"
+            ) != null
+        )
             return false;
         if (!Declarations(line).TryGetValue("display", out var display) || display != "inline")
             return false;
@@ -111,23 +132,37 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
         if (name == "t")
             return true;
         var separator = name.IndexOf('_');
-        return name.StartsWith('s') && separator > 1 && separator < name.Length - 1
+        return name.StartsWith('s')
+            && separator > 1
+            && separator < name.Length - 1
             && name[1..separator].All(char.IsAsciiLetterOrDigit)
             && name[(separator + 1)..].All(char.IsAsciiDigit);
     }
 
-    private static bool Continues(IElement previous, IElement next,
-        Dictionary<IElement, (double Left, double Bottom)> coordinates)
+    private static bool Continues(
+        IElement previous,
+        IElement next,
+        Dictionary<IElement, (double Left, double Bottom)> coordinates
+    )
     {
         var before = coordinates[previous];
         var after = coordinates[next];
         var gap = before.Bottom - after.Bottom;
-        if (Math.Abs(before.Left - after.Left) > CoordinateTolerance || gap < MinimumLineGapPixels || gap > MaximumLineGapPixels)
+        if (
+            Math.Abs(before.Left - after.Left) > CoordinateTolerance
+            || gap < MinimumLineGapPixels
+            || gap > MaximumLineGapPixels
+        )
             return false;
         var first = previous.TextContent.Trim();
         var second = next.TextContent.Trim();
-        if (first.Length < 40 || second.Length < 15 || WordCount(first) < 6 || WordCount(second) < 3
-            || !first.Any(char.IsLower))
+        if (
+            first.Length < 40
+            || second.Length < 15
+            || WordCount(first) < 6
+            || WordCount(second) < 3
+            || !first.Any(char.IsLower)
+        )
             return false;
         return char.IsLetterOrDigit(first[^1])
             && (char.IsLower(second[0]) || second[0] is '€' or '$' or '£');
@@ -136,13 +171,19 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
     private static int WordCount(string value) =>
         value.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length;
 
-    private static void Flush(List<IElement> run,
-        Dictionary<IElement, (double Left, double Bottom)> coordinates, IHtmlDocument doc)
+    private static void Flush(
+        List<IElement> run,
+        Dictionary<IElement, (double Left, double Bottom)> coordinates,
+        IHtmlDocument doc
+    )
     {
         if (run.Count >= MinimumRunLines)
         {
-            var gaps = run.Zip(run.Skip(1), (before, after) =>
-                coordinates[before].Bottom - coordinates[after].Bottom).ToArray();
+            var gaps = run.Zip(
+                    run.Skip(1),
+                    (before, after) => coordinates[before].Bottom - coordinates[after].Bottom
+                )
+                .ToArray();
             if (gaps.Max() - gaps.Min() <= CoordinateTolerance)
                 Join(run, doc);
         }
@@ -173,12 +214,23 @@ internal sealed class PositionedProseConversionStep : IHtmlNormalizationStep
         return true;
     }
 
-    private static bool TryPixel(Dictionary<string, string> styles, string property, out double value)
+    private static bool TryPixel(
+        Dictionary<string, string> styles,
+        string property,
+        out double value
+    )
     {
         value = 0;
-        return styles.TryGetValue(property, out var raw) && raw.EndsWith("px", StringComparison.Ordinal)
-            && double.TryParse(raw.AsSpan(0, raw.Length - 2), NumberStyles.AllowDecimalPoint,
-                CultureInfo.InvariantCulture, out value) && double.IsFinite(value) && value >= 0;
+        return styles.TryGetValue(property, out var raw)
+            && raw.EndsWith("px", StringComparison.Ordinal)
+            && double.TryParse(
+                raw.AsSpan(0, raw.Length - 2),
+                NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out value
+            )
+            && double.IsFinite(value)
+            && value >= 0;
     }
 
     private static Dictionary<string, string> Declarations(IElement element)
