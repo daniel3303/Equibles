@@ -170,13 +170,14 @@ public class EsefJsonReportContentTests
     public void Build_ConverterProducesNothing_FailsSoRecoveryCanRetry()
     {
         var converter = Substitute.For<ISecDocumentHtmlToMarkdownConverter>();
-        var act = () => EsefJsonReportContent.Build(
-            Report().ToString(),
-            Lei,
-            new DateOnly(2025, 12, 31),
-            new SecDocumentHtmlNormalizer(),
-            converter
-        );
+        var act = () =>
+            EsefJsonReportContent.Build(
+                Report().ToString(),
+                Lei,
+                new DateOnly(2025, 12, 31),
+                new SecDocumentHtmlNormalizer(),
+                converter
+            );
 
         act.Should().Throw<InvalidDataException>();
     }
@@ -191,13 +192,14 @@ public class EsefJsonReportContentTests
         report["facts"]["second-note"] = report["facts"][NoteId].DeepClone();
         var converter = Substitute.For<ISecDocumentHtmlToMarkdownConverter>();
         converter.Convert(Arg.Any<string>()).Returns("First note", failedText);
-        var act = () => EsefJsonReportContent.Build(
-            report.ToString(),
-            Lei,
-            new DateOnly(2025, 12, 31),
-            new SecDocumentHtmlNormalizer(),
-            converter
-        );
+        var act = () =>
+            EsefJsonReportContent.Build(
+                report.ToString(),
+                Lei,
+                new DateOnly(2025, 12, 31),
+                new SecDocumentHtmlNormalizer(),
+                converter
+            );
 
         act.Should().Throw<InvalidDataException>();
         converter.Received(2).Convert(Arg.Any<string>());
