@@ -69,3 +69,12 @@
 - Original decompressed JSON: 5,903,989 bytes, SHA-256 `9baaf1134344c2ee7eda38c77e790857001b49b994c8068e20fd0919b79662a0`.
 - Excerpt: 50,622 bytes, SHA-256 `cfb639531bbc0c9aae2961430ca603860c8bca35256b5d6e33f300049ce59d16`.
 - Tagged narratives provide excerpts, not the complete visual report; numeric context dates select eligible notes and never supply invented wording in the text.
+
+## Syncona 2026 root-level note heading
+
+- `syncona-2026-payables-note.html.gz` is the unchanged value of `TagsThatMustBeAppliedIfCorrespondingInformationIsPresentInAReport_Label_0047` from the retained [2026 Syncona Limited xBRL-JSON report](https://filings.xbrl.org/213800X8MBI5VQITLW60/2026-03-31/ESEF/GB/0/213800X8MBI5VQITLW60-2026-03-31-T01.json) (LEI `213800X8MBI5VQITLW60`), read on 2026-10-06.
+- The fragment retains the uppercase root span and complete accrued-expenses/payables table; no markup or whitespace was edited.
+- Fragment SHA-256: `f2b59ecd48fec0bc21f003bd75c6139165c20cbae52b5303d5dd54f5fad2043f` (3533 bytes).
+- A root heading must never replace the document body and discard its table.
+- Original decompressed JSON SHA-256: `289feea2ac743aea37d0a34d629478f3cbe37786037a09a197a857eb1b513323` (1338544 bytes).
+- The fixture is gzip-compressed without changing the captured whitespace; gzip SHA-256: `e803fdb6d57672ca58136d7d75dd866e0d025df7f5f524e78714faf735846400`.

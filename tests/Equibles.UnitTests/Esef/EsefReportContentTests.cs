@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.HostedService.Services;
@@ -21,6 +22,34 @@ public class EsefReportContentTests
                 new SecDocumentHtmlToMarkdownConverter()
             )
         );
+
+    [Fact]
+    public void Build_RealNoteWithRootHeading_PreservesPayablesTable()
+    {
+        using var file = File.OpenRead(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Esef",
+                "syncona-2026-payables-note.html.gz"
+            )
+        );
+        using var gzip = new GZipStream(file, CompressionMode.Decompress);
+        using var reader = new StreamReader(gzip);
+        var markup = reader.ReadToEnd();
+
+        var text = BuildText(markup);
+
+        text.Should().Contain("13. ACCRUED EXPENSES AND PAYABLES");
+        text.Should()
+            .Contain("Charitable donations payable")
+            .And.Contain("3,642")
+            .And.Contain("4,002");
+        text.Should().Contain("Management fees accrued").And.Contain("2,951").And.Contain("1,079");
+        text.Should().Contain("Other payables").And.Contain("762").And.Contain("1,182");
+        text.Should().Contain("Total").And.Contain("7,355").And.Contain("6,263");
+        text.Should().Contain("2026").And.Contain("2025").And.Contain("£’000");
+    }
 
     [Fact]
     public void StripEmbeddedData_RemovesAnImageAndAFontRulePayload()

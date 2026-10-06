@@ -37,6 +37,9 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             var parent = span.ParentElement;
             if (parent == null || processedParents.Contains(parent))
                 continue;
+            // A root-level note heading cannot replace the document container or its other content.
+            if (ReferenceEquals(parent, doc.Body) || ReferenceEquals(parent, doc.DocumentElement))
+                continue;
 
             var siblingSpans = parent.QuerySelectorAll("span").ToList();
             if (siblingSpans.Count == 0)
