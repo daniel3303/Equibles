@@ -286,6 +286,66 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(default, default, default);
     }
 
+    [Theory]
+    [InlineData("no-notes", false)]
+    [InlineData("malformed", true)]
+    [InlineData("wrong-owner", true)]
+    [InlineData("missing-period", true)]
+    public async Task Backfill_JsonEmptyOrInvalid_PreservesEnvelopeAndTracksOutcome(
+        string scenario,
+        bool failed
+    )
+    {
+        var document = SeedEsef();
+        document.XbrlType = XbrlType.JsonXbrl;
+        document.NormalizedContentVersion = 4;
+        document.Content.Size = 0;
+        _company.LegalEntityIdentifier = "2549001EPXH6NK7I2R78";
+        document.ReportingForDate =
+            scenario == "missing-period" ? default : new DateOnly(2025, 12, 31);
+        var json = """
+            {"documentInfo":{"documentType":"https://xbrl.org/2021/xbrl-json",
+            "namespaces":{"ifrs-full":"https://xbrl.ifrs.org/taxonomy/2024-03-27/ifrs-full",
+            "scheme":"http://standards.iso.org/iso/17442","iso4217":"http://www.xbrl.org/2003/iso4217"},
+            "taxonomy":["https://example.test/taxonomy.xsd"]},"facts":{
+            "assets":{"value":"100","dimensions":{"concept":"ifrs-full:Assets",
+            "entity":"scheme:2549001EPXH6NK7I2R78","period":"2026-01-01T00:00:00","unit":"iso4217:EUR"}}}}
+            """;
+        if (scenario == "malformed")
+            json = "{";
+        if (scenario == "wrong-owner")
+            json = json.Replace(_company.LegalEntityIdentifier, "529900S21EQ1BO4ESM68");
+        var original = GzipCompressor.Compress(Encoding.UTF8.GetBytes(json));
+        document.XbrlContent.FileContent.Bytes = original;
+        var originalId = document.XbrlContentId;
+        _dbContext.SaveChanges();
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(original, writable: false));
+        _fileManager.GetContent(document.Content).Returns(Array.Empty<byte>());
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Processed.Should().Be(1);
+        result.Failed.Should().Be(failed ? 1 : 0);
+        document
+            .NormalizedContentVersion.Should()
+            .Be(failed ? 4 : Document.EsefEmptyContentRecoveryVersion);
+        document.NormalizedContentAttempts.Should().Be(failed ? 1 : 0);
+        document.XbrlContentId.Should().Be(originalId);
+        document.XbrlContent.FileContent.Bytes.Should().Equal(original);
+        await _persistenceService
+            .DidNotReceiveWithAnyArgs()
+            .ReplaceContent(default, default, default);
+        if (!failed)
+        {
+            result.Unchanged.Should().Be(1);
+            await _persistenceService
+                .Received(1)
+                .ResetChunks(document, Arg.Any<CancellationToken>());
+        }
+    }
+
     [Fact]
     public async Task Backfill_EdgarFilingWithNoText_FailsAndKeepsItsText()
     {
@@ -309,9 +369,9 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(XbrlType.JsonXbrl, XbrlCaptureStatus.Captured)]
+    [InlineData(XbrlType.StandaloneXbrl, XbrlCaptureStatus.Captured)]
     [InlineData(XbrlType.InlineIxbrl, XbrlCaptureStatus.NotChecked)]
-    public async Task Backfill_EsefWithoutCapturedInlineHtml_IsNotEligible(
+    public async Task Backfill_EsefWithoutSupportedCapturedEnvelope_IsNotEligible(
         XbrlType type,
         XbrlCaptureStatus status
     )
@@ -334,7 +394,10 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData("EsefAnnualReport", 0, 3, true)]
     [InlineData("EsefReport", 0, 3, true)]
     [InlineData("EsefAnnualReport", 20, 3, false)]
-    [InlineData("EsefAnnualReport", 0, 4, false)]
+    [InlineData("EsefAnnualReport", 0, 4, true)]
+    [InlineData("EsefReport", 0, 4, true)]
+    [InlineData("EsefAnnualReport", 20, 4, false)]
+    [InlineData("EsefAnnualReport", 0, 5, false)]
     [InlineData("TenK", 0, 1, false)]
     public void Pending_EmptyEsefRecovery_DoesNotReopenReadableOrCurrentDocuments(
         string form,
@@ -359,6 +422,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [InlineData(4)]
     public async Task Backfill_EmptyEsefAtThePriorVersion_UsesRetainedEnvelopeAndAdvancesGeneration(
         int version
     )

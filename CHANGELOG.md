@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Recover issuer-owned, current-period IFRS note excerpts from retained ESEF JSON reports without changing original envelopes or structured facts; excerpt text does not represent the complete visual report.
 - Recover searchable text from oversized ESEF reports by removing unused layout styles from the retrieval copy while preserving complete text and original reports. Retry previously empty retained reports through the existing normalization backfill.
 
 ### Added

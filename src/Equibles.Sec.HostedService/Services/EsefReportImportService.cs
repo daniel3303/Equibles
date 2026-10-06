@@ -406,7 +406,13 @@ public class EsefReportImportService(
         byte[] content;
         if (isJson)
         {
-            content = [];
+            content = EsefJsonReportContent.Build(
+                html,
+                candidate.LegalEntityIdentifier,
+                periodEnd,
+                normalizer,
+                converter
+            );
         }
         else
         {
