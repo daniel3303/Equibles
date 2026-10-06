@@ -16,7 +16,7 @@ namespace Equibles.IntegrationTests.Sec;
 public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
 {
     [Fact]
-    public async Task Search_RefillsPastForeignAndOutdatedMatches_UsingParentDatesAndTopK()
+    public async Task Search_NarrowsForeignAndOutdatedMatchesBeforeRanking_UsingParentDatesAndTopK()
     {
         var domestic = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
         var foreign = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
@@ -61,8 +61,11 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
 
         result.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
         capture
-            .Scans.Count.Should()
-            .BeGreaterThan(1, "filtered candidates must not truncate recall");
+            .Scans.Should()
+            .ContainSingle("the parent scope must narrow the index before ranking");
+        capture
+            .Parameters.Should()
+            .Contain(parameter => parameter.Value.ToString().Contains("term_set"));
         await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
@@ -79,7 +82,7 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
     }
 
     [Fact]
-    public async Task Search_OnlyReturnsEmptyAfterExhaustingFilteredCandidates()
+    public async Task Search_ReturnsEmptyWithoutScanningTheIndex_WhenTheParentWindowIsEmpty()
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "EMPTY");
         var old = AddDocument(issuer, new DateOnly(2020, 1, 1));
@@ -103,7 +106,106 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         );
 
         result.Should().BeEmpty();
+        capture.Scans.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Search_LargeDateWindowRefillsCandidates_WithoutTruncatingTheDocumentScope()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "LARGE");
+        var old = AddDocument(issuer, new DateOnly(2020, 1, 1));
+        for (var index = 0; index < 80; index++)
+            AddChunk(
+                old,
+                index,
+                "orbital revenue",
+                new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            );
+        for (var index = 0; index < 4096; index++)
+            AddDocument(issuer, new DateOnly(2026, 1, 1));
+        var expected = AddChunk(
+            AddDocument(issuer, new DateOnly(2026, 1, 1)),
+            0,
+            "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 200)),
+            new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        );
+        await DbContext.SaveChangesAsync();
+        var capture = new RankCapture();
+        await using var context = Fixture.CreateDbContext(builder =>
+            builder.AddInterceptors(capture)
+        );
+
+        var result = await new ChunkRepository(context).HybridSearch(
+            "orbital revenue",
+            1,
+            startDate: new DateOnly(2025, 1, 1)
+        );
+
+        result.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
         capture.Scans.Count.Should().BeGreaterThan(1);
+        capture
+            .Parameters.Should()
+            .NotContain(parameter => parameter.Value.ToString().Contains("term_set"));
+    }
+
+    [Fact]
+    public async Task Search_RanksTextAcrossDocumentTypes_WithoutBoostingRareTypes()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "RANK");
+        var annual = AddDocument(issuer, new DateOnly(2026, 1, 1));
+        var expected = AddChunk(annual, 0, "orbital revenue", DateTime.UtcNow);
+        for (var index = 1; index <= 40; index++)
+            AddChunk(annual, index, "unrelated filing text", DateTime.UtcNow);
+        var quarterly = AddDocument(issuer, new DateOnly(2026, 1, 1));
+        quarterly.DocumentType = DocumentType.TenQ;
+        AddChunk(
+            quarterly,
+            0,
+            "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 4)),
+            DateTime.UtcNow
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await new ChunkRepository(DbContext).HybridSearch(
+            "orbital revenue",
+            1,
+            documentTypes: [DocumentType.TenK, DocumentType.TenQ]
+        );
+
+        result.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
+    }
+
+    [Fact]
+    public async Task Search_DateWindowRespectsEndDateAndDocumentType_WithStaleChunkDates()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "DATES");
+        var tooNew = AddDocument(issuer, new DateOnly(2026, 3, 1));
+        AddChunk(tooNew, 0, "orbital revenue", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var wrongType = AddDocument(issuer, new DateOnly(2026, 1, 1));
+        wrongType.DocumentType = DocumentType.TenQ;
+        AddChunk(
+            wrongType,
+            0,
+            "orbital revenue",
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        );
+        var expected = AddChunk(
+            AddDocument(issuer, new DateOnly(2026, 1, 1)),
+            0,
+            "orbital revenue",
+            new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await new ChunkRepository(DbContext).HybridSearch(
+            "orbital revenue",
+            3,
+            documentTypes: [DocumentType.TenK],
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: new DateOnly(2026, 2, 1)
+        );
+
+        result.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
     }
 
     [Theory]

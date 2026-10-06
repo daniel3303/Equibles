@@ -58,57 +58,19 @@ public class ChunkRepository : BaseRepository<Chunk>
         // lowercased to line up with the indexed token. DocumentId is a UUID and matches
         // as-is.
         if (ticker != null)
-            clauses.Add(ParadeDbJsonQuery.Term(nameof(Chunk.Ticker), ticker.ToLowerInvariant()));
+            clauses.Add(ParadeDbJsonQuery.TermSet(nameof(Chunk.Ticker), ticker.ToLowerInvariant()));
 
         if (documentId.HasValue)
-            clauses.Add(ParadeDbJsonQuery.Term(nameof(Chunk.DocumentId), documentId.Value));
+            clauses.Add(ParadeDbJsonQuery.TermSet(nameof(Chunk.DocumentId), documentId.Value));
 
-        // One type is a plain required term; several nest as a boolean of shoulds (a
-        // boolean with only should clauses requires at least one to match), so "10-K or
-        // 10-Q" still resolves inside the index.
-        if (documentTypes is { Count: 1 })
+        // Term sets filter without adding metadata relevance scores to the text ranking.
+        if (documentTypes is { Count: > 0 })
             clauses.Add(
-                ParadeDbJsonQuery.Term(
+                ParadeDbJsonQuery.TermSet(
                     nameof(Chunk.DocumentType),
-                    documentTypes.First().Value.ToLowerInvariant()
+                    documentTypes.Select(t => (object)t.Value.ToLowerInvariant()).ToArray()
                 )
             );
-        else if (documentTypes is { Count: > 1 })
-            clauses.Add(
-                ParadeDbJsonQuery.Boolean(b =>
-                    b.Should(
-                        documentTypes
-                            .Select(t =>
-                                ParadeDbJsonQuery.Term(
-                                    nameof(Chunk.DocumentType),
-                                    t.Value.ToLowerInvariant()
-                                )
-                            )
-                            .ToArray()
-                    )
-                )
-            );
-
-        var searchQuery = ParadeDbJsonQuery
-            .Boolean(b =>
-            {
-                b.Must(clauses.ToArray());
-                // Exclusion must live INSIDE the index too: dropping a dominant filer's
-                // hits after scoring would silently shrink the result set instead of
-                // refilling it with the next-best matches (a subject company can own
-                // 90% of the top hits for its own flagship keyword).
-                if (excludeTickers is { Count: > 0 })
-                    b.MustNot(
-                        excludeTickers
-                            .Select(t =>
-                                ParadeDbJsonQuery.Term(nameof(Chunk.Ticker), t.ToLowerInvariant())
-                            )
-                            .ToArray()
-                    );
-            })
-            .ToJson();
-
-        var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
 
         // Set a hard CommandTimeout for this call so Postgres aborts the
         // statement independently of pdb.parse / pdb.score honouring the
@@ -122,6 +84,41 @@ public class ChunkRepository : BaseRepository<Chunk>
         deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
+            var documentIds = await ChunkDateScope.Read(
+                DbContext,
+                ticker,
+                documentId,
+                documentTypes,
+                startDate,
+                endDate,
+                deadline.Token
+            );
+            if (documentIds is { Length: 0 })
+                return [];
+            if (documentIds != null)
+                clauses.Add(
+                    ParadeDbJsonQuery.TermSet(
+                        nameof(Chunk.DocumentId),
+                        documentIds.Cast<object>().ToArray()
+                    )
+                );
+            var searchQuery = ParadeDbJsonQuery
+                .Boolean(b =>
+                {
+                    b.Must(clauses.ToArray());
+                    // Keep exclusions inside the index so ranking refills after a dominant filer.
+                    if (excludeTickers is { Count: > 0 })
+                        b.MustNot(
+                            ParadeDbJsonQuery.TermSet(
+                                nameof(Chunk.Ticker),
+                                excludeTickers.Select(t => (object)t.ToLowerInvariant()).ToArray()
+                            )
+                        );
+                })
+                .ToJson();
+            var query = DbContext
+                .Set<Chunk>()
+                .Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
             return await LeaderOnlyScan(
                 scan =>
                     ChunkRankedScope.Read(
