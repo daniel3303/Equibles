@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="AngleSharp" />
+    <PackageReference Include="AngleSharp.Css" />
     <PackageReference Include="Equibles.Core.AutoWiring" />
     <!-- Direct reference pins the otherwise-transitive Microsoft.Bcl.Memory
          (pulled via the ML.Tokenizers / PdfPig graph) off the vulnerable

@@ -53,6 +53,8 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
     {
         var tempDoc = _parser.ParseDocument(html);
 
+        StylesheetProseConversionStep.Execute(tempDoc, html);
+
         foreach (var step in _steps)
         {
             step.Execute(tempDoc);

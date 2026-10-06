@@ -40,3 +40,14 @@ WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
 - Continue only unfinished long prose into lowercase or currency-prefixed text; preserve its original child nodes with explicit line breaks inside one paragraph.
 - Never cross an element wrapper, visible intervening node or page boundary; preserve every non-whitespace character and original source file.
 - This conversion does not globally reopen readable reports; a finite historical repair must identify the affected retained envelopes and use the existing normalization queue.
+
+## Stylesheet-positioned prose
+
+- Valid XHTML with `.pf > .pc > .t` page lines may use an isolated, loader-free CSS cascade before the existing normalization steps; no fonts, images, scripts or external stylesheets are fetched.
+- Limit this path to 8 Mi-characters of markup, 32 stylesheets, 1 Mi-character of stylesheet text and 20,000 active rules; refuse DTDs, processing instructions and XML nesting beyond 128 levels.
+- Decode stylesheet XML entities before CSS parsing; refuse external, alternate, scoped and conditionally selected stylesheets, unsupported rules and generated text.
+- Accept screen/all rules and ignore print-only rules; unknown media may only switch off text shadows or apply transparent text stroke.
+- Require absolute pixel coordinates, a uniform positive scale, a left-bottom transform origin and unambiguous same-column baselines; reject transformed ancestors and unsupported positioning or visibility.
+- Join at least three adjacent unfinished Latin prose lines with consistent fonts and spacing; reject bidirectional characters and ordering controls; retain original inline XBRL and harmless inline elements, words and explicit line breaks.
+- Preserve tables, separate columns, short numeric cells, ended sentences, page boundaries and all uncertain layouts; unsupported reports continue through the existing normalizer unchanged.
+- The importer must retain the bounded stylesheet metadata in its retrieval input; this change does not rewrite original documents or reopen historical extractions.
