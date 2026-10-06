@@ -116,7 +116,9 @@ public class ChunkRepository : BaseRepository<Chunk>
                         );
                 })
                 .ToJson();
-            var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
+            var query = DbContext
+                .Set<Chunk>()
+                .Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
             return await LeaderOnlyScan(
                 scan =>
                     ChunkRankedScope.Read(

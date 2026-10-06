@@ -180,20 +180,10 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "DATES");
         var tooNew = AddDocument(issuer, new DateOnly(2026, 3, 1));
-        AddChunk(
-            tooNew,
-            0,
-            "orbital revenue",
-            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-        );
+        AddChunk(tooNew, 0, "orbital revenue", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var wrongType = AddDocument(issuer, new DateOnly(2026, 1, 1));
         wrongType.DocumentType = DocumentType.TenQ;
-        AddChunk(
-            wrongType,
-            0,
-            "orbital revenue",
-            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-        );
+        AddChunk(wrongType, 0, "orbital revenue", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var expected = AddChunk(
             AddDocument(issuer, new DateOnly(2026, 1, 1)),
             0,
