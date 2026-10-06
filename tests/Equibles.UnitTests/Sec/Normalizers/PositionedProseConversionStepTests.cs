@@ -150,7 +150,10 @@ public class PositionedProseConversionStepTests
     {
         Convert(
                 Line(0)
-                    + Line(1, text: "Another separate paragraph starts with different contractual terms ")
+                    + Line(
+                        1,
+                        text: "Another separate paragraph starts with different contractual terms "
+                    )
                     + Line(2)
             )
             .Should()
