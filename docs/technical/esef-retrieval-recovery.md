@@ -61,3 +61,5 @@ WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
 - Refuse hidden or semantically altered boundary text using bounded local CSS rules; conditional, external, malformed and unsupported styles preserve existing boundaries.
 - This changes derived retrieval text only; preserve originals, tagged financial facts and existing normalization generations.
 - The importer must retain the bounded stylesheet metadata in its retrieval input; this change does not rewrite original documents or reopen historical extractions.
+
+- Mixed-font positioned lines may reserve a vertical obstacle only when all existing geometry guards pass, every child retains the same font size and its line height stays bounded. Reserve twice the effective font height on both sides; preserve the line and never join it as prose.
