@@ -107,3 +107,11 @@
 - Derived envelope: 1,400,372 bytes, SHA-256 `42ee7ec800f8e61fc8d9c5e80f7833e04ce52f4878bcf0956afc0b9bf537555e`.
 - Uncompressed fixture: 166,322 bytes, SHA-256 `3af8d215634d2504b8042b379b220b06be65729ea1fd2893ace8439dda87ebea`.
 - Four numeric cells use a different inline font and line height. They remain separate, bounded obstacles while the three-line lessees paragraph retains both named subsidiaries.
+
+## Glaston 2025 liquidity disclosure continuation
+
+- `glaston-2025-liquidity-continuation.xhtml.gz` retains the complete `f0__s7__6__114` narrative and both referenced continuations from the [2025 annual report](https://www.oam.fi/cns-web/oam/viewAttachment.action?messageAttachmentId=340873), read on 2026-10-06.
+- The three complete stylesheets follow the retained extraction envelope, with embedded binary payloads removed; other report content and media are omitted. XML serialization preserves equivalent namespace and empty-element syntax.
+- Original: 36,428,122 bytes, SHA-256 `3389c81ae6d0cadbd557ca3958c99014fba8827a7958a9018d3769d6ab8935be`.
+- Uncompressed fixture: 1673240 bytes, SHA-256 `77ab8283722c187202f68144ee50cef099fe09a5d474a77408258b41aa88c4d2`.
+- The issuer sentence ends in `con-`; the next linked fragment continues it with `sists` and the facility amounts. The following complete paragraph and financial tables remain separate.
