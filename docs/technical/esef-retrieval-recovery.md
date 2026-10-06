@@ -10,6 +10,7 @@
 - Retained JSON contributes only unqualified IFRS explanatory notes with matching issuer and report-period contexts; validate the envelope with the existing financial parser first.
 - JSON notes are excerpts, never a reconstruction of the full visual report; context dates filter notes but never become invented source wording.
 - Convert the complete selected markup within the existing limit; valid reports without eligible notes settle empty, while malformed envelopes and failed conversions retain retries.
+- Root-level note headings never replace the HTML or body container; preserve the sibling prose and table structure.
 - Readable ESEF reports and current SEC documents keep their existing normalization generation.
 - The finite recovery cohort is captured inline or JSON ESEF documents with empty content, normalization version below 5, and fewer than five failed attempts.
 - The existing backfill replays their retained envelopes, replaces only derived text, clears stale chunks transactionally, and stamps ESEF generation 5 even when the full report still exceeds the limit.
