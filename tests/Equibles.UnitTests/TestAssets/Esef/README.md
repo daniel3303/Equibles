@@ -61,3 +61,11 @@
 - Layout, media and other facts are omitted; body/header wrappers and the title are minimal replacements.
 - Original retained source: 6249827 bytes, SHA-256 `8e69e741597b9d52e219ec142158fc6e0ea1fd46bc05c0d340c6bc3dd6ac34fe`.
 - Excerpt: 3112 bytes, SHA-256 `3709fc83288d8d271848b7890acfefc18e3f45aa8f8101541af36f265cb7613c`.
+
+## Better Collective JSON borrowing disclosures
+
+- `better-collective-2025-json-notes-excerpt.json` retains the complete unchanged `documentInfo` and five fact objects from the [2025 report](https://filings.xbrl.org/2549001EPXH6NK7I2R78/2025-12-31/ESEF/DK/0/bettercollective-2025-12-31-en.json), read from the retained original on 2026-10-05.
+- Fact `f1__s9__7__242-1` is the complete borrowing disclosure; four numeric facts retain current-period issuer and annual evidence. Other facts were omitted and JSON formatting was expanded; fact values and dimensions were not edited.
+- Original decompressed JSON: 5,903,989 bytes, SHA-256 `9baaf1134344c2ee7eda38c77e790857001b49b994c8068e20fd0919b79662a0`.
+- Excerpt: 50,622 bytes, SHA-256 `cfb639531bbc0c9aae2961430ca603860c8bca35256b5d6e33f300049ce59d16`.
+- Tagged narratives provide excerpts, not the complete visual report; numeric context dates select eligible notes and never supply invented wording in the text.

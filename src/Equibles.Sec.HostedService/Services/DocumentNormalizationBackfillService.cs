@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Sec.HostedService.Services;
 
 /// <summary>
-/// Re-normalizes stale retrieval text from EDGAR sources or retained inline ESEF envelopes. Each successful replacement keeps the document id, removes stale
+/// Re-normalizes stale retrieval text from EDGAR sources or retained ESEF envelopes. Each successful replacement keeps the document id, removes stale
 /// chunks, and returns it to the indexed pending queue for locked reprocessing.
 /// </summary>
 public class DocumentNormalizationBackfillService
@@ -155,7 +155,7 @@ public class DocumentNormalizationBackfillService
                     );
                 if (emptyByDesign)
                     _logger.LogInformation(
-                        "ESEF report {DocumentId} is past the retrieval ceiling ({EnvelopeBytes} bytes); storing an empty body as the importer does.",
+                        "ESEF report {DocumentId} has no eligible retrieval text within the conversion limit ({EnvelopeBytes} envelope bytes); storing an empty body as the importer does.",
                         document.Id,
                         document.XbrlUncompressedSize
                     );
@@ -203,7 +203,7 @@ public class DocumentNormalizationBackfillService
         return result;
     }
 
-    // EmptyByDesign marks an ESEF report too large to retrieve, which the importer also stores without text.
+    // Size refusals and JSON without eligible note text are terminal empty retrieval outcomes.
     private async Task<(byte[] Content, bool EmptyByDesign)> BuildContent(
         Document document,
         CancellationToken cancellationToken
@@ -250,6 +250,19 @@ public class DocumentNormalizationBackfillService
         if (output.Length == 0)
             throw new InvalidOperationException("Captured ESEF envelope is empty.");
         var html = Encoding.UTF8.GetString(output.ToArray());
+        if (document.XbrlType == XbrlType.JsonXbrl)
+        {
+            if (document.ReportingForDate == default)
+                throw new InvalidDataException("The JSON report has no recorded reporting period.");
+            var notes = EsefJsonReportContent.Build(
+                html,
+                document.Issuer.LegalEntityIdentifier,
+                document.ReportingForDate,
+                _normalizer,
+                _converter
+            );
+            return (notes, notes.Length == 0);
+        }
         var content = EsefReportContent.Build(html, _normalizer, _converter);
         return (content, content.Length == 0 && EsefReportContent.ExceedsRetrievalLimit(html));
     }

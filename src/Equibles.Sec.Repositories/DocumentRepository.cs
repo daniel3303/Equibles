@@ -165,7 +165,7 @@ public class DocumentRepository : BaseRepository<Document>
 
     /// <summary>
     /// Documents whose stored Markdown predates the current normalization pipeline. EDGAR
-    /// sources can be re-fetched; inline ESEF sources replay their retained envelope. This is the single definition of the normalized-content
+    /// sources can be re-fetched; ESEF sources replay their retained envelope. This is the single definition of the normalized-content
     /// backfill work-set.
     /// </summary>
     public IQueryable<Document> GetPendingNormalizedContent()
@@ -191,7 +191,10 @@ public class DocumentRepository : BaseRepository<Document>
                             || d.DocumentType == DocumentType.EsefReport
                         )
                         && d.XbrlStatus == XbrlCaptureStatus.Captured
-                        && d.XbrlType == XbrlType.InlineIxbrl
+                        && (
+                            d.XbrlType == XbrlType.InlineIxbrl
+                            || d.XbrlType == XbrlType.JsonXbrl
+                        )
                         && d.XbrlContentId != null
                     )
                     || (
