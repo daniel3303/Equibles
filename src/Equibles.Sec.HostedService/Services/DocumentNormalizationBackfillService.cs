@@ -115,6 +115,10 @@ public class DocumentNormalizationBackfillService
                 continue;
 
             result.Processed++;
+            var replayingReadableEsef =
+                document.DocumentType?.IsEsef() == true
+                && document.NormalizedContentVersion >= Document.NormalizedContentBuilderVersion
+                && document.Content?.Size > 0;
             document.NormalizedContentAttempts++;
             var currentAttempt = document.NormalizedContentAttempts;
             if (
@@ -143,6 +147,10 @@ public class DocumentNormalizationBackfillService
                     document,
                     cancellationToken
                 );
+                if (replayingReadableEsef && normalizedContent.Length == 0)
+                    throw new InvalidOperationException(
+                        "ESEF replay cannot replace readable stored text with an empty body."
+                    );
                 if (
                     !emptyByDesign
                     && (
@@ -167,7 +175,13 @@ public class DocumentNormalizationBackfillService
 
                 if (await ContentMatches(document, normalizedContent))
                 {
-                    await _persistenceService.ResetChunks(document, cancellationToken);
+                    if (replayingReadableEsef)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await _documentRepository.SaveChanges();
+                    }
+                    else
+                        await _persistenceService.ResetChunks(document, cancellationToken);
                     result.Unchanged++;
                     continue;
                 }

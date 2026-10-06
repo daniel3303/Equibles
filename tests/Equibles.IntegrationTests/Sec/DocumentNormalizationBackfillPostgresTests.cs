@@ -221,6 +221,8 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
     [InlineData("EsefAnnualReport", 4, true, false)]
     [InlineData("EsefReport", 4, true, false)]
     [InlineData("EsefAnnualReport", 4, true, true)]
+    [InlineData("EsefAnnualReport", 5, false, false)]
+    [InlineData("EsefReport", 5, false, false)]
     public async Task Backfill_EsefReplacesOnlyDerivedContentAndFinishesItsQueueEntry(
         string form,
         int version,
@@ -228,7 +230,10 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         bool noNotes
     )
     {
-        var document = await SeedLegacyDocument("ESEF", []);
+        var document = await SeedLegacyDocument(
+            "ESEF",
+            version == 5 ? "readable older text"u8.ToArray() : []
+        );
         document.NormalizedContentVersion = version;
         var original = GzipCompressor.Compress(
             Encoding.UTF8.GetBytes(
@@ -288,9 +293,117 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         else
             text.Should().Contain("Retained annual report");
         saved.ChunkedAt.Should().BeNull();
-        saved.NormalizedContentVersion.Should().Be(Document.EsefEmptyContentRecoveryVersion);
+        saved.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
         (await sut.Backfill(1)).Processed.Should().Be(0);
         await client.DidNotReceiveWithAnyArgs().GetDocumentContent(default, default, default);
+    }
+
+    [Fact]
+    public async Task Backfill_UnchangedReadableEsef_PreservesIndexedChunksAndCompletesReplay()
+    {
+        const string html = "<html><body><p>Readable retained report.</p></body></html>";
+        var text = EsefReportContent.Build(
+            html,
+            new SecDocumentHtmlNormalizer(),
+            new SecDocumentHtmlToMarkdownConverter()
+        );
+        var document = await SeedLegacyDocument("ESEF", text);
+        document.DocumentType = DocumentType.EsefReport;
+        document.NormalizedContentVersion = 1;
+        document.Issuer.Cik = null;
+        document.XbrlType = XbrlType.InlineIxbrl;
+        document.XbrlStatus = XbrlCaptureStatus.Captured;
+        document.XbrlContent = new Equibles.Media.Data.Models.File
+        {
+            Name = "retained",
+            Extension = "gz",
+            ContentType = "application/gzip",
+            FileContent = new Equibles.Media.Data.Models.FileContent
+            {
+                Bytes = GzipCompressor.Compress(Encoding.UTF8.GetBytes(html)),
+            },
+        };
+        document.ChunkedAt = DateTime.UtcNow;
+        document.ChunkAttempts = 2;
+        var chunkedAt = document.ChunkedAt;
+        var contentId = document.ContentId;
+        DbContext.Add(document.XbrlContent);
+        var chunk = new Chunk
+        {
+            DocumentId = document.Id,
+            Index = 0,
+            StartPosition = 0,
+            EndPosition = text.Length,
+            StartLineNumber = 1,
+            Content = Encoding.UTF8.GetString(text),
+            DocumentType = DocumentType.EsefReport,
+            ReportingDate = document.ReportingDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+        };
+        DbContext.Add(chunk);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var client = Substitute.For<ISecEdgarClient>();
+        var sut = BuildSut(client);
+
+        var result = await sut.Backfill(1);
+
+        result.Unchanged.Should().Be(1);
+        result.Failed.Should().Be(0);
+        await using var verify = Fixture.CreateDbContext();
+        var saved = await verify.Set<Document>().SingleAsync(row => row.Id == document.Id);
+        saved.ContentId.Should().Be(contentId);
+        saved.ChunkedAt.Should().BeCloseTo(chunkedAt.Value, TimeSpan.FromMilliseconds(1));
+        saved.ChunkAttempts.Should().Be(2);
+        saved.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
+        saved.NormalizedContentAttempts.Should().Be(0);
+        (await verify.Set<Chunk>().SingleAsync(row => row.DocumentId == document.Id))
+            .Id.Should()
+            .Be(chunk.Id);
+        (await sut.Backfill(1)).Processed.Should().Be(0);
+        await client.DidNotReceiveWithAnyArgs().GetDocumentContent(default, default, default);
+    }
+
+    [Fact]
+    public async Task Backfill_ReadableEsefWithSizeRefusal_PersistsFailureWithoutErasingText()
+    {
+        var document = await SeedLegacyDocument("ESEF", "Readable original body"u8.ToArray());
+        document.DocumentType = DocumentType.EsefReport;
+        document.NormalizedContentVersion = 1;
+        document.Issuer.Cik = null;
+        document.XbrlType = XbrlType.InlineIxbrl;
+        document.XbrlStatus = XbrlCaptureStatus.Captured;
+        var html =
+            "<html><body><p>"
+            + new string('a', EsefReportContent.MaxRetrievalHtmlChars + 1)
+            + "</p></body></html>";
+        document.XbrlContent = new Equibles.Media.Data.Models.File
+        {
+            Name = "retained",
+            Extension = "gz",
+            ContentType = "application/gzip",
+            FileContent = new Equibles.Media.Data.Models.FileContent
+            {
+                Bytes = GzipCompressor.Compress(Encoding.UTF8.GetBytes(html)),
+            },
+        };
+        var contentId = document.ContentId;
+        DbContext.Add(document.XbrlContent);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var result = await BuildSut(Substitute.For<ISecEdgarClient>()).Backfill(1);
+
+        result.Failed.Should().Be(1);
+        await using var verify = Fixture.CreateDbContext();
+        var saved = await verify
+            .Set<Document>()
+            .Include(row => row.Content)
+                .ThenInclude(file => file.FileContent)
+            .SingleAsync(row => row.Id == document.Id);
+        saved.ContentId.Should().Be(contentId);
+        saved.Content.FileContent.Bytes.Should().Equal("Readable original body"u8.ToArray());
+        saved.NormalizedContentVersion.Should().Be(1);
+        saved.NormalizedContentAttempts.Should().Be(1);
     }
 
     private const string JsonReport = """

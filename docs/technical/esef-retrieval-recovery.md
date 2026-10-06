@@ -13,20 +13,25 @@
 - JSON notes are excerpts, never a reconstruction of the full visual report; context dates filter notes but never become invented source wording.
 - Convert the complete selected markup within the existing limit; valid reports without eligible notes settle empty, while malformed envelopes and failed conversions retain retries.
 - Root-level note headings never replace the HTML or body container; preserve the sibling prose and table structure.
-- Readable ESEF reports and current SEC documents keep their existing normalization generation.
-- The finite recovery cohort is captured inline or JSON ESEF documents with empty content, normalization version below 5, and fewer than five failed attempts.
-- The existing backfill replays their retained envelopes, replaces only derived text, clears stale chunks transactionally, and stamps ESEF generation 5 even when the full report still exceeds the limit.
-- Retire the empty-content selection exception only after its eligible cohort is empty, current writers stamp generation 5, and no older writers remain deployed.
+- Generation 6 replays captured inline ESEF documents below that generation, including readable reports, through the existing bounded normalization worker.
+- JSON recovery remains limited to empty reports below generation 5; current SEC documents stay settled.
+- Both cohorts require a retained envelope and fewer than five failed attempts; parked attempts remain visible and are not silently reset.
+- Replay replaces only changed derived text and clears its stale chunks transactionally; unchanged readable ESEF text keeps its chunks and only advances the normalization stamp.
+- Never replace an already-normalized readable report with an empty body; retain its text and record the failed attempt even for a conversion-size refusal.
+- Empty reports may settle empty when conversion remains too large; successful replays and new ESEF writers stamp generation 6.
+- Retire the finite selection exceptions only after the eligible cohort below is empty, current writers stamp generation 6, and no older writers remain deployed.
 - An empty cohort proves the conversion was retried; it does not prove every report became readable or any downstream extraction completed.
 
 ```sql
-SELECT COUNT(*) AS eligible_empty_esef_documents
+SELECT COUNT(*) AS eligible_esef_retrieval_replays
 FROM "Document" d
 JOIN "File" f ON f."Id" = d."ContentId"
 WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
-  AND d."NormalizedContentVersion" < 5
+  AND (
+    (d."XbrlType" = 0 AND d."NormalizedContentVersion" < 6)
+    OR (d."NormalizedContentVersion" < 5 AND f."Size" = 0)
+  )
   AND d."NormalizedContentAttempts" < 5
-  AND f."Size" = 0
   AND d."XbrlStatus" = 1 -- Captured
   AND d."XbrlType" IN (0, 2) -- InlineIxbrl, JsonXbrl
   AND d."XbrlContentId" IS NOT NULL;
@@ -41,7 +46,7 @@ WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
 - Decline stylesheets, nested positioning, coordinate overrides, explicit breaks and unsupported inline layout declarations.
 - Continue only unfinished long prose into lowercase or currency-prefixed text; preserve its original child nodes with explicit line breaks inside one paragraph.
 - Never cross an element wrapper, visible intervening node or page boundary; preserve every non-whitespace character and original source file.
-- This conversion does not globally reopen readable reports; a finite historical repair must identify the affected retained envelopes and use the existing normalization queue.
+- Generation 6 applies this conversion to retained inline reports through the normalization queue; envelopes missing layout evidence may remain unchanged.
 
 ## Stylesheet-positioned prose
 
@@ -61,7 +66,7 @@ WHERE d."DocumentType" IN ('EsefAnnualReport', 'EsefReport')
 - Keep complete paragraphs, numeric boundaries, tables, lists, excluded content and uncertain chains separate; cap chains at 128 fragments and joined paragraphs at 8,000 characters.
 - Both joined fragments must share the exact enclosing fact objects; keep unrelated nested fact, quotation and deletion scopes separate.
 - Refuse hidden or semantically altered boundary text using bounded local CSS rules; conditional, external, malformed and unsupported styles preserve existing boundaries.
-- This changes derived retrieval text only; preserve originals, tagged financial facts and existing normalization generations.
-- The importer must retain the bounded stylesheet metadata in its retrieval input; this change does not rewrite original documents or reopen historical extractions.
+- This changes derived retrieval text only; preserve originals and tagged financial facts.
+- The importer must retain the bounded stylesheet metadata in its retrieval input; replay never rewrites original documents, and downstream readers must independently validate changed text.
 
 - Mixed-font positioned lines may reserve a vertical obstacle only when all existing geometry guards pass, every child retains the same font size and its line height stays bounded. Reserve twice the effective font height on both sides; preserve the line and never join it as prose.

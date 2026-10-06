@@ -109,12 +109,13 @@ public class Document
     /// </summary>
     public const int NormalizedContentBuilderVersion = 1;
 
-    // Reopen only empty ESEF text; readable reports and SEC captures keep their existing generation.
+    // JSON recovery remains limited to empty text; inline reports also replay prose-layout fixes.
     public const int EsefEmptyContentRecoveryVersion = 5;
+    public const int EsefContentBuilderVersion = 6;
 
     public static int ContentBuilderVersion(DocumentType documentType) =>
         documentType?.IsEsef() == true
-            ? EsefEmptyContentRecoveryVersion
+            ? EsefContentBuilderVersion
             : NormalizedContentBuilderVersion;
 
     [MaxLength(2000)]
