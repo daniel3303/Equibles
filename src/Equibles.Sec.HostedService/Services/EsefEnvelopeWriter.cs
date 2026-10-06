@@ -209,7 +209,7 @@ internal sealed class EsefEnvelopeWriter(XmlReader reader, XmlWriter writer, boo
         var stylesheet = new StringBuilder();
         while (reader.Read() && reader.NodeType != XmlNodeType.EndElement)
         {
-            if (reader.NodeType == XmlNodeType.Element)
+            if (reader.NodeType is XmlNodeType.Element or XmlNodeType.ProcessingInstruction)
                 throw new InvalidDataException("Unexpected markup inside stylesheet.");
             if (
                 reader.NodeType

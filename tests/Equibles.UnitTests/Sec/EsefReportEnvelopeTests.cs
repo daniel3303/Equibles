@@ -15,6 +15,22 @@ public class EsefReportEnvelopeTests
     private static readonly DateOnly Period = new(2024, 12, 31);
 
     [Fact]
+    public void RefusesProcessingInstructionsInsideStylesheetsRatherThanDiscardingThem()
+    {
+        var source = Encoding.UTF8.GetBytes(
+            Report()
+                .Replace(
+                    "<style>",
+                    "<style><?xml-stylesheet type='text/css' href='https://example.test/layout.css'?>"
+                )
+        );
+        Assert.Throws<InvalidDataException>(() =>
+            EsefReportEnvelope.Discover(source, new(2025, 3, 1))
+        );
+        Assert.Throws<InvalidDataException>(() => EsefReportEnvelope.ForRetrieval(source));
+    }
+
+    [Fact]
     public void RetrievalPreservesQNameSelectorsThatForbidJoiningHiddenContinuations()
     {
         var source = Report()
