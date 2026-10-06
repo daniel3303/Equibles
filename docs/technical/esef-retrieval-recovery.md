@@ -16,6 +16,12 @@
 - Generation 6 replays captured inline ESEF documents below that generation, including readable reports, through the existing bounded normalization worker.
 - JSON recovery remains limited to empty reports below generation 5; current SEC documents stay settled.
 - Both cohorts require a retained envelope and fewer than five failed attempts; parked attempts remain visible and are not silently reset.
+- Annual inline reports prefer their retained original over older extraction copies that may omit stylesheets; general inline and JSON reports use their retained extraction envelope.
+- Recheck original gzip bytes against the stored hash, physical length and expanded length; reject invalid originals instead of falling back to a lower-fidelity copy.
+- Original annual reports must prove the stored LEI, annual period and publication cutoff through the shared envelope parser; preserve the existing 300 MiB original and 50 MiB compacted-envelope limits.
+- Apply the existing strict inline annual proof, including declared reporting dates and nonconflicting facts with valid units; trailing-year figures never override a declared interim period.
+- Keep namespace canonicalization in the financial validation copy; retrieval preserves source prefixes, QName values and processing instructions so CSS selectors and external-style guards retain their meaning.
+- Source selection changes only derived text; original pointers, files and tagged facts remain unchanged.
 - Replay replaces only changed derived text and clears its stale chunks transactionally; unchanged readable ESEF text keeps its chunks and only advances the normalization stamp.
 - Never replace an already-normalized readable report with an empty body; retain its text and record the failed attempt even for a conversion-size refusal.
 - Empty reports may settle empty when conversion remains too large; successful replays and new ESEF writers stamp generation 6.

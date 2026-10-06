@@ -1,0 +1,5 @@
+- Source: https://fr.ftp.opendatasoft.com/datadila/INFOFI/ECO/2026/08/FCECO083041_20260831.zip
+- Captured: 2026-09-23.
+- Original member: `tff-2026-04-30-1-fr/reports/tff-2026-04-30-1-fr.xhtml`.
+- Excerpt retains the original consolidated assets and revenue facts for 2026-04-30, their contexts and unit, and the original root namespace declarations.
+- Presentation markup and other facts are omitted; numeric text, scale, transform, identifiers and periods are unchanged.

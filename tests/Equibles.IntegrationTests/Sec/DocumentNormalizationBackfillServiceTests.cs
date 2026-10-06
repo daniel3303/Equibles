@@ -592,6 +592,97 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .GetDocumentContent(default, default, default);
     }
 
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("wrong-hash")]
+    [InlineData("wrong-size")]
+    [InlineData("wrong-expanded-size")]
+    [InlineData("bad-header")]
+    [InlineData("wrong-issuer")]
+    [InlineData("wrong-period")]
+    [InlineData("future-period")]
+    [InlineData("storage-wrapper")]
+    [InlineData("oversized-source")]
+    [InlineData("oversized-inflated")]
+    public async Task Backfill_RetainedAnnualOriginal_IsPreferredOnlyWithCompleteCaptureAndIdentityProof(
+        string scenario
+    )
+    {
+        var document = SeedEsef();
+        document.NormalizedContentVersion = 1;
+        _company.LegalEntityIdentifier = "969500N6BAT2PU986341";
+        document.ReportingForDate = new DateOnly(2026, 4, 30);
+        document.ReportingDate = new DateOnly(2026, 8, 31);
+        var original = System.IO.File.ReadAllBytes(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets/Esef/dila-tff-2026.xhtml")
+        );
+        var compressed = GzipCompressor.Compress(original);
+        if (scenario == "bad-header")
+            compressed[0] = 0;
+        var file = new Equibles.Media.Data.Models.File
+        {
+            Name = "original",
+            Extension = "gz",
+            ContentType = "application/gzip",
+            Size = compressed.Length,
+            ContentHash = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(compressed)),
+            FileContent = new Equibles.Media.Data.Models.FileContent { Bytes = compressed },
+        };
+        document.AsFiledHtmlContent = file;
+        document.AsFiledHtmlUncompressedSize = original.Length;
+        if (scenario == "wrong-hash")
+            file.ContentHash = "sha256:" + new string('0', 64);
+        if (scenario == "wrong-size")
+            file.Size++;
+        if (scenario == "wrong-expanded-size")
+            document.AsFiledHtmlUncompressedSize++;
+        if (scenario == "wrong-issuer")
+            _company.LegalEntityIdentifier = "2549001EPXH6NK7I2R78";
+        if (scenario == "wrong-period")
+            document.ReportingForDate = new DateOnly(2025, 4, 30);
+        if (scenario == "future-period")
+            document.ReportingDate = new DateOnly(2026, 4, 29);
+        if (scenario == "storage-wrapper")
+            file.StorageProvider = Equibles.Media.Data.Models.StorageProvider.FileSystemGzip;
+        if (scenario == "oversized-source")
+            file.Size = EsefReportEnvelope.MaximumSourceBytes + 1L;
+        if (scenario == "oversized-inflated")
+            document.AsFiledHtmlUncompressedSize = EsefReportEnvelope.MaximumSourceBytes + 1L;
+        _dbContext.Add(file);
+        _dbContext.SaveChanges();
+        var originalId = file.Id;
+        var envelopeId = document.XbrlContentId;
+        _fileManager.OpenRead(file).Returns(_ => new MemoryStream(compressed, writable: false));
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Processed.Should().Be(1);
+        result.Failed.Should().Be(scenario == "valid" ? 0 : 1);
+        result.Replaced.Should().Be(scenario == "valid" ? 1 : 0);
+        document.AsFiledHtmlContentId.Should().Be(originalId);
+        document.XbrlContentId.Should().Be(envelopeId);
+        file.FileContent.Bytes.Should().Equal(compressed);
+        await _fileManager.DidNotReceive().OpenRead(document.XbrlContent);
+        await _secEdgarClient
+            .DidNotReceiveWithAnyArgs()
+            .GetDocumentContent(default, default, default);
+        if (scenario == "valid")
+            await _persistenceService
+                .Received(1)
+                .ReplaceContent(
+                    document,
+                    Arg.Is<byte[]>(bytes =>
+                        bytes.Length > 0
+                        && !Encoding.UTF8.GetString(bytes).Contains("Retained annual report")
+                    ),
+                    Arg.Any<CancellationToken>()
+                );
+        else
+            await _persistenceService
+                .DidNotReceiveWithAnyArgs()
+                .ReplaceContent(default, default, default);
+    }
+
     private Document SeedEsef()
     {
         var document = SeedDocument(0);
