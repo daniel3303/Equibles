@@ -90,8 +90,9 @@ public class EsefJsonReportContentTests
     )
     {
         var report = Report();
-        report["documentInfo"]["namespaces"]["bad prefix"] =
-            report["documentInfo"]["namespaces"][prefix];
+        report["documentInfo"]["namespaces"]["bad prefix"] = report["documentInfo"]["namespaces"][
+            prefix
+        ];
         report["facts"][NoteId]["dimensions"][dimension] = "bad prefix:" + localName;
 
         Build(report.ToString()).Should().BeEmpty();
@@ -117,8 +118,9 @@ public class EsefJsonReportContentTests
     public void Build_TrustedNamespaceAliasAndMatchingPeriod_PreservesDisclosure(string period)
     {
         var report = Report();
-        report["documentInfo"]["namespaces"]["notes"] =
-            report["documentInfo"]["namespaces"]["ifrs-full"];
+        report["documentInfo"]["namespaces"]["notes"] = report["documentInfo"]["namespaces"][
+            "ifrs-full"
+        ];
         report["facts"][NoteId]["dimensions"]["concept"] =
             "notes:DisclosureOfBorrowingsExplanatory";
         report["facts"][NoteId]["dimensions"]["period"] = period;
