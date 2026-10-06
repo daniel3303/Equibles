@@ -28,7 +28,7 @@ public static class EsefReportContent
     public static bool ExceedsRetrievalLimit(string html) =>
         PrepareRetrievalMarkup(html)?.Length > MaxRetrievalHtmlChars;
 
-    // Small reports stay byte-identical; oversized XHTML compacts only unused layout metadata.
+    // Small reports stay byte-identical; oversized XHTML sheds viewer scripts and unused layout metadata.
     public static string PrepareRetrievalMarkup(string html) =>
         EsefRetrievalMarkup.Compact(StripEmbeddedData(html), MaxRetrievalHtmlChars);
 
