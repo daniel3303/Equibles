@@ -89,27 +89,6 @@ public class ChunkRepository : BaseRepository<Chunk>
                 )
             );
 
-        var searchQuery = ParadeDbJsonQuery
-            .Boolean(b =>
-            {
-                b.Must(clauses.ToArray());
-                // Exclusion must live INSIDE the index too: dropping a dominant filer's
-                // hits after scoring would silently shrink the result set instead of
-                // refilling it with the next-best matches (a subject company can own
-                // 90% of the top hits for its own flagship keyword).
-                if (excludeTickers is { Count: > 0 })
-                    b.MustNot(
-                        excludeTickers
-                            .Select(t =>
-                                ParadeDbJsonQuery.Term(nameof(Chunk.Ticker), t.ToLowerInvariant())
-                            )
-                            .ToArray()
-                    );
-            })
-            .ToJson();
-
-        var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
-
         // Set a hard CommandTimeout for this call so Postgres aborts the
         // statement independently of pdb.parse / pdb.score honouring the
         // cancellation token, then restore the prior value so other queries
@@ -122,6 +101,25 @@ public class ChunkRepository : BaseRepository<Chunk>
         deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
+            var documentIds = await ChunkDateScope.Read(
+                DbContext, ticker, documentId, documentTypes, startDate, endDate, deadline.Token
+            );
+            if (documentIds is { Length: 0 })
+                return [];
+            if (documentIds != null)
+                clauses.Add(ParadeDbJsonQuery.TermSet(nameof(Chunk.DocumentId), documentIds.Cast<object>().ToArray()));
+            var searchQuery = ParadeDbJsonQuery
+                .Boolean(b =>
+                {
+                    b.Must(clauses.ToArray());
+                    // Keep exclusions inside the index so ranking refills after a dominant filer.
+                    if (excludeTickers is { Count: > 0 })
+                        b.MustNot(
+                            excludeTickers.Select(t => ParadeDbJsonQuery.Term(nameof(Chunk.Ticker), t.ToLowerInvariant())).ToArray()
+                        );
+                })
+                .ToJson();
+            var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
             return await LeaderOnlyScan(
                 scan =>
                     ChunkRankedScope.Read(
