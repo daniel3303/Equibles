@@ -1,5 +1,16 @@
 # European filing index captures
 
+## B2 Impact 2025 stylesheet-positioned borrowing paragraphs
+
+- `b2-impact-2025-styled-borrowings.xhtml.gz` contains complete page elements `pf8d` and `pf99` (printed pages 141 and 153) and all six stylesheets from the retained [2025 annual report](https://api3.oslo.oslobors.no/v1/newsreader/attachment?messageId=672002&attachmentId=324636), read on 2026-10-06.
+- Embedded font/image payloads and the other pages were omitted; the selected pages keep their text and coordinates, with minimal XHTML wrappers and XML serialization of equivalent namespace and empty-element syntax.
+- Original: 15,331,068 bytes, SHA-256 `0c47d8dc2742ad5a5da6144e36e51a3aa821760fef6d20e345a6cbc30573c3ba`.
+- Uncompressed fixture: 409,865 bytes, SHA-256 `229d920016607503a1698ae6ae4db10f8b3b145a29bfb373b055018a8ac96a6a`.
+- Notes 24 and 31 exercise adjacent prose lines, inline XBRL, kerning spans, stylesheet XML entities and an unchanged positioned table container.
+- The source names B2Kapital Holding S.à r.l. as borrower and B2 Impact ASA as guarantor; joining their original paragraph does not change those roles.
+
+## Index captures
+
 - `ctt-2022-json-excerpt.json` retains the source document metadata and unchanged facts `f-3`/`f-4` from `https://filings.xbrl.org/529900G4A1IKOKC22K56/2022-12-31/ESEF/PT/0/002367-2022-12-31.json`, captured on 2026-09-21; all other facts are omitted. The xBRL-JSON midnight instants correspond to the preceding calendar day, and `decimals` is precision, not a scaling factor.
 - `arkema-2020-json-excerpt.json` retains the source document metadata and unchanged first fact `fact_16961` from `https://filings.xbrl.org/9695000EHMS84KKP2785/2020-12-31/ESEF/FR/0/arkema-2021-12-31AR.json`, captured on 2026-09-22; all other facts are omitted. The report declares the published 2021-02-03 candidate-recommendation document type.
 
