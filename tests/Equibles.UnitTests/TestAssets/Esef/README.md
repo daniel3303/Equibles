@@ -115,3 +115,12 @@
 - Original: 36,428,122 bytes, SHA-256 `3389c81ae6d0cadbd557ca3958c99014fba8827a7958a9018d3769d6ab8935be`.
 - Uncompressed fixture: 1673240 bytes, SHA-256 `77ab8283722c187202f68144ee50cef099fe09a5d474a77408258b41aa88c4d2`.
 - The issuer sentence ends in `con-`; the next linked fragment continues it with `sists` and the facility amounts. The following complete paragraph and financial tables remain separate.
+
+## Ferragamo 2025 embedded viewer data
+
+- `ferragamo-2025-viewer-envelope.xhtml.gz` contains the complete retained retrieval envelope rebuilt from the [official 2025 annual report](https://www.emarketstorage.it/sites/default/files/xbrl/2026-03/20260331_180856.zip), read on 2026-10-06.
+- Embedded images and font payloads were removed by the existing capture envelope writer; every report page, Inline XBRL fact and viewer script remains unchanged.
+- Original XHTML: 128,271,043 bytes, SHA-256 `28bb8836aae316f2caab8faa9d098303a4f60cfea7de728793a29632e8e85312`.
+- Uncompressed fixture: 21,005,544 bytes, SHA-256 `2bb4af182eeda8fe3a780df4c7904c921cc1beee885813005b7002414f6cdf20`.
+- The `application/x.ixbrl-viewer+json` script contains 9,215,347 characters of viewer data, pushing the report above the unchanged 16 Mi-character conversion limit.
+- Tests compare every parsed Inline XBRL fact before and after retrieval compaction and verify the complete report body remains readable.

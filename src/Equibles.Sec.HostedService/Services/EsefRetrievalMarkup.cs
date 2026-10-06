@@ -73,9 +73,27 @@ internal static partial class EsefRetrievalMarkup
                     NewLineHandling = NewLineHandling.Entitize,
                 }
             );
+            var scriptContainer = false;
             do
             {
-                CopyNode(reader, writer);
+                if (reader.Depth == 1)
+                    scriptContainer =
+                        reader.NodeType == XmlNodeType.Element
+                        && reader.NamespaceURI == XhtmlNamespace
+                        && reader.LocalName is "head" or "body";
+                if (
+                    reader.NodeType == XmlNodeType.Element
+                    && reader.LocalName == "script"
+                    && reader.NamespaceURI == XhtmlNamespace
+                )
+                {
+                    // Only root head/body children are presentation scripts; other
+                    // locations may contribute to a fact, context or continuation.
+                    if (reader.Depth != 2 || !scriptContainer || !SkipScript(reader))
+                        return source;
+                }
+                else
+                    CopyNode(reader, writer);
                 writer.Flush();
                 // Output only grows; never pass a prefix to the document normalizer.
                 if (output.Length > maximumCharacters)
@@ -89,6 +107,17 @@ internal static partial class EsefRetrievalMarkup
             // Ambiguous or non-XML input keeps the existing size refusal.
             return source;
         }
+    }
+
+    private static bool SkipScript(XmlReader reader)
+    {
+        // Viewer data is already omitted by Markdown conversion. Refuse nested XML,
+        // which could contain financial facts, instead of hiding it from the parser.
+        using var subtree = reader.ReadSubtree();
+        while (subtree.Read())
+            if (subtree.Depth > 0 && subtree.NodeType == XmlNodeType.Element)
+                return false;
+        return true;
     }
 
     private static void CopyNode(XmlReader reader, XmlWriter writer)

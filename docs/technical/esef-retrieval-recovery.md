@@ -2,7 +2,9 @@
 
 - Keep original XHTML and XBRL envelopes unchanged; compaction applies only to the retrieval copy.
 - Before the existing 16 Mi-character conversion limit, oversized valid XHTML may shed a fixed set of layout declarations unused by normalization.
-- Preserve text, elements, namespaces, table spans, all other attributes except the layout metadata below, and all remaining styles, including emphasis, alignment, visibility, color and text decoration.
+- Omit XHTML scripts only when directly inside the root XHTML head or body; viewer payloads are already excluded from Markdown.
+- Refuse compaction when an XHTML script has another parent or contains child elements; financial facts, contexts and continuations may depend on that markup.
+- Preserve all other text, elements, namespaces, table spans, all other attributes except the layout metadata below, and all remaining styles, including emphasis, alignment, visibility, color and text decoration.
 - Flat numeric `rgb(...)` and `rgba(...)` values permit declaration splitting; preserve all other complex CSS attributes in full; invalid XML and output still exceeding the limit retain the existing empty-by-design result.
 - On `span` and `div`, unused nonempty class values become one neutral class; spans with such classes may clear their redundant id value. Preserve class-driven lists, math, footnotes, line blocks and code-language conventions.
 - Keep nonempty class metadata: the Markdown reader uses its presence to preserve paragraph boundaries. Preserve anchor ids, classless-span ids, namespaced attributes and all other elements.
