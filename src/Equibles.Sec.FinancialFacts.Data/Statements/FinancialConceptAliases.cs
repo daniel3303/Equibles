@@ -49,6 +49,11 @@ public static class FinancialConceptAliases
             // contract tags (fee revenue must never outrank the headline).
             // Nonfinancial filers never tag it, so they are unaffected.
             G("RevenuesNetOfInterestExpense"),
+            // Utilities' income-statement "Operating revenues" total (DTE, XEL, NEE);
+            // their contract tags omit alternative-revenue and derivative lines of either
+            // sign (NEE FY2022: 20,956 total net of derivative losses vs ~23,000 contract).
+            // After Revenues because some filers tag a small slice here beside Revenues.
+            G("RegulatedAndUnregulatedOperatingRevenue"),
             G("RevenueFromContractWithCustomerExcludingAssessedTax"),
             // Some filers (REITs like ARE) tag their total-revenue line with the
             // assessed-tax-inclusive ASC 606 variant and never file the excluding
