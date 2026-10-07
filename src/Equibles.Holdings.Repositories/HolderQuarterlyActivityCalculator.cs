@@ -75,6 +75,8 @@ public static class HolderQuarterlyActivityCalculator
             ListedTicker = current.ListedTicker,
             Ticker = current.Ticker,
             Name = current.Name,
+            ShareType = current.ShareType,
+            OptionType = current.OptionType,
             CurrentShares = current.Shares,
             CurrentValue = current.Value,
             PreviousShares = previous?.Shares ?? 0,
@@ -96,6 +98,8 @@ public static class HolderQuarterlyActivityCalculator
             ListedTicker = previous.ListedTicker,
             Ticker = previous.Ticker,
             Name = previous.Name,
+            ShareType = previous.ShareType,
+            OptionType = previous.OptionType,
             CurrentShares = 0,
             CurrentValue = 0,
             PreviousShares = previous.Shares,
@@ -110,9 +114,13 @@ public static class HolderQuarterlyActivityCalculator
     )
     {
         return holdings
+            // The holding grain minus ReportDate: a call or principal leg is a different position
+            // from the common shares of the same security, never a share-count change.
             .GroupBy(h => new SecurityKey(
                 h.EquityIssuerId,
-                h.ListedTicker ?? h.Issuer?.Presentation?.Listing?.Ticker
+                h.ListedTicker ?? h.Issuer?.Presentation?.Listing?.Ticker,
+                h.ShareType,
+                h.OptionType
             ))
             .ToDictionary(
                 g => g.Key,
@@ -123,6 +131,8 @@ public static class HolderQuarterlyActivityCalculator
                     ListedTicker = g.Key.ListedTicker,
                     Ticker = g.Key.ListedTicker,
                     Name = g.First().Issuer?.Name,
+                    ShareType = g.Key.ShareType,
+                    OptionType = g.Key.OptionType,
                     Shares = g.Sum(h => h.Shares),
                     Value = g.Sum(h => h.Value),
                 }
@@ -136,9 +146,16 @@ public static class HolderQuarterlyActivityCalculator
         public string ListedTicker { get; set; }
         public string Ticker { get; set; }
         public string Name { get; set; }
+        public ShareType ShareType { get; set; }
+        public OptionType? OptionType { get; set; }
         public long Shares { get; set; }
         public long Value { get; set; }
     }
 
-    private readonly record struct SecurityKey(Guid CommonStockId, string ListedTicker);
+    private readonly record struct SecurityKey(
+        Guid CommonStockId,
+        string ListedTicker,
+        ShareType ShareType,
+        OptionType? OptionType
+    );
 }

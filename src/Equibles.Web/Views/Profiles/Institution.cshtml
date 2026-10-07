@@ -207,6 +207,7 @@
                                             <tr>
                                                 <th scope="col">Ticker</th>
                                                 <th scope="col">Company</th>
+                                                <th scope="col">Type</th>
                                                 <th scope="col" class="text-right">Prior</th>
                                                 <th scope="col" class="text-right">New</th>
                                                 <th scope="col" class="text-right">Δ Shares</th>
@@ -221,6 +222,7 @@
                                                 <tr>
                                                     <td class="font-mono">@row.Ticker</td>
                                                     <td class="max-w-xs truncate">@row.Name</td>
+                                                    <td>@row.Instrument</td>
                                                     <td class="text-right font-mono"><compactable-number value="@row.PreviousShares" /></td>
                                                     <td class="text-right font-mono"><compactable-number value="@row.CurrentShares" /></td>
                                                     <td class="text-right font-mono @deltaSharesCss"><compactable-number value="@row.DeltaShares" sign /></td>
