@@ -66,9 +66,9 @@ public static class AdsRatioExtractor
         "derived from the price per ads",
     };
 
-    private static readonly Dictionary<string, int> NumberWords = new(
-        StringComparer.OrdinalIgnoreCase
-    )
+    // Units take a tens prefix ("twenty five", or "twentyfive" once the tokenizer
+    // drops the hyphen); teens never do.
+    private static readonly Dictionary<string, int> UnitWords = new(StringComparer.Ordinal)
     {
         ["one"] = 1,
         ["two"] = 2,
@@ -79,6 +79,10 @@ public static class AdsRatioExtractor
         ["seven"] = 7,
         ["eight"] = 8,
         ["nine"] = 9,
+    };
+
+    private static readonly Dictionary<string, int> TeenWords = new(StringComparer.Ordinal)
+    {
         ["ten"] = 10,
         ["eleven"] = 11,
         ["twelve"] = 12,
@@ -89,7 +93,18 @@ public static class AdsRatioExtractor
         ["seventeen"] = 17,
         ["eighteen"] = 18,
         ["nineteen"] = 19,
+    };
+
+    private static readonly Dictionary<string, int> TensWords = new(StringComparer.Ordinal)
+    {
         ["twenty"] = 20,
+        ["thirty"] = 30,
+        ["forty"] = 40,
+        ["fifty"] = 50,
+        ["sixty"] = 60,
+        ["seventy"] = 70,
+        ["eighty"] = 80,
+        ["ninety"] = 90,
     };
 
     // The token that opens a ratio clause: a bare "ads"/"adr", or the phrase
@@ -180,10 +195,10 @@ public static class AdsRatioExtractor
             var limit = Math.Min(tokens.Count, afterRepresents + 3);
             for (var j = afterRepresents + 1; j < limit; j++)
             {
-                var number = ParseNumberToken(tokens[j]);
+                var number = ParseNumberAt(tokens, j, out var next);
                 if (number == null)
                     continue;
-                if (OrdinaryShareNounFollows(tokens, j + 1))
+                if (OrdinaryShareNounFollows(tokens, next))
                     return number;
                 // A number that doesn't lead to the share noun isn't the ratio;
                 // give up on this anchor and look for the next one.
@@ -233,15 +248,96 @@ public static class AdsRatioExtractor
         return false;
     }
 
-    // Digits-with-commas ("43,200") or a number word ("twelve"). Null otherwise.
-    private static int? ParseNumberToken(string token)
+    // Digits-with-commas ("43,200") or a spelled-out number ("sixty", "twenty-five",
+    // "one hundred and fifty") starting at tokens[start]. Sets next to the token after
+    // the number so a multi-word number is never read as its leading word alone.
+    private static int? ParseNumberAt(IReadOnlyList<string> tokens, int start, out int next)
     {
-        if (token.Length == 0)
-            return null;
+        next = start + 1;
+        var token = tokens[start];
         if (token.Any(char.IsDigit))
             return int.TryParse(token.Replace(",", string.Empty), out var value) ? value : null;
-        return NumberWords.TryGetValue(token, out var word) ? word : null;
+
+        var index = start;
+        var number = ParseBelowThousand(tokens, ref index);
+        if (number == null)
+            return null;
+        if (index < tokens.Count && Word(tokens[index]) == "thousand")
+        {
+            index++;
+            number *= 1000;
+            var save = index;
+            if (index < tokens.Count && Word(tokens[index]) == "and")
+                index++;
+            var remainder = ParseBelowThousand(tokens, ref index);
+            if (remainder == null)
+                index = save;
+            number += remainder ?? 0;
+        }
+        next = index;
+        return number;
     }
+
+    // "one".."nine hundred [and] ninety-nine"; advances index past what it read.
+    private static int? ParseBelowThousand(IReadOnlyList<string> tokens, ref int index)
+    {
+        var number = ParseBelowHundred(tokens, ref index);
+        if (number == null || index >= tokens.Count || Word(tokens[index]) != "hundred")
+            return number;
+
+        index++;
+        number *= 100;
+        var save = index;
+        if (index < tokens.Count && Word(tokens[index]) == "and")
+            index++;
+        var remainder = ParseBelowHundred(tokens, ref index);
+        if (remainder == null)
+            index = save;
+        return number + (remainder ?? 0);
+    }
+
+    // A unit, a teen, a tens word optionally followed by a unit ("twenty five"), or a
+    // fused tens-unit token ("twentyfive", from a hyphenated "twenty-five").
+    private static int? ParseBelowHundred(IReadOnlyList<string> tokens, ref int index)
+    {
+        if (index >= tokens.Count)
+            return null;
+        var word = Word(tokens[index]);
+        if (UnitWords.TryGetValue(word, out var unit) || TeenWords.TryGetValue(word, out unit))
+        {
+            index++;
+            return unit;
+        }
+
+        foreach (var (tensWord, tens) in TensWords)
+        {
+            if (word == tensWord)
+            {
+                index++;
+                if (
+                    index < tokens.Count
+                    && UnitWords.TryGetValue(Word(tokens[index]), out var trailing)
+                )
+                {
+                    index++;
+                    return tens + trailing;
+                }
+                return tens;
+            }
+            if (
+                word.StartsWith(tensWord, StringComparison.Ordinal)
+                && UnitWords.TryGetValue(word[tensWord.Length..], out var fused)
+            )
+            {
+                index++;
+                return tens + fused;
+            }
+        }
+        return null;
+    }
+
+    // A token without the grouping comma Tokenize keeps for digits ("sixty," → "sixty").
+    private static string Word(string token) => token.TrimEnd(',');
 
     // Lowercase, split on whitespace, and reduce each token to letters/digits and
     // the comma (kept for grouped numbers like "43,200"). Dropping the

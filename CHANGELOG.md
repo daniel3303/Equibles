@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Read spelled-out ADS ratios above twenty ("sixty", "thirty-five", "one hundred and twenty") when restating a per-ADS price on an ordinary-share Form 4 row; a multi-word number is no longer read as its leading word. Insider parser version 11 re-derives stored rows from cached filings.
 - Recover issuer-owned, current-period IFRS note excerpts from retained ESEF JSON reports without changing original envelopes or structured facts; excerpt text does not represent the complete visual report.
 - Recover searchable text from oversized ESEF reports by removing unused layout styles from the retrieval copy while preserving complete text and original reports. Retry previously empty retained reports through the existing normalization backfill.
 
