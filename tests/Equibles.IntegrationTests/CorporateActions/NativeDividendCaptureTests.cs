@@ -254,4 +254,33 @@ public class NativeDividendCaptureTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .AmountPerShare.Should()
             .Be(1m);
     }
+
+    [Fact]
+    public async Task UsListingWithoutDenomination_AdoptsUsdBeforeTheDatabaseChecksThePayment()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SAME",
+            SecondaryTickers: ["CLASS"]
+        );
+        issuer.Presentation.Listing.TradingCurrency = "USD";
+        DbContext.Add(issuer);
+        await DbContext.SaveChangesAsync();
+        var secondary = issuer
+            .Securities.SelectMany(security => security.Listings)
+            .Single(row => row.Ticker == "CLASS");
+
+        (await Capture().CaptureForListing(issuer.Id, secondary.Id, "CLASS", [Payment()]))
+            .Should()
+            .Be(1);
+
+        DbContext.ChangeTracker.Clear();
+        var listing = await DbContext
+            .Set<EquityListing>()
+            .SingleAsync(row => row.Id == secondary.Id);
+        listing.TradingCurrency.Should().Be("USD");
+        listing.QuoteUnitMultiplier.Should().BeNull();
+        (await new CashDividendRepository(DbContext).GetByListing(secondary.Id).SingleAsync())
+            .Currency.Should()
+            .Be("USD");
+    }
 }

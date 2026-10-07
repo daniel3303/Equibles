@@ -35,7 +35,8 @@ public class DividendToolsTests : ParadeDbMcpTestBase
             Cik: Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
             SecondaryTickers: secondaryTickers.ToList()
         );
-        stock.Presentation.Listing.TradingCurrency = "USD";
+        foreach (var listing in stock.Securities.SelectMany(security => security.Listings))
+            listing.TradingCurrency = "USD";
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         return stock;
@@ -45,14 +46,20 @@ public class DividendToolsTests : ParadeDbMcpTestBase
         EquityIssuer stock,
         DateOnly exDate,
         decimal amount,
-        CashDividendSource source = CashDividendSource.Yahoo
+        CashDividendSource source = CashDividendSource.Yahoo,
+        string listedTicker = null
     )
     {
         DbContext.Add(
             new CashDividend
             {
                 EquityIssuerId = stock.Id,
-                EquityListingId = stock.Presentation.EquityListingId,
+                EquityListingId = stock
+                    .Securities.SelectMany(security => security.Listings)
+                    .Single(listing =>
+                        listing.Ticker == (listedTicker ?? stock.Presentation.Listing.Ticker)
+                    )
+                    .Id,
                 Currency = "USD",
                 ExDate = exDate,
                 AmountPerShare = amount,
@@ -102,14 +109,37 @@ public class DividendToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetDividendHistory_SecondaryTicker_IsRejected()
+    public async Task GetDividendHistory_SecondaryShareClass_ReadsOnlyItsOwnListing()
     {
-        await SeedStock("BRK-B", "Berkshire Hathaway Inc.", "BRK-A");
+        var stock = await SeedStock("BRK-B", "Berkshire Hathaway Inc.", "BRK-A");
+        await SeedDividend(stock, new DateOnly(2025, 2, 10), 0.25m);
 
-        var result = await Sut().GetDividendHistory("BRK.A");
+        var withoutOwnPayments = await Sut().GetDividendHistory("BRK.A");
+        await SeedDividend(stock, new DateOnly(2025, 3, 10), 375m, listedTicker: "BRK-A");
+        var ownPayments = await Sut().GetDividendHistory("BRK.A");
+        var primary = await Sut().GetDividendHistory("BRK-B");
 
-        result.Should().Contain("available only for the current primary ticker BRK-B");
-        result.Should().Contain("BRK-A is a separate listing");
+        withoutOwnPayments.Should().Contain("No cash-dividend records are stored for BRK-A.");
+        ownPayments.Should().Contain("Declared cash dividends for BRK-A, newest first:");
+        ownPayments.Should().Contain("2025-03-10 | $375");
+        ownPayments.Should().NotContain("2025-02-10");
+        primary.Should().Contain("2025-02-10 | $0.25");
+        primary.Should().NotContain("2025-03-10");
+    }
+
+    [Fact]
+    public async Task GetDividendHistory_SecondaryEtfSeries_ReadsItsOwnListingWithoutTheTrustName()
+    {
+        var trust = await SeedStock("FNDA", "Schwab Strategic Trust", "SCHD");
+        await SeedDividend(trust, new DateOnly(2026, 9, 24), 0.22m);
+        await SeedDividend(trust, new DateOnly(2026, 9, 24), 0.26m, listedTicker: "SCHD");
+
+        var result = await Sut().GetDividendHistory("SCHD");
+
+        result.Should().Contain("Declared cash dividends for SCHD, newest first:");
+        result.Should().Contain("2026-09-24 | $0.26");
+        result.Should().NotContain("$0.22");
+        result.Should().NotContain("Schwab Strategic Trust");
     }
 
     [Fact]

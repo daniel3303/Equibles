@@ -125,7 +125,7 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 
 - `GetStockPrices` — daily OHLCV + `AdjustedClose` for a ticker over a date range.
 - `GetLatestClosingPrices` — latest close for one or more tickers.
-- `GetDividendHistory` — declared cash-dividend history by ex-date for a company's current primary ticker.
+- `GetDividendHistory` — declared cash-dividend history by ex-date for an exact stock or ETF listing; share classes and fund series of one filer never share payments.
 - `GetStochasticOscillator` — Stochastic Oscillator (%K and %D) for a ticker over a date range.
 - `GetAverageTrueRange` — Wilder's Average True Range (ATR) volatility measure for a ticker over a date range.
 - `GetOnBalanceVolume` — On-Balance Volume (OBV) cumulative-flow indicator for a ticker over a date range.

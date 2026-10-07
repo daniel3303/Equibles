@@ -381,4 +381,126 @@ public class CashDividendCaptureManagerTests
         (await manager.Capture(Guid.NewGuid(), "AAPL", null)).Should().Be(0);
         (await manager.Capture(Guid.NewGuid(), "AAPL", [])).Should().Be(0);
     }
+
+    [Fact]
+    public async Task CaptureForListing_UsSecondaryWithoutDenomination_AdoptsUsdAndStoresItsOwnPayment()
+    {
+        await using var db = NewDb();
+        EquityIssuer trust = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "FNDA",
+            SecondaryTickers: ["SCHD"],
+            ReferenceTickers: ["FNDA", "SCHD"]
+        );
+        trust.Presentation.Listing.TradingCurrency = "USD";
+        db.Add(trust);
+        await db.SaveChangesAsync();
+        var schd = trust
+            .Securities.SelectMany(security => security.Listings)
+            .Single(listing => listing.Ticker == "SCHD");
+
+        var changes = await NewManager(db)
+            .CaptureForListing(
+                trust.Id,
+                schd.Id,
+                "SCHD",
+                [Dividend(new DateOnly(2026, 9, 24), 0.26m, CashDividendSource.External)]
+            );
+
+        changes.Should().Be(1);
+        db.ChangeTracker.Clear();
+        var stored = await db.Set<CashDividend>().SingleAsync();
+        stored.EquityListingId.Should().Be(schd.Id);
+        stored.Currency.Should().Be("USD");
+        var listing = await db.Set<EquityListing>().SingleAsync(row => row.Id == schd.Id);
+        listing.TradingCurrency.Should().Be("USD");
+        listing.QuoteUnitMultiplier.Should().BeNull("a payment does not prove the quotation scale");
+    }
+
+    [Theory]
+    [InlineData("US", "EUR")]
+    [InlineData("PT", "USD")]
+    public async Task CaptureForListing_WithoutDenominationOrUsdUsEvidence_WritesNothing(
+        string marketCountryCode,
+        string paymentCurrency
+    )
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SAME",
+            MarketCountryCode: marketCountryCode,
+            MarketIdentifierCode: marketCountryCode == "US" ? null : "XLIS"
+        );
+        db.Add(stock);
+        await db.SaveChangesAsync();
+        var payment = Dividend(new DateOnly(2026, 9, 24), 0.26m);
+        payment.Currency = paymentCurrency;
+
+        (
+            await NewManager(db)
+                .CaptureForListing(stock.Id, stock.Presentation.EquityListingId, "SAME", [payment])
+        )
+            .Should()
+            .Be(0);
+
+        db.ChangeTracker.Clear();
+        (await db.Set<CashDividend>().AnyAsync()).Should().BeFalse();
+        (await db.Set<EquityListing>().SingleAsync()).TradingCurrency.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CaptureForListing_UsListingWithAScaledQuotation_DoesNotAdoptUsd()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
+        stock.Presentation.Listing.QuoteUnitMultiplier = 0.01m;
+        db.Add(stock);
+        await db.SaveChangesAsync();
+
+        (
+            await NewManager(db)
+                .CaptureForListing(
+                    stock.Id,
+                    stock.Presentation.EquityListingId,
+                    "SAME",
+                    [Dividend(new DateOnly(2026, 9, 24), 0.26m)]
+                )
+        )
+            .Should()
+            .Be(0);
+
+        db.ChangeTracker.Clear();
+        (await db.Set<CashDividend>().AnyAsync()).Should().BeFalse();
+        (await db.Set<EquityListing>().SingleAsync()).TradingCurrency.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CaptureForHistoricalListing_WithoutDenomination_DoesNotAdoptUsd()
+    {
+        await using var db = NewDb();
+        var delistedOn = new DateOnly(2025, 6, 30);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SAME",
+            Active: false,
+            DelistedOn: delistedOn
+        );
+        db.Add(stock);
+        await db.SaveChangesAsync();
+
+        (
+            await NewManager(db)
+                .CaptureForHistoricalListing(
+                    stock.Id,
+                    stock.Presentation.EquityListingId,
+                    "SAME",
+                    delistedOn,
+                    [Dividend(new DateOnly(2025, 3, 14), 0.26m)]
+                )
+        )
+            .Should()
+            .Be(0);
+
+        db.ChangeTracker.Clear();
+        (await db.Set<CashDividend>().AnyAsync()).Should().BeFalse();
+        (await db.Set<EquityListing>().SingleAsync()).TradingCurrency.Should().BeNull();
+    }
 }

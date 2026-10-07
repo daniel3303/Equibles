@@ -102,6 +102,42 @@ public static class SecondaryTickerPolicy
     }
 
     /// <summary>
+    /// The exact active U.S. listing a spelling names (presentation, directory- or reference-listed),
+    /// folding a dot to a dash only on a literal miss; null when absent or ambiguous.
+    /// </summary>
+    public static EquityListing ResolveExactUsListing(EquityIssuer stock, string requestedTicker)
+    {
+        var requested = TickerNormalizer.Normalize(requestedTicker);
+        if (stock == null || requested == null)
+            return null;
+
+        var candidates = requested.Contains('.')
+            ? new[] { requested, requested.Replace('.', '-') }
+            : new[] { requested };
+        foreach (var candidate in candidates)
+        {
+            var matches = stock
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US"
+                    && nativeListing.Active
+                    && string.Equals(nativeListing.Ticker, candidate, StringComparison.Ordinal)
+                    && (
+                        nativeListing.Id == stock.Presentation?.EquityListingId
+                        || nativeListing.IsDirectoryListed
+                        || nativeListing.IsReferenceListed
+                    )
+                )
+                .Take(2)
+                .ToList();
+            if (matches.Count > 0)
+                return matches.Count == 1 ? matches[0] : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Whether <paramref name="requestedTicker"/> named a symbol other than
     /// <paramref name="stock"/>'s primary one. Accepts the dot class-share notation for
     /// the dash form the data stores (BRK.B is BRK-B, not a secondary symbol) so the

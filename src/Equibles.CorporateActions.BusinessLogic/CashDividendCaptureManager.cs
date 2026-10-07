@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.CorporateActions.BusinessLogic;
 
 // Captures exact listing payments; earlier issuer-only observations remain independent evidence.
+// A U.S. listing without a recorded denomination adopts USD from an explicitly USD payment.
 [Service]
 public class CashDividendCaptureManager
 {
@@ -114,7 +115,6 @@ public class CashDividendCaptureManager
         var listing = candidates.Count == 1 ? candidates[0] : null;
         if (
             listing == null
-            || listing.TradingCurrency == null
             || (!listingId.HasValue && listing.Id != stock.Presentation?.EquityListingId)
         )
         {
@@ -137,6 +137,25 @@ public class CashDividendCaptureManager
         {
             await transaction.RollbackAsync(cancellationToken);
             return 0;
+        }
+
+        if (listing.TradingCurrency == null)
+        {
+            if (
+                !AdoptsUsDollarDenomination(
+                    listing,
+                    listingId,
+                    expectedDelistedOn,
+                    combinedDividends
+                )
+            )
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return 0;
+            }
+            // Saved before the payments so the database denomination check sees it.
+            listing.TradingCurrency = "USD";
+            await _stockRepository.SaveChanges();
         }
 
         var existing = await _dividendRepository
@@ -195,6 +214,20 @@ public class CashDividendCaptureManager
         await transaction.CommitAsync(cancellationToken);
         return changes;
     }
+
+    // A current U.S. listing trades in dollars; an explicitly USD payment on that exact listing records
+    // the denomination its dividends need, while the unproven quotation scale stays unknown.
+    private static bool AdoptsUsDollarDenomination(
+        EquityListing listing,
+        Guid? listingId,
+        DateOnly? expectedDelistedOn,
+        IReadOnlyCollection<CapturedDividend> dividends
+    ) =>
+        listingId.HasValue
+        && !expectedDelistedOn.HasValue
+        && listing.MarketCountryCode == "US"
+        && listing.QuoteUnitMultiplier is null or 1m
+        && dividends.All(dividend => dividend.Currency == "USD");
 
     // Manual values are operator-owned. Yahoo supplies the adjusted price history, so its
     // dividend amount must remain stable against a later generic external-reference refresh.
