@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<YahooPriceScraperWorker>();
         services.AddHostedService<YahooCatalogPriceScraperWorker>();
+        services.AddHostedService<YahooUsEnrichmentWorker>();
 
         return services;
     }
