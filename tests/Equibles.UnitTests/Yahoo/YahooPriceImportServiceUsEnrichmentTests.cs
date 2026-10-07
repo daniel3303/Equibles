@@ -6,6 +6,7 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.TestSupport;
 using Equibles.Worker;
 using Equibles.Yahoo.Data;
@@ -15,6 +16,7 @@ using Equibles.Yahoo.HostedService.Extensions;
 using Equibles.Yahoo.HostedService.Services;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,9 +27,8 @@ using NSubstitute;
 namespace Equibles.UnitTests.Yahoo;
 
 /// <summary>
-/// Pins that US key statistics (the only writer of the stored market cap) are reachable without a
-/// price pass. Gated behind the whole-universe US price pass, enrichment never ran while the worker
-/// restarted more often than that pass took, and every stored market cap froze.
+/// Pins that US key statistics, the only writer of the stored market cap, land without a price
+/// pass in front of them, so the refresh never depends on a whole-universe pass completing.
 /// </summary>
 public class YahooPriceImportServiceUsEnrichmentTests
 {
@@ -42,12 +43,14 @@ public class YahooPriceImportServiceUsEnrichmentTests
             _dbOptions = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString(), new InMemoryDatabaseRoot())
                 .EnableServiceProviderCaching(false)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
             var services = new ServiceCollection();
             services.AddScoped(_ => NewContext());
             services.AddScoped<EquityIssuerRepository>();
             services.AddScoped<EquityListingRepository>();
             services.AddScoped<EquityDailyStockPriceRepository>();
+            services.AddScoped(_ => Substitute.For<ISharesOutstandingProvider>());
             var scopeFactory = services
                 .BuildServiceProvider()
                 .GetRequiredService<IServiceScopeFactory>();
@@ -69,7 +72,7 @@ public class YahooPriceImportServiceUsEnrichmentTests
             );
         }
 
-        private EquiblesFinancialDbContext NewContext()
+        public EquiblesFinancialDbContext NewContext()
         {
             var context = new EquiblesFinancialDbContext(
                 _dbOptions,
@@ -93,17 +96,32 @@ public class YahooPriceImportServiceUsEnrichmentTests
     }
 
     [Fact]
-    public async Task ImportUsEnrichment_RequestsKeyStatisticsWithoutAPricePass()
+    public async Task ImportUsEnrichment_RefreshesTheMarketCapWithoutAPricePass()
     {
         var harness = new Harness();
         harness.SeedUs("QSI");
+        harness
+            .Client.GetKeyStatistics("QSI")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 218_883_912,
+                    MarketCapitalization = 267_038_373,
+                }
+            );
 
         await harness.Sut.ImportUsEnrichment(CancellationToken.None);
 
-        await harness.Client.Received(1).GetKeyStatistics("QSI");
         await harness
             .Client.DidNotReceive()
             .GetChart(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        await using var db = harness.NewContext();
+        var listing = await db.Set<EquityListing>()
+            .Include(l => l.Security)
+            .SingleAsync(l => l.Ticker == "QSI");
+        listing.Security.MarketCapitalization.Should().Be(267_038_373);
+        listing.Security.SharesOutstanding.Should().Be(218_883_912);
+        listing.YahooEnrichmentAttemptedAt.Should().NotBeNull();
         harness.Sut.HasEnrichmentBacklog.Should().BeFalse();
     }
 

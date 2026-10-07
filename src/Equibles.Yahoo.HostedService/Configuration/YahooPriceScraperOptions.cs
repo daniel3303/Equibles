@@ -12,8 +12,8 @@ public class YahooPriceScraperOptions : ScraperOptions
     public int EnrichmentIntervalHours { get; set; } = 24;
 
     /// <summary>
-    /// Maximum due US stocks enriched per US enrichment cycle. A full batch requests an immediate
-    /// continuation, so a backlog drains across short, restart-safe cycles beside the price pass.
+    /// Maximum due stocks enriched per enrichment cycle; catalog cycles cap it further at 25. A
+    /// full batch requests an immediate continuation, so a backlog drains in restart-safe cycles.
     /// </summary>
     public int EnrichmentBatchSize { get; set; } = 250;
 

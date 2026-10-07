@@ -677,8 +677,8 @@ public class YahooPriceImportService
     // quarter of the universe returning nothing is not a tail.
     private const double BarrenUniverseShareForWarning = 0.25;
 
-    // Pass 2 — key statistics + company profile. Two extra Yahoo calls per stock and the bulk of a
-    // cycle's traffic, which is why it runs in restart-safe batches AND strictly after prices.
+    // Key statistics + company profile: two Yahoo calls per stock, so it runs in bounded batches
+    // whose per-listing stamps survive restarts.
     private async Task ImportEnrichment(
         List<PriceSeriesTarget> crawlOrder,
         CancellationToken cancellationToken,
@@ -697,7 +697,7 @@ public class YahooPriceImportService
             return;
 
         _logger.LogInformation(
-            "Enriching {Count} due stocks; {Remaining} will continue after the next price pass",
+            "Enriching {Count} due stocks; {Remaining} will continue in a later batch",
             selection.Targets.Count,
             selection.Remaining
         );
@@ -3058,8 +3058,8 @@ public class YahooPriceImportService
     // Yahoo sometimes returns no market cap at all (summaryDetail.marketCap missing — common for
     // multi-class issuers it hasn't reconciled, #5238): with no Yahoo market cap there is nothing
     // to rescale, and the figure would otherwise stay stale forever even after EDGAR's share count
-    // is corrected. When a current price is available (the same import cycle's freshly-fetched
-    // close), compute EDGAR shares × price directly instead of leaving the stored value untouched.
+    // is corrected. When a current price is available (the latest stored close), compute EDGAR
+    // shares × price directly instead of leaving the stored value untouched.
     private static double ReconcileMarketCap(
         long? edgarShares,
         long yahooShares,
