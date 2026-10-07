@@ -119,6 +119,52 @@ public class HolderQuarterlyActivityCalculatorTests
         result[StockPositionChangeType.Unchanged][0].CurrentShares.Should().Be(1_000);
     }
 
+    // A 250,000-share call beside 743,950 common shares is two positions, never one initiation.
+    [Fact]
+    public void Group_CallAndCommonInTheSameSecurity_AreSeparatePositions()
+    {
+        EquityIssuer cdw = MakeStock("CDW", "CDW Corp");
+
+        var result = HolderQuarterlyActivityCalculator.Group(
+            [
+                MakeHolding(cdw, shares: 250_000, value: 35_160_000, optionType: OptionType.Call),
+                MakeHolding(cdw, shares: 743_950, value: 104_629_128),
+            ],
+            []
+        );
+
+        result[StockPositionChangeType.Initiated]
+            .Select(row => (row.Instrument, row.CurrentShares, row.CurrentValue))
+            .Should()
+            .BeEquivalentTo([("Call", 250_000L, 35_160_000L), ("Common", 743_950L, 104_629_128L)]);
+    }
+
+    [Fact]
+    public void Group_NewCallBesideAnUnchangedCommonStake_KeepsTheCommonStakeUnchanged()
+    {
+        EquityIssuer cdw = MakeStock("CDW", "CDW Corp");
+
+        var result = HolderQuarterlyActivityCalculator.Group(
+            [
+                MakeHolding(cdw, shares: 1_000, value: 100_000),
+                MakeHolding(cdw, shares: 500, value: 5_000, optionType: OptionType.Call),
+                MakeHolding(cdw, shares: 2_000, value: 2_000, shareType: ShareType.Principal),
+            ],
+            [MakeHolding(cdw, shares: 1_000, value: 90_000)]
+        );
+
+        result[StockPositionChangeType.Unchanged]
+            .Should()
+            .ContainSingle()
+            .Which.IsCommonShares.Should()
+            .BeTrue();
+        result[StockPositionChangeType.Initiated]
+            .Select(row => row.Instrument)
+            .Should()
+            .BeEquivalentTo(["Call", "Principal"]);
+        result[StockPositionChangeType.Increased].Should().BeEmpty();
+    }
+
     private static EquityIssuer MakeStock(string ticker, string name) =>
         Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
@@ -127,7 +173,13 @@ public class HolderQuarterlyActivityCalculatorTests
             Cik: "C" + Guid.NewGuid().ToString("N")[..7]
         );
 
-    private static InstitutionalHolding MakeHolding(EquityIssuer stock, long shares, long value) =>
+    private static InstitutionalHolding MakeHolding(
+        EquityIssuer stock,
+        long shares,
+        long value,
+        OptionType? optionType = null,
+        ShareType shareType = ShareType.Shares
+    ) =>
         new()
         {
             EquityIssuerId = stock.Id,
@@ -137,7 +189,8 @@ public class HolderQuarterlyActivityCalculatorTests
             ReportDate = new DateOnly(2024, 12, 31),
             Shares = shares,
             Value = value,
-            ShareType = ShareType.Shares,
+            ShareType = shareType,
+            OptionType = optionType,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
         };
 }

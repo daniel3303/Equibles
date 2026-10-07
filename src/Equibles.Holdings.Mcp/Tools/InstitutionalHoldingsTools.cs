@@ -821,12 +821,7 @@ public class InstitutionalHoldingsTools
 
     // How a 13F line should be described to a reader: the security type, not the activity bucket.
     private static string PositionType(OptionType? optionType, ShareType shareType) =>
-        optionType switch
-        {
-            Equibles.Holdings.Data.Models.OptionType.Put => "Put",
-            Equibles.Holdings.Data.Models.OptionType.Call => "Call",
-            _ => shareType == ShareType.Principal ? "Principal" : "Common",
-        };
+        HoldingInstrument.Label(optionType, shareType);
 
     [McpServerTool(
         Name = "SearchInstitutions",
@@ -1985,7 +1980,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
+        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Common shares, put/call positions and principal amounts are separate rows labelled by Type. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
     )]
     public Task<string> GetInstitutionQuarterlyActivity(
         [Description(
@@ -2141,11 +2136,11 @@ public class InstitutionalHoldingsTools
             return false;
         }
         result.AppendNumberedTable(
-            "| # | Ticker | Company | Prior | New | Δ Shares | Δ Value ($M) |",
-            "|---|--------|---------|-------|-----|---------|-------------|",
+            "| # | Ticker | Company | Type | Prior | New | Δ Shares | Δ Value ($M) |",
+            "|---|--------|---------|------|-------|-----|---------|-------------|",
             rows,
             (rank, r) =>
-                $"| {rank} | {r.Ticker} | {r.Name} | {McpFormat.WholeNumber(r.PreviousShares)} | {McpFormat.WholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
+                $"| {rank} | {r.Ticker} | {r.Name} | {r.Instrument} | {McpFormat.WholeNumber(r.PreviousShares)} | {McpFormat.WholeNumber(r.CurrentShares)} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |"
         );
         result.AppendLine();
         return true;
@@ -2588,6 +2583,9 @@ public class InstitutionalHoldingsTools
         {
             foreach (var r in rows)
             {
+                // Principal amounts are filed dollars, never shares; a split cannot restate them.
+                if (r.ShareType == ShareType.Principal)
+                    continue;
                 var loadedSplits = SplitsFor(splitsByStock, r.CommonStockId);
                 var splits = string.IsNullOrWhiteSpace(r.PrimaryTicker)
                     ? loadedSplits

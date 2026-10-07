@@ -1,3 +1,5 @@
+using Equibles.Holdings.Data.Models;
+
 namespace Equibles.Holdings.Repositories.Models;
 
 public enum StockPositionChangeType
@@ -16,6 +18,14 @@ public class StockPositionChange
     public string ListedTicker { get; set; }
     public string Ticker { get; set; }
     public string Name { get; set; }
+
+    // The position grain beyond the security: common shares, put/call notional, or principal.
+    public ShareType ShareType { get; set; }
+    public OptionType? OptionType { get; set; }
+
+    public bool IsCommonShares => OptionType == null && ShareType == ShareType.Shares;
+
+    public string Instrument => HoldingInstrument.Label(OptionType, ShareType);
 
     public long CurrentShares { get; set; }
     public long PreviousShares { get; set; }

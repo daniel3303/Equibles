@@ -98,6 +98,70 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
         output.Should().NotContain("+1,000");
     }
 
+    // A call leg and a principal amount are separate positions from the common shares, and a filed
+    // principal amount is never split-restated into a phantom move.
+    [Fact]
+    public async Task GetInstitutionQuarterlyActivity_InstrumentLegs_AreSeparateRowsAndPrincipalIsNotRestated()
+    {
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        var holder = new InstitutionalHolder { Cik = "2", Name = "Fund Two Capital" };
+        DbContext.AddRange(apple, holder);
+
+        var prior = new DateOnly(2024, 9, 30);
+        var current = new DateOnly(2024, 12, 31);
+        DbContext.Add(
+            new StockSplit
+            {
+                EquityIssuerId = apple.Id,
+                EquityListingId = apple.Presentation.EquityListingId,
+                PriceSeriesTicker = apple.Presentation.Listing.Ticker,
+                EffectiveDate = new DateOnly(2024, 11, 15),
+                Numerator = 2,
+                Denominator = 1,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        // Flat common stake across the split, a new call leg, and a flat convertible principal.
+        DbContext.Add(MakeHolding(holder, apple, prior, shares: 1_000, value: 100_000));
+        DbContext.Add(MakeHolding(holder, apple, current, shares: 2_000, value: 100_000));
+        var call = MakeHolding(holder, apple, current, shares: 700, value: 35_000);
+        call.OptionType = OptionType.Call;
+        DbContext.Add(call);
+        foreach (var date in new[] { prior, current })
+        {
+            var principal = MakeHolding(holder, apple, date, shares: 5_000, value: 5_000);
+            principal.ShareType = ShareType.Principal;
+            DbContext.Add(principal);
+        }
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new EquityIssuerRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetInstitutionQuarterlyActivity("Fund Two Capital");
+
+        output.Should().Contain("| Call | 0 | 700 | +700 |");
+        output.Should().MatchRegex(@"## Increased\r?\n_No stocks in this bucket this quarter\._");
+        output.Should().NotContain("Common");
+        output.Should().NotContain("Principal");
+    }
+
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
         EquityIssuer stock,
