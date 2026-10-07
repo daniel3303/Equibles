@@ -446,4 +446,61 @@ public class CashDividendCaptureManagerTests
         (await db.Set<CashDividend>().AnyAsync()).Should().BeFalse();
         (await db.Set<EquityListing>().SingleAsync()).TradingCurrency.Should().BeNull();
     }
+
+    [Fact]
+    public async Task CaptureForListing_UsListingWithAScaledQuotation_DoesNotAdoptUsd()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
+        stock.Presentation.Listing.QuoteUnitMultiplier = 0.01m;
+        db.Add(stock);
+        await db.SaveChangesAsync();
+
+        (
+            await NewManager(db)
+                .CaptureForListing(
+                    stock.Id,
+                    stock.Presentation.EquityListingId,
+                    "SAME",
+                    [Dividend(new DateOnly(2026, 9, 24), 0.26m)]
+                )
+        )
+            .Should()
+            .Be(0);
+
+        db.ChangeTracker.Clear();
+        (await db.Set<CashDividend>().AnyAsync()).Should().BeFalse();
+        (await db.Set<EquityListing>().SingleAsync()).TradingCurrency.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CaptureForHistoricalListing_WithoutDenomination_DoesNotAdoptUsd()
+    {
+        await using var db = NewDb();
+        var delistedOn = new DateOnly(2025, 6, 30);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SAME",
+            Active: false,
+            DelistedOn: delistedOn
+        );
+        db.Add(stock);
+        await db.SaveChangesAsync();
+
+        (
+            await NewManager(db)
+                .CaptureForHistoricalListing(
+                    stock.Id,
+                    stock.Presentation.EquityListingId,
+                    "SAME",
+                    delistedOn,
+                    [Dividend(new DateOnly(2025, 3, 14), 0.26m)]
+                )
+        )
+            .Should()
+            .Be(0);
+
+        db.ChangeTracker.Clear();
+        (await db.Set<CashDividend>().AnyAsync()).Should().BeFalse();
+        (await db.Set<EquityListing>().SingleAsync()).TradingCurrency.Should().BeNull();
+    }
 }

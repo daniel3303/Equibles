@@ -102,10 +102,8 @@ public static class SecondaryTickerPolicy
     }
 
     /// <summary>
-    /// Resolves a caller's spelling to the exact active U.S. listing it names: the presentation
-    /// listing or a directory- or reference-listed sibling. The dot class-share notation folds to
-    /// the stored dash form only on a literal miss. Returns null when absent or ambiguous, so a
-    /// share class or fund series never reads another listing's datasets.
+    /// The exact active U.S. listing a spelling names (presentation, directory- or reference-listed),
+    /// folding a dot to a dash only on a literal miss; null when absent or ambiguous.
     /// </summary>
     public static EquityListing ResolveExactUsListing(EquityIssuer stock, string requestedTicker)
     {
