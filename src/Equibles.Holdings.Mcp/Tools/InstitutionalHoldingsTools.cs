@@ -821,12 +821,7 @@ public class InstitutionalHoldingsTools
 
     // How a 13F line should be described to a reader: the security type, not the activity bucket.
     private static string PositionType(OptionType? optionType, ShareType shareType) =>
-        optionType switch
-        {
-            Equibles.Holdings.Data.Models.OptionType.Put => "Put",
-            Equibles.Holdings.Data.Models.OptionType.Call => "Call",
-            _ => shareType == ShareType.Principal ? "Principal" : "Common",
-        };
+        HoldingInstrument.Label(optionType, shareType);
 
     [McpServerTool(
         Name = "SearchInstitutions",

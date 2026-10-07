@@ -25,13 +25,7 @@ public class StockPositionChange
 
     public bool IsCommonShares => OptionType == null && ShareType == ShareType.Shares;
 
-    public string Instrument =>
-        OptionType switch
-        {
-            Equibles.Holdings.Data.Models.OptionType.Put => "Put",
-            Equibles.Holdings.Data.Models.OptionType.Call => "Call",
-            _ => ShareType == ShareType.Principal ? "Principal" : "Common",
-        };
+    public string Instrument => HoldingInstrument.Label(OptionType, ShareType);
 
     public long CurrentShares { get; set; }
     public long PreviousShares { get; set; }

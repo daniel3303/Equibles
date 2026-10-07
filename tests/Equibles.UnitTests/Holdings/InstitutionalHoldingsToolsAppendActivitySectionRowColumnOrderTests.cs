@@ -14,7 +14,7 @@ public class InstitutionalHoldingsToolsAppendActivitySectionRowColumnOrderTests
         );
 
     // AppendActivitySection (extracted in #1542) emits a row in the order
-    // "| {rank} | {Ticker} | {Name} | {Prior} | {New} | {Δ Shares} | {Δ Value} |"
+    // "| {rank} | {Ticker} | {Name} | {Type} | {Prior} | {New} | {Δ Shares} | {Δ Value} |"
     // — the same column sequence its header line declares. The LLM consumer
     // reads the header to bind columns by position; a refactor that swapped
     // the Ticker/Name order in the row template without updating the header

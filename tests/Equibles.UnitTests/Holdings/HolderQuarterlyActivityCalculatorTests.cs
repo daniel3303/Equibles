@@ -119,8 +119,7 @@ public class HolderQuarterlyActivityCalculatorTests
         result[StockPositionChangeType.Unchanged][0].CurrentShares.Should().Be(1_000);
     }
 
-    // Production finding 5bf31fa6: Duquesne's 250,000-share CDW call and 743,950 common shares were
-    // reported as one ~$140M initiation instead of two positions.
+    // A 250,000-share call beside 743,950 common shares is two positions, never one initiation.
     [Fact]
     public void Group_CallAndCommonInTheSameSecurity_AreSeparatePositions()
     {

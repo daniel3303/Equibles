@@ -98,8 +98,8 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
         output.Should().NotContain("+1,000");
     }
 
-    // Production finding 5bf31fa6: a call leg and a principal amount are separate positions from
-    // the common shares, and a filed principal amount is never split-restated into a phantom move.
+    // A call leg and a principal amount are separate positions from the common shares, and a filed
+    // principal amount is never split-restated into a phantom move.
     [Fact]
     public async Task GetInstitutionQuarterlyActivity_InstrumentLegs_AreSeparateRowsAndPrincipalIsNotRestated()
     {
@@ -157,7 +157,7 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
         var output = await sut.GetInstitutionQuarterlyActivity("Fund Two Capital");
 
         output.Should().Contain("| Call | 0 | 700 | +700 |");
-        output.Should().NotContain("## Increased (");
+        output.Should().MatchRegex(@"## Increased\r?\n_No stocks in this bucket this quarter\._");
         output.Should().NotContain("Common");
         output.Should().NotContain("Principal");
     }
