@@ -418,8 +418,10 @@ public class InsiderFilingReprocessManager
         // Family and amendment identity are document-level facts, so stamp every
         // stored row even when the current parser produces fewer rows than an
         // older version and some rows cannot be mapped by order.
+        var ownerRelationship = InsiderFilingParser.ParseOwnerRelationship(root);
         foreach (var row in rows)
         {
+            row.OwnerRelationship = ownerRelationship;
             row.FilingForm = filingForm;
             row.IsAmendment = isAmendment;
             row.OriginalFilingDate = originalFilingDate;
