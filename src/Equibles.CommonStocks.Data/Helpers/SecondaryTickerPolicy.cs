@@ -102,6 +102,44 @@ public static class SecondaryTickerPolicy
     }
 
     /// <summary>
+    /// Resolves a caller's spelling to the exact active U.S. listing it names: the presentation
+    /// listing or a directory- or reference-listed sibling. The dot class-share notation folds to
+    /// the stored dash form only on a literal miss. Returns null when absent or ambiguous, so a
+    /// share class or fund series never reads another listing's datasets.
+    /// </summary>
+    public static EquityListing ResolveExactUsListing(EquityIssuer stock, string requestedTicker)
+    {
+        var requested = TickerNormalizer.Normalize(requestedTicker);
+        if (stock == null || requested == null)
+            return null;
+
+        var candidates = requested.Contains('.')
+            ? new[] { requested, requested.Replace('.', '-') }
+            : new[] { requested };
+        foreach (var candidate in candidates)
+        {
+            var matches = stock
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US"
+                    && nativeListing.Active
+                    && string.Equals(nativeListing.Ticker, candidate, StringComparison.Ordinal)
+                    && (
+                        nativeListing.Id == stock.Presentation?.EquityListingId
+                        || nativeListing.IsDirectoryListed
+                        || nativeListing.IsReferenceListed
+                    )
+                )
+                .Take(2)
+                .ToList();
+            if (matches.Count > 0)
+                return matches.Count == 1 ? matches[0] : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Whether <paramref name="requestedTicker"/> named a symbol other than
     /// <paramref name="stock"/>'s primary one. Accepts the dot class-share notation for
     /// the dash form the data stores (BRK.B is BRK-B, not a secondary symbol) so the
