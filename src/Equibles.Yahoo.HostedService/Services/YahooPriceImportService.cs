@@ -107,7 +107,29 @@ public class YahooPriceImportService
         ImportUniverse(includeEnrichment, includeCatalog: true, cancellationToken);
 
     public Task ImportUsPrices(CancellationToken cancellationToken) =>
-        ImportUniverse(includeEnrichment: true, includeCatalog: false, cancellationToken);
+        ImportUniverse(includeEnrichment: false, includeCatalog: false, cancellationToken);
+
+    /// <summary>
+    /// One bounded key-statistics + company-profile batch over the due US presentation listings.
+    /// No price pass runs first, so market-cap refreshes never wait for a whole-universe pass to
+    /// outlive the worker process.
+    /// </summary>
+    public async Task ImportUsEnrichment(CancellationToken cancellationToken)
+    {
+        HasEnrichmentBacklog = false;
+        var tickerMap = await _tickerMapService.Build(
+            _workerOptions.TickersToSync,
+            cancellationToken
+        );
+        var targets = await BuildPriceSeriesTargets(
+            tickerMap.Values.Distinct().ToList(),
+            cancellationToken
+        );
+        await ImportEnrichment(
+            targets.Where(target => target.IsPrimary).ToList(),
+            cancellationToken
+        );
+    }
 
     private async Task ImportUniverse(
         bool includeEnrichment,

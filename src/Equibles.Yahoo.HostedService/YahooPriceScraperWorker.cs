@@ -58,8 +58,5 @@ public class YahooPriceScraperWorker : BaseScraperWorker
         // intentionally verifies the invariant once more.
         if (!_ohlcRepairComplete)
             _ohlcRepairComplete = await importService.RepairInvalidOhlc(stoppingToken);
-
-        if (importService.HasEnrichmentBacklog)
-            RequestImmediateContinuation();
     }
 }
