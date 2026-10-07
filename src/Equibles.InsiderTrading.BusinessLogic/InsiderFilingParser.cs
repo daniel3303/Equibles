@@ -59,6 +59,7 @@ public static class InsiderFilingParser
         // element, so it applies to every row this filing contributes — stamp it
         // on each as they are added.
         var rule10b5One = ParseRule10b5One(root);
+        var ownerRelationship = ParseOwnerRelationship(root);
         var originalFilingDate = isAmendment ? ParseDateOfOriginalSubmission(root) : null;
 
         var sourceOrder = 0;
@@ -78,6 +79,7 @@ public static class InsiderFilingParser
                 return;
             tx.TransactionOrder = order;
             tx.IsRule10b5One = rule10b5One;
+            tx.OwnerRelationship = ownerRelationship;
             tx.OriginalFilingDate = originalFilingDate;
             tx.FilingForm = ParseOwnershipForm(filing.Form);
             transactions.Add(tx);
@@ -210,6 +212,26 @@ public static class InsiderFilingParser
     {
         var element = root.Element("aff10b5One");
         return element == null ? null : ParseBool(element.Value);
+    }
+
+    // Rows belong to the first reportingOwner (see the ingest owner resolution), so its
+    // boxes describe them; null when the filing names no reporting owner.
+    public static InsiderRelationship? ParseOwnerRelationship(XElement root)
+    {
+        var owner = root.Element("reportingOwner");
+        if (owner == null)
+            return null;
+        var boxes = owner.Element("reportingOwnerRelationship");
+        var relationship = InsiderRelationship.None;
+        if (ParseBool(boxes?.Element("isDirector")?.Value))
+            relationship |= InsiderRelationship.Director;
+        if (ParseBool(boxes?.Element("isOfficer")?.Value))
+            relationship |= InsiderRelationship.Officer;
+        if (ParseBool(boxes?.Element("isTenPercentOwner")?.Value))
+            relationship |= InsiderRelationship.TenPercentOwner;
+        if (ParseBool(boxes?.Element("isOther")?.Value))
+            relationship |= InsiderRelationship.Other;
+        return relationship;
     }
 
     // The 0-shares row recorded for a noSecuritiesOwned Form 3 — the owner's zero

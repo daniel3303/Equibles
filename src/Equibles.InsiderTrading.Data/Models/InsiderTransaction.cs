@@ -43,9 +43,10 @@ public class InsiderTransaction
     /// v9 tags the no-securities-owned sentinel as a holding so it participates only
     /// in holding-section supersession; v10 restores source-row identity through rejected dates;
     /// v11 re-reads spelled-out ADS ratios above twenty ("sixty", "thirty-five") so per-ADS
-    /// prices on ordinary-share rows are restated to per-ordinary.
+    /// prices on ordinary-share rows are restated to per-ordinary; v12 records the reporting
+    /// owner's relationship boxes on each row.
     /// </summary>
-    public const int CurrentParserVersion = 11;
+    public const int CurrentParserVersion = 12;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -144,6 +145,12 @@ public class InsiderTransaction
     /// before this was captured; those are reclassified by a reprocess pass.
     /// </summary>
     public InsiderSecurityKind SecurityKind { get; set; } = InsiderSecurityKind.Unknown;
+
+    /// <summary>
+    /// The reporting owner's relationship to the issuer as ticked on this filing; null until
+    /// the row is derived at parser version 12.
+    /// </summary>
+    public InsiderRelationship? OwnerRelationship { get; set; }
 
     /// <summary>
     /// Parsing-algorithm version that produced this row. See
