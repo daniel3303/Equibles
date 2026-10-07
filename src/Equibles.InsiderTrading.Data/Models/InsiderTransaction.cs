@@ -147,8 +147,8 @@ public class InsiderTransaction
     public InsiderSecurityKind SecurityKind { get; set; } = InsiderSecurityKind.Unknown;
 
     /// <summary>
-    /// The reporting owner's relationship to the issuer as ticked on this filing; null until
-    /// the row is derived at parser version 12.
+    /// The relationship boxes ticked by this filing's reporting owners (the union across joint
+    /// filers); null until derived at parser version 12 or when no owner states one.
     /// </summary>
     public InsiderRelationship? OwnerRelationship { get; set; }
 
