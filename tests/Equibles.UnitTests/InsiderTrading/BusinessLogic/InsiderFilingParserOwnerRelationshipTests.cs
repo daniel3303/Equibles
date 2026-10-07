@@ -7,6 +7,7 @@ namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
 
 // The relationship boxes are per filing: the same owner can be a director at one issuer and
 // only a 10% holder at another, so every row carries the boxes of the filing it came from.
+// Joint filers share the reported trade, so their boxes are combined.
 public class InsiderFilingParserOwnerRelationshipTests
 {
     private static List<InsiderTransaction> ParseAll(XElement root)
@@ -43,9 +44,10 @@ public class InsiderFilingParserOwnerRelationshipTests
         );
 
     [Fact]
-    public void ParseTransactions_JointFilingFirstOwnerTenPercentOnly_StampsTheFirstOwnersBoxes()
+    public void ParseTransactions_JointFilingFundAndItsDirector_StampsTheUnionOfBoxes()
     {
-        // Rows belong to the first reporting owner, so a co-filer's director box must not leak in.
+        // A fund listed first with the director who manages it: the director's interest in the
+        // trade must not depend on filing order, so both filers' boxes reach every row.
         var root = new XElement(
             "ownershipDocument",
             Owner("0000000001", "isTenPercentOwner"),
@@ -58,7 +60,10 @@ public class InsiderFilingParserOwnerRelationshipTests
         transactions.Should().HaveCount(2);
         transactions
             .Should()
-            .OnlyContain(t => t.OwnerRelationship == InsiderRelationship.TenPercentOwner);
+            .OnlyContain(t =>
+                t.OwnerRelationship
+                == (InsiderRelationship.TenPercentOwner | InsiderRelationship.Director)
+            );
     }
 
     [Fact]
@@ -93,6 +98,21 @@ public class InsiderFilingParserOwnerRelationshipTests
             .ContainSingle()
             .Which.OwnerRelationship.Should()
             .Be(InsiderRelationship.None);
+    }
+
+    [Fact]
+    public void ParseOwnerRelationship_NoRelationshipElement_IsNullSoTheRowStaysUnknown()
+    {
+        var root = new XElement(
+            "ownershipDocument",
+            new XElement(
+                "reportingOwner",
+                new XElement("reportingOwnerId", new XElement("rptOwnerCik", "0000000001"))
+            ),
+            new XElement("nonDerivativeTable", Purchase())
+        );
+
+        InsiderFilingParser.ParseOwnerRelationship(root).Should().BeNull();
     }
 
     [Fact]

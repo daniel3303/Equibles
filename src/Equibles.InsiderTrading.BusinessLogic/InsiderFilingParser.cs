@@ -214,23 +214,26 @@ public static class InsiderFilingParser
         return element == null ? null : ParseBool(element.Value);
     }
 
-    // Rows belong to the first reportingOwner (see the ingest owner resolution), so its
-    // boxes describe them; null when the filing names no reporting owner.
+    // Every joint filer holds an interest in the reported trade, so the rows carry the union of
+    // their boxes; null when no reporting owner states a relationship.
     public static InsiderRelationship? ParseOwnerRelationship(XElement root)
     {
-        var owner = root.Element("reportingOwner");
-        if (owner == null)
-            return null;
-        var boxes = owner.Element("reportingOwnerRelationship");
-        var relationship = InsiderRelationship.None;
-        if (ParseBool(boxes?.Element("isDirector")?.Value))
-            relationship |= InsiderRelationship.Director;
-        if (ParseBool(boxes?.Element("isOfficer")?.Value))
-            relationship |= InsiderRelationship.Officer;
-        if (ParseBool(boxes?.Element("isTenPercentOwner")?.Value))
-            relationship |= InsiderRelationship.TenPercentOwner;
-        if (ParseBool(boxes?.Element("isOther")?.Value))
-            relationship |= InsiderRelationship.Other;
+        InsiderRelationship? relationship = null;
+        foreach (var owner in root.Elements("reportingOwner"))
+        {
+            var boxes = owner.Element("reportingOwnerRelationship");
+            if (boxes == null)
+                continue;
+            relationship ??= InsiderRelationship.None;
+            if (ParseBool(boxes.Element("isDirector")?.Value))
+                relationship |= InsiderRelationship.Director;
+            if (ParseBool(boxes.Element("isOfficer")?.Value))
+                relationship |= InsiderRelationship.Officer;
+            if (ParseBool(boxes.Element("isTenPercentOwner")?.Value))
+                relationship |= InsiderRelationship.TenPercentOwner;
+            if (ParseBool(boxes.Element("isOther")?.Value))
+                relationship |= InsiderRelationship.Other;
+        }
         return relationship;
     }
 
