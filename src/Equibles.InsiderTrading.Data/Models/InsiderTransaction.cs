@@ -41,9 +41,11 @@ public class InsiderTransaction
     /// rows) stayed null (#7164, EquiblesCommercial); v8 stamps the authoritative
     /// Form 3/4/5 family so amendments cannot supersede a different ownership form;
     /// v9 tags the no-securities-owned sentinel as a holding so it participates only
-    /// in holding-section supersession; v10 restores source-row identity through rejected dates.
+    /// in holding-section supersession; v10 restores source-row identity through rejected dates;
+    /// v11 re-reads spelled-out ADS ratios above twenty ("sixty", "thirty-five") so per-ADS
+    /// prices on ordinary-share rows are restated to per-ordinary.
     /// </summary>
-    public const int CurrentParserVersion = 10;
+    public const int CurrentParserVersion = 11;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
