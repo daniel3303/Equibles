@@ -126,29 +126,34 @@ public static class CommonStockRepositoryExtensions
     }
 
     /// <summary>
-    /// Issuers outside the current US directory whose US listing carried exactly this ticker,
-    /// one id per issuer. A flat join from the ticker index keeps the lookup off the issuer table.
+    /// Issuers whose US listing carried exactly this ticker and no longer trades under it: the
+    /// listing is retired, or its issuer left the current US directory. One id per issuer.
     /// </summary>
-    public static IQueryable<Guid> GetDelistedUsTickerOwnerIds(
+    public static IQueryable<Guid> GetRetiredUsTickerOwnerIds(
         this EquityIssuerRepository repository,
         string listedTicker
     )
     {
         return repository
             .GetAll()
-            .Where(candidate =>
-                candidate.Presentation != null
-                && !(
-                    candidate.Presentation.Listing.MarketCountryCode == "US"
-                    && candidate.Presentation.Listing.Active
-                )
-            )
+            .Where(candidate => candidate.Presentation != null)
             .SelectMany(
                 candidate => candidate.Securities.SelectMany(security => security.Listings),
-                (candidate, listing) => new { candidate.Id, Listing = listing }
+                (candidate, listing) =>
+                    new
+                    {
+                        candidate.Id,
+                        Presentation = candidate.Presentation.Listing,
+                        Listing = listing,
+                    }
             )
             .Where(claim =>
-                claim.Listing.MarketCountryCode == "US" && claim.Listing.Ticker == listedTicker
+                claim.Listing.MarketCountryCode == "US"
+                && claim.Listing.Ticker == listedTicker
+                && (
+                    !claim.Listing.Active
+                    || !(claim.Presentation.MarketCountryCode == "US" && claim.Presentation.Active)
+                )
             )
             .Select(claim => claim.Id)
             .Distinct();
@@ -166,9 +171,9 @@ public static class CommonStockRepositoryExtensions
     }
 
     /// <summary>
-    /// ResolveByTicker for historical reads: when no current issuer holds the ticker, the one
-    /// delisted issuer whose US listing carried it answers, so its stored history stays reachable.
-    /// Two delisted claimants fail closed, and a current owner always wins over a former one.
+    /// ResolveByTicker for historical reads: when no current issuer trades the ticker, the one
+    /// issuer whose retired US listing carried it answers (a delisted company, or a listed one
+    /// that changed ticker). Two former claimants fail closed, and a current owner always wins.
     /// </summary>
     public static async Task<(EquityIssuer Stock, string Error)> ResolveByTickerIncludingDelisted(
         this EquityIssuerRepository repository,
@@ -190,8 +195,22 @@ public static class CommonStockRepositoryExtensions
         ];
         foreach (var spelling in spellings.Distinct(StringComparer.Ordinal))
         {
+            // A ticker a listed company still trades, even off the directory, is never handed back.
+            var stillTraded = await repository
+                .GetCurrentUsDirectory()
+                .AnyAsync(candidate =>
+                    candidate.Securities.Any(security =>
+                        security.Listings.Any(listing =>
+                            listing.MarketCountryCode == "US"
+                            && listing.Active
+                            && listing.Ticker == spelling
+                        )
+                    )
+                );
+            if (stillTraded)
+                return (null, NotFound(ticker));
             var ownerIds = await repository
-                .GetDelistedUsTickerOwnerIds(spelling)
+                .GetRetiredUsTickerOwnerIds(spelling)
                 .Take(2)
                 .ToListAsync();
             if (ownerIds.Count > 1)

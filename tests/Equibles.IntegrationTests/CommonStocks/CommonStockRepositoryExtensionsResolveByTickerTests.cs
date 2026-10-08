@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -259,6 +260,55 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
 
         stock!.Name.Should().Be("Delisted class B");
         error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_ListedCompanysFormerTickerResolvesIt()
+    {
+        EquityIssuer renamed = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NEWT",
+            Name: "Renamed Co",
+            Cik: "4401"
+        );
+        UsEquityDirectory.GetOrAddListing(renamed, "OLDT").Active = false;
+        _dbContext.Add(renamed);
+        await _dbContext.SaveChangesAsync();
+
+        var (current, _) = await _repository.ResolveByTicker("OLDT");
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("OLDT");
+
+        current.Should().BeNull();
+        stock!.Name.Should().Be("Renamed Co");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_TickerStillTradedOffTheDirectoryIsNotHandedBack()
+    {
+        EquityIssuer trader = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MAIN",
+            Name: "Still trades it",
+            Cik: "4501"
+        );
+        UsEquityDirectory.GetOrAddListing(trader, "SIDE");
+        _dbContext.AddRange(
+            trader,
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "SIDE",
+                Active: false,
+                Name: "Former owner",
+                Cik: "4502"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("SIDE");
+
+        stock.Should().BeNull();
+        error.Should().Be("Stock 'SIDE' not found.");
     }
 
     [Fact]
