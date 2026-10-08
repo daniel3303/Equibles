@@ -331,6 +331,17 @@ In OpenClaw, add an MCP server with the URL `http://localhost:8081/mcp` (HTTP tr
 
 Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP transport).
 
+### Running over stdio
+
+Clients that launch a server as a subprocess can run it over stdin/stdout instead of HTTP:
+
+```bash
+dotnet build src/Equibles.Mcp.Server
+dotnet run --no-build --project src/Equibles.Mcp.Server -- --stdio
+```
+
+Build first: a plain `dotnet run` restores and prints build output on stdout, which corrupts the protocol stream. The server reads `ConnectionStrings:DefaultConnection` as usual, so point it at the same database the worker fills. Logs go to stderr. The API key and the per-request output-format header and query parameter do not apply; set `EQUIBLES_OUTPUT_FORMAT=gcf` in the subprocess environment instead.
+
 ## Tools
 
 This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
