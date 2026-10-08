@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -163,6 +164,151 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
 
         stock!.Name.Should().Be("Default owner");
         error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_DelistedOwnerAnswersWhereCurrentResolutionMisses()
+    {
+        _dbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "GONE",
+                Active: false,
+                Name: "Delisted Co",
+                Cik: "4001"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (current, currentError) = await _repository.ResolveByTicker("gone");
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("gone");
+
+        current.Should().BeNull();
+        currentError.Should().Be("Stock 'gone' not found.");
+        stock!.Name.Should().Be("Delisted Co");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_CurrentOwnerWinsOverAFormerOne()
+    {
+        _dbContext.AddRange(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "REUSE",
+                Active: false,
+                Name: "Former owner",
+                Cik: "4101"
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "REUSE",
+                Name: "Current owner",
+                Cik: "4102"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("REUSE");
+
+        stock!.Name.Should().Be("Current owner");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_TwoDelistedClaimantsFailClosed()
+    {
+        _dbContext.AddRange(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "TWICE",
+                Active: false,
+                Name: "First former owner",
+                Cik: "4201"
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "TWICE",
+                Active: false,
+                Name: "Second former owner",
+                Cik: "4202"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("TWICE");
+
+        stock.Should().BeNull();
+        error.Should().Be("Listed security 'TWICE' is ambiguous.");
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_DottedClassShareFallsBackToDelistedDashForm()
+    {
+        _dbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "OLD-B",
+                Active: false,
+                Name: "Delisted class B",
+                Cik: "4301"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("OLD.B");
+
+        stock!.Name.Should().Be("Delisted class B");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_ListedCompanysFormerTickerResolvesIt()
+    {
+        EquityIssuer renamed = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NEWT",
+            Name: "Renamed Co",
+            Cik: "4401"
+        );
+        UsEquityDirectory.GetOrAddListing(renamed, "OLDT").Active = false;
+        _dbContext.Add(renamed);
+        await _dbContext.SaveChangesAsync();
+
+        var (current, _) = await _repository.ResolveByTicker("OLDT");
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("OLDT");
+
+        current.Should().BeNull();
+        stock!.Name.Should().Be("Renamed Co");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerIncludingDelisted_TickerStillTradedOffTheDirectoryIsNotHandedBack()
+    {
+        EquityIssuer trader = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MAIN",
+            Name: "Still trades it",
+            Cik: "4501"
+        );
+        UsEquityDirectory.GetOrAddListing(trader, "SIDE");
+        _dbContext.AddRange(
+            trader,
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "SIDE",
+                Active: false,
+                Name: "Former owner",
+                Cik: "4502"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, error) = await _repository.ResolveByTickerIncludingDelisted("SIDE");
+
+        stock.Should().BeNull();
+        error.Should().Be("Stock 'SIDE' not found.");
     }
 
     [Fact]

@@ -115,7 +115,8 @@ public class InsiderTradingTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -307,7 +308,8 @@ public class InsiderTradingTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -502,7 +504,8 @@ public class InsiderTradingTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 

@@ -125,14 +125,113 @@ public static class CommonStockRepositoryExtensions
             .Distinct();
     }
 
+    /// <summary>
+    /// Issuers whose US listing carried exactly this ticker and no longer trades under it: the
+    /// listing is retired, or its issuer left the current US directory. One id per issuer.
+    /// </summary>
+    public static IQueryable<Guid> GetRetiredUsTickerOwnerIds(
+        this EquityIssuerRepository repository,
+        string listedTicker
+    )
+    {
+        return repository
+            .GetAll()
+            .Where(candidate => candidate.Presentation != null)
+            .SelectMany(
+                candidate => candidate.Securities.SelectMany(security => security.Listings),
+                (candidate, listing) =>
+                    new
+                    {
+                        candidate.Id,
+                        Presentation = candidate.Presentation.Listing,
+                        Listing = listing,
+                    }
+            )
+            .Where(claim =>
+                claim.Listing.MarketCountryCode == "US"
+                && claim.Listing.Ticker == listedTicker
+                && (
+                    !claim.Listing.Active
+                    || !(claim.Presentation.MarketCountryCode == "US" && claim.Presentation.Active)
+                )
+            )
+            .Select(claim => claim.Id)
+            .Distinct();
+    }
+
     public static async Task<(EquityIssuer Stock, string Error)> ResolveByTicker(
+        this EquityIssuerRepository repository,
+        string ticker
+    )
+    {
+        var (stock, ambiguous) = await repository.ResolveCurrentByTicker(ticker);
+        return stock != null ? (stock, null)
+            : ambiguous ? (null, Ambiguous(ticker))
+            : (null, NotFound(ticker));
+    }
+
+    /// <summary>
+    /// ResolveByTicker for historical reads: when no current issuer trades the ticker, the one
+    /// issuer whose retired US listing carried it answers (a delisted company, or a listed one
+    /// that changed ticker). Two former claimants fail closed, and a current owner always wins.
+    /// </summary>
+    public static async Task<(EquityIssuer Stock, string Error)> ResolveByTickerIncludingDelisted(
+        this EquityIssuerRepository repository,
+        string ticker
+    )
+    {
+        var (stock, ambiguous) = await repository.ResolveCurrentByTicker(ticker);
+        if (stock != null)
+            return (stock, null);
+        var normalized = TickerNormalizer.Normalize(ticker);
+        if (ambiguous || normalized == null)
+            return (null, ambiguous ? Ambiguous(ticker) : NotFound(ticker));
+
+        string[] spellings = [normalized, normalized.Replace('.', '-')];
+        foreach (var spelling in spellings.Distinct(StringComparer.Ordinal))
+        {
+            // A ticker a listed company still trades, even off the directory, is never handed back.
+            var stillTraded = await repository
+                .GetCurrentUsDirectory()
+                .AnyAsync(candidate =>
+                    candidate.Securities.Any(security =>
+                        security.Listings.Any(listing =>
+                            listing.MarketCountryCode == "US"
+                            && listing.Active
+                            && listing.Ticker == spelling
+                        )
+                    )
+                );
+            if (stillTraded)
+                return (null, NotFound(ticker));
+            var ownerIds = await repository
+                .GetRetiredUsTickerOwnerIds(spelling)
+                .Take(2)
+                .ToListAsync();
+            if (ownerIds.Count > 1)
+                return (null, Ambiguous(ticker));
+            if (ownerIds.Count == 1)
+                return (
+                    await repository.GetAll().FirstAsync(candidate => candidate.Id == ownerIds[0]),
+                    null
+                );
+        }
+        return (null, NotFound(ticker));
+    }
+
+    private static string NotFound(string ticker) => $"Stock '{ticker}' not found.";
+
+    private static string Ambiguous(string ticker) => $"Listed security '{ticker}' is ambiguous.";
+
+    // The current US directory owner of a ticker, or Ambiguous when two current issuers claim it.
+    private static async Task<(EquityIssuer Stock, bool Ambiguous)> ResolveCurrentByTicker(
         this EquityIssuerRepository repository,
         string ticker
     )
     {
         var normalized = TickerNormalizer.Normalize(ticker);
         if (normalized == null)
-            return (null, $"Stock '{ticker}' not found.");
+            return (null, false);
 
         var literal = normalized;
         var folded = TickerNormalizer.NormalizeDashListed(normalized) ?? literal;
@@ -150,19 +249,19 @@ public static class CommonStockRepositoryExtensions
 
         var authoritativeOwners = await FindOwners(literal);
         if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)
-            return (null, $"Listed security '{ticker}' is ambiguous.");
+            return (null, true);
         EquityIssuer stock = authoritativeOwners.SingleOrDefault();
         if (stock == null && !string.Equals(literal, folded, StringComparison.OrdinalIgnoreCase))
         {
             authoritativeOwners = await FindOwners(folded);
             if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)
-                return (null, $"Listed security '{ticker}' is ambiguous.");
+                return (null, true);
             stock = authoritativeOwners.SingleOrDefault();
         }
         stock ??= await repository.GetUsByTicker(normalized);
         if (stock == null && normalized.Contains('.'))
             stock = await repository.GetUsByTicker(normalized.Replace('.', '-'));
-        return stock == null ? (null, $"Stock '{ticker}' not found.") : (stock, null);
+        return (stock, false);
     }
 
     // SEC CIKs appear padded and unpadded, while a surviving filer can also own a predecessor's
