@@ -25,8 +25,7 @@ public class Realtime13FArchiveBuilder
         );
         var coverPage = new StringBuilder(
             "ACCESSION_NUMBER\tISAMENDMENT\tAMENDMENTTYPE\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\t"
-                + "FILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\t"
-                + "CONFIDENTIALTREATMENT\n"
+                + "FILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
         );
         var infoTable = new StringBuilder(
             "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMTTYPE\tPUTCALL\tVALUE\tSSHPRNAMT\tVOTING_AUTH_SOLE\t"
@@ -42,7 +41,9 @@ public class Realtime13FArchiveBuilder
             "ACCESSION_NUMBER\tOTHERMANAGER_SK\tCIK\tFORM13FFILENUMBER\tCRDNUMBER\tSECFILENUMBER\t"
                 + "NAME\n"
         );
-        var summaryPage = new StringBuilder("ACCESSION_NUMBER\tTABLEENTRYTOTAL\tTABLEVALUETOTAL\n");
+        var summaryPage = new StringBuilder(
+            "ACCESSION_NUMBER\tTABLEENTRYTOTAL\tTABLEVALUETOTAL\tISCONFIDENTIALOMITTED\n"
+        );
 
         foreach (var filing in filings)
         {
@@ -66,8 +67,7 @@ public class Realtime13FArchiveBuilder
                 Clean(filing.City),
                 Clean(filing.StateOrCountry),
                 Clean(filing.Form13FFileNumber),
-                Clean(filing.CrdNumber),
-                filing.ConfidentialTreatmentRequested ? "Y" : "N"
+                Clean(filing.CrdNumber)
             );
 
             foreach (var (seq, identity) in filing.OtherManagers)
@@ -108,7 +108,8 @@ public class Realtime13FArchiveBuilder
                 summaryPage,
                 Clean(filing.AccessionNumber),
                 filing.TableEntryTotal?.ToString() ?? string.Empty,
-                filing.TableValueTotal?.ToString() ?? string.Empty
+                filing.TableValueTotal?.ToString() ?? string.Empty,
+                filing.ConfidentialOmitted ? "Y" : "N"
             );
 
             foreach (var holding in filing.Holdings)

@@ -21,7 +21,6 @@ public class Parsed13FFiling
     public string StateOrCountry { get; set; }
     public string Form13FFileNumber { get; set; }
     public string CrdNumber { get; set; }
-    public bool ConfidentialTreatmentRequested { get; set; }
 
     /// <summary>Summary-page <c>tableEntryTotal</c> — the filer's own position count. Null when
     /// the cover page carries no summary page (13F-NT).</summary>
@@ -48,5 +47,7 @@ public class Parsed13FFiling
     internal bool CompleteSubmissionVerified { get; set; }
     internal string ReportType { get; set; }
     internal int? OtherIncludedManagersCount { get; set; }
+
+    // Summary-page isConfidentialOmitted: the filer left positions out under a confidential-treatment request.
     internal bool ConfidentialOmitted { get; set; }
 }

@@ -91,6 +91,11 @@ public class ImportContext
     public Dictionary<string, (int? EntryTotal, long? ValueTotal)> SummaryPages { get; } =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Summary-page ISCONFIDENTIALOMITTED per accession, only where the cell is filled: true means the
+    // filer left positions out under a confidential-treatment request.
+    public Dictionary<string, bool> ConfidentialOmittedByAccession { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     // The filing whose unmapped CUSIPs are currently being collected, and the CUSIPs already
     // counted for it, so a position split across otherManager legs counts once (see
     // HoldingsImportService.RecordUnmappedCusip). Reset at each accession boundary.

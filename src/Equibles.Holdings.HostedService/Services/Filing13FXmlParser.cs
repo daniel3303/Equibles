@@ -54,9 +54,6 @@ public class Filing13FXmlParser
             StateOrCountry = Value(Child(address, "stateOrCountry")),
             Form13FFileNumber = Value(Descendant(coverPage, "form13FFileNumber")),
             CrdNumber = Value(Descendant(coverPage, "crdNumber")),
-            ConfidentialTreatmentRequested = IsAmendmentValue(
-                Value(Descendant(coverPage, "confidentialTreatmentRequestedFlag"))
-            ),
             ReportType = Value(Child(coverPage, "reportType")),
         };
 

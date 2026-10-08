@@ -104,6 +104,25 @@ public class Realtime13FArchiveBuilderTests
         fields[1].Should().Be("Y");
     }
 
+    [Theory]
+    [InlineData(true, "Y")]
+    [InlineData(false, "N")]
+    public void Build_ConfidentialOmitted_RidesTheSummaryPageNotTheCoverPage(
+        bool omitted,
+        string expected
+    )
+    {
+        var filing = CreateFiling();
+        filing.ConfidentialOmitted = omitted;
+        using var archive = _sut.Build([filing]);
+
+        var summary = ReadEntry(archive, "SUMMARYPAGE.tsv").Split('\n');
+        var column = Array.IndexOf(summary[0].Split('\t'), "ISCONFIDENTIALOMITTED");
+        column.Should().BeGreaterThan(0);
+        summary[1].Split('\t')[column].Should().Be(expected);
+        ReadEntry(archive, "COVERPAGE.tsv").Should().NotContain("CONFIDENTIAL");
+    }
+
     [Fact]
     public void Build_WithHoldings_InfoTableContainsHoldingRows()
     {
