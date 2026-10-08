@@ -58,9 +58,14 @@ public partial class Program
     // There is no HTTP pipeline, so the API key and output-format middleware do not apply.
     private static async Task RunStdio(string[] args)
     {
-        var builder = Host.CreateApplicationBuilder(
-            args.Where(arg => arg != StdioArgument).ToArray()
-        );
+        var settings = new HostApplicationBuilderSettings
+        {
+            Args = args.Where(arg => arg != StdioArgument).ToArray(),
+            Configuration = new ConfigurationManager(),
+        };
+        // Honour ASPNETCORE_ENVIRONMENT like the HTTP host; DOTNET_ variables and arguments still win.
+        settings.Configuration.AddEnvironmentVariables(prefix: "ASPNETCORE_");
+        var builder = Host.CreateApplicationBuilder(settings);
         builder.Logging.ClearProviders();
         ConfigureServices(builder, stdio: true);
         await builder.Build().RunAsync();

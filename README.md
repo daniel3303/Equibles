@@ -336,10 +336,11 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 Clients that launch a server as a subprocess can run it over stdin/stdout instead of HTTP:
 
 ```bash
-dotnet run --project src/Equibles.Mcp.Server -- --stdio
+dotnet build src/Equibles.Mcp.Server
+dotnet run --no-build --project src/Equibles.Mcp.Server -- --stdio
 ```
 
-The server reads `ConnectionStrings:DefaultConnection` as usual, so point it at the same database the worker fills. Logs go to stderr, and the HTTP-only API key and output-format options do not apply.
+Build first: a plain `dotnet run` restores and prints build output on stdout, which corrupts the protocol stream. The server reads `ConnectionStrings:DefaultConnection` as usual, so point it at the same database the worker fills. Logs go to stderr. The API key and the per-request output-format header and query parameter do not apply; set `EQUIBLES_OUTPUT_FORMAT=gcf` in the subprocess environment instead.
 
 ## Tools
 

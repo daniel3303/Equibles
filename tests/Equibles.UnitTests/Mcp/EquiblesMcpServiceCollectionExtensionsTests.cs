@@ -1,6 +1,7 @@
 using Equibles.Mcp;
 using Equibles.Mcp.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol.Protocol;
 
 namespace Equibles.UnitTests.Mcp;
 
@@ -65,5 +66,28 @@ public class EquiblesMcpServiceCollectionExtensionsTests
             .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()
             .Should()
             .BeSameAs(hostsOwnCache);
+    }
+
+    [Fact]
+    public void AddEquiblesMcp_Stdio_RegistersTheStdioTransport()
+    {
+        // A host that opts into stdio gets the one long-lived transport that reads stdin.
+        var services = new ServiceCollection();
+
+        services.AddEquiblesMcp(_ => { }, stdio: true);
+
+        services.Should().Contain(d => d.ServiceType == typeof(ITransport));
+    }
+
+    [Fact]
+    public void AddEquiblesMcp_Default_StaysOnHttpWithNoStdioTransport()
+    {
+        // Existing callers pass no flag and must keep streamable HTTP, which creates a
+        // transport per session instead of registering one.
+        var services = new ServiceCollection();
+
+        services.AddEquiblesMcp(_ => { });
+
+        services.Should().NotContain(d => d.ServiceType == typeof(ITransport));
     }
 }
