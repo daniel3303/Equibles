@@ -70,7 +70,8 @@ public class CongressTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -173,9 +174,8 @@ public class CongressTools
                 string listedTicker = null;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
-                    var (resolvedStock, stockError) = await _commonStockRepository.ResolveByTicker(
-                        ticker
-                    );
+                    var (resolvedStock, stockError) =
+                        await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                     if (stockError != null)
                         return stockError;
                     stock = resolvedStock;

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
@@ -131,9 +132,13 @@ public class RagSearchTools
                     if (normalizedTicker == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
-                    EquityIssuer stock = await _commonStockRepository.GetUsByTicker(
-                        normalizedTicker
-                    );
+                    EquityIssuer stock =
+                        await _commonStockRepository.GetUsByTicker(normalizedTicker)
+                        ?? (
+                            await _commonStockRepository.ResolveByTickerIncludingDelisted(
+                                normalizedTicker
+                            )
+                        ).Stock;
                     if (stock == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
@@ -303,7 +308,13 @@ public class RagSearchTools
                     if (normalizedTicker == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
-                    stock = await _commonStockRepository.GetUsByTicker(normalizedTicker);
+                    stock =
+                        await _commonStockRepository.GetUsByTicker(normalizedTicker)
+                        ?? (
+                            await _commonStockRepository.ResolveByTickerIncludingDelisted(
+                                normalizedTicker
+                            )
+                        ).Stock;
                     if (stock == null)
                         return McpToolExecutor.StockNotFound(ticker);
                 }

@@ -103,7 +103,8 @@ public class FinancialFactsTools
                 if (string.IsNullOrWhiteSpace(concept))
                     return $"A concept is required. {SupportedAliasesNote()}";
 
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 

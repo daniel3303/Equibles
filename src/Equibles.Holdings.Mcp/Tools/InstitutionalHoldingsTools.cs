@@ -121,7 +121,8 @@ public class InstitutionalHoldingsTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -422,7 +423,8 @@ public class InstitutionalHoldingsTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -917,7 +919,8 @@ public class InstitutionalHoldingsTools
             {
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, stockError) =
+                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
