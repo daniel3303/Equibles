@@ -37,8 +37,16 @@ namespace Equibles.Mcp.Server;
 
 public partial class Program
 {
+    public const string StdioArgument = "--stdio";
+
     public static async Task Main(string[] args)
     {
+        if (args.Contains(StdioArgument))
+        {
+            await RunStdio(args);
+            return;
+        }
+
         var builder = WebApplication.CreateBuilder(args);
         ConfigureServices(builder);
         var app = builder.Build();
@@ -46,11 +54,33 @@ public partial class Program
         await app.RunAsync();
     }
 
-    public static void ConfigureServices(WebApplicationBuilder builder)
+    // Serves MCP over stdin/stdout for clients that launch the server as a subprocess.
+    // There is no HTTP pipeline, so the API key and output-format middleware do not apply.
+    private static async Task RunStdio(string[] args)
+    {
+        var builder = Host.CreateApplicationBuilder(
+            args.Where(arg => arg != StdioArgument).ToArray()
+        );
+        builder.Logging.ClearProviders();
+        ConfigureServices(builder, stdio: true);
+        await builder.Build().RunAsync();
+    }
+
+    public static void ConfigureServices(IHostApplicationBuilder builder, bool stdio = false)
     {
         builder.Services.AddSerilog(config =>
         {
-            config.ReadFrom.Configuration(builder.Configuration);
+            if (stdio)
+            {
+                // stdout carries the protocol, so every log event goes to stderr.
+                config.MinimumLevel.Warning();
+                config.WriteTo.Console(standardErrorFromLevel: LogEventLevel.Verbose);
+            }
+            else
+            {
+                config.ReadFrom.Configuration(builder.Configuration);
+            }
+
             var minLevel = builder.Configuration["MinimumLogLevel"];
             if (
                 !string.IsNullOrEmpty(minLevel)
@@ -95,21 +125,24 @@ public partial class Program
             builder.Configuration.GetSection("Worker")
         );
 
-        builder.Services.AddEquiblesMcp(mcp =>
-        {
-            mcp.AddHoldings();
-            mcp.AddInsiderTrading();
-            mcp.AddFred();
-            mcp.AddSec();
-            mcp.AddFinancialFacts();
-            mcp.AddCftc();
-            mcp.AddCboe();
-            mcp.AddFdaCatalysts();
-            mcp.AddCongress();
-            mcp.AddShortData();
-            mcp.AddStockPrices();
-            mcp.AddGovernmentContracts();
-        });
+        builder.Services.AddEquiblesMcp(
+            mcp =>
+            {
+                mcp.AddHoldings();
+                mcp.AddInsiderTrading();
+                mcp.AddFred();
+                mcp.AddSec();
+                mcp.AddFinancialFacts();
+                mcp.AddCftc();
+                mcp.AddCboe();
+                mcp.AddFdaCatalysts();
+                mcp.AddCongress();
+                mcp.AddShortData();
+                mcp.AddStockPrices();
+                mcp.AddGovernmentContracts();
+            },
+            stdio
+        );
 
         builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
     }

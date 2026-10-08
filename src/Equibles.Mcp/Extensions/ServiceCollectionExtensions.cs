@@ -8,10 +8,15 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddEquiblesMcp(
         this IServiceCollection services,
-        Action<EquiblesMcpBuilder> configureMcp
+        Action<EquiblesMcpBuilder> configureMcp,
+        bool stdio = false
     )
     {
-        var mcpServerBuilder = services.AddMcpServer().WithHttpTransport();
+        // A client that launches the server as a subprocess speaks over stdin/stdout;
+        // every other host serves streamable HTTP.
+        var mcpServerBuilder = stdio
+            ? services.AddMcpServer().WithStdioServerTransport()
+            : services.AddMcpServer().WithHttpTransport();
         // Tools that cache an expensive whole-universe computation (e.g. the
         // short-squeeze board) resolve IMemoryCache, so the builder guarantees it
         // regardless of what the host registers. AddMemoryCache is TryAdd-based —
