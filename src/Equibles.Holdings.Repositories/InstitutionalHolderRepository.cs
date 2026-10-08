@@ -27,6 +27,22 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             : await GetAll().FirstOrDefaultAsync(h => h.Cik == alternateCik);
     }
 
+    // Each holder's newest stored 13F report date; an import of an older quarter must not override it.
+    public async Task<Dictionary<Guid, DateOnly>> GetLatest13FReportDates(
+        IReadOnlyCollection<Guid> holderIds,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return await DbContext
+            .Set<InstitutionalFiling>()
+            .Where(f =>
+                holderIds.Contains(f.InstitutionalHolderId) && f.FilingType == FilingType.Form13F
+            )
+            .GroupBy(f => f.InstitutionalHolderId)
+            .Select(g => new { HolderId = g.Key, ReportDate = g.Max(f => f.ReportDate) })
+            .ToDictionaryAsync(r => r.HolderId, r => r.ReportDate, cancellationToken);
+    }
+
     public async Task<List<InstitutionalHolder>> GetByCiks(
         IEnumerable<string> ciks,
         CancellationToken cancellationToken = default

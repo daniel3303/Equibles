@@ -47,6 +47,7 @@ public class Parsed13FFiling
     internal bool CompleteSubmissionVerified { get; set; }
     internal string ReportType { get; set; }
     internal int? OtherIncludedManagersCount { get; set; }
+
     // Summary-page isConfidentialOmitted: the filer left positions out under a confidential-treatment request.
     internal bool ConfidentialOmitted { get; set; }
 }

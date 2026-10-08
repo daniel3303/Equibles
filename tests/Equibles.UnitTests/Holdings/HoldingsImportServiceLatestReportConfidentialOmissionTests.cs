@@ -34,7 +34,10 @@ public class HoldingsImportServiceLatestReportConfidentialOmissionTests
             )
         );
 
-        HoldingsImportService.BuildLatestReportConfidentialOmission(context)[Cik].Should().BeTrue();
+        HoldingsImportService
+            .BuildLatestReportConfidentialOmission(context)[Cik]
+            .Omitted.Should()
+            .BeTrue();
     }
 
     [Fact]
@@ -51,7 +54,10 @@ public class HoldingsImportServiceLatestReportConfidentialOmissionTests
             )
         );
 
-        HoldingsImportService.BuildLatestReportConfidentialOmission(context)[Cik].Should().BeTrue();
+        HoldingsImportService
+            .BuildLatestReportConfidentialOmission(context)[Cik]
+            .Omitted.Should()
+            .BeTrue();
     }
 
     [Fact]
@@ -70,8 +76,77 @@ public class HoldingsImportServiceLatestReportConfidentialOmissionTests
 
         HoldingsImportService
             .BuildLatestReportConfidentialOmission(context)[Cik]
-            .Should()
+            .Omitted.Should()
             .BeFalse();
+    }
+
+    [Fact]
+    public void SamePeriodNewHoldingsAmendment_DoesNotReplaceItsOriginal()
+    {
+        var context = Context(
+            Filing("0000950123-24-002518", "14-FEB-2024", "31-DEC-2023", omitted: true),
+            Filing(
+                "0000950123-24-005664",
+                "15-MAY-2024",
+                "31-DEC-2023",
+                omitted: false,
+                amendmentType: "NEW HOLDINGS"
+            )
+        );
+
+        HoldingsImportService
+            .BuildLatestReportConfidentialOmission(context)[Cik]
+            .Omitted.Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public void StoredReportForALaterQuarter_IsNotOverriddenByAnOlderImport()
+    {
+        // Realtime imports one filing per archive, so the import alone cannot see the newer quarter.
+        var context = Context(
+            Filing(
+                "0000950123-26-000002",
+                "20-AUG-2026",
+                "31-MAR-2026",
+                omitted: false,
+                amendmentType: "RESTATEMENT"
+            )
+        );
+        var holder = new InstitutionalHolder { Cik = Cik, ConfidentialTreatmentRequested = true };
+
+        Service()
+            .RefreshExistingHolderConfidentialTreatment(
+                context,
+                [holder],
+                new Dictionary<Guid, DateOnly> { [holder.Id] = new DateOnly(2026, 6, 30) }
+            );
+
+        holder.ConfidentialTreatmentRequested.Should().BeTrue();
+    }
+
+    [Fact]
+    public void StoredReportForTheSameQuarter_AllowsItsRestatementToRefresh()
+    {
+        var context = Context(
+            Filing(
+                "0000950123-26-000004",
+                "20-AUG-2026",
+                "30-JUN-2026",
+                omitted: false,
+                amendmentType: "RESTATEMENT"
+            )
+        );
+        var holder = new InstitutionalHolder { Cik = Cik, ConfidentialTreatmentRequested = true };
+
+        Service()
+            .RefreshExistingHolderConfidentialTreatment(
+                context,
+                [holder],
+                new Dictionary<Guid, DateOnly> { [holder.Id] = new DateOnly(2026, 6, 30) }
+            );
+
+        holder.ConfidentialTreatmentRequested.Should().BeFalse();
     }
 
     [Fact]
@@ -82,7 +157,7 @@ public class HoldingsImportServiceLatestReportConfidentialOmissionTests
         );
         var holder = new InstitutionalHolder { Cik = Cik, ConfidentialTreatmentRequested = true };
 
-        Service().RefreshExistingHolderConfidentialTreatment(context, [holder]);
+        Service().RefreshExistingHolderConfidentialTreatment(context, [holder], NoStoredReports);
 
         holder.ConfidentialTreatmentRequested.Should().BeTrue();
     }
@@ -102,10 +177,12 @@ public class HoldingsImportServiceLatestReportConfidentialOmissionTests
         );
         var holder = new InstitutionalHolder { Cik = Cik, ConfidentialTreatmentRequested = false };
 
-        Service().RefreshExistingHolderConfidentialTreatment(context, [holder]);
+        Service().RefreshExistingHolderConfidentialTreatment(context, [holder], NoStoredReports);
 
         holder.ConfidentialTreatmentRequested.Should().BeTrue();
     }
+
+    private static readonly Dictionary<Guid, DateOnly> NoStoredReports = [];
 
     private static (SubmissionRow Submission, CoverPageRow CoverPage, bool? Omitted) Filing(
         string accession,
@@ -151,8 +228,9 @@ public class HoldingsImportServiceLatestReportConfidentialOmissionTests
             ),
         };
         foreach (var filing in filings.Where(f => f.Omitted.HasValue))
-            context.ConfidentialOmittedByAccession[filing.Submission.AccessionNumber] =
-                filing.Omitted.Value;
+            context.ConfidentialOmittedByAccession[filing.Submission.AccessionNumber] = filing
+                .Omitted
+                .Value;
         return context;
     }
 

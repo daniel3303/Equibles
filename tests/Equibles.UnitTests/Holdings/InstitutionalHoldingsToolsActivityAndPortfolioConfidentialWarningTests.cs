@@ -29,17 +29,18 @@ public class InstitutionalHoldingsToolsActivityAndPortfolioConfidentialWarningTe
         };
         var grouped = Enum.GetValues<StockPositionChangeType>()
             .ToDictionary(type => type, _ => new List<StockPositionChange>());
-        grouped[StockPositionChangeType.Increased].Add(
-            new StockPositionChange
-            {
-                CommonStockId = Guid.NewGuid(),
-                Ticker = "GOOGL",
-                CurrentShares = 200,
-                PreviousShares = 100,
-                CurrentValue = 200_000,
-                PreviousValue = 100_000,
-            }
-        );
+        grouped[StockPositionChangeType.Increased]
+            .Add(
+                new StockPositionChange
+                {
+                    CommonStockId = Guid.NewGuid(),
+                    Ticker = "GOOGL",
+                    CurrentShares = 200,
+                    PreviousShares = 100,
+                    CurrentValue = 200_000,
+                    PreviousValue = 100_000,
+                }
+            );
 
         var rendered = (string)
             method.Invoke(

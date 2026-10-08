@@ -969,7 +969,15 @@ public class HoldingsImportService
             cikToHolderId[holder.Cik] = holder.Id;
         }
 
-        RefreshExistingHolderConfidentialTreatment(context, existingHolders);
+        var latestStoredReportDates = await holderRepo.GetLatest13FReportDates(
+            existingHolders.Select(holder => holder.Id).ToList(),
+            cancellationToken
+        );
+        RefreshExistingHolderConfidentialTreatment(
+            context,
+            existingHolders,
+            latestStoredReportDates
+        );
         CreateMissingHolders(context, existingHolders, holderRepo, cikToHolderId);
 
         await holderRepo.SaveChanges();
@@ -978,11 +986,12 @@ public class HoldingsImportService
         context.CikToHolderId = cikToHolderId;
     }
 
-    // Refresh the confidential-treatment flag on holders we already track from their newest
-    // report in this import; their identity columns stay as first seen.
+    // Refresh the confidential-treatment flag on holders we already track from their newest report
+    // in this import, unless a stored 13F covers a later quarter; identity columns stay as first seen.
     internal void RefreshExistingHolderConfidentialTreatment(
         ImportContext context,
-        List<InstitutionalHolder> existingHolders
+        List<InstitutionalHolder> existingHolders,
+        IReadOnlyDictionary<Guid, DateOnly> latestStoredReportDates
     )
     {
         var omittedByCanonicalCik = BuildLatestReportConfidentialOmission(context);
@@ -991,27 +1000,31 @@ public class HoldingsImportService
         {
             var canonicalCik = CikNormalizer.Canonicalize(holder.Cik);
             if (
-                canonicalCik != null
-                && omittedByCanonicalCik.TryGetValue(canonicalCik, out var omitted)
+                canonicalCik == null
+                || !omittedByCanonicalCik.TryGetValue(canonicalCik, out var report)
             )
-                holder.ConfidentialTreatmentRequested = omitted;
+                continue;
+            if (
+                latestStoredReportDates.TryGetValue(holder.Id, out var storedPeriod)
+                && storedPeriod > report.Period
+            )
+                continue;
+            holder.ConfidentialTreatmentRequested = report.Omitted;
         }
     }
 
     // Whether each filer's newest report (latest original or RESTATEMENT for the newest period) omits
     // confidential positions, by canonical CIK; a NEW HOLDINGS amendment only adds what it discloses.
-    internal static Dictionary<string, bool> BuildLatestReportConfidentialOmission(
-        ImportContext context
-    )
+    internal static Dictionary<
+        string,
+        (DateOnly Period, bool Omitted)
+    > BuildLatestReportConfidentialOmission(ImportContext context)
     {
         var latestByCik = new Dictionary<string, SubmissionRow>(StringComparer.Ordinal);
         foreach (var submission in context.Submissions.Values)
         {
             var canonicalCik = CikNormalizer.Canonicalize(submission.Cik);
-            if (
-                canonicalCik == null
-                || IsNewHoldingsAmendment(submission.AccessionNumber, context)
-            )
+            if (canonicalCik == null || IsNewHoldingsAmendment(submission.AccessionNumber, context))
                 continue;
             if (
                 !latestByCik.TryGetValue(canonicalCik, out var current)
@@ -1022,7 +1035,9 @@ public class HoldingsImportService
             }
         }
 
-        var omittedByCik = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var omittedByCik = new Dictionary<string, (DateOnly Period, bool Omitted)>(
+            StringComparer.Ordinal
+        );
         foreach (var (canonicalCik, submission) in latestByCik)
         {
             if (
@@ -1031,7 +1046,10 @@ public class HoldingsImportService
                     out var omitted
                 )
             )
-                omittedByCik[canonicalCik] = omitted;
+            {
+                TryParseDateOnly(submission.PeriodOfReport, out var period);
+                omittedByCik[canonicalCik] = (period, omitted);
+            }
         }
 
         return omittedByCik;
@@ -1116,8 +1134,8 @@ public class HoldingsImportService
             var canonicalCik = CikNormalizer.Canonicalize(submission.Cik);
             var confidentialOmitted =
                 canonicalCik != null
-                && omittedByCanonicalCik.TryGetValue(canonicalCik, out var omitted)
-                && omitted;
+                && omittedByCanonicalCik.TryGetValue(canonicalCik, out var report)
+                && report.Omitted;
 
             // Cover-page strings are unbounded in the source TSV/XML; one over-length
             // value rejects the whole batch flush (22001) and discards the filing's

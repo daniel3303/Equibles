@@ -2095,6 +2095,7 @@ public class InstitutionalHoldingsTools
         if (rendered == 0)
         {
             result.AppendLine("_No matching buckets._");
+            AppendConfidentialTreatmentWarning(result, holder, "activity");
             return result.ToString();
         }
 

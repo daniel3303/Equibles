@@ -421,6 +421,91 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ImportDataSet_LaterRestatementOfAnOlderQuarter_KeepsTheNewestQuartersFlag()
+    {
+        // Realtime imports one filing per archive: a Q1 restatement filed after the Q2 original must
+        // not clear the flag the newer quarter set.
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
+        using (var seed = FreshContext())
+        {
+            seed.Set<EquityIssuer>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, new DateOnly(2026, 6, 30))] = 150m,
+            [(stock.Id, null, new DateOnly(2026, 3, 31))] = 140m,
+        };
+        var sut = CreateImporter(PriceProviderReturning(prices));
+
+        ZipArchive Filing(
+            string accession,
+            string filingDate,
+            string period,
+            string isAmendment,
+            string amendmentType,
+            string omitted
+        ) =>
+            BuildArchive(
+                (
+                    "SUBMISSION.tsv",
+                    "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+                        + $"{(isAmendment == "Y" ? "13F-HR/A" : "13F-HR")}\t{accession}\t{filingDate}\t{period}\t0001067983\n"
+                ),
+                (
+                    "COVERPAGE.tsv",
+                    "ACCESSION_NUMBER\tISAMENDMENT\tAMENDMENTTYPE\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+                        + $"{accession}\t{isAmendment}\t{amendmentType}\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n"
+                ),
+                (
+                    "INFOTABLE.tsv",
+                    "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+                        + $"{accession}\t037833100\t1000\tSH\t\tSOLE\t1000\t0\t0\tCOM\t\n"
+                ),
+                (
+                    "SUMMARYPAGE.tsv",
+                    "ACCESSION_NUMBER\tOTHERINCLUDEDMANAGERSCOUNT\tTABLEENTRYTOTAL\tTABLEVALUETOTAL\tISCONFIDENTIALOMITTED\n"
+                        + $"{accession}\t0\t1\t150000\t{omitted}\n"
+                )
+            );
+
+        using (var newest = Filing("ACC-Q2", "2026-08-14", "2026-06-30", "N", "", "Y"))
+            (await sut.ImportDataSet(newest, new DateOnly(2026, 1, 1), CancellationToken.None))
+                .IsComplete.Should()
+                .BeTrue();
+        using (
+            var olderRestatement = Filing(
+                "ACC-Q1A",
+                "2026-08-20",
+                "2026-03-31",
+                "Y",
+                "RESTATEMENT",
+                "N"
+            )
+        )
+            (
+                await sut.ImportDataSet(
+                    olderRestatement,
+                    new DateOnly(2026, 1, 1),
+                    CancellationToken.None
+                )
+            )
+                .IsComplete.Should()
+                .BeTrue();
+
+        using var verify = FreshContext();
+        var holder = await verify.Set<InstitutionalHolder>().SingleAsync();
+        holder.ConfidentialTreatmentRequested.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ImportDataSet_ArchiveWithoutASummaryPage_LeavesDeclaredTotalsNull()
     {
         // Older archives and 13F-NT rows carry no summary page. The rollup must say "no
