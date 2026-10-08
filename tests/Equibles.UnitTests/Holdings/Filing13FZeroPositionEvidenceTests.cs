@@ -64,10 +64,6 @@ public class Filing13FZeroPositionEvidenceTests
         "<summaryPage><isConfidentialOmitted>true</isConfidentialOmitted>"
     )]
     [InlineData(
-        "<coverPage>",
-        "<coverPage><confidentialTreatmentRequestedFlag>true</confidentialTreatmentRequestedFlag>"
-    )]
-    [InlineData(
         "<investmentDiscretion>OTR",
         "<otherManager>1</otherManager><investmentDiscretion>OTR"
     )]

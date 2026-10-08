@@ -43,6 +43,28 @@ public class Filing13FXmlParserSummaryPageTotalsTests
         filing.TableValueTotal.Should().Be(1_381_198_076L);
     }
 
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void ParseCoverPage_SummaryPageConfidentialOmitted_IsCarried(string value, bool expected)
+    {
+        // Berkshire's Q3 2023 original filed isConfidentialOmitted=true; the NEW HOLDINGS amendment
+        // that later disclosed the position filed false. The 13F schema has no cover-page flag.
+        var filing = Parser.ParseCoverPage(
+            Xml(
+                "  <formData><summaryPage>"
+                    + "    <tableEntryTotal>152</tableEntryTotal>"
+                    + $"    <isConfidentialOmitted>{value}</isConfidentialOmitted>"
+                    + "  </summaryPage></formData>"
+            ),
+            "0000950123-23-010898",
+            "1067983",
+            new DateOnly(2023, 11, 14)
+        );
+
+        filing.ConfidentialOmitted.Should().Be(expected);
+    }
+
     [Fact]
     public void ParseCoverPage_NoSummaryPage_LeavesTotalsNull()
     {

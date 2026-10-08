@@ -5,8 +5,8 @@ namespace Equibles.UnitTests.Holdings;
 
 public class HoldingsImportServiceIsYesExactOneMatchTests
 {
-    // IsYes maps SEC cover-page Y/N text to a bool — used for the
-    // ConfidentialTreatmentRequested flag on 13F holdings. The OR chain
+    // IsYes maps SEC Y/N text to a bool — used for the
+    // ConfidentialTreatmentRequested flag on 13F holders. The OR chain
     // distinguishes between case-insensitive word matches (`Y`, `yes`,
     // `true`) and a strict equality check on `"1"`. A refactor that
     // generalised the `"1"` arm into `raw.StartsWith("1")` or

@@ -14,7 +14,6 @@ internal static class Filing13FZeroPositionEvidence
 
     private static bool HasVerifiedZeroQuantities(Parsed13FFiling filing) =>
         filing.CompleteSubmissionVerified
-        && !filing.ConfidentialTreatmentRequested
         && !filing.ConfidentialOmitted
         && filing.ReportType == "13F HOLDINGS REPORT"
         && filing.OtherIncludedManagersCount == 0

@@ -808,6 +808,7 @@ public class InstitutionalHoldingsTools
                 + "coverage — preferred shares, bonds, warrants, untracked share classes — so the "
                 + "filing's own declared total can exceed the figure above._"
         );
+        AppendConfidentialTreatmentWarning(result, holder, "portfolio");
 
         var pagedNote = McpOutput.PagedTruncationNote(holdings.Count, totalRows, offset);
         if (pagedNote.Length > 0)
@@ -1856,13 +1857,7 @@ public class InstitutionalHoldingsTools
             "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × tracked 13F value), where the per-share price proxy is the current quarter's Value / Shares._"
         );
 
-        if (holder.ConfidentialTreatmentRequested)
-        {
-            result.AppendLine();
-            result.AppendLine(
-                "⚠️ **Confidential Treatment** — This manager has requested confidential treatment for one or more investments in the most recent 13F filing. The portfolio shown may be incomplete."
-            );
-        }
+        AppendConfidentialTreatmentWarning(result, holder, "portfolio");
 
         return result.ToString();
     }
@@ -1902,13 +1897,7 @@ public class InstitutionalHoldingsTools
         );
         result.AppendLine(PublishedValueCaveat);
 
-        if (holder.ConfidentialTreatmentRequested)
-        {
-            result.AppendLine();
-            result.AppendLine(
-                "⚠️ **Confidential Treatment** — This manager has requested confidential treatment for one or more investments in the most recent 13F filing. The allocation shown may be incomplete."
-            );
-        }
+        AppendConfidentialTreatmentWarning(result, holder, "allocation");
 
         return result.ToString();
     }
@@ -2112,7 +2101,24 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             "_Δ Value is the change in published position value. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable; the change includes price movement, not just trading — it also drives the per-bucket ordering._"
         );
+        AppendConfidentialTreatmentWarning(result, holder, "activity");
         return result.ToString();
+    }
+
+    // Omitted positions surface later in a 13F-HR/A, so a reader must not take the filed table as complete.
+    private static void AppendConfidentialTreatmentWarning(
+        StringBuilder result,
+        InstitutionalHolder holder,
+        string subject
+    )
+    {
+        if (!holder.ConfidentialTreatmentRequested)
+            return;
+        result.AppendLine();
+        result.AppendLine(
+            "⚠️ **Confidential Treatment** — This manager has requested confidential treatment for one or more investments in the most recent 13F filing. "
+                + $"The {subject} shown may be incomplete."
+        );
     }
 
     private static bool AppendActivitySection(
