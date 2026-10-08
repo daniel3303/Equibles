@@ -62,8 +62,7 @@ public class NportTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) =
-                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return MarkdownText(stockError);
 

@@ -83,9 +83,7 @@ public class NCenTools
                 }
                 else
                 {
-                    var (stock, _) = await _commonStockRepository.ResolveByTickerIncludingDelisted(
-                        fund
-                    );
+                    var (stock, _) = await _commonStockRepository.ResolveByTicker(fund);
                     if (stock == null)
                         return $"No registered fund found for '{safeFund}' in the tracked Form NPORT-P/N-CEN datasets. Use SearchFunds to find an exact profile id. Registered management investment companies and ETFs are in scope; vehicles outside those filing regimes may be absent, and fixed-income-only series can be missing from the tracked NPORT-P directory. This is a coverage result, not evidence that the fund does not exist.";
                     issuerId = stock.Id;

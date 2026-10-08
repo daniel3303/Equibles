@@ -86,8 +86,7 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) =
-                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
                 var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
@@ -194,8 +193,7 @@ public class ShortDataTools
             {
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var (stock, stockError) =
-                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
                 var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);

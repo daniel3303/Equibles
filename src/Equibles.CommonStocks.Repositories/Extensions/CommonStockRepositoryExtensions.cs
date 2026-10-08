@@ -187,12 +187,7 @@ public static class CommonStockRepositoryExtensions
         if (ambiguous || normalized == null)
             return (null, ambiguous ? Ambiguous(ticker) : NotFound(ticker));
 
-        string[] spellings =
-        [
-            normalized,
-            TickerNormalizer.NormalizeDashListed(normalized) ?? normalized,
-            normalized.Replace('.', '-'),
-        ];
+        string[] spellings = [normalized, normalized.Replace('.', '-')];
         foreach (var spelling in spellings.Distinct(StringComparer.Ordinal))
         {
             // A ticker a listed company still trades, even off the directory, is never handed back.
