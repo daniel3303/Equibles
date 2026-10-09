@@ -242,30 +242,32 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             )
             .IsCreatedConcurrently();
 
-        // Worklist for the filed-publish revise phase, spelled exactly as EF renders that phase's
-        // WHERE; Filed rows are under 1% of the corpus, and without it every page sequentially
-        // scanned the whole table to find them.
+        // Worklist for the filed-publish revise phase: Filed rows are under 1% of the corpus, and
+        // without it every page sequentially scanned the whole table to find them. The retry stamp
+        // stays out of every holdings index so the lane's daily retry updates remain HOT; the phase
+        // filters stamped rows itself.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => h.Id, "IX_InstitutionalHolding_FiledReviseRepair")
             .HasDatabaseName("IX_InstitutionalHolding_FiledReviseRepair")
             .HasFilter(
                 "NOT \"ValuePending\" AND \"ShareType\" = 0 AND NOT \"ValueUnavailable\" "
-                    + "AND \"ValueSource\" = 1 AND \"ValueLastRetryAt\" IS NULL "
+                    + "AND \"ValueSource\" = 1 "
                     + "AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0 "
                     + "AND \"Value\" = \"FiledValue\" AND \"Shares\" > 0"
             )
             .IsCreatedConcurrently();
 
         // Worklist for the unmarked-zero stamp: abandoned zeros with no filed figure to publish,
-        // the complement of the stuck-zero predicate on FiledValue.
+        // the complement of the stuck-zero predicate on FiledValue; ValueRetryCount stays out for
+        // the same reason as above.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => h.Id, "IX_InstitutionalHolding_UnmarkedZeroRepair")
             .HasDatabaseName("IX_InstitutionalHolding_UnmarkedZeroRepair")
             .HasFilter(
                 "\"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" "
-                    + "AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0) AND \"ValueRetryCount\" > 0"
+                    + "AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0)"
             )
             .IsCreatedConcurrently();
 

@@ -2828,7 +2828,7 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex(new[] { "Id" }, "IX_InstitutionalHolding_FiledReviseRepair")
                         .HasDatabaseName("IX_InstitutionalHolding_FiledReviseRepair")
-                        .HasFilter("NOT \"ValuePending\" AND \"ShareType\" = 0 AND NOT \"ValueUnavailable\" AND \"ValueSource\" = 1 AND \"ValueLastRetryAt\" IS NULL AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0 AND \"Value\" = \"FiledValue\" AND \"Shares\" > 0")
+                        .HasFilter("NOT \"ValuePending\" AND \"ShareType\" = 0 AND NOT \"ValueUnavailable\" AND \"ValueSource\" = 1 AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0 AND \"Value\" = \"FiledValue\" AND \"Shares\" > 0")
                         .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex(new[] { "Id" }, "IX_InstitutionalHolding_ImplausibleDerivationRepair")
@@ -2843,7 +2843,7 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex(new[] { "Id" }, "IX_InstitutionalHolding_UnmarkedZeroRepair")
                         .HasDatabaseName("IX_InstitutionalHolding_UnmarkedZeroRepair")
-                        .HasFilter("\"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0) AND \"ValueRetryCount\" > 0")
+                        .HasFilter("\"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0)")
                         .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("InstitutionalHolding");

@@ -35,7 +35,7 @@ namespace Equibles.Migrations.Migrations
                 "CREATE INDEX CONCURRENTLY IF NOT EXISTS \"IX_InstitutionalHolding_FiledReviseRepair\" "
                     + "ON \"InstitutionalHolding\" (\"Id\") "
                     + "WHERE NOT \"ValuePending\" AND \"ShareType\" = 0 AND NOT \"ValueUnavailable\" "
-                    + "AND \"ValueSource\" = 1 AND \"ValueLastRetryAt\" IS NULL "
+                    + "AND \"ValueSource\" = 1 "
                     + "AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0 "
                     + "AND \"Value\" = \"FiledValue\" AND \"Shares\" > 0;",
                 suppressTransaction: true
@@ -46,7 +46,7 @@ namespace Equibles.Migrations.Migrations
                 "CREATE INDEX CONCURRENTLY IF NOT EXISTS \"IX_InstitutionalHolding_UnmarkedZeroRepair\" "
                     + "ON \"InstitutionalHolding\" (\"Id\") "
                     + "WHERE \"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" "
-                    + "AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0) AND \"ValueRetryCount\" > 0;",
+                    + "AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0);",
                 suppressTransaction: true
             );
         }
