@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService;
 
 /// <summary>
-/// Periodically (re)computes the fund score for filers that have a filing rollup on file, so the
+/// Periodically (re)computes the fund score for filers with a filing rollup or an existing score, so the
 /// institutions leaderboard can rank the universe by alpha vs the benchmark. Scoring is
 /// incremental: a filer is re-scored when a filing was imported after its last score,
 /// when its score is older than <see cref="MaxScoreAge"/>, or when it has no score at all
@@ -150,8 +150,26 @@ public class FundScoringWorker : BackgroundService
             })
             .ToDictionaryAsync(s => s.InstitutionalHolderId, cancellationToken);
 
+        // A joint filing's shared accession rolls up under one holder only, so a scored co-filer
+        // with no rollup of its own is still revisited on the staleness floor and refreshed or pruned.
+        var discovered = holders.Select(h => h.HolderId).ToHashSet();
+        var candidates = holders
+            .Select(h => (h.HolderId, h.LastImported, h.LastFiled))
+            .Concat(
+                scoreStates
+                    .Keys.Where(id => !discovered.Contains(id))
+                    .Select(id =>
+                        (
+                            HolderId: id,
+                            LastImported: DateTime.MinValue,
+                            LastFiled: DateOnly.MinValue
+                        )
+                    )
+            )
+            .ToList();
+
         var staleBefore = DateTime.UtcNow - MaxScoreAge;
-        var pending = holders
+        var pending = candidates
             .Where(h =>
             {
                 scoreStates.TryGetValue(h.HolderId, out var scoreState);
@@ -169,7 +187,7 @@ public class FundScoringWorker : BackgroundService
         _logger.LogInformation(
             "Fund scoring cycle: {Pending} of {Total} filer(s) due (new data, stale, or unscored)",
             pending.Count,
-            holders.Count
+            candidates.Count
         );
         return pending;
     }

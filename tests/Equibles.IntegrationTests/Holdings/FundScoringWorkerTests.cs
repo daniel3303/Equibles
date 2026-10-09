@@ -120,6 +120,32 @@ public class FundScoringWorkerTests : IDisposable
         _fundScoreRepository.GetAll().Should().BeEmpty();
     }
 
+    // A joint filing's accession rolls up under one co-filer only; the other keeps its score fresh
+    // through the staleness floor instead of being dropped from discovery.
+    [Fact]
+    public async Task ScoreAllHolders_AStaleScoreWithoutAFilingRollup_IsRefreshed()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark(withFilingRollups: false);
+        _fundScoreRepository.Add(
+            new FundScore
+            {
+                InstitutionalHolderId = holder.Id,
+                BenchmarkTicker = "SPY",
+                WindowYears = FundScoringManager.DefaultWindowYears,
+                CalculationVersion = FundScore.CurrentCalculationVersion,
+                AlphaPercent = -99m,
+                CreationTime = DateTime.UtcNow.AddDays(-8),
+            }
+        );
+        await _fundScoreRepository.SaveChanges();
+
+        var scored = await _worker.ScoreAllHolders(CancellationToken.None);
+
+        scored.Should().Be(1);
+        var persisted = _fundScoreRepository.GetByHolder(holder).Should().ContainSingle().Subject;
+        persisted.AlphaPercent.Should().BeGreaterThan(0m);
+    }
+
     // Every scope shares the one in-memory context so the worker's enumerate scope and per-holder
     // scopes all see the same seeded data and writes.
     private IServiceScopeFactory SharedContextScopeFactory()
