@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService;
 
 /// <summary>
-/// Periodically (re)computes the fund score for filers with a filing rollup or an existing score, so the
-/// institutions leaderboard can rank the universe by alpha vs the benchmark. Scoring is
-/// incremental: a filer is re-scored when a filing was imported after its last score,
+/// Periodically (re)computes the fund score for filers with a filing rollup or an existing
+/// score, so the institutions leaderboard can rank the universe by alpha vs the benchmark.
+/// Scoring is incremental: a filer is re-scored when a filing was imported after its last score,
 /// when its score is older than <see cref="MaxScoreAge"/>, or when it has no score at all
 /// (which also keeps visiting Schedule 13D/G-only filers — scoring them yields nothing, which
 /// prunes any stale score they may have accumulated, and their backtest short-circuits before
