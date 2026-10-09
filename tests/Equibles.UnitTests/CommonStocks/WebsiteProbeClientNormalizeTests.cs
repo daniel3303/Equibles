@@ -29,6 +29,9 @@ public class WebsiteProbeClientNormalizeTests
     [InlineData("mailto:ir@acme.com")]
     [InlineData("localhost")]
     [InlineData("not a url")]
+    [InlineData("https://www.linkedin.com/company/acme")]
+    [InlineData("amazon.com")]
+    [InlineData("https://www.sec.gov/cgi-bin/browse-edgar?CIK=1")]
     public void NonWebCandidates_AreRejected(string candidate)
     {
         WebsiteProbeClient.Normalize(candidate).Should().BeNull();

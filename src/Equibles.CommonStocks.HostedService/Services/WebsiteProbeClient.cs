@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.Integrations.Common.RateLimiter;
 using Microsoft.Extensions.Logging;
 
@@ -146,6 +147,8 @@ public class WebsiteProbeClient
             // "mailto:ir@acme.com" parses as user "mailto:ir" at host "acme.com"
             // once the https:// prefix is applied.
             || !string.IsNullOrEmpty(uri.UserInfo)
+            // A shared platform profile is reachable but is not the company's own site.
+            || IssuerWebsitePolicy.IsSharedPlatform(normalized)
         )
             return null;
 
