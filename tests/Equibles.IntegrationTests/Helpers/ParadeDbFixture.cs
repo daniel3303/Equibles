@@ -63,6 +63,7 @@ public class ParadeDbFixture : IAsyncLifetime
     {
         await _container.StartAsync();
         ConnectionString = _container.GetConnectionString();
+        await WaitUntilAcceptingHostConnections();
 
         await using (var ctx = CreateNativeDbContext())
         {
@@ -92,6 +93,27 @@ public class ParadeDbFixture : IAsyncLifetime
     public async Task DisposeAsync()
     {
         await _container.DisposeAsync();
+    }
+
+    // On a loaded Docker VM the first host connection can exceed Npgsql's connect timeout after
+    // the container's readiness probe has already passed, so retry until one actually opens.
+    private async Task WaitUntilAcceptingHostConnections()
+    {
+        var deadline = DateTime.UtcNow.AddMinutes(5);
+        var probe = new NpgsqlConnectionStringBuilder(ConnectionString) { Timeout = 5 }.ToString();
+        while (true)
+        {
+            try
+            {
+                await using var connection = new NpgsqlConnection(probe);
+                await connection.OpenAsync();
+                return;
+            }
+            catch (Exception) when (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+        }
     }
 
     /// <summary>

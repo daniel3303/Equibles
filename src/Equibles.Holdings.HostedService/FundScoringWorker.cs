@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService;
 
 /// <summary>
-/// Periodically (re)computes the fund score for filers that have holdings on file, so the
+/// Periodically (re)computes the fund score for filers that have a filing rollup on file, so the
 /// institutions leaderboard can rank the universe by alpha vs the benchmark. Scoring is
-/// incremental: a filer is re-scored when holdings data was imported after its last score,
+/// incremental: a filer is re-scored when a filing was imported after its last score,
 /// when its score is older than <see cref="MaxScoreAge"/>, or when it has no score at all
 /// (which also keeps visiting Schedule 13D/G-only filers — scoring them yields nothing, which
 /// prunes any stale score they may have accumulated, and their backtest short-circuits before
@@ -115,26 +115,31 @@ public class FundScoringWorker : BackgroundService
     // universe together with two change signals per filer, and one small read yields the
     // existing scores' last-computed times. A filer is due when it has no score for this
     // (window, benchmark), its data changed after the score, or the score has aged past
-    // MaxScoreAge. Two signals because neither alone sees every change: row CreationTime
-    // catches new inserts (new quarters, late backfills of old filings) but not in-place
-    // amendment restatements — the importer's upsert rewrites values without touching
-    // CreationTime — while the latest FilingDate catches those restatements (it IS rewritten
-    // on match) but not backfills of old-dated filings. FundScore.CreationTime is refreshed
-    // on every upsert, so it is the "last scored at" marker; a transiently unscoreable filer
-    // keeps its old timestamps and is retried by the staleness floor.
+    // MaxScoreAge. The signals come from the per-accession filing rollups, not the positions:
+    // every import writes one InstitutionalFiling row per accession it lands (13F, amendment or
+    // 13D/G) in the same transaction as its positions, so the rollups carry the same change
+    // signals at ~1/200th of the rows — grouping the positions themselves read the whole
+    // multi-gigabyte table on every cycle. Two signals because neither alone sees every change:
+    // rollup CreationTime catches new accessions (new quarters, late backfills of old filings)
+    // but not a re-import that upserts an existing accession in place without touching
+    // CreationTime, while the latest FilingDate catches an amendment restating an earlier quarter.
+    // Positions still being imported ahead of their rollup are picked up once it lands.
+    // FundScore.CreationTime is refreshed on every upsert, so it is the "last scored at" marker;
+    // a transiently unscoreable filer keeps its old timestamps and is retried by the staleness
+    // floor.
     private async Task<List<Guid>> SelectHoldersNeedingScore(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var holders = await dbContext
-            .Set<InstitutionalHolding>()
-            .GroupBy(h => h.InstitutionalHolderId)
+            .Set<InstitutionalFiling>()
+            .GroupBy(f => f.InstitutionalHolderId)
             .Select(g => new
             {
                 HolderId = g.Key,
-                LastImported = g.Max(h => h.CreationTime),
-                LastFiled = g.Max(h => h.FilingDate),
+                LastImported = g.Max(f => f.CreationTime),
+                LastFiled = g.Max(f => f.FilingDate),
             })
             .ToListAsync(cancellationToken);
 
