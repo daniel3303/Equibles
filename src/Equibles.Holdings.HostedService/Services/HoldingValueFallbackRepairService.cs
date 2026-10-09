@@ -91,13 +91,12 @@ namespace Equibles.Holdings.HostedService.Services;
 /// Filed population) or re-exhausts into a retry stamp this phase excludes. Phase 3 terminates
 /// because the recalculator guards the same number this phase tests — the effective per-share
 /// price (factor × close) — so a reset row can never re-derive back above the cap and be reset
-/// again. The stuck-zero and implausible-derivation phases are each served by a partial Id
-/// worklist index whose entries disappear as rows heal; the implausible predicate is spelled in
-/// its index exactly as EF renders the phase query, because Postgres uses a partial index only
-/// when it can prove the query's WHERE implies the index's, node for node. The other candidate
-/// predicates are not index-served. Affected filing rollups and AUM quarters are re-derived through
-/// <see cref="HoldingsRollupRefresher"/> in the same pass — a healed position with a stale rollup
-/// would just move the lie one aggregate up.
+/// again. Every phase is served by a partial Id worklist index whose entries disappear as rows
+/// heal, each spelled exactly as EF renders the phase query, because Postgres uses a partial
+/// index only when it can prove the query's WHERE implies the index's, node for node; without
+/// one, a page is a sequential scan of the whole table. Affected filing rollups and AUM quarters
+/// are re-derived through <see cref="HoldingsRollupRefresher"/> in the same pass — a healed
+/// position with a stale rollup would just move the lie one aggregate up.
 /// </para>
 /// </remarks>
 [Service]
@@ -273,9 +272,10 @@ public class HoldingValueFallbackRepairService
         }
     }
 
-    // Exposed for the Npgsql translation pin: Guid.CompareTo is the only way to express the
-    // frontier in LINQ (Guid has no comparison operators), and an untranslatable shape would
-    // pass every InMemory-backed test while faulting the phase at runtime.
+    // Exposed for the Npgsql translation and plan pins: Guid.CompareTo is the only way to express
+    // the frontier in LINQ (Guid has no comparison operators), an untranslatable shape would pass
+    // every InMemory-backed test while faulting the phase at runtime, and
+    // IX_InstitutionalHolding_FiledReviseRepair carries this WHERE verbatim.
     internal static IQueryable<InstitutionalHolding> BuildReviseCandidateQuery(
         EquiblesFinancialDbContext dbContext,
         Guid frontier
@@ -606,18 +606,7 @@ public class HoldingValueFallbackRepairService
 
         // Value stays 0, so no rollup or AUM figure moves — the stamp only makes the row
         // visible to every surface that discloses unvalued positions through the flags.
-        var rows = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h =>
-                h.Value == 0L
-                && !h.ValuePending
-                && !h.ValueUnavailable
-                && (h.FiledValue == null || h.FiledValue <= 0)
-                && h.ValueRetryCount > 0
-            )
-            .OrderBy(h => h.Id)
-            .Take(MaxRowsPerCycle)
-            .ToListAsync(cancellationToken);
+        var rows = await BuildUnmarkedZeroCandidateQuery(dbContext).ToListAsync(cancellationToken);
 
         if (rows.Count == 0)
         {
@@ -633,6 +622,23 @@ public class HoldingValueFallbackRepairService
         await dbContext.SaveChangesAsync(cancellationToken);
         return rows.Count;
     }
+
+    // Exposed for the plan pin: IX_InstitutionalHolding_UnmarkedZeroRepair carries this WHERE
+    // verbatim, and a rendering drift would silently hand the phase back to a full-table scan.
+    internal static IQueryable<InstitutionalHolding> BuildUnmarkedZeroCandidateQuery(
+        EquiblesFinancialDbContext dbContext
+    ) =>
+        dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.Value == 0L
+                && !h.ValuePending
+                && !h.ValueUnavailable
+                && (h.FiledValue == null || h.FiledValue <= 0)
+                && h.ValueRetryCount > 0
+            )
+            .OrderBy(h => h.Id)
+            .Take(MaxRowsPerCycle);
 
     private static void ExtendCommandTimeout(EquiblesFinancialDbContext dbContext)
     {

@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService;
 
 /// <summary>
-/// Periodically (re)computes the fund score for filers that have holdings on file, so the
-/// institutions leaderboard can rank the universe by alpha vs the benchmark. Scoring is
-/// incremental: a filer is re-scored when holdings data was imported after its last score,
+/// Periodically (re)computes the fund score for filers with a filing rollup or an existing
+/// score, so the institutions leaderboard can rank the universe by alpha vs the benchmark.
+/// Scoring is incremental: a filer is re-scored when a filing was imported after its last score,
 /// when its score is older than <see cref="MaxScoreAge"/>, or when it has no score at all
 /// (which also keeps visiting Schedule 13D/G-only filers — scoring them yields nothing, which
 /// prunes any stale score they may have accumulated, and their backtest short-circuits before
@@ -111,30 +111,25 @@ public class FundScoringWorker : BackgroundService
         return scored;
     }
 
-    // The incremental selection: one grouped pass over the holdings table yields the filer
-    // universe together with two change signals per filer, and one small read yields the
-    // existing scores' last-computed times. A filer is due when it has no score for this
-    // (window, benchmark), its data changed after the score, or the score has aged past
-    // MaxScoreAge. Two signals because neither alone sees every change: row CreationTime
-    // catches new inserts (new quarters, late backfills of old filings) but not in-place
-    // amendment restatements — the importer's upsert rewrites values without touching
-    // CreationTime — while the latest FilingDate catches those restatements (it IS rewritten
-    // on match) but not backfills of old-dated filings. FundScore.CreationTime is refreshed
-    // on every upsert, so it is the "last scored at" marker; a transiently unscoreable filer
-    // keeps its old timestamps and is retried by the staleness floor.
+    // A filer is due when it has no score for this (window, benchmark), its data changed after
+    // FundScore.CreationTime (the last-scored marker), or the score aged past MaxScoreAge.
+    // Both change signals come from the per-accession InstitutionalFiling rollups (CreationTime
+    // for new accessions, the latest FilingDate for in-place amendments), which SyncFilingSummaries
+    // writes after a data set's positions, so a filer whose positions lead its rollup is scored
+    // once the rollup lands.
     private async Task<List<Guid>> SelectHoldersNeedingScore(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var holders = await dbContext
-            .Set<InstitutionalHolding>()
-            .GroupBy(h => h.InstitutionalHolderId)
+            .Set<InstitutionalFiling>()
+            .GroupBy(f => f.InstitutionalHolderId)
             .Select(g => new
             {
                 HolderId = g.Key,
-                LastImported = g.Max(h => h.CreationTime),
-                LastFiled = g.Max(h => h.FilingDate),
+                LastImported = g.Max(f => f.CreationTime),
+                LastFiled = g.Max(f => f.FilingDate),
             })
             .ToListAsync(cancellationToken);
 
@@ -155,8 +150,26 @@ public class FundScoringWorker : BackgroundService
             })
             .ToDictionaryAsync(s => s.InstitutionalHolderId, cancellationToken);
 
+        // A joint filing's shared accession rolls up under one holder only, so a scored co-filer
+        // with no rollup of its own is still revisited on the staleness floor and refreshed or pruned.
+        var discovered = holders.Select(h => h.HolderId).ToHashSet();
+        var candidates = holders
+            .Select(h => (h.HolderId, h.LastImported, h.LastFiled))
+            .Concat(
+                scoreStates
+                    .Keys.Where(id => !discovered.Contains(id))
+                    .Select(id =>
+                        (
+                            HolderId: id,
+                            LastImported: DateTime.MinValue,
+                            LastFiled: DateOnly.MinValue
+                        )
+                    )
+            )
+            .ToList();
+
         var staleBefore = DateTime.UtcNow - MaxScoreAge;
-        var pending = holders
+        var pending = candidates
             .Where(h =>
             {
                 scoreStates.TryGetValue(h.HolderId, out var scoreState);
@@ -174,7 +187,7 @@ public class FundScoringWorker : BackgroundService
         _logger.LogInformation(
             "Fund scoring cycle: {Pending} of {Total} filer(s) due (new data, stale, or unscored)",
             pending.Count,
-            holders.Count
+            candidates.Count
         );
         return pending;
     }

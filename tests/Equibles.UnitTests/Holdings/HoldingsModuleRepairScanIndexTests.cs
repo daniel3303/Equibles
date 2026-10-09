@@ -9,15 +9,17 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
-/// Pins the two partial indexes behind the daily repair scans to the queries they serve. A partial
-/// index is used only when Postgres can prove the query's WHERE implies the index's predicate, so
-/// the rendered SQL and the declared filter must agree word for word.
+/// Pins the partial indexes behind the repair scans to the queries they serve. A partial index is
+/// used only when Postgres can prove the query's WHERE implies its predicate, so the rendered SQL
+/// and the declared filter must agree word for word.
 /// </summary>
 public class HoldingsModuleRepairScanIndexTests
 {
     private const string ImplausibleIndexName =
         "IX_InstitutionalHolding_ImplausibleDerivationRepair";
     private const string ImpossibleIndexName = "IX_InstitutionalHolding_ImpossiblePositionRepair";
+    private const string FiledReviseIndexName = "IX_InstitutionalHolding_FiledReviseRepair";
+    private const string UnmarkedZeroIndexName = "IX_InstitutionalHolding_UnmarkedZeroRepair";
     private const string IndexConcurrentAnnotation = "Npgsql:CreatedConcurrently";
 
     internal const string ImplausibleFilter =
@@ -26,6 +28,16 @@ public class HoldingsModuleRepairScanIndexTests
 
     internal const string ImpossibleFilter =
         "\"ShareType\" = 0 AND NOT \"ValueUnavailable\" AND \"Shares\" > 1000000";
+
+    internal const string FiledReviseFilter =
+        "NOT \"ValuePending\" AND \"ShareType\" = 0 AND NOT \"ValueUnavailable\" "
+        + "AND \"ValueSource\" = 1 AND \"ValueLastRetryAt\" IS NULL "
+        + "AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0 "
+        + "AND \"Value\" = \"FiledValue\" AND \"Shares\" > 0";
+
+    internal const string UnmarkedZeroFilter =
+        "\"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" "
+        + "AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0) AND \"ValueRetryCount\" > 0";
 
     [Fact]
     public void ImplausibleDerivationIndex_IsAConcurrentIdWorklist()
@@ -38,6 +50,22 @@ public class HoldingsModuleRepairScanIndexTests
 
         index.Properties.Select(p => p.Name).Should().Equal(nameof(InstitutionalHolding.Id));
         index.GetFilter().Should().Be(ImplausibleFilter);
+        index.FindAnnotation(IndexConcurrentAnnotation)?.Value.Should().Be(true);
+    }
+
+    [Theory]
+    [InlineData(FiledReviseIndexName, FiledReviseFilter)]
+    [InlineData(UnmarkedZeroIndexName, UnmarkedZeroFilter)]
+    public void RepairWorklistIndex_IsAConcurrentIdWorklist(string name, string filter)
+    {
+        using var db = NewInMemoryDb();
+        var index = db
+            .Model.FindEntityType(typeof(InstitutionalHolding))!
+            .GetIndexes()
+            .Single(i => i.GetDatabaseName() == name);
+
+        index.Properties.Select(p => p.Name).Should().Equal(nameof(InstitutionalHolding.Id));
+        index.GetFilter().Should().Be(filter);
         index.FindAnnotation(IndexConcurrentAnnotation)?.Value.Should().Be(true);
     }
 
@@ -82,6 +110,35 @@ public class HoldingsModuleRepairScanIndexTests
             .ToQueryString();
 
         WhereClause(sql).Should().Be(ImplausibleFilter);
+        sql.Should().Contain("ORDER BY i.\"Id\"");
+        sql.Should().Contain("LIMIT");
+    }
+
+    // The frontier is the one condition the worklist cannot carry; it follows the indexed predicate.
+    [Fact]
+    public void FiledReviseQuery_RendersTheIndexPredicateVerbatim()
+    {
+        using var db = NewTranslationDb();
+
+        var sql = HoldingValueFallbackRepairService
+            .BuildReviseCandidateQuery(db, Guid.Empty)
+            .ToQueryString();
+
+        WhereClause(sql).Should().StartWith(FiledReviseFilter + " AND \"Id\" > @");
+        sql.Should().Contain("ORDER BY i.\"Id\"");
+        sql.Should().Contain("LIMIT");
+    }
+
+    [Fact]
+    public void UnmarkedZeroQuery_RendersTheIndexPredicateVerbatim()
+    {
+        using var db = NewTranslationDb();
+
+        var sql = HoldingValueFallbackRepairService
+            .BuildUnmarkedZeroCandidateQuery(db)
+            .ToQueryString();
+
+        WhereClause(sql).Should().Be(UnmarkedZeroFilter);
         sql.Should().Contain("ORDER BY i.\"Id\"");
         sql.Should().Contain("LIMIT");
     }
@@ -137,7 +194,8 @@ public class HoldingsModuleRepairScanIndexTests
                 sql[start..end].Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
             )
             .Replace("i.\"", "\"")
-            .Replace("NOT (\"ValuePending\")", "NOT \"ValuePending\"");
+            .Replace("NOT (\"ValuePending\")", "NOT \"ValuePending\"")
+            .Replace("NOT (\"ValueUnavailable\")", "NOT \"ValueUnavailable\"");
     }
 
     private static EquiblesFinancialDbContext NewTranslationDb()
