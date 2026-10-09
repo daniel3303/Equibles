@@ -5,12 +5,10 @@
 namespace Equibles.Migrations.Migrations
 {
     /// <summary>
-    /// Replaces the quarter-leading holder covering index with one whose included columns serve
-    /// every quarter-slice read of the snapshot rebuild index-only, and adds the partial Id
-    /// worklists behind the filed-revise and unmarked-zero repair phases, spelled exactly as EF
-    /// renders those phases' WHERE. The holdings table is tens of gigabytes in production, so
-    /// every build and drop runs concurrently, only an invalid leftover of an interrupted build
-    /// is dropped first, and the old index goes only after its replacement is valid.
+    /// Replaces the quarter-leading holder index with one that serves every quarter-rebuild read
+    /// index-only, and adds the partial Id worklists of the filed-revise and unmarked-zero repairs.
+    /// Every build and drop runs concurrently, dropping only an invalid leftover first and the old
+    /// index only after its replacement exists.
     /// </summary>
     public partial class AddHoldingQuarterRebuildAndRepairIndexes : Migration
     {

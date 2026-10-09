@@ -169,13 +169,10 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             })
             .IncludeProperties(h => new { h.Shares, h.Value });
 
-        // Covering index for the per-holder 13F ranking pages (AUM Movers, Top by AUM,
-        // Double-Down) and for every quarter-slice read of the snapshot rebuild (AUM, holder,
-        // stock, listing, sector and churn generations): WHERE ReportDate = <quarter>[ OR <prior>]
-        // AND FilingType = 13F. Leading with ReportDate makes a quarter one contiguous range, and
-        // the included columns let each rebuild query run index-only instead of skip-scanning the
-        // holder- or stock-leading covering indexes (one search per filer or stock, gigabytes per
-        // quarter) or fetching every heap tuple for AccessionNumber.
+        // Serves the per-holder 13F ranking pages and every quarter-slice read of the snapshot
+        // rebuild (ReportDate = <quarter>[ OR <prior>] AND FilingType = 13F) as one contiguous
+        // index-only range, instead of skip-scanning a holder- or stock-leading index or fetching
+        // each heap tuple for AccessionNumber.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => new

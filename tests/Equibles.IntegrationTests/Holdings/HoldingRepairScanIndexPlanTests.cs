@@ -160,10 +160,8 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
         }
     }
 
-    // The quarter rebuild's reads must stay index-only: the market aggregate counts distinct
-    // accessions, which only the quarter index covers, and a heap fetch per position costs
-    // gigabytes per quarter in production. Many filers and stocks on one date make a skip scan
-    // of the holder- or stock-leading indexes visibly dearer than the quarter's contiguous range.
+    // Every holdings scan of the quarter rebuild must be index-only, and one that does not seek a
+    // single holder or stock must read the quarter's contiguous range instead of skip-scanning.
     [Fact]
     public async Task QuarterRebuildReads_AreServedByTheQuarterIndex()
     {
@@ -189,31 +187,44 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
 
         await service.RebuildQuarterAsync(reportDate, CancellationToken.None);
 
-        var quarterReads = capture
-            .Commands.Where(c =>
-                c.Text.Contains("FROM \"InstitutionalHolding\"")
-                && c.Text.Contains("\"ReportDate\" =")
-            )
+        var holdingsReads = capture
+            .Commands.Where(c => c.Text.Contains("FROM \"InstitutionalHolding\""))
             .ToList();
-        var marketAggregates = quarterReads
-            .Where(c => c.Text.Contains("\"AccessionNumber\"") && c.Text.Contains("count(DISTINCT"))
-            .ToList();
-        marketAggregates.Should().ContainSingle();
-        foreach (var plan in await Explain(marketAggregates))
+        holdingsReads
+            .Should()
+            .HaveCountGreaterThanOrEqualTo(
+                7,
+                "holder, market, empty-filing, sector, previous-quarter, activity, listing and churn reads"
+            );
+        var plans = await Explain(holdingsReads);
+        foreach (var plan in plans)
         {
-            plan.Should()
-                .Contain("Index Only Scan using \"IX_InstitutionalHolding_QuarterRebuild\"")
-                .And.NotContain("Seq Scan on \"InstitutionalHolding\"");
-        }
-        var groupedReads = quarterReads
-            .Where(c => c.Text.Contains("GROUP BY") && c.Text.Contains("sum("))
-            .ToList();
-        groupedReads.Should().NotBeEmpty();
-        foreach (var plan in await Explain(groupedReads))
-        {
-            plan.Should()
-                .Contain("Index Only Scan using")
-                .And.NotContain("Seq Scan on \"InstitutionalHolding\"");
+            var lines = plan.Split('\n');
+            var holdingScans = Enumerable
+                .Range(0, lines.Length)
+                .Where(j => lines[j].Contains("on \"InstitutionalHolding\""))
+                .ToList();
+            holdingScans.Should().NotBeEmpty(plan);
+            foreach (var j in holdingScans)
+            {
+                // A scan right under a Limit is a report-date seek that stops at its first row.
+                if (j > 0 && lines[j - 1].TrimStart(' ', '-', '>').StartsWith("Limit"))
+                {
+                    continue;
+                }
+                lines[j].Should().Contain("Index Only Scan", plan);
+                var condition =
+                    j + 1 < lines.Length && lines[j + 1].Contains("Index Cond:")
+                        ? lines[j + 1]
+                        : "";
+                var seeksOneOwner =
+                    condition.Contains("\"InstitutionalHolderId\" =")
+                    || condition.Contains("\"EquityIssuerId\" =");
+                if (!seeksOneOwner)
+                {
+                    lines[j].Should().Contain("\"IX_InstitutionalHolding_QuarterRebuild\"", plan);
+                }
+            }
         }
     }
 
@@ -326,12 +337,9 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
         await context.Database.ExecuteSqlRawAsync("ANALYZE \"InstitutionalHolding\";");
     }
 
-    // Five consecutive quarters held by many filers across many stocks, inserted interleaved so
-    // a quarter's positions are scattered across the heap as in production: each filer reports
-    // three stocks per quarter under one accession, so the target quarter is wide on both group
-    // keys and a heap fetch per position is the cost the covering index exists to avoid. VACUUM
-    // sets the visibility map, without which the planner prices every index-only scan as a heap
-    // fetch per row.
+    // Twenty quarters of filers that each report three stocks per accession and rotate two of them
+    // every quarter, so a two-quarter slice is a small share of the table and of its holder-stock
+    // pairs as in production, and a skip scan of a stock- or holder-leading index costs what it does there.
     private async Task SeedQuarter(DateOnly reportDate, int holders, int stocks)
     {
         await using var context = fixture.CreateDbContext();
@@ -347,7 +355,7 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
             )
             .ToList();
         context.Set<EquityIssuer>().AddRange(issuers);
-        var quarters = Enumerable.Range(-2, 5).Select(q => reportDate.AddMonths(3 * q)).ToList();
+        var quarters = Enumerable.Range(-18, 20).Select(q => reportDate.AddMonths(3 * q)).ToList();
         for (var h = 0; h < holders; h++)
         {
             var holder = new InstitutionalHolder
@@ -368,7 +376,7 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
                             new InstitutionalHolding
                             {
                                 Id = Guid.NewGuid(),
-                                EquityIssuerId = issuers[(h * 3 + k) % stocks].Id,
+                                EquityIssuerId = issuers[(h * 3 + k + q * 2) % stocks].Id,
                                 InstitutionalHolderId = holder.Id,
                                 ReportDate = quarters[q],
                                 FilingDate = quarters[q].AddDays(45),

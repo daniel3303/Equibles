@@ -109,7 +109,7 @@ public class ParadeDbFixture : IAsyncLifetime
                 await connection.OpenAsync();
                 return;
             }
-            catch (Exception) when (DateTime.UtcNow < deadline)
+            catch (NpgsqlException ex) when (ex.IsTransient && DateTime.UtcNow < deadline)
             {
                 await Task.Delay(TimeSpan.FromSeconds(2));
             }

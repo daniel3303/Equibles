@@ -111,22 +111,12 @@ public class FundScoringWorker : BackgroundService
         return scored;
     }
 
-    // The incremental selection: one grouped pass over the holdings table yields the filer
-    // universe together with two change signals per filer, and one small read yields the
-    // existing scores' last-computed times. A filer is due when it has no score for this
-    // (window, benchmark), its data changed after the score, or the score has aged past
-    // MaxScoreAge. The signals come from the per-accession filing rollups, not the positions:
-    // every import writes one InstitutionalFiling row per accession it lands (13F, amendment or
-    // 13D/G) in the same transaction as its positions, so the rollups carry the same change
-    // signals at ~1/200th of the rows — grouping the positions themselves read the whole
-    // multi-gigabyte table on every cycle. Two signals because neither alone sees every change:
-    // rollup CreationTime catches new accessions (new quarters, late backfills of old filings)
-    // but not a re-import that upserts an existing accession in place without touching
-    // CreationTime, while the latest FilingDate catches an amendment restating an earlier quarter.
-    // Positions still being imported ahead of their rollup are picked up once it lands.
-    // FundScore.CreationTime is refreshed on every upsert, so it is the "last scored at" marker;
-    // a transiently unscoreable filer keeps its old timestamps and is retried by the staleness
-    // floor.
+    // A filer is due when it has no score for this (window, benchmark), its data changed after
+    // FundScore.CreationTime (the last-scored marker), or the score aged past MaxScoreAge.
+    // Both change signals come from the per-accession InstitutionalFiling rollups (CreationTime
+    // for new accessions, the latest FilingDate for in-place amendments), which SyncFilingSummaries
+    // writes after a data set's positions, so a filer whose positions lead its rollup is scored
+    // once the rollup lands.
     private async Task<List<Guid>> SelectHoldersNeedingScore(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
