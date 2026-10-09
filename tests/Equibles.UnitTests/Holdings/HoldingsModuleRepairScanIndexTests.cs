@@ -31,13 +31,13 @@ public class HoldingsModuleRepairScanIndexTests
 
     internal const string FiledReviseFilter =
         "NOT \"ValuePending\" AND \"ShareType\" = 0 AND NOT \"ValueUnavailable\" "
-        + "AND \"ValueSource\" = 1 AND \"ValueLastRetryAt\" IS NULL "
+        + "AND \"ValueSource\" = 1 "
         + "AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0 "
         + "AND \"Value\" = \"FiledValue\" AND \"Shares\" > 0";
 
     internal const string UnmarkedZeroFilter =
         "\"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" "
-        + "AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0) AND \"ValueRetryCount\" > 0";
+        + "AND (\"FiledValue\" IS NULL OR \"FiledValue\" <= 0)";
 
     [Fact]
     public void ImplausibleDerivationIndex_IsAConcurrentIdWorklist()
@@ -114,7 +114,8 @@ public class HoldingsModuleRepairScanIndexTests
         sql.Should().Contain("LIMIT");
     }
 
-    // The frontier is the one condition the worklist cannot carry; it follows the indexed predicate.
+    // The frontier and the retry stamp are the two conditions the worklist leaves to the query (the
+    // stamp so the lane's retry updates stay HOT); the rest of the rendered WHERE is the predicate.
     [Fact]
     public void FiledReviseQuery_RendersTheIndexPredicateVerbatim()
     {
@@ -124,7 +125,12 @@ public class HoldingsModuleRepairScanIndexTests
             .BuildReviseCandidateQuery(db, Guid.Empty)
             .ToQueryString();
 
-        WhereClause(sql).Should().StartWith(FiledReviseFilter + " AND \"Id\" > @");
+        var where = WhereClause(sql);
+        where.Should().Contain("\"ValueLastRetryAt\" IS NULL AND ");
+        where
+            .Replace("\"ValueLastRetryAt\" IS NULL AND ", "")
+            .Should()
+            .StartWith(FiledReviseFilter + " AND \"Id\" > @");
         sql.Should().Contain("ORDER BY i.\"Id\"");
         sql.Should().Contain("LIMIT");
     }
@@ -138,7 +144,9 @@ public class HoldingsModuleRepairScanIndexTests
             .BuildUnmarkedZeroCandidateQuery(db)
             .ToQueryString();
 
-        WhereClause(sql).Should().Be(UnmarkedZeroFilter);
+        var where = WhereClause(sql);
+        where.Should().EndWith(" AND \"ValueRetryCount\" > 0");
+        where.Replace(" AND \"ValueRetryCount\" > 0", "").Should().Be(UnmarkedZeroFilter);
         sql.Should().Contain("ORDER BY i.\"Id\"");
         sql.Should().Contain("LIMIT");
     }
