@@ -1,9 +1,9 @@
-using Equibles.CommonStocks.BusinessLogic.Websites;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Equibles.CommonStocks.BusinessLogic;
+using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -408,7 +408,12 @@ public class CompanySyncService : ICompanySyncService
                     || IssuerWebsitePolicy.IsSharedPlatform(existingStock.Website)
                 )
             )
+            {
+                // A cleared shared platform must not wait out discovery's cooldown before a real site is sought.
+                if (fetchedWebsite == null && !string.IsNullOrEmpty(existingStock.Website))
+                    existingStock.WebsiteCheckedAt = null;
                 existingStock.Website = fetchedWebsite;
+            }
 
             UsEquityDirectory.SelectPrimary(existingStock, primaryTicker);
             existingStock.Presentation.Listing.Active = true;
