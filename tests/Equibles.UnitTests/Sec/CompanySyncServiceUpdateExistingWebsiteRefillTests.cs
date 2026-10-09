@@ -180,4 +180,59 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
             .FirstAsync(s => s.Cik == _cik);
         updated.Website.Should().Be("https://www.already-set.com");
     }
+
+    [Fact]
+    public async Task StoredSharedPlatform_IsReplacedByTheFilersOwnSite()
+    {
+        var (db, stock) = await SeedStock("https://www.linkedin.com");
+        using var _ = db;
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyMetadata(_cik)
+            .Returns(new CompanyMetadata { Website = "https://www.example.com" });
+
+        await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
+
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
+        updated.Website.Should().Be("https://www.example.com");
+    }
+
+    [Fact]
+    public async Task StoredSharedPlatform_IsClearedForDiscovery_WhenSecOffersNoOwnSite()
+    {
+        var (db, stock) = await SeedStock("https://www.linkedin.com");
+        stock.WebsiteCheckedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        using var _ = db;
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyMetadata(_cik)
+            .Returns(new CompanyMetadata { Website = "linkedin.com/company/example" });
+
+        await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
+
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
+        updated.Website.Should().BeNull();
+        updated.WebsiteCheckedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PlatformOwnersOwnSite_IsNotRefetched()
+    {
+        var (db, stock) = await SeedStock("https://www.apple.com");
+        using var _ = db;
+        var edgar = Substitute.For<ISecEdgarClient>();
+
+        await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
+
+        await edgar.DidNotReceive().GetCompanyMetadata(Arg.Any<string>());
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
+        updated.Website.Should().Be("https://www.apple.com");
+    }
 }

@@ -3,6 +3,7 @@ using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Equibles.CommonStocks.BusinessLogic;
+using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -307,9 +308,13 @@ public class CompanySyncService : ICompanySyncService
         // Empty string counts as missing: the SEC metadata website field is blank for most
         // companies, and rows that captured that blank must stay eligible for a refill —
         // but only re-ask EDGAR once per recheck interval, not once per 15s cycle.
+        // A shared-platform profile stored earlier counts as missing too, so the refill replaces it or
+        // clears it for the other discovery sources.
         var missingWebsite =
-            string.IsNullOrEmpty(existingStock.Website)
-            && ShouldAttemptWebsiteFetch(secCompany.Cik);
+            (
+                string.IsNullOrEmpty(existingStock.Website)
+                || IssuerWebsitePolicy.IsSharedPlatform(existingStock.Website)
+            ) && ShouldAttemptWebsiteFetch(secCompany.Cik);
         var directoryChanged =
             existingStock.Presentation?.Listing?.Active != true
             || existingStock.Presentation.Listing.DelistedOn != null
@@ -396,8 +401,19 @@ public class CompanySyncService : ICompanySyncService
 
         try
         {
-            if (missingWebsite && string.IsNullOrEmpty(existingStock.Website))
+            if (
+                missingWebsite
+                && (
+                    string.IsNullOrEmpty(existingStock.Website)
+                    || IssuerWebsitePolicy.IsSharedPlatform(existingStock.Website)
+                )
+            )
+            {
+                // A cleared shared platform must not wait out discovery's cooldown before a real site is sought.
+                if (fetchedWebsite == null && !string.IsNullOrEmpty(existingStock.Website))
+                    existingStock.WebsiteCheckedAt = null;
                 existingStock.Website = fetchedWebsite;
+            }
 
             UsEquityDirectory.SelectPrimary(existingStock, primaryTicker);
             existingStock.Presentation.Listing.Active = true;
@@ -987,6 +1003,8 @@ public class CompanySyncService : ICompanySyncService
         {
             var metadata = await _secEdgarClient.GetCompanyMetadata(cik);
             var website = metadata?.Website?.Trim();
+            if (IssuerWebsitePolicy.IsSharedPlatform(website))
+                website = null;
             // Normalise the SEC's usual blank answer to null so it is stored as "still
             // missing" rather than masquerading as a captured website. Remember blanks
             // so the next cycles skip the request until the recheck interval elapses.
