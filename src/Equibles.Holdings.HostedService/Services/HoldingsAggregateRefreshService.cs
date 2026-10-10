@@ -711,17 +711,11 @@ public class HoldingsAggregateRefreshService
         // A date without Form 13F positions (a Schedule 13D/G event date a stub dirtied) is not
         // a quarter: carrying the prior quarter's listings forward would publish a sold-out row
         // for every one of them, so the date's activity rows are removed instead.
-        var is13FReportDate =
-            await dbContext
-                .Set<InstitutionalHolding>()
-                .AnyAsync(
-                    h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F,
-                    cancellationToken
-                )
-            || await dbContext
-                .Set<InstitutionalFiling>()
-                .Zero13FRestatements()
-                .AnyAsync(f => f.ReportDate == reportDate, cancellationToken);
+        var is13FReportDate = await HoldingsRollupRefresher.Is13FReportDate(
+            dbContext,
+            reportDate,
+            cancellationToken
+        );
         if (!is13FReportDate)
         {
             await dbContext

@@ -81,5 +81,64 @@ public class HoldingsRollupRefresherTests : IAsyncLifetime
         snapshot.DirtyAt.Should().BeCloseTo(firstEvent, TimeSpan.FromMilliseconds(1));
     }
 
+    [Fact]
+    public async Task MarkAumSnapshotsDirty_DateWithout13FPositions_GetsNoStub()
+    {
+        var eventDate = new DateOnly(2024, 12, 18);
+        await using (var seed = FreshContext())
+        {
+            var stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple",
+                Cik: "320193"
+            );
+            var holder = new InstitutionalHolder { Cik = "H001", Name = "Holder" };
+            seed.AddRange(stock, holder);
+            await seed.SaveChangesAsync();
+            seed.AddRange(
+                Holding(stock.Id, holder.Id, Current, FilingType.Form13F, "acc-13f"),
+                Holding(stock.Id, holder.Id, eventDate, FilingType.Schedule13D, "acc-13d")
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var write = FreshContext())
+        {
+            await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+                write,
+                [Current, eventDate],
+                CancellationToken.None
+            );
+        }
+
+        await using var read = FreshContext();
+        var snapshots = await read.Set<AumQuarterlySnapshot>()
+            .Select(snapshot => snapshot.ReportDate)
+            .ToListAsync();
+        snapshots.Should().Equal(Current);
+    }
+
+    private static InstitutionalHolding Holding(
+        Guid stockId,
+        Guid holderId,
+        DateOnly reportDate,
+        FilingType filingType,
+        string accession
+    ) =>
+        new()
+        {
+            EquityIssuerId = stockId,
+            InstitutionalHolderId = holderId,
+            FilingDate = reportDate.AddDays(45),
+            ReportDate = reportDate,
+            Shares = 1_000,
+            Value = 100_000,
+            ShareType = ShareType.Shares,
+            InvestmentDiscretion = InvestmentDiscretion.Sole,
+            AccessionNumber = accession,
+            FilingType = filingType,
+            Cusip = "037833100",
+        };
+
     private EquiblesFinancialDbContext FreshContext() => _fixture.CreateDbContext();
 }
