@@ -83,6 +83,7 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
     [InlineData("audit interrupted", true)]
     [InlineData("rescan pending", true)]
     [InlineData("rescan completed since", true)]
+    [InlineData("rescan completed before", false)]
     public async Task AuditLatest_AfterACompletedAudit_RerunsOnlyWhenItsInputsMoved(
         string change,
         bool reruns
@@ -102,6 +103,11 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
         await db.SaveChangesAsync();
         var processed = new ProcessedDataSetRepository(db);
         await processed.CompleteCoverageAudit(CancellationToken.None);
+        // Offsets from the stamp the database wrote, so the app clock cannot skew the comparison.
+        var stamp = await processed
+            .GetByFileName(ProcessedDataSet.CoverageAuditedFileName)
+            .Select(row => row.CreationTime)
+            .SingleAsync();
         switch (change)
         {
             case "stale audit":
@@ -115,7 +121,7 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
                     {
                         FileName = "01jul2026-30sep2026_form13f.zip",
                         ParserVersion = ProcessedDataSet.CurrentParserVersion,
-                        CreationTime = DateTime.UtcNow.AddMinutes(1),
+                        CreationTime = stamp.AddMinutes(1),
                     }
                 );
                 break;
@@ -130,7 +136,16 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
                     new HoldingsCusipRescan
                     {
                         Cusip = "037833100",
-                        CompletedAt = DateTime.UtcNow.AddMinutes(1),
+                        CompletedAt = stamp.AddMinutes(1),
+                    }
+                );
+                break;
+            case "rescan completed before":
+                db.Add(
+                    new HoldingsCusipRescan
+                    {
+                        Cusip = "037833100",
+                        CompletedAt = stamp.AddMinutes(-1),
                     }
                 );
                 break;
@@ -158,7 +173,7 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             await act.Should().ThrowAsync<HttpRequestException>();
         else
         {
-            await act.Should().NotThrowAsync();
+            (await act()).Should().Be(stamp + HoldingsArchiveCoverageService.AuditInterval);
             await edgar.DidNotReceive().DownloadStream(Arg.Any<string>());
         }
     }
@@ -214,8 +229,12 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
         );
 
-        await audit.AuditLatest(new DateOnly(2020, 1, 1), CancellationToken.None);
-        await audit.AuditLatest(new DateOnly(2020, 1, 1), CancellationToken.None);
+        (await audit.AuditLatest(new DateOnly(2020, 1, 1), CancellationToken.None))
+            .Should()
+            .BeNull();
+        (await audit.AuditLatest(new DateOnly(2020, 1, 1), CancellationToken.None))
+            .Should()
+            .NotBeNull();
 
         await edgar.Received(1).DownloadStream(Arg.Any<string>());
         (await processed.GetByFileName(ProcessedDataSet.CoverageAuditPendingFileName).AnyAsync())

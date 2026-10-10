@@ -166,4 +166,75 @@ public class HoldingsScraperWorkerDoWorkCycleTests : ParadeDbMcpTestBase
             .CountAsync(CancellationToken.None);
         processedCount.Should().BeGreaterThan(0, "backfill marked historical periods processed");
     }
+
+    [Fact]
+    public async Task DoWork_CurrentSourceAudit_WakesTheWorkerWhenItFallsDue()
+    {
+        var start = new DateTime(2024, 6, 1);
+        foreach (var name in HoldingsDataSetClient.GetDataSetFileNames(start))
+            DbContext.Add(
+                new ProcessedDataSet
+                {
+                    FileName = name,
+                    ParserVersion = ProcessedDataSet.CurrentParserVersion,
+                    CreationTime = DateTime.UtcNow.AddHours(-2),
+                }
+            );
+        await DbContext.SaveChangesAsync();
+        var processed = new ProcessedDataSetRepository(DbContext);
+        await processed.CompleteCoverageAudit(CancellationToken.None);
+        var stamp = await processed
+            .GetByFileName(ProcessedDataSet.CoverageAuditedFileName)
+            .Select(row => row.CreationTime)
+            .SingleAsync();
+        var audits = ThrowingDataSetClient();
+        var scopeFactory = ServiceScopeSubstitute.Create(
+            (typeof(ProcessedDataSetRepository), processed),
+            (typeof(HoldingsDataSetClient), ThrowingDataSetClient()),
+            (typeof(HoldingsImportService), BuildImporter()),
+            (typeof(InstitutionalHolderRepository), new InstitutionalHolderRepository(DbContext)),
+            (
+                typeof(HoldingsArchiveCoverageService),
+                new HoldingsArchiveCoverageService(
+                    BuildImporter(),
+                    audits,
+                    processed,
+                    new InstitutionalHolderRepository(DbContext),
+                    new InstitutionalHoldingRepository(DbContext),
+                    new HoldingsImportFailureRepository(DbContext),
+                    new HoldingsCusipRescanRepository(DbContext),
+                    new HoldingsRealtimeReplaySignal(),
+                    Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
+                )
+            )
+        );
+        var config = Substitute.For<IConfiguration>();
+        config["Sec:ContactEmail"].Returns("test@example.com");
+        var worker = new FastWorker(
+            Substitute.For<ILogger<HoldingsScraperWorker>>(),
+            scopeFactory,
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new WorkerOptions { MinSyncDate = start }),
+            config
+        );
+        var flags = BindingFlags.NonPublic | BindingFlags.Instance;
+
+        await (Task)
+            typeof(HoldingsScraperWorker)
+                .GetMethod("DoWork", flags)
+                .Invoke(worker, [CancellationToken.None]);
+
+        worker.CoverageAuditDueAt.Should().Be(stamp + HoldingsArchiveCoverageService.AuditInterval);
+        worker.CoverageAuditDueAt = DateTime.UtcNow.AddMilliseconds(200);
+        var wait = (Task)
+            typeof(HoldingsScraperWorker)
+                .GetMethod("WaitForNextCycle", flags)
+                .Invoke(worker, [TimeSpan.FromHours(24), CancellationToken.None]);
+        (await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(30))))
+            .Should()
+            .BeSameAs(wait, "the daily sleep must end when the skipped audit falls due");
+    }
 }

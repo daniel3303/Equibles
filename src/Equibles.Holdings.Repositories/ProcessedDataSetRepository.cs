@@ -29,6 +29,10 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
         );
     }
 
+    public Task ExpireCoverageAudit(CancellationToken cancellationToken = default) =>
+        GetByFileName(ProcessedDataSet.CoverageAuditedFileName)
+            .ExecuteDeleteAsync(cancellationToken);
+
     private Task QueueMarker(string fileName, CancellationToken cancellationToken) =>
         DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""

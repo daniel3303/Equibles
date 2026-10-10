@@ -85,6 +85,39 @@ public class HoldingsScraperWorkerMarkAsProcessedTests : ParadeDbMcpTestBase
         row.ParserVersion.Should().Be(ProcessedDataSet.CurrentParserVersion);
     }
 
+    [Fact]
+    public async Task MarkAsProcessed_ReImport_ExpiresTheSourceCoverageAudit()
+    {
+        DbContext.Add(
+            new ProcessedDataSet
+            {
+                FileName = "2023q2_form13f.zip",
+                SubmissionCount = 6500,
+                ParserVersion = ProcessedDataSet.CurrentParserVersion - 1,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        await new ProcessedDataSetRepository(DbContext).CompleteCoverageAudit(
+            CancellationToken.None
+        );
+        DbContext.ChangeTracker.Clear();
+
+        var method = typeof(HoldingsScraperWorker).GetMethod(
+            "MarkAsProcessed",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        );
+        await (Task)method.Invoke(CreateWorker(), ["2023q2_form13f.zip", 6612]);
+
+        await using var verify = Fixture.CreateDbContext();
+        (
+            await verify
+                .Set<ProcessedDataSet>()
+                .AnyAsync(p => p.FileName == ProcessedDataSet.CoverageAuditedFileName)
+        )
+            .Should()
+            .BeFalse("a re-imported archive's positions must be audited again");
+    }
+
     private HoldingsScraperWorker CreateWorker()
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
