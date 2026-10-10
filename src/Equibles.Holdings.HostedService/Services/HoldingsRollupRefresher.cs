@@ -98,21 +98,49 @@ internal static class HoldingsRollupRefresher
         return realigned;
     }
 
+    // The dates among the given ones that are Form 13F quarters: a quarter has 13F positions
+    // or an empty 13F restatement. Positions are probed per date (one index seek each); the
+    // small filing table answers the restatement side in one query.
+    internal static async Task<HashSet<DateOnly>> Filter13FReportDates(
+        EquiblesFinancialDbContext dbContext,
+        IReadOnlyCollection<DateOnly> reportDates,
+        CancellationToken cancellationToken
+    )
+    {
+        var quarters = new HashSet<DateOnly>();
+        if (reportDates.Count == 0)
+        {
+            return quarters;
+        }
+        foreach (var reportDate in reportDates)
+        {
+            var hasPositions = await dbContext
+                .Set<InstitutionalHolding>()
+                .AnyAsync(
+                    h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F,
+                    cancellationToken
+                );
+            if (hasPositions)
+            {
+                quarters.Add(reportDate);
+            }
+        }
+        var restated = await dbContext
+            .Set<InstitutionalFiling>()
+            .Zero13FRestatements()
+            .Where(f => reportDates.Contains(f.ReportDate))
+            .Select(f => f.ReportDate)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        quarters.UnionWith(restated);
+        return quarters;
+    }
+
     internal static async Task<bool> Is13FReportDate(
         EquiblesFinancialDbContext dbContext,
         DateOnly reportDate,
         CancellationToken cancellationToken
-    ) =>
-        await dbContext
-            .Set<InstitutionalHolding>()
-            .AnyAsync(
-                h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F,
-                cancellationToken
-            )
-        || await dbContext
-            .Set<InstitutionalFiling>()
-            .Zero13FRestatements()
-            .AnyAsync(f => f.ReportDate == reportDate, cancellationToken);
+    ) => (await Filter13FReportDates(dbContext, [reportDate], cancellationToken)).Count > 0;
 
     /// <summary>
     /// Stamps the quarters' AUM snapshots and their immediate successors dirty so the drain
@@ -136,17 +164,15 @@ internal static class HoldingsRollupRefresher
         // A date without a snapshot gains one only when it is a Form 13F quarter; a Schedule
         // 13D/G event date a repair passes would otherwise gain a stub the drain rebuilds for
         // nothing.
-        var changedQuarters = new List<DateOnly>();
-        foreach (var reportDate in reportDates.Distinct())
-        {
-            if (
-                snapshotDates.Contains(reportDate)
-                || await Is13FReportDate(dbContext, reportDate, cancellationToken)
-            )
-            {
-                changedQuarters.Add(reportDate);
-            }
-        }
+        var distinctDates = reportDates.Distinct().ToList();
+        var quarters13F = await Filter13FReportDates(
+            dbContext,
+            distinctDates.Where(date => !snapshotDates.Contains(date)).ToList(),
+            cancellationToken
+        );
+        var changedQuarters = distinctDates
+            .Where(date => snapshotDates.Contains(date) || quarters13F.Contains(date))
+            .ToList();
         if (changedQuarters.Count == 0)
         {
             return;
