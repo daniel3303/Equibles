@@ -90,9 +90,11 @@ public class HoldingsCusipRescanTests(ParadeDbFixture fixture) : IAsyncLifetime
                 .Be(new DateOnly(2023, 3, 31));
             (await db.Set<HoldingsCusipRescan>().SingleAsync()).CompletedAt.Should().BeNull();
             (await db.Set<InstitutionalHolding>().CountAsync()).Should().Be(0);
-            var failure = await db.Set<HoldingsImportFailure>().SingleAsync();
-            failure.AccessionNumber.Should().Be("original");
-            failure.Cik.Should().Be("123");
+            // Every affected filing is queued, not only the filer's earliest.
+            (await db.Set<HoldingsImportFailure>().OrderBy(row => row.FilingDate).ToListAsync())
+                .Select(row => (row.AccessionNumber, row.Cik))
+                .Should()
+                .Equal(("original", "123"), ("later", "123"));
             (await db.Set<ProcessedDataSet>().CountAsync()).Should().Be(2);
             var coverage = new HoldingsImportCoverage(
                 new HoldingsImportFailureRepository(db),
@@ -120,9 +122,9 @@ public class HoldingsCusipRescanTests(ParadeDbFixture fixture) : IAsyncLifetime
             (await db.Set<ProcessedDataSet>().Select(row => row.FileName).ToListAsync())
                 .Should()
                 .BeEquivalentTo(First, Second, ProcessedDataSet.RealtimeReplayPendingFileName);
-            (await db.Set<HoldingsImportFailure>().Select(row => row.Cik).ToListAsync())
+            (await db.Set<HoldingsImportFailure>().Select(row => row.AccessionNumber).ToListAsync())
                 .Should()
-                .BeEquivalentTo("123", "456");
+                .BeEquivalentTo("original", "later", "unrelated");
         }
     }
 

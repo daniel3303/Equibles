@@ -8,7 +8,9 @@ internal static class HoldingsCusipArchiveScanner
 {
     internal sealed record Filing(string AccessionNumber, string Cik, DateOnly FilingDate);
 
-    internal static async Task<IReadOnlyList<Filing>> FindAffectedFilers(
+    // Every affected filing, not only each filer's earliest: recovery skips a stored tail that an
+    // earlier filing left unchanged, so a later affected filing must be queued in its own right.
+    internal static async Task<IReadOnlyList<Filing>> FindAffectedFilings(
         ZipArchive archive,
         HashSet<string> cusips,
         DateOnly minReportDate,
@@ -35,7 +37,7 @@ internal static class HoldingsCusipArchiveScanner
                 accessions.Add(accession);
             }
         }
-        var found = new Dictionary<string, Filing>(StringComparer.Ordinal);
+        var found = new List<Filing>();
         await foreach (
             var row in Read(
                 archive,
@@ -63,21 +65,12 @@ internal static class HoldingsCusipArchiveScanner
             accessions.Remove(accession);
             if (report < minReportDate)
                 continue;
-            var candidate = new Filing(accession, cik, filed);
-            if (
-                !found.TryGetValue(cik, out var previous)
-                || filed < previous.FilingDate
-                || (
-                    filed == previous.FilingDate
-                    && StringComparer.Ordinal.Compare(accession, previous.AccessionNumber) < 0
-                )
-            )
-                found[cik] = candidate;
+            found.Add(new Filing(accession, cik, filed));
         }
         if (accessions.Count != 0)
             throw new InvalidDataException("Matched accessions are missing from SUBMISSION.tsv.");
         return found
-            .Values.OrderBy(row => row.FilingDate)
+            .OrderBy(row => row.FilingDate)
             .ThenBy(row => row.AccessionNumber, StringComparer.Ordinal)
             .ToList();
     }

@@ -104,8 +104,9 @@ public class HoldingsImportRecoveryService(
             throw new InvalidDataException(
                 "The SEC submissions response omitted a retained later filing; recovery was not attempted."
             );
-        // Reapply the complete later tail, even if its markers already exist. Otherwise an
-        // old recovered original overwrites amendments imported while that original failed.
+        // Reapply the later tail after any filing that changes holdings, even if its markers
+        // already exist. Otherwise an old recovered original overwrites amendments imported while
+        // that original failed.
         if (
             pending.Any(row =>
                 !outOfScope.Contains(row.AccessionNumber)
@@ -115,20 +116,34 @@ public class HoldingsImportRecoveryService(
             throw new InvalidDataException(
                 "The SEC submissions response omitted a pending filing; recovery was not attempted."
             );
-        var imported = await ingestion.IngestSpecificFilings(
+        var replay = await ingestion.ReplayRecoveryTail(
             entries,
+            pending.Select(row => row.AccessionNumber).ToHashSet(StringComparer.OrdinalIgnoreCase),
             minReportDate,
             cancellationToken
         );
-        if (imported != entries.Count)
+        var resolved = replay.Complete
+            ? pending.Select(row => row.AccessionNumber).ToList()
+            : replay.Resolvable;
+        foreach (var accession in resolved)
+            await failures.Resolve(accession, cancellationToken, startedAt);
+        if (resolved.Count == 0)
+        {
+            logger.LogDebug(
+                "Holdings recovery for CIK {Cik} remains pending; attempted {Attempted} filings, skipped {Skipped} unchanged",
+                cik,
+                replay.Attempted,
+                replay.Skipped
+            );
             return;
-        foreach (var row in pending)
-            await failures.Resolve(row.AccessionNumber, cancellationToken, startedAt);
+        }
         logger.LogInformation(
-            "Holdings recovery resolved {Failures} failed filings for CIK {Cik}; replayed {Filings} filings",
+            "Holdings recovery resolved {Resolved} of {Failures} failed filings for CIK {Cik}; replayed {Filings} filings, skipped {Skipped} unchanged",
+            resolved.Count,
             pending.Count,
             cik,
-            imported
+            replay.Imported,
+            replay.Skipped
         );
     }
 }

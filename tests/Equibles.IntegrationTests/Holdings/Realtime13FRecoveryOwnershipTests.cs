@@ -170,8 +170,9 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
         await recovery.Recover(new(2020, 1, 1), CancellationToken.None);
         await recoveryIngestion
             .DidNotReceive()
-            .IngestSpecificFilings(
+            .ReplayRecoveryTail(
                 Arg.Any<IReadOnlyCollection<EdgarDailyIndexEntry>>(),
+                Arg.Any<IReadOnlySet<string>>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>()
             );
@@ -208,6 +209,47 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                 .Received(1)
                 .GetFilingArtifactNames(Arg.Any<string>(), accession, Arg.Any<CancellationToken>());
         (await db.Set<HoldingsImportFailure>().CountAsync()).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task RecoveryReplay_LeavesTheStoredTailUnfetched_WhileThePendingFilingWritesNothing()
+    {
+        await using var db = fixture.CreateDbContext();
+        db.Add(new ProcessedFiling { AccessionNumber = "stored" });
+        await db.SaveChangesAsync();
+        var edgar = Substitute.For<ISecEdgarClient>();
+        // Unreadable artifacts return before any holdings write.
+        edgar
+            .GetFilingArtifactNames(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns([]);
+
+        var result = await Ingestion(edgar)
+            .ReplayRecoveryTail(
+                [
+                    Entry("unseen", Filed.AddDays(2)),
+                    Entry("stored", Filed.AddDays(1)),
+                    Entry("stuck", Filed),
+                ],
+                new HashSet<string> { "stuck" },
+                new(2020, 1, 1),
+                CancellationToken.None
+            );
+
+        result.Attempted.Should().Be(2);
+        result.Skipped.Should().Be(1);
+        result.Complete.Should().BeFalse();
+        result.Resolvable.Should().BeEmpty();
+        await edgar
+            .DidNotReceive()
+            .GetFilingArtifactNames(Arg.Any<string>(), "stored", Arg.Any<CancellationToken>());
+        foreach (var accession in new[] { "stuck", "unseen" })
+            await edgar
+                .Received(1)
+                .GetFilingArtifactNames(Arg.Any<string>(), accession, Arg.Any<CancellationToken>());
     }
 
     [Fact]

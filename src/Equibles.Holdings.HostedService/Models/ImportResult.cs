@@ -11,13 +11,16 @@ namespace Equibles.Holdings.HostedService.Models;
 /// could not be told apart under their retained observation identities. The import still
 /// completes — the conflict is a stored-data defect that no retry can clear — so the caller has
 /// to surface these, or the skip is invisible.
+/// <paramref name="HoldingsUntouched"/> is true only for the returns that precede every holdings
+/// write; recovery relies on it to skip re-applying a tail that nothing changed.
 /// </summary>
 public record ImportResult(
     int SubmissionCount,
     bool IsComplete,
     int InsertedHoldings = 0,
     IReadOnlyList<string> ConflictedFilings = null,
-    bool NoTrackedStocks = false
+    bool NoTrackedStocks = false,
+    bool HoldingsUntouched = false
 )
 {
     public IReadOnlyList<string> ConflictedFilings { get; init; } = ConflictedFilings ?? [];

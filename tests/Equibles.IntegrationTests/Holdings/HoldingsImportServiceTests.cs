@@ -232,6 +232,7 @@ public class HoldingsImportServiceTests
 
         result.SubmissionCount.Should().Be(0);
         result.IsComplete.Should().BeFalse();
+        result.HoldingsUntouched.Should().BeTrue("this return precedes every holdings write");
     }
 
     [Fact]
@@ -270,6 +271,7 @@ public class HoldingsImportServiceTests
 
         result.SubmissionCount.Should().Be(0);
         result.IsComplete.Should().BeTrue();
+        result.HoldingsUntouched.Should().BeTrue("this return precedes every holdings write");
     }
 
     [Fact]
@@ -299,6 +301,7 @@ public class HoldingsImportServiceTests
 
         result.SubmissionCount.Should().Be(1);
         result.IsComplete.Should().BeFalse();
+        result.HoldingsUntouched.Should().BeTrue("this return precedes every holdings write");
     }
 
     [Fact]
@@ -346,5 +349,6 @@ public class HoldingsImportServiceTests
 
         result.SubmissionCount.Should().Be(1);
         result.IsComplete.Should().BeFalse();
+        result.HoldingsUntouched.Should().BeTrue("this return precedes every holdings write");
     }
 }

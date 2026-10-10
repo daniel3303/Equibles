@@ -108,15 +108,21 @@ public class HoldingsImportService
             ConfirmedZeroRestatement = confirmedZeroRestatement,
         };
 
+        // Every return before UpsertInstitutionalHolders precedes all holdings writes, so it
+        // reports HoldingsUntouched.
         var parseResult = await ParseSubmissions(context, cancellationToken);
         if (parseResult == null)
-            return new ImportResult(0, IsComplete: false);
+            return new ImportResult(0, IsComplete: false, HoldingsUntouched: true);
         if (parseResult == false)
-            return new ImportResult(0, IsComplete: true);
+            return new ImportResult(0, IsComplete: true, HoldingsUntouched: true);
         // Cover pages must parse BEFORE the dedup: whether a later filing supersedes
         // its original depends on the amendment type, which lives on the cover page.
         if (!await ParseCoverPages(context, cancellationToken))
-            return new ImportResult(context.Submissions.Count, IsComplete: false);
+            return new ImportResult(
+                context.Submissions.Count,
+                IsComplete: false,
+                HoldingsUntouched: true
+            );
         DeduplicateSubmissions(context);
         var submissionCount = context.Submissions.Count;
         await ParseSummaryPages(context, cancellationToken);
@@ -124,12 +130,17 @@ public class HoldingsImportService
         if (cusipResult == CusipMappingOutcome.NoInfoTable)
             // A malformed publication is not evidence of an empty quarter. Keep it
             // retryable so a corrected archive can recover without clearing a false success.
-            return new ImportResult(submissionCount, IsComplete: false);
+            return new ImportResult(submissionCount, IsComplete: false, HoldingsUntouched: true);
         if (cusipResult == CusipMappingOutcome.NoTrackedStocks && confirmedZeroRestatement == null)
             // No tracked stock mapped — typically a cold start where the FTD
             // scraper hasn't seeded CUSIPs yet. NOT terminal: leave the data
             // set unprocessed so a later cycle backfills it once CUSIPs exist.
-            return new ImportResult(submissionCount, IsComplete: false, NoTrackedStocks: true);
+            return new ImportResult(
+                submissionCount,
+                IsComplete: false,
+                NoTrackedStocks: true,
+                HoldingsUntouched: true
+            );
         await BuildPriceMap(context, cancellationToken);
         await BuildSplitMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);

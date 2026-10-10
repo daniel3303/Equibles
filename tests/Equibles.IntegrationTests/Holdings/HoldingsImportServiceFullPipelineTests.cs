@@ -288,6 +288,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         result.IsComplete.Should().BeTrue();
         result.InsertedHoldings.Should().Be(2);
+        result.HoldingsUntouched.Should().BeFalse("the import wrote positions");
 
         using var verify = FreshContext();
         var holdings = await verify.Set<InstitutionalHolding>().AsNoTracking().ToListAsync();
