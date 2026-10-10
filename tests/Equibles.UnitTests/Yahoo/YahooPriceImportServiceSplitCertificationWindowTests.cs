@@ -221,7 +221,7 @@ public class YahooPriceImportServiceSplitCertificationWindowTests
     }
 
     [Fact]
-    public void CertifiableSplits_InvalidCandleTheReplacementDrops_IsNotCertified()
+    public void CertifiableSplits_InvalidCandleTheReplacementDrops_DoesNotHoldTheSplit()
     {
         // The replacement never stores an impossible candle, so it must not certify against one.
         var split = Split(new DateOnly(2024, 6, 10), 10m, 1m);
