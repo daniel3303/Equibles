@@ -370,17 +370,7 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         await DbContext.SaveChangesAsync();
 
         DbContext.ChangeTracker.Clear();
-        var task = (Task)
-            typeof(YahooPriceImportService)
-                .GetMethod(
-                    "RequeueStampedSplitBasisMismatches",
-                    BindingFlags.Instance | BindingFlags.NonPublic
-                )!
-                .Invoke(
-                    Service(),
-                    [DateOnly.FromDateTime(DateTime.UtcNow), CancellationToken.None]
-                )!;
-        await task;
+        await RunSplitBoundaryAudit();
 
         await using var read = Fixture.CreateDbContext();
         var stored = await read.Set<StockSplit>().SingleAsync();
@@ -394,6 +384,74 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .Should()
             .Be(siblingDiscontinuous ? 4 : 2);
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SplitBoundaryAudit_JumpBesideTheCapturedDate_RequeuesTheMarker(
+        bool neighbouringJump
+    )
+    {
+        // WLFC's 3:1 was captured for 2026-07-21 while its stored series jumps on 07-20 and has no
+        // 07-21 bar, so the pair straddling the captured date alone looked continuous.
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "WLFC");
+        var listing = issuer.Presentation.Listing;
+        var applied = DateTime.UtcNow;
+        DbContext.Add(issuer);
+        await DbContext.SaveChangesAsync();
+        DbContext.Add(
+            new StockSplit
+            {
+                Issuer = issuer,
+                Listing = listing,
+                PriceSeriesTicker = "WLFC",
+                EffectiveDate = new DateOnly(2026, 7, 21),
+                Numerator = 3,
+                Denominator = 1,
+                Source = StockSplitSource.Yahoo,
+                PriceAdjustmentAppliedTime = applied,
+            }
+        );
+        AddBoundaryPrice(
+            listing,
+            "WLFC",
+            new DateOnly(2026, 7, 16),
+            neighbouringJump ? 196.00m : 65.33m
+        );
+        AddBoundaryPrice(
+            listing,
+            "WLFC",
+            new DateOnly(2026, 7, 17),
+            neighbouringJump ? 191.65m : 63.88m
+        );
+        AddBoundaryPrice(listing, "WLFC", new DateOnly(2026, 7, 20), 63.12m);
+        AddBoundaryPrice(listing, "WLFC", new DateOnly(2026, 7, 22), 66.32m);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await RunSplitBoundaryAudit();
+
+        await using var read = Fixture.CreateDbContext();
+        var stored = await read.Set<StockSplit>().SingleAsync();
+        if (neighbouringJump)
+            stored.PriceAdjustmentAppliedTime.Should().BeNull();
+        else
+            stored
+                .PriceAdjustmentAppliedTime.Should()
+                .BeCloseTo(applied, TimeSpan.FromMilliseconds(1));
+    }
+
+    private Task RunSplitBoundaryAudit() =>
+        (Task)
+            typeof(YahooPriceImportService)
+                .GetMethod(
+                    "RequeueStampedSplitBasisMismatches",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                )!
+                .Invoke(
+                    Service(),
+                    [DateOnly.FromDateTime(DateTime.UtcNow), CancellationToken.None]
+                )!;
 
     private void AddBoundaryPrice(
         EquityListing listing,

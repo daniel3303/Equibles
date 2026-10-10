@@ -39,10 +39,9 @@ internal readonly record struct VenueRowReconciliation(int Retained, int Rebased
 internal readonly record struct AppliedSplitBoundary(
     Guid SplitId,
     DateTime AppliedTime,
+    DateOnly EffectiveDate,
     decimal Numerator,
-    decimal Denominator,
-    decimal? CloseBefore,
-    decimal? CloseAfter
+    decimal Denominator
 );
 
 internal readonly record struct SplitBasisDefinition(
@@ -61,6 +60,10 @@ public class YahooPriceImportService
     private const decimal MaterialSplitRatioFloor = 0.5m;
     private const decimal MaterialSplitRatioCeiling = 2m;
     private const decimal SplitRatioMatchTolerance = 0.25m;
+
+    // The audit loads stored bars from this far before the same-event window, so the window's
+    // first traded bar still has a predecessor to compare against.
+    private const int SplitAuditPredecessorSlackDays = 30;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<YahooPriceImportService> _logger;
@@ -1138,18 +1141,17 @@ public class YahooPriceImportService
         // concurrent restatement remains pending because the manager revalidates the locked row.
         var capturedDividends = await CaptureDividends(target, chartData, cancellationToken);
 
-        // A serve whose last bar predates a split's effective date passed the boundary check
-        // vacuously (no post-effective close to compare), so it cannot certify that split's basis:
-        // stamping it applied here parked BYND's 1-for-30 outside the pending queue while the
-        // stored series stayed pre-split. Keep such splits pending; the fair queue retries them.
+        // A serve ending before a split, or still jumping by its ratio near the effective date, cannot
+        // certify its basis (BYND's 1-for-30 and WLFC's 3:1 were both stamped that way); the fair
+        // queue retries them. The replacement restated chartData.Prices in place, so this is the stored basis.
         var certifiableSeries = selectedSeries with
         {
-            Splits = CertifiableSplits(selectedSeries.Splits, chartData.Prices.Max(p => p.Date)),
+            Splits = CertifiableSplits(selectedSeries.Splits, chartData.Prices),
         };
         if (certifiableSeries.Splits.Count < selectedSeries.Splits.Count)
         {
             _logger.LogWarning(
-                "Provider history for {Ticker} ends before {Count} pending split(s) became effective; keeping them pending",
+                "Provider history for {Ticker} cannot yet certify {Count} pending split(s): it ends before the effective date or still crosses price bases near it; keeping them pending",
                 target.Ticker,
                 selectedSeries.Splits.Count - certifiableSeries.Splits.Count
             );
@@ -1213,7 +1215,7 @@ public class YahooPriceImportService
             .GetSecurities()
             .SelectMany(security => security.Listings)
             .WithDirectoryInstrumentIdentity();
-        var boundaries = await splitRepository
+        var auditedSplits = splitRepository
             .GetAll()
             .Where(split =>
                 split.PriceAdjustmentAppliedTime >= appliedSince
@@ -1230,38 +1232,49 @@ public class YahooPriceImportService
                     split.Numerator / split.Denominator <= MaterialSplitRatioFloor
                     || split.Numerator / split.Denominator >= MaterialSplitRatioCeiling
                 )
-            )
+            );
+        var boundaries = await auditedSplits
             .Select(split => new AppliedSplitBoundary(
                 split.Id,
                 split.PriceAdjustmentAppliedTime!.Value,
+                split.EffectiveDate,
                 split.Numerator,
-                split.Denominator,
-                priceRepository
-                    .GetAllSeries()
-                    .Where(price =>
-                        price.EquityListingId == split.EquityListingId
-                        && price.Date < split.EffectiveDate
-                    )
-                    .OrderByDescending(price => price.Date)
-                    .Select(price => (decimal?)price.Close)
-                    .FirstOrDefault(),
-                priceRepository
-                    .GetAllSeries()
-                    .Where(price =>
-                        price.EquityListingId == split.EquityListingId
-                        && price.Date >= split.EffectiveDate
-                    )
-                    .OrderBy(price => price.Date)
-                    .Select(price => (decimal?)price.Close)
-                    .FirstOrDefault()
+                split.Denominator
             ))
             .ToListAsync(cancellationToken);
+        if (boundaries.Count == 0)
+            return;
+
+        var leadDays =
+            StockSplitCaptureManager.SameEventWindowDays + SplitAuditPredecessorSlackDays;
+        var trailDays = StockSplitCaptureManager.SameEventWindowDays;
+        var tradedBars = (
+            await auditedSplits
+                .SelectMany(split =>
+                    priceRepository
+                        .GetAllSeries()
+                        .Where(price =>
+                            price.EquityListingId == split.EquityListingId
+                            && price.Volume > 0
+                            && price.Date >= split.EffectiveDate.AddDays(-leadDays)
+                            && price.Date <= split.EffectiveDate.AddDays(trailDays)
+                        )
+                        .Select(price => new
+                        {
+                            SplitId = split.Id,
+                            price.Date,
+                            price.Close,
+                            price.Volume,
+                        })
+                )
+                .ToListAsync(cancellationToken)
+        ).ToLookup(bar => bar.SplitId, bar => (bar.Date, bar.Close, bar.Volume));
 
         var invalidMarkers = boundaries
             .Where(boundary =>
-                IsSplitBoundaryDiscontinuous(
-                    boundary.CloseBefore,
-                    boundary.CloseAfter,
+                HasSplitBasisJumpNearEffectiveDate(
+                    tradedBars[boundary.SplitId],
+                    boundary.EffectiveDate,
                     boundary.Numerator,
                     boundary.Denominator
                 )
@@ -1375,16 +1388,66 @@ public class YahooPriceImportService
         return restated;
     }
 
-    // The splits a replacement history can actually certify: only a serve containing at least one
-    // bar on or after a split's effective date can prove the series is on that split's basis. A
-    // serve ending earlier passes the discontinuity check vacuously and must leave the split
-    // pending instead of stamping it applied.
+    // The splits a replacement history can actually certify: the serve must reach the effective
+    // date (an earlier-ending serve passes the boundary check vacuously), and no traded pair near
+    // that date may still jump by the ratio (a mixed-basis serve passes the straddling pair alone).
     internal static IReadOnlyList<PendingSplitSnapshot> CertifiableSplits(
         IReadOnlyList<PendingSplitSnapshot> splits,
-        DateOnly lastServedDate
+        IReadOnlyCollection<HistoricalPrice> servedPrices
     )
     {
-        return splits.Where(split => split.EffectiveDate <= lastServedDate).ToList();
+        var lastServedDate = servedPrices.Max(price => price.Date);
+        var servedBars = servedPrices
+            .Select(price => (price.Date, price.Close, price.Volume))
+            .ToList();
+        return splits
+            .Where(split =>
+                split.EffectiveDate <= lastServedDate
+                && !HasSplitBasisJumpNearEffectiveDate(
+                    servedBars,
+                    split.EffectiveDate,
+                    split.Numerator,
+                    split.Denominator
+                )
+            )
+            .ToList();
+    }
+
+    // Providers date a split a session off and serve mixed bases for days around it, so any traded
+    // pair within the same-event window that jumps by the ratio, in either direction, is a basis break.
+    // Zero-volume bars carry stale quotes and are skipped.
+    internal static bool HasSplitBasisJumpNearEffectiveDate(
+        IEnumerable<(DateOnly Date, decimal Close, long Volume)> bars,
+        DateOnly effectiveDate,
+        decimal numerator,
+        decimal denominator
+    )
+    {
+        var windowStart = effectiveDate.AddDays(-StockSplitCaptureManager.SameEventWindowDays);
+        var windowEnd = effectiveDate.AddDays(StockSplitCaptureManager.SameEventWindowDays);
+        decimal? previousClose = null;
+        foreach (
+            var bar in bars.Where(bar => bar.Volume > 0 && bar.Close > 0m && bar.Date <= windowEnd)
+                .OrderBy(bar => bar.Date)
+        )
+        {
+            if (
+                bar.Date >= windowStart
+                && (
+                    IsSplitBoundaryDiscontinuous(previousClose, bar.Close, numerator, denominator)
+                    || IsSplitBoundaryDiscontinuous(
+                        bar.Close,
+                        previousClose,
+                        numerator,
+                        denominator
+                    )
+                )
+            )
+                return true;
+            previousClose = bar.Close;
+        }
+
+        return false;
     }
 
     private bool ShouldRejectSplitBearingHistory(

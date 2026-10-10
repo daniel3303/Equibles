@@ -205,7 +205,7 @@ public class YahooPriceImportServiceSplitRestatementTests
 
         var certifiable = YahooPriceImportService.CertifiableSplits(
             [effective, notServedYet],
-            lastServedDate: new DateOnly(2026, 8, 13)
+            [Bar(new DateOnly(2026, 8, 7), 9.00m), Bar(new DateOnly(2026, 8, 13), 9.10m)]
         );
 
         certifiable.Should().ContainSingle().Which.Should().Be(effective);
@@ -224,9 +224,21 @@ public class YahooPriceImportServiceSplitRestatementTests
 
         var certifiable = YahooPriceImportService.CertifiableSplits(
             [split],
-            lastServedDate: new DateOnly(2026, 8, 14)
+            [Bar(new DateOnly(2026, 8, 13), 9.00m), Bar(new DateOnly(2026, 8, 14), 9.10m)]
         );
 
         certifiable.Should().ContainSingle();
     }
+
+    private static HistoricalPrice Bar(DateOnly date, decimal close) =>
+        new()
+        {
+            Date = date,
+            Open = close,
+            High = close,
+            Low = close,
+            Close = close,
+            AdjustedClose = close,
+            Volume = 1_000,
+        };
 }
