@@ -183,6 +183,8 @@ public class HoldingsValueRecalculator
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
             ExtendCommandTimeout(dbContext);
 
+            // Only rows whose ladder step is due are loaded; the rest of the pair, and their
+            // manager legs, stay on disk until their day comes.
             var holdings = await dbContext
                 .Set<InstitutionalHolding>()
                 .Include(h => h.ManagerEntries)
@@ -193,6 +195,7 @@ public class HoldingsValueRecalculator
                     && h.ListedTicker == pair.ListedTicker
                     && h.ReportDate == pair.ReportDate
                 )
+                .Where(RetryDue(now))
                 .ToListAsync(cancellationToken);
 
             var changed = false;
@@ -423,6 +426,21 @@ public class HoldingsValueRecalculator
     /// it across manager legs in proportion to their shares (the only allocation the filing
     /// supports — legs carry counts, not values).
     /// </summary>
+    // The ladder as a predicate: a row is due once its anchor (last retry, else creation) plus
+    // the delay for its retry count has passed. Mirrors the in-memory gate below it.
+    internal static System.Linq.Expressions.Expression<Func<InstitutionalHolding, bool>> RetryDue(
+        DateTime now
+    )
+    {
+        var first = now - RetryDelays[0];
+        var second = now - RetryDelays[1];
+        var later = now - RetryDelays[MaxRetries - 1];
+        return h =>
+            (h.ValueRetryCount == 0 && (h.ValueLastRetryAt ?? h.CreationTime) <= first)
+            || (h.ValueRetryCount == 1 && (h.ValueLastRetryAt ?? h.CreationTime) <= second)
+            || (h.ValueRetryCount >= 2 && (h.ValueLastRetryAt ?? h.CreationTime) <= later);
+    }
+
     internal static void ApplyFiledValue(InstitutionalHolding holding)
     {
         // A Filed row with no filed figure would be a permanently invisible zero: matched by
