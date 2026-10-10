@@ -25,9 +25,13 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
                 && row.MarketCountryCode == "US"
                 && row.Ticker == listedTicker
             )
-            .Select(row => row.Id);
+            .Select(row => (Guid?)row.Id);
+        // Equality with a scalar listing id lets the planner walk (EquityListingId, date) in
+        // order, so a latest-N read stops after N rows instead of sorting the listing's history.
         return GetAll()
-            .Where(row => listingIds.Count() == 1 && listingIds.Contains(row.EquityListingId));
+            .Where(row =>
+                listingIds.Count() == 1 && row.EquityListingId == listingIds.FirstOrDefault()
+            );
     }
 
     public IQueryable<DateOnly> GetLatestDate()
