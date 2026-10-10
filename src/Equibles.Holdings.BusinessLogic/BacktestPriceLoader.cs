@@ -352,7 +352,10 @@ public class BacktestPriceLoader
                 foreach (var (listingId, series) in batch)
                 {
                     var current = Replace(series, tailFrom, to, fresh[listingId]);
-                    _seriesCache.Set(listingId, priceWindowFrom, current);
+                    if (!ReferenceEquals(current, series))
+                    {
+                        _seriesCache.Set(listingId, priceWindowFrom, current);
+                    }
                     AppendRows(rows, stockByListing[listingId], current, to);
                 }
             }
@@ -437,7 +440,8 @@ public class BacktestPriceLoader
 
     // Replaces the cached rows inside the re-read range [tailFrom, to] with the fresh ones, so a
     // bar the lane resettled is replaced, one stored since is appended and one deleted is gone;
-    // rows before the tail and after a shorter read's end stay as cached.
+    // rows before the tail and after a shorter read's end stay as cached. Returns the same
+    // series when the range is unchanged, so an untouched tail costs no rebuild or re-set.
     internal static CachedListingSeries Replace(
         CachedListingSeries series,
         DateOnly tailFrom,
@@ -445,9 +449,9 @@ public class BacktestPriceLoader
         IEnumerable<QueriedPriceRow> fresh
     )
     {
-        var kept = series.Segments.SelectMany(segment =>
-            segment
-                .Dates.Select(
+        var cached = series
+            .Segments.SelectMany(segment =>
+                segment.Dates.Select(
                     (date, index) =>
                         new QueriedPriceRow(
                             Guid.Empty,
@@ -456,12 +460,19 @@ public class BacktestPriceLoader
                             segment.Closes[index]
                         )
                 )
-                .Where(row => row.Date < tailFrom || row.Date > to)
-        );
-        return ToSeries(
-            kept.Concat(fresh.Where(row => row.Date >= tailFrom && row.Date <= to)),
-            series.LoadedAt
-        );
+            )
+            .ToList();
+        var inRange = fresh
+            .Where(row => row.Date >= tailFrom && row.Date <= to)
+            .Select(row => row with { EquityListingId = Guid.Empty })
+            .OrderBy(row => row.Date)
+            .ToList();
+        if (cached.Where(row => row.Date >= tailFrom && row.Date <= to).SequenceEqual(inRange))
+        {
+            return series;
+        }
+        var kept = cached.Where(row => row.Date < tailFrom || row.Date > to);
+        return ToSeries(kept.Concat(inRange), series.LoadedAt);
     }
 
     private static void AppendRows(

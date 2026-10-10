@@ -141,6 +141,53 @@ public class BacktestPriceLoaderSeriesTests
     }
 
     [Fact]
+    public void Replace_ReturnsTheSameSeriesWhenTheTailIsUnchanged()
+    {
+        var series = BacktestPriceLoader.ToSeries(
+            [
+                new BacktestPriceLoader.QueriedPriceRow(
+                    Guid.Empty,
+                    "A",
+                    new DateOnly(2023, 1, 3),
+                    1m
+                ),
+                new BacktestPriceLoader.QueriedPriceRow(
+                    Guid.Empty,
+                    "A",
+                    new DateOnly(2023, 1, 20),
+                    2m
+                ),
+            ],
+            DateTime.UtcNow
+        );
+        var listingId = Guid.NewGuid();
+
+        var unchanged = BacktestPriceLoader.Replace(
+            series,
+            new DateOnly(2023, 1, 10),
+            new DateOnly(2023, 1, 31),
+            [new BacktestPriceLoader.QueriedPriceRow(listingId, "A", new DateOnly(2023, 1, 20), 2m)]
+        );
+        var changed = BacktestPriceLoader.Replace(
+            series,
+            new DateOnly(2023, 1, 10),
+            new DateOnly(2023, 1, 31),
+            [
+                new BacktestPriceLoader.QueriedPriceRow(
+                    listingId,
+                    "A",
+                    new DateOnly(2023, 1, 20),
+                    2.5m
+                ),
+            ]
+        );
+
+        unchanged.Should().BeSameAs(series);
+        changed.Should().NotBeSameAs(series);
+        changed.Segments.Single().Closes.Should().Equal(1m, 2.5m);
+    }
+
+    [Fact]
     public void Replace_KeepsRowsAfterAShorterReadsEnd()
     {
         var loadedAt = DateTime.UtcNow;
