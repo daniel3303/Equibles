@@ -5,11 +5,12 @@ namespace Equibles.Sec.HostedService.Services;
 /// to the frontier instead of anti-joining the whole table. New rows are always created at the
 /// frontier (CreationTime = insert time), so a floored batch query sees all new work. Rows left
 /// behind the frontier are caught by two rescan tiers: an hourly rescan from the oldest row any
-/// batch read since the previous one, never more than <see cref="BoundedRescanLookback"/> behind
-/// the floor (stragglers are read-skew commits or partially processed batches, always near the
-/// frontier — an index-range anti-join, not a corpus scan), and an unfloored full scan at most
-/// once per day as the backstop for re-queued work older than the bounded window. The cursor is owned by the long-lived worker — the
-/// per-scope manager only reads and advances it — and hydrates its floor and full-rescan stamp
+/// batch read since the previous one, never more than <see cref="BoundedRescanLookback"/>
+/// behind the floor (stragglers are read-skew commits or partially processed batches, always
+/// near the frontier — an index-range anti-join, not a corpus scan), and an unfloored full scan
+/// at most once per day as the backstop for re-queued work older than the bounded window. The
+/// cursor is owned by the long-lived worker — the per-scope manager only reads and advances it —
+/// and hydrates its floor and full-rescan stamp
 /// from the persisted BackfillState row, so a process restart resumes at the frontier instead
 /// of paying the minutes-long corpus scan on every boot (deploy bursts used to pay it several
 /// times in a row).
@@ -42,8 +43,8 @@ public class BackfillCursor
 
     private DateTime _lastBoundedScanUtc = DateTime.MinValue;
 
-    // Oldest row any batch read since the last bounded rescan started, which bounds every row a
-    // batch skipped since; unknown until this process runs one, so the first looks back in full.
+    // Oldest row any batch read since the last bounded rescan read its window, which bounds every
+    // row a batch skipped since; unknown until this process runs one, so the first looks back in full.
     private DateTime? _oldestReadSinceBoundedRescan;
 
     /// <summary>The BackfillState row key this cursor hydrates from and persists to.</summary>
@@ -94,18 +95,28 @@ public class BackfillCursor
     }
 
     /// <summary>Moves the frontier to the newest CreationTime the current batch reached.</summary>
-    public void Advance(DateTime lastBatchCreationTime) =>
-        Advance(lastBatchCreationTime, lastBatchCreationTime);
-
-    /// <summary>
-    /// Moves the frontier to the newest CreationTime the batch reached and records its oldest,
-    /// where any row the batch failed to process stays for the next bounded rescan to find.
-    /// </summary>
-    public void Advance(DateTime firstBatchCreationTime, DateTime lastBatchCreationTime)
+    public void Advance(DateTime lastBatchCreationTime)
     {
         Floor = lastBatchCreationTime;
+    }
+
+    /// <summary>
+    /// Records the oldest CreationTime of a batch about to be processed: any row it leaves
+    /// unprocessed, through a skip or a fault, stays there for the next bounded rescan to find.
+    /// </summary>
+    public void NoteRead(DateTime firstBatchCreationTime)
+    {
         if (_oldestReadSinceBoundedRescan is { } oldest && firstBatchCreationTime < oldest)
             _oldestReadSinceBoundedRescan = firstBatchCreationTime;
+    }
+
+    /// <summary>
+    /// Records that the admitted bounded rescan read its window, so the next one starts from the
+    /// current floor; a rescan whose query faulted never calls this and stays due from the same floor.
+    /// </summary>
+    public void CompleteBoundedRescan()
+    {
+        _oldestReadSinceBoundedRescan = Floor;
     }
 
     /// <summary>
@@ -113,8 +124,7 @@ public class BackfillCursor
     /// set here) to one per interval. False when still rate-limited or when there is no floor to
     /// bound from — a floorless cursor has never processed anything, so only the full scan
     /// applies. The floor itself is left untouched: a rescan that finds stragglers moves it back
-    /// via <see cref="Advance(DateTime, DateTime)"/>, and the floored path then works itself
-    /// forward again.
+    /// via <see cref="Advance"/>, and the floored path then works itself forward again.
     /// </summary>
     public bool TryStartBoundedRescan(DateTime utcNow)
     {
@@ -131,7 +141,6 @@ public class BackfillCursor
             && oldest - BoundedRescanCommitMargin > lookback
                 ? oldest - BoundedRescanCommitMargin
                 : lookback;
-        _oldestReadSinceBoundedRescan = Floor;
         return true;
     }
 

@@ -675,6 +675,165 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GenerateEmbeddingBatch_AfterARescan_ReadsOnlyFromTheOldestRowReadSince()
+    {
+        // Once this process has rescanned, the next rescan starts at the floor it last started
+        // from less the commit margin, not a full lookback behind the frontier.
+        var (frontier, near, far) = await SeedRescanWindow();
+        var cursor = new BackfillCursor("chunk-embedding");
+        cursor.Hydrate(frontier.CreationTime, DateTime.UtcNow);
+        cursor.TryStartBoundedRescan(DateTime.UtcNow.AddHours(-2)).Should().BeTrue();
+        cursor.CompleteBoundedRescan();
+        List<Chunk> processed = null;
+        _processor
+            .GenerateEmbeddings(
+                Arg.Do<List<Chunk>>(chunks => processed = chunks),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.CompletedTask);
+
+        (await NewEmbeddingManager().GenerateEmbeddingBatch(cursor, CancellationToken.None))
+            .Should()
+            .BeTrue();
+
+        processed.Select(chunk => chunk.Id).Should().Equal(near.Id);
+        far.CreationTime.Should().BeBefore(cursor.BoundedRescanFloor!.Value);
+    }
+
+    [Fact]
+    public async Task GenerateEmbeddingBatch_RescanBatchFaults_KeepsItsRowsInTheNextRescan()
+    {
+        // A rescan batch that throws never advances, so its oldest row must already be recorded
+        // or the next rescan would start past it.
+        var (frontier, near, _) = await SeedRescanWindow();
+        var cursor = new BackfillCursor("chunk-embedding");
+        cursor.Hydrate(frontier.CreationTime, DateTime.UtcNow);
+        cursor.TryStartBoundedRescan(DateTime.UtcNow.AddHours(-2)).Should().BeTrue();
+        cursor.CompleteBoundedRescan();
+        _processor
+            .GenerateEmbeddings(Arg.Any<List<Chunk>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("embedding server down")));
+
+        var act = () =>
+            NewEmbeddingManager().GenerateEmbeddingBatch(cursor, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        cursor.TryStartBoundedRescan(DateTime.UtcNow.AddHours(2)).Should().BeTrue();
+        cursor
+            .BoundedRescanFloor.Should()
+            .BeCloseTo(
+                near.CreationTime - BackfillCursor.BoundedRescanCommitMargin,
+                TimeSpan.FromMicroseconds(1)
+            );
+    }
+
+    [Fact]
+    public async Task GenerateEmbeddingBatch_RescanQueryFaults_KeepsTheSameWindowDue()
+    {
+        // A rescan query that times out read nothing, so the next rescan must start from the
+        // same floor instead of past the rows a batch read before it.
+        var (frontier, near, _) = await SeedRescanWindow();
+        var cursor = new BackfillCursor("chunk-embedding");
+        cursor.Hydrate(frontier.CreationTime, DateTime.UtcNow);
+        cursor.TryStartBoundedRescan(DateTime.UtcNow.AddHours(-2)).Should().BeTrue();
+        cursor.CompleteBoundedRescan();
+        cursor.NoteRead(near.CreationTime);
+        var manager = new DocumentManager(
+            new DocumentRepository(DbContext),
+            new SecondReadFailsChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
+            _processor,
+            Options.Create(
+                new EmbeddingConfig
+                {
+                    Enabled = true,
+                    BaseUrl = "http://localhost:11434",
+                    ModelName = "test-model",
+                }
+            ),
+            NullLogger<DocumentManager>()
+        );
+
+        var act = () => manager.GenerateEmbeddingBatch(cursor, CancellationToken.None);
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        var failedFloor = cursor.BoundedRescanFloor;
+        failedFloor
+            .Should()
+            .BeCloseTo(
+                near.CreationTime - BackfillCursor.BoundedRescanCommitMargin,
+                TimeSpan.FromMicroseconds(1)
+            );
+        cursor.TryStartBoundedRescan(DateTime.UtcNow.AddHours(2)).Should().BeTrue();
+        cursor.BoundedRescanFloor.Should().Be(failedFloor);
+    }
+
+    // The floored read succeeds and the bounded rescan read after it times out.
+    private sealed class SecondReadFailsChunkRepository(
+        Equibles.Data.EquiblesFinancialDbContext dbContext
+    ) : ChunkRepository(dbContext)
+    {
+        private int _reads;
+
+        public override IQueryable<Chunk> GetAll() =>
+            ++_reads == 2 ? throw new TimeoutException("bounded rescan timed out") : base.GetAll();
+    }
+
+    // An embedded frontier chunk with one unembedded chunk 30 minutes and one 10 hours behind it.
+    private async Task<(Chunk Frontier, Chunk Near, Chunk Far)> SeedRescanWindow()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddDays(-1)
+        );
+        var frontier = MakeChunk(
+            document,
+            content: "embedded frontier",
+            index: 0,
+            createdAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+        var near = MakeChunk(
+            document,
+            content: "near straggler",
+            index: 1,
+            createdAt: frontier.CreationTime.AddMinutes(-30)
+        );
+        var far = MakeChunk(
+            document,
+            content: "far straggler",
+            index: 2,
+            createdAt: frontier.CreationTime.AddHours(-10)
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        DbContext.Set<Chunk>().AddRange(frontier, near, far);
+        DbContext
+            .Set<Embedding>()
+            .Add(
+                new Embedding
+                {
+                    Id = Guid.NewGuid(),
+                    ChunkId = frontier.Id,
+                    Model = "test-model",
+                    Vector = new Vector(new ReadOnlyMemory<float>(new[] { 1f, 0f, 0f })),
+                    VectorDimension = 3,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        return (frontier, near, far);
+    }
+
+    [Fact]
     public async Task GenerateEmbeddingBatch_ProcessorThrows_RewindsTheFullRescanStampAndDoesNotAdvance()
     {
         // The all-fail guard in the processor throws on a systemic outage AFTER the batch was
