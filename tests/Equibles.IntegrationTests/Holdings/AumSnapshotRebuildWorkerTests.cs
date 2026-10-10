@@ -531,44 +531,6 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExecuteAsync_ListingRowsWithoutFigures_RebuildOnlyThoseQuarters()
-    {
-        // Rows an older worker wrote carry null per-listing figures; boot rebuilds those
-        // quarters alone, so a restart resumes instead of walking every quarter again.
-        await SeedTwoQuarters();
-        await SeedFullCoverage(DateTime.UtcNow.AddHours(-1));
-        await using (var ctx = FreshContext())
-        {
-            await ctx.Set<StockQuarterlyListingActivity>()
-                .Where(row => row.ReportDate == Q3)
-                .ExecuteUpdateAsync(set =>
-                    set.SetProperty(row => row.CurrentFilerCount, (int?)null)
-                );
-        }
-
-        var scopeFactory = ScopeFactory();
-        var refreshService = new HoldingsAggregateRefreshService(
-            scopeFactory,
-            NullLogger<HoldingsAggregateRefreshService>.Instance
-        );
-        var worker = new InstantTickWorker(scopeFactory, refreshService);
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await worker.StartAsync(cts.Token);
-        await WaitForSnapshots(async ctx =>
-            !await ctx.Set<StockQuarterlyListingActivity>()
-                .AnyAsync(row => !row.IsCombined && row.CurrentFilerCount == null)
-        );
-        await worker.StopAsync(CancellationToken.None);
-
-        await using var read = FreshContext();
-        var totals = await read.Set<AumQuarterlySnapshot>()
-            .ToDictionaryAsync(s => s.ReportDate, s => s.TotalValue);
-        totals[Q3].Should().NotBe(999_999_999, "the quarter missing figures was rebuilt");
-        totals[Q4].Should().Be(999_999_999, "a quarter whose rows carry figures is left alone");
-    }
-
-    [Fact]
     public async Task ExecuteAsync_NoHoldings_DoesNotCreatePhantomSnapshotRows()
     {
         // No holdings seeded — the worker should not invent rows out of nothing.

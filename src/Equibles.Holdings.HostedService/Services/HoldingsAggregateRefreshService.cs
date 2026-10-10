@@ -75,13 +75,6 @@ public class HoldingsAggregateRefreshService
         );
     }
 
-    // Rebuilds the given quarters in order with the per-quarter error isolation of the bulk paths.
-    public Task RebuildReportDatesAsync(
-        IReadOnlyList<DateOnly> reportDates,
-        TimeSpan? commandTimeout,
-        CancellationToken cancellationToken
-    ) => RebuildReportDates(reportDates.ToList(), commandTimeout, cancellationToken);
-
     public Task RebuildAllAsync(CancellationToken cancellationToken) =>
         RebuildAllAsync(commandTimeout: null, cancellationToken);
 

@@ -34,7 +34,7 @@ public class StockQuarterlyListingActivity
 
     // Current-quarter figures over this exact listing's 13F rows, so exact-listing request
     // reads never group the holdings corpus; a rebuilt closed-quarter row carries them, zero
-    // when sold out. Null means an older worker or the combined lane wrote the row.
+    // when sold out. Null means the combined lane wrote the row.
     public long? CurrentValue { get; set; }
 
     // Distinct 13F filers with a row in this listing-quarter.
