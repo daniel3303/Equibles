@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
@@ -30,16 +31,19 @@ public class BacktestPriceLoader
     private readonly EquityDailyStockPriceRepository _priceRepository;
     private readonly EquityIssuerRepository _stockRepository;
     private readonly StockSplitRepository _splitRepository;
+    private readonly BacktestPriceSeriesCache _seriesCache;
 
     public BacktestPriceLoader(
         EquityDailyStockPriceRepository priceRepository,
         EquityIssuerRepository stockRepository,
-        StockSplitRepository splitRepository
+        StockSplitRepository splitRepository,
+        BacktestPriceSeriesCache seriesCache
     )
     {
         _priceRepository = priceRepository;
         _stockRepository = stockRepository;
         _splitRepository = splitRepository;
+        _seriesCache = seriesCache;
     }
 
     /// <summary>
@@ -125,7 +129,7 @@ public class BacktestPriceLoader
                 EquityListingId = mapping.Id,
             })
             .ToListAsync(cancellationToken);
-        var listingIds = mappings
+        var stockByListing = mappings
             .GroupBy(mapping => new ListingKey(
                 mapping.CommonStockId,
                 NormalizeTicker(mapping.ListedTicker)
@@ -137,33 +141,15 @@ public class BacktestPriceLoader
                     new ListingKey(mapping.CommonStockId, NormalizeTicker(mapping.ListedTicker))
                 )
             )
-            .Select(mapping => mapping.EquityListingId)
-            .Distinct()
-            .ToArray();
-        var rows = new List<LoadedPriceRow>();
-        foreach (var listingBatch in listingIds.Chunk(ListingQueryBatchSize))
-        {
-            rows.AddRange(
-                await _priceRepository
-                    .GetAllSeries()
-                    .Where(ListingPredicate(listingBatch))
-                    .Where(price =>
-                        price.Date >= priceWindowFrom
-                        && price.Date <= to
-                        && price.Close > 0
-                        && price.Volume > 0
-                    )
-                    .Select(price => new LoadedPriceRow
-                    {
-                        CommonStockId = price.Listing.Security.EquityIssuerId,
-                        ListedTicker = price.SourceTicker,
-                        Date = price.Date,
-                        Close = price.Close,
-                    })
-                    .ToListAsync(cancellationToken)
-            );
-        }
-
+            .GroupBy(mapping => mapping.EquityListingId)
+            .ToDictionary(group => group.Key, group => group.First().CommonStockId);
+        var rows = await LoadListingRows(
+            stockByListing,
+            priceWindowFrom,
+            to,
+            splits,
+            cancellationToken
+        );
         var pricesByListing = rows.Select(row => new
             {
                 Key = new ListingKey(row.CommonStockId, NormalizeTicker(row.ListedTicker)),
@@ -297,6 +283,230 @@ public class BacktestPriceLoader
     }
 
     private static string NormalizeTicker(string ticker) => ticker?.Trim().ToUpperInvariant();
+
+    // Every listing is read through the process-wide series cache. A miss, or a listing whose
+    // stock gained a split since its rows were read, is read for the whole window; a cached
+    // listing is re-read from the unsettled tail before its last cached date, so the newest
+    // closes land as soon as they are stored and a resettled bar is replaced on the next read.
+    // A corrected older close without a split waits for the window start to move or for the
+    // entry's lifetime, whichever comes first.
+    private async Task<List<LoadedPriceRow>> LoadListingRows(
+        IReadOnlyDictionary<Guid, Guid> stockByListing,
+        DateOnly priceWindowFrom,
+        DateOnly to,
+        IReadOnlyList<StockSplit> splits,
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = new List<LoadedPriceRow>();
+        var misses = new List<Guid>();
+        var hits = new List<(Guid ListingId, CachedListingSeries Series)>();
+        foreach (var (listingId, stockId) in stockByListing)
+        {
+            if (
+                _seriesCache.TryGet(listingId, priceWindowFrom, out var cached)
+                && !RestatedSince(splits, stockId, cached.LoadedAt)
+            )
+            {
+                hits.Add((listingId, cached));
+            }
+            else
+            {
+                // Yesterday's generation would otherwise hold its capacity until it expires.
+                _seriesCache.Remove(listingId, priceWindowFrom.AddDays(-1));
+                misses.Add(listingId);
+            }
+        }
+
+        foreach (var batch in misses.Chunk(ListingQueryBatchSize))
+        {
+            var loadedAt = DateTime.UtcNow;
+            var loaded = (await QueryRows(batch, priceWindowFrom, to, cancellationToken)).ToLookup(
+                row => row.EquityListingId
+            );
+            foreach (var listingId in batch)
+            {
+                var series = ToSeries(loaded[listingId], loadedAt);
+                _seriesCache.Set(listingId, priceWindowFrom, series);
+                AppendRows(rows, stockByListing[listingId], series, to);
+            }
+        }
+
+        // The tail is re-read per distinct cached end so a listing that stopped trading never
+        // widens the read of the ones that trade daily.
+        foreach (var group in hits.GroupBy(hit => hit.Series.MaxDate))
+        {
+            var tailFrom = TailFrom(group.Key, priceWindowFrom);
+            foreach (var batch in group.Chunk(ListingQueryBatchSize))
+            {
+                var fresh = (
+                    tailFrom <= to
+                        ? await QueryRows(
+                            batch.Select(hit => hit.ListingId).ToArray(),
+                            tailFrom,
+                            to,
+                            cancellationToken
+                        )
+                        : []
+                ).ToLookup(row => row.EquityListingId);
+                foreach (var (listingId, series) in batch)
+                {
+                    var current = Replace(series, tailFrom, to, fresh[listingId]);
+                    if (!ReferenceEquals(current, series))
+                    {
+                        _seriesCache.Set(listingId, priceWindowFrom, current);
+                    }
+                    AppendRows(rows, stockByListing[listingId], current, to);
+                }
+            }
+        }
+        return rows;
+    }
+
+    // The first date a cached series is re-read from: the unsettled tail before its last row,
+    // never earlier than the window itself.
+    internal static DateOnly TailFrom(DateOnly? maxDate, DateOnly priceWindowFrom)
+    {
+        if (maxDate is not { } last)
+            return priceWindowFrom;
+        var tail = last.AddDays(-BacktestPriceSeriesCache.UnsettledTailDays);
+        return tail < priceWindowFrom ? priceWindowFrom : tail;
+    }
+
+    private static bool RestatedSince(
+        IReadOnlyList<StockSplit> splits,
+        Guid stockId,
+        DateTime loadedAt
+    ) =>
+        splits.Any(split =>
+            split.EquityIssuerId == stockId
+            && (split.CreationTime > loadedAt || split.PriceAdjustmentAppliedTime > loadedAt)
+        );
+
+    private async Task<List<QueriedPriceRow>> QueryRows(
+        IReadOnlyCollection<Guid> listingIds,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken
+    ) =>
+        await _priceRepository
+            .GetAllSeries()
+            .Where(ListingPredicate(listingIds))
+            .Where(price =>
+                price.Date >= from && price.Date <= to && price.Close > 0 && price.Volume > 0
+            )
+            .Select(price => new QueriedPriceRow(
+                price.EquityListingId,
+                price.SourceTicker,
+                price.Date,
+                price.Close
+            ))
+            .ToListAsync(cancellationToken);
+
+    internal static CachedListingSeries ToSeries(
+        IEnumerable<QueriedPriceRow> rows,
+        DateTime loadedAt
+    )
+    {
+        var segments = new List<CachedSeriesSegment>();
+        DateOnly? maxDate = null;
+        var run = new List<QueriedPriceRow>();
+        foreach (var row in rows.OrderBy(row => row.Date))
+        {
+            if (run.Count > 0 && run[^1].SourceTicker != row.SourceTicker)
+            {
+                segments.Add(ToSegment(run));
+                run.Clear();
+            }
+            run.Add(row);
+            maxDate = row.Date;
+        }
+        if (run.Count > 0)
+            segments.Add(ToSegment(run));
+        return new CachedListingSeries
+        {
+            LoadedAt = loadedAt,
+            MaxDate = maxDate,
+            Segments = segments,
+        };
+    }
+
+    private static CachedSeriesSegment ToSegment(List<QueriedPriceRow> run) =>
+        new(
+            run[0].SourceTicker,
+            run.Select(row => row.Date).ToArray(),
+            run.Select(row => row.Close).ToArray()
+        );
+
+    // Replaces the cached rows inside the re-read range [tailFrom, to] with the fresh ones, so a
+    // bar the lane resettled is replaced, one stored since is appended and one deleted is gone;
+    // rows before the tail and after a shorter read's end stay as cached. Returns the same
+    // series when the range is unchanged, so an untouched tail costs no rebuild or re-set.
+    internal static CachedListingSeries Replace(
+        CachedListingSeries series,
+        DateOnly tailFrom,
+        DateOnly to,
+        IEnumerable<QueriedPriceRow> fresh
+    )
+    {
+        var cached = series
+            .Segments.SelectMany(segment =>
+                segment.Dates.Select(
+                    (date, index) =>
+                        new QueriedPriceRow(
+                            Guid.Empty,
+                            segment.SourceTicker,
+                            date,
+                            segment.Closes[index]
+                        )
+                )
+            )
+            .ToList();
+        var inRange = fresh
+            .Where(row => row.Date >= tailFrom && row.Date <= to)
+            .Select(row => row with { EquityListingId = Guid.Empty })
+            .OrderBy(row => row.Date)
+            .ToList();
+        if (cached.Where(row => row.Date >= tailFrom && row.Date <= to).SequenceEqual(inRange))
+        {
+            return series;
+        }
+        var kept = cached.Where(row => row.Date < tailFrom || row.Date > to);
+        return ToSeries(kept.Concat(inRange), series.LoadedAt);
+    }
+
+    private static void AppendRows(
+        List<LoadedPriceRow> rows,
+        Guid stockId,
+        CachedListingSeries series,
+        DateOnly to
+    )
+    {
+        foreach (var segment in series.Segments)
+        {
+            for (var index = 0; index < segment.Dates.Length; index++)
+            {
+                if (segment.Dates[index] > to)
+                    break;
+                rows.Add(
+                    new LoadedPriceRow
+                    {
+                        CommonStockId = stockId,
+                        ListedTicker = segment.SourceTicker,
+                        Date = segment.Dates[index],
+                        Close = segment.Closes[index],
+                    }
+                );
+            }
+        }
+    }
+
+    internal readonly record struct QueriedPriceRow(
+        Guid EquityListingId,
+        string SourceTicker,
+        DateOnly Date,
+        decimal Close
+    );
 
     internal static Expression<Func<EquityDailyStockPrice, bool>> ListingPredicate(
         IReadOnlyCollection<Guid> listingIds
