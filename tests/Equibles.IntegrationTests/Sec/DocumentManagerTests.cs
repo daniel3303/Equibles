@@ -579,6 +579,102 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GenerateEmbeddingBatch_DrainedFrontier_RescansFromTheLookbackAndRemembersTheStraggler()
+    {
+        // The first bounded rescan in a process reads a lookback behind the drained floor:
+        // it takes a straggler inside that window, leaves an older one to the daily full scan,
+        // and the straggler it read, still unembedded, is where the next rescan must start.
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddDays(-3)
+        );
+        var frontier = MakeChunk(
+            document,
+            content: "embedded frontier",
+            index: 0,
+            createdAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+        var straggler = MakeChunk(
+            document,
+            content: "straggler",
+            index: 1,
+            createdAt: frontier.CreationTime.AddHours(-20)
+        );
+        var laterStraggler = MakeChunk(
+            document,
+            content: "later straggler",
+            index: 3,
+            createdAt: frontier.CreationTime.AddHours(-10)
+        );
+        var older = MakeChunk(
+            document,
+            content: "behind the window",
+            index: 2,
+            createdAt: frontier.CreationTime.AddDays(-2)
+        );
+
+        DbContext.Set<EquityIssuer>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        DbContext.Set<Chunk>().AddRange(frontier, straggler, laterStraggler, older);
+        DbContext
+            .Set<Embedding>()
+            .Add(
+                new Embedding
+                {
+                    Id = Guid.NewGuid(),
+                    ChunkId = frontier.Id,
+                    Model = "test-model",
+                    Vector = new Vector(new ReadOnlyMemory<float>(new[] { 1f, 0f, 0f })),
+                    VectorDimension = 3,
+                }
+            );
+        DbContext
+            .Set<BackfillState>()
+            .Add(
+                new BackfillState
+                {
+                    Name = "chunk-embedding",
+                    Floor = frontier.CreationTime,
+                    LastFullRescanAt = DateTime.UtcNow,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        List<Chunk> processed = null;
+        _processor
+            .GenerateEmbeddings(
+                Arg.Do<List<Chunk>>(chunks => processed = chunks),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.CompletedTask);
+        var cursor = new BackfillCursor("chunk-embedding");
+
+        var workDone = await NewEmbeddingManager()
+            .GenerateEmbeddingBatch(cursor, CancellationToken.None);
+
+        workDone.Should().BeTrue();
+        processed.Select(chunk => chunk.Id).Should().Equal(straggler.Id, laterStraggler.Id);
+        cursor.Floor.Should().BeCloseTo(laterStraggler.CreationTime, TimeSpan.FromMicroseconds(1));
+        cursor.TryStartBoundedRescan(DateTime.UtcNow.AddHours(2)).Should().BeTrue();
+        cursor
+            .BoundedRescanFloor.Should()
+            .BeCloseTo(
+                straggler.CreationTime - BackfillCursor.BoundedRescanCommitMargin,
+                TimeSpan.FromMicroseconds(1)
+            );
+    }
+
+    [Fact]
     public async Task GenerateEmbeddingBatch_ProcessorThrows_RewindsTheFullRescanStampAndDoesNotAdvance()
     {
         // The all-fail guard in the processor throws on a systemic outage AFTER the batch was

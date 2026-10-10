@@ -4,11 +4,11 @@ namespace Equibles.Sec.HostedService.Services;
 /// Tracks how far a CreationTime-ordered backfill has progressed so each poll seeks straight
 /// to the frontier instead of anti-joining the whole table. New rows are always created at the
 /// frontier (CreationTime = insert time), so a floored batch query sees all new work. Rows left
-/// behind the frontier are caught by two rescan tiers: an hourly rescan bounded to
-/// <see cref="BoundedRescanLookback"/> behind the floor (stragglers are read-skew commits or
-/// partially processed batches, always near the frontier — an index-range anti-join, not a
-/// corpus scan), and an unfloored full scan at most once per day as the backstop for re-queued
-/// work older than the bounded window. The cursor is owned by the long-lived worker — the
+/// behind the frontier are caught by two rescan tiers: an hourly rescan from the oldest row any
+/// batch read since the previous one, never more than <see cref="BoundedRescanLookback"/> behind
+/// the floor (stragglers are read-skew commits or partially processed batches, always near the
+/// frontier — an index-range anti-join, not a corpus scan), and an unfloored full scan at most
+/// once per day as the backstop for re-queued work older than the bounded window. The cursor is owned by the long-lived worker — the
 /// per-scope manager only reads and advances it — and hydrates its floor and full-rescan stamp
 /// from the persisted BackfillState row, so a process restart resumes at the frontier instead
 /// of paying the minutes-long corpus scan on every boot (deploy bursts used to pay it several
@@ -18,10 +18,14 @@ public class BackfillCursor
 {
     // Stragglers surface close behind the frontier: a long transaction committing rows whose
     // CreationTime predates an already-advanced floor, or a batch whose processing partially
-    // skipped items. An hourly rescan floored a week back catches both through the
+    // skipped items. An hourly rescan floored at most a day back catches both through the
     // CreationTime index without touching the rest of the corpus.
     private static readonly TimeSpan BoundedRescanInterval = TimeSpan.FromHours(1);
-    public static readonly TimeSpan BoundedRescanLookback = TimeSpan.FromDays(7);
+    public static readonly TimeSpan BoundedRescanLookback = TimeSpan.FromDays(1);
+
+    // A writer stamps CreationTime before it commits; a row committed after a rescan started can
+    // predate the oldest row read since by at most this long.
+    public static readonly TimeSpan BoundedRescanCommitMargin = TimeSpan.FromHours(1);
 
     // A full (unfloored) scan anti-joins the entire table — minutes on the chunk corpus — so it
     // runs at most daily, purely as the backstop for work re-queued behind the bounded window
@@ -37,6 +41,10 @@ public class BackfillCursor
     private static readonly TimeSpan FailedFullRescanRetryInterval = TimeSpan.FromMinutes(30);
 
     private DateTime _lastBoundedScanUtc = DateTime.MinValue;
+
+    // Oldest row any batch read since the last bounded rescan started, which bounds every row a
+    // batch skipped since; unknown until this process runs one, so the first looks back in full.
+    private DateTime? _oldestReadSinceBoundedRescan;
 
     /// <summary>The BackfillState row key this cursor hydrates from and persists to.</summary>
     public string Name { get; }
@@ -57,6 +65,13 @@ public class BackfillCursor
     /// admits the rescan immediately — a fresh install backfills without waiting out a day.
     /// </summary>
     public DateTime? LastFullRescanAt { get; private set; }
+
+    /// <summary>
+    /// Lower bound of the bounded rescan <see cref="TryStartBoundedRescan"/> last admitted: the
+    /// oldest row read since the previous one, less <see cref="BoundedRescanCommitMargin"/>, and
+    /// never more than <see cref="BoundedRescanLookback"/> behind the floor.
+    /// </summary>
+    public DateTime? BoundedRescanFloor { get; private set; }
 
     public BackfillCursor(string name)
     {
@@ -79,18 +94,27 @@ public class BackfillCursor
     }
 
     /// <summary>Moves the frontier to the newest CreationTime the current batch reached.</summary>
-    public void Advance(DateTime lastBatchCreationTime)
+    public void Advance(DateTime lastBatchCreationTime) =>
+        Advance(lastBatchCreationTime, lastBatchCreationTime);
+
+    /// <summary>
+    /// Moves the frontier to the newest CreationTime the batch reached and records its oldest,
+    /// where any row the batch failed to process stays for the next bounded rescan to find.
+    /// </summary>
+    public void Advance(DateTime firstBatchCreationTime, DateTime lastBatchCreationTime)
     {
         Floor = lastBatchCreationTime;
+        if (_oldestReadSinceBoundedRescan is { } oldest && firstBatchCreationTime < oldest)
+            _oldestReadSinceBoundedRescan = firstBatchCreationTime;
     }
 
     /// <summary>
-    /// Rate-limits the bounded straggler rescan (a query floored at Floor −
-    /// <see cref="BoundedRescanLookback"/>) to one per interval. False when still rate-limited
-    /// or when there is no floor to bound from — a floorless cursor has never processed
-    /// anything, so only the full scan applies. The floor itself is left untouched: a rescan
-    /// that finds stragglers moves it back via <see cref="Advance"/>, and the floored path then
-    /// works itself forward again.
+    /// Rate-limits the bounded straggler rescan (a query floored at <see cref="BoundedRescanFloor"/>,
+    /// set here) to one per interval. False when still rate-limited or when there is no floor to
+    /// bound from — a floorless cursor has never processed anything, so only the full scan
+    /// applies. The floor itself is left untouched: a rescan that finds stragglers moves it back
+    /// via <see cref="Advance(DateTime, DateTime)"/>, and the floored path then works itself
+    /// forward again.
     /// </summary>
     public bool TryStartBoundedRescan(DateTime utcNow)
     {
@@ -101,6 +125,13 @@ public class BackfillCursor
             return false;
 
         _lastBoundedScanUtc = utcNow;
+        var lookback = Floor.Value - BoundedRescanLookback;
+        BoundedRescanFloor =
+            _oldestReadSinceBoundedRescan is { } oldest
+            && oldest - BoundedRescanCommitMargin > lookback
+                ? oldest - BoundedRescanCommitMargin
+                : lookback;
+        _oldestReadSinceBoundedRescan = Floor;
         return true;
     }
 

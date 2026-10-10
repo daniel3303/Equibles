@@ -192,7 +192,10 @@ public class DocumentManager
             () => _documentProcessor.GenerateEmbeddings(chunksWithoutEmbeddings, cancellationToken),
             cursor
         );
-        cursor.Advance(chunksWithoutEmbeddings[^1].CreationTime);
+        cursor.Advance(
+            chunksWithoutEmbeddings[0].CreationTime,
+            chunksWithoutEmbeddings[^1].CreationTime
+        );
         await PersistCursor(cursor);
         return true;
     }
@@ -217,8 +220,8 @@ public class DocumentManager
         }
     }
 
-    // Floored batch first; when the frontier drains, an hourly rescan bounded a week behind the
-    // floor catches near-frontier stragglers cheaply, and an unfloored corpus scan runs at most
+    // Floored batch first; when the frontier drains, an hourly rescan from the oldest row read
+    // since the previous one catches near-frontier stragglers cheaply, and an unfloored corpus scan runs at most
     // daily as the backstop for re-queued work older than the bounded window. The cursor
     // hydrates from its persisted BackfillState row on first use per process, so a restart
     // resumes at the frontier instead of paying the corpus scan.
@@ -237,9 +240,9 @@ public class DocumentManager
         }
 
         var utcNow = DateTime.UtcNow;
-        if (cursor.Floor is { } drainedFloor && cursor.TryStartBoundedRescan(utcNow))
+        if (cursor.TryStartBoundedRescan(utcNow))
         {
-            var batch = await query(drainedFloor - BackfillCursor.BoundedRescanLookback);
+            var batch = await query(cursor.BoundedRescanFloor);
             if (batch.Count > 0)
                 return batch;
         }
