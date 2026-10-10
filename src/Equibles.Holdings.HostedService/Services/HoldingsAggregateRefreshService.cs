@@ -708,6 +708,36 @@ public class HoldingsAggregateRefreshService
         CancellationToken cancellationToken
     )
     {
+        // A date without Form 13F positions (a Schedule 13D/G event date a stub dirtied) is not
+        // a quarter: carrying the prior quarter's listings forward would publish a sold-out row
+        // for every one of them, so the date's activity rows are removed instead.
+        var is13FReportDate =
+            await dbContext
+                .Set<InstitutionalHolding>()
+                .AnyAsync(
+                    h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F,
+                    cancellationToken
+                )
+            || await dbContext
+                .Set<InstitutionalFiling>()
+                .Zero13FRestatements()
+                .AnyAsync(f => f.ReportDate == reportDate, cancellationToken);
+        if (!is13FReportDate)
+        {
+            await dbContext
+                .Set<StockQuarterlyActivity>()
+                .Where(s => s.ReportDate == reportDate)
+                .ExecuteDeleteAsync(cancellationToken);
+            await ReplaceListingActivitySnapshots(
+                dbContext,
+                reportDate,
+                isCombined: false,
+                [],
+                cancellationToken
+            );
+            return;
+        }
+
         // The prior quarter on record. default(DateOnly) when this is the
         // earliest — no holding row carries that date, so every "previous"
         // predicate below is simply false and all current filers count as new.

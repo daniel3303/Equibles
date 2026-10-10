@@ -128,6 +128,62 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RebuildQuarterAsync_13DGEventDate_RemovesItsActivityRows()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
+        var holderA = await SeedHolder(seed, "H001");
+        var holder13D = await SeedHolder(seed, "H004");
+        seed.AddRange(
+            MakeHolding(aapl, holderA, QPrev, 100_000, "acc-a-prev"),
+            MakeHolding(
+                aapl,
+                holder13D,
+                PollutionDate,
+                999_000_000,
+                "acc-13d",
+                filingType: FilingType.Schedule13D
+            ),
+            // Rows an older rebuild carried forward onto the event date.
+            new StockQuarterlyActivity
+            {
+                EquityIssuerId = aapl.Id,
+                ReportDate = PollutionDate,
+                PreviousReportDate = QPrev,
+                PreviousShares = 10_000,
+                PreviousValue = 100_000,
+                PreviousFilerCount = 1,
+            },
+            new StockQuarterlyListingActivity
+            {
+                EquityIssuerId = aapl.Id,
+                ReportDate = PollutionDate,
+                IsCombined = false,
+                PriceSeriesTicker = "AAPL",
+                PreviousShares = 10_000,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(PollutionDate, CancellationToken.None);
+
+        await using var read = FreshContext();
+        (await read.Set<StockQuarterlyActivity>().AnyAsync(s => s.ReportDate == PollutionDate))
+            .Should()
+            .BeFalse("a 13D/G event date is not a quarter");
+        (
+            await read.Set<StockQuarterlyListingActivity>()
+                .AnyAsync(s => s.ReportDate == PollutionDate)
+        )
+            .Should()
+            .BeFalse("the carried-forward sold-out rows are removed");
+        (await read.Set<StockQuarterlyActivity>().AnyAsync(s => s.ReportDate == QPrev))
+            .Should()
+            .BeFalse("other quarters are untouched");
+    }
+
+    [Fact]
     public async Task RebuildQuarterAsync_PreservesExactListingShareBreakdown()
     {
         await using var seed = FreshContext();

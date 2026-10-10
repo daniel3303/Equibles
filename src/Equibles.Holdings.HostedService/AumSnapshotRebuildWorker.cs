@@ -266,27 +266,19 @@ public class AumSnapshotRebuildWorker : BackgroundService
     }
 
     // Rows an older worker wrote lack the per-listing figures, and only a rebuild revisits a
-    // quarter no import dirties; each boot resumes with the 13F quarters still missing them.
-    // Complete when no non-combined row of a 13F quarter has a null CurrentFilerCount.
+    // date no import dirties; each boot resumes with the dates still carrying nulls. A date
+    // that is not a 13F quarter loses its rows in that rebuild. Complete when no non-combined
+    // row has a null CurrentFilerCount.
     private async Task BackfillListingFigures(
         EquiblesFinancialDbContext dbContext,
         CancellationToken cancellationToken
     )
     {
-        var nullFigureDates = await dbContext
+        var quarters = await dbContext
             .Set<StockQuarterlyListingActivity>()
             .Where(s => !s.IsCombined && s.CurrentFilerCount == null)
             .Select(s => s.ReportDate)
             .Distinct()
-            .ToListAsync(cancellationToken);
-        if (nullFigureDates.Count == 0)
-        {
-            return;
-        }
-
-        var quarters = await InstitutionalHoldingReportDateQueries
-            .Get13FReportDates(dbContext)
-            .Where(date => nullFigureDates.Contains(date))
             .OrderBy(date => date)
             .ToListAsync(cancellationToken);
         if (quarters.Count == 0)
@@ -295,7 +287,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
         }
 
         _logger.LogInformation(
-            "Listing snapshot figures missing for {Quarters} 13F quarter(s) — rebuilding them with {Timeout}s command timeout",
+            "Listing snapshot figures missing for {Quarters} report date(s) — rebuilding them with {Timeout}s command timeout",
             quarters.Count,
             BackfillCommandTimeout.TotalSeconds
         );
