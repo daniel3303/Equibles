@@ -18,11 +18,19 @@ public class HoldingsArchiveCoverageService(
     InstitutionalHolderRepository holders,
     InstitutionalHoldingRepository holdings,
     HoldingsImportFailureRepository failures,
+    HoldingsCusipRescanRepository rescans,
     HoldingsRealtimeReplaySignal signal,
     ILogger<HoldingsArchiveCoverageService> logger
 )
 {
-    public async Task AuditLatest(DateOnly minReportDate, CancellationToken cancellationToken)
+    // The daily backstop, a little under the bulk cycle; the worker wakes when a skipped audit falls due.
+    internal static readonly TimeSpan AuditInterval = TimeSpan.FromHours(20);
+
+    // Returns when a skipped audit falls due, or null once it ran or had nothing to audit.
+    public async Task<DateTime?> AuditLatest(
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
     {
         var names = await processed
             .GetAll()
@@ -38,13 +46,42 @@ public class HoldingsArchiveCoverageService(
             .OrderByDescending(row => row.End)
             .FirstOrDefault();
         if (latest == null || latest.End < minReportDate)
-            return;
+            return null;
+        if (await CurrentUntil(cancellationToken) is { } due)
+        {
+            logger.LogInformation(
+                "13F source coverage unchanged since its last audit; next audit due {Due:u}",
+                due
+            );
+            return due;
+        }
         await processed.QueueCoverageAudit(cancellationToken);
         using var archive = await dataSets.DownloadDataSet(latest.Name, cancellationToken);
         await Audit(archive, minReportDate, cancellationToken);
-        await processed
-            .GetByFileName(ProcessedDataSet.CoverageAuditPendingFileName)
-            .ExecuteDeleteAsync(cancellationToken);
+        await processed.CompleteCoverageAudit(cancellationToken);
+        return null;
+    }
+
+    // The audit compares the newest archive with every filer's stored book, so between data set
+    // imports, rescans and interrupted audits a rerun only repeats its last answer.
+    internal async Task<DateTime?> CurrentUntil(CancellationToken cancellationToken)
+    {
+        var audited = await processed
+            .GetByFileName(ProcessedDataSet.CoverageAuditedFileName)
+            .Select(row => (DateTime?)row.CreationTime)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (audited is not { } at || at < DateTime.UtcNow - AuditInterval)
+            return null;
+        // A data set import, a replay or rescan marker, or an audit interrupted since then.
+        if (await processed.GetAll().AnyAsync(row => row.CreationTime > at, cancellationToken))
+            return null;
+        if (
+            await rescans
+                .GetAll()
+                .AnyAsync(row => row.CompletedAt == null || row.CompletedAt > at, cancellationToken)
+        )
+            return null;
+        return at + AuditInterval;
     }
 
     internal async Task Audit(

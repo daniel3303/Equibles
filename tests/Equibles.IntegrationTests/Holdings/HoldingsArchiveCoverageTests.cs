@@ -56,6 +56,7 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             null,
             null,
             null,
+            null,
             new HoldingsRealtimeReplaySignal(),
             Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
         );
@@ -73,6 +74,232 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
         (await coverage.GetIncompleteReason(new DateOnly(2026, 6, 30)))
             .Should()
             .Contain("being reconciled");
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("stale audit", true)]
+    [InlineData("data set imported since", true)]
+    [InlineData("audit interrupted", true)]
+    [InlineData("rescan pending", true)]
+    [InlineData("rescan completed since", true)]
+    [InlineData("rescan completed before", false)]
+    public async Task AuditLatest_AfterACompletedAudit_RerunsOnlyWhenItsInputsMoved(
+        string change,
+        bool reruns
+    )
+    {
+        // A worker restart reruns the bulk cycle; the audit repeats only when the archive,
+        // a replay or a rescan may have changed what it compares, or its daily interval passed.
+        await using var db = fixture.CreateDbContext();
+        db.Add(
+            new ProcessedDataSet
+            {
+                FileName = "01jun2026-31aug2026_form13f.zip",
+                ParserVersion = ProcessedDataSet.CurrentParserVersion,
+                CreationTime = DateTime.UtcNow.AddHours(-30),
+            }
+        );
+        await db.SaveChangesAsync();
+        var processed = new ProcessedDataSetRepository(db);
+        await processed.CompleteCoverageAudit(CancellationToken.None);
+        // Offsets from the stamp the database wrote, so the app clock cannot skew the comparison.
+        var stamp = await processed
+            .GetByFileName(ProcessedDataSet.CoverageAuditedFileName)
+            .Select(row => row.CreationTime)
+            .SingleAsync();
+        switch (change)
+        {
+            case "stale audit":
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE \"ProcessedDataSet\" SET \"CreationTime\" = {DateTime.UtcNow.AddHours(-21)} WHERE \"FileName\" = {ProcessedDataSet.CoverageAuditedFileName}"
+                );
+                break;
+            case "data set imported since":
+                db.Add(
+                    new ProcessedDataSet
+                    {
+                        FileName = "01jul2026-30sep2026_form13f.zip",
+                        ParserVersion = ProcessedDataSet.CurrentParserVersion,
+                        CreationTime = stamp.AddMinutes(1),
+                    }
+                );
+                break;
+            case "audit interrupted":
+                await processed.QueueCoverageAudit(CancellationToken.None);
+                break;
+            case "rescan pending":
+                db.Add(new HoldingsCusipRescan { Cusip = "037833100" });
+                break;
+            case "rescan completed since":
+                db.Add(
+                    new HoldingsCusipRescan
+                    {
+                        Cusip = "037833100",
+                        CompletedAt = stamp.AddMinutes(1),
+                    }
+                );
+                break;
+            case "rescan completed before":
+                db.Add(
+                    new HoldingsCusipRescan
+                    {
+                        Cusip = "037833100",
+                        CompletedAt = stamp.AddMinutes(-1),
+                    }
+                );
+                break;
+        }
+        await db.SaveChangesAsync();
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .DownloadStream(Arg.Any<string>())
+            .Returns(Task.FromException<Stream>(new HttpRequestException("Unavailable")));
+        var audit = new HoldingsArchiveCoverageService(
+            null,
+            new HoldingsDataSetClient(edgar, Substitute.For<ILogger<HoldingsDataSetClient>>()),
+            processed,
+            null,
+            null,
+            null,
+            new HoldingsCusipRescanRepository(db),
+            new HoldingsRealtimeReplaySignal(),
+            Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
+        );
+
+        var act = () => audit.AuditLatest(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        if (reruns)
+            await act.Should().ThrowAsync<HttpRequestException>();
+        else
+        {
+            (await act()).Should().Be(stamp + HoldingsArchiveCoverageService.AuditInterval);
+            await edgar.DidNotReceive().DownloadStream(Arg.Any<string>());
+        }
+    }
+
+    [Fact]
+    public async Task AuditLatest_CompletedAudit_StampsItSoTheNextCycleSkipsTheArchive()
+    {
+        await using var db = fixture.CreateDbContext();
+        var issuer = new EquityIssuer { Name = "Source issuer" };
+        db.Add(issuer);
+        db.Add(
+            new EquityListingCusipEvidence
+            {
+                EquityIssuerId = issuer.Id,
+                Cusip = "78464A805",
+                ListedTicker = "SPTM",
+            }
+        );
+        db.Add(
+            new ProcessedDataSet
+            {
+                FileName = "01jun2026-31aug2026_form13f.zip",
+                ParserVersion = ProcessedDataSet.CurrentParserVersion,
+                CreationTime = DateTime.UtcNow.AddHours(-3),
+            }
+        );
+        await db.SaveChangesAsync();
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .DownloadStream(Arg.Any<string>())
+            .Returns(_ => Task.FromResult<Stream>(SourceArchive()));
+        var services = new ServiceCollection();
+        services.AddScoped(_ => fixture.CreateDbContext());
+        services.AddScoped<EquityIssuerRepository>();
+        using var provider = services.BuildServiceProvider();
+        var importer = new HoldingsImportService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Substitute.For<ILogger<HoldingsImportService>>(),
+            Options.Create(new WorkerOptions()),
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<IBus>()
+        );
+        var processed = new ProcessedDataSetRepository(db);
+        var audit = new HoldingsArchiveCoverageService(
+            importer,
+            new HoldingsDataSetClient(edgar, Substitute.For<ILogger<HoldingsDataSetClient>>()),
+            processed,
+            new InstitutionalHolderRepository(db),
+            new InstitutionalHoldingRepository(db),
+            new HoldingsImportFailureRepository(db),
+            new HoldingsCusipRescanRepository(db),
+            new HoldingsRealtimeReplaySignal(),
+            Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
+        );
+
+        (await audit.AuditLatest(new DateOnly(2020, 1, 1), CancellationToken.None))
+            .Should()
+            .BeNull();
+        (await audit.AuditLatest(new DateOnly(2020, 1, 1), CancellationToken.None))
+            .Should()
+            .NotBeNull();
+
+        await edgar.Received(1).DownloadStream(Arg.Any<string>());
+        (await processed.GetByFileName(ProcessedDataSet.CoverageAuditPendingFileName).AnyAsync())
+            .Should()
+            .BeFalse();
+        (await processed.GetByFileName(ProcessedDataSet.CoverageAuditedFileName).AnyAsync())
+            .Should()
+            .BeTrue();
+    }
+
+    private static MemoryStream SourceArchive()
+    {
+        var stream = new MemoryStream();
+        using (var output = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            Write(
+                output,
+                "SUBMISSION.tsv",
+                "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n13F-HR\toriginal\t19-AUG-2026\t30-JUN-2026\t0000000123\n"
+            );
+            Write(
+                output,
+                "COVERPAGE.tsv",
+                "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\noriginal\tN\tSource manager\n"
+            );
+            Write(
+                output,
+                "INFOTABLE.tsv",
+                "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMTTYPE\tPUTCALL\noriginal\t78464A805\tSH\t\n"
+            );
+        }
+        stream.Position = 0;
+        return stream;
+    }
+
+    [Fact]
+    public async Task CompleteCoverageAudit_ClearsThePendingMarkerAndStampsTheAudit()
+    {
+        await using var db = fixture.CreateDbContext();
+        var processed = new ProcessedDataSetRepository(db);
+        await processed.QueueCoverageAudit(CancellationToken.None);
+
+        await processed.CompleteCoverageAudit(CancellationToken.None);
+        // A later audit restamps the marker rather than keeping the first audit's time.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"ProcessedDataSet\" SET \"CreationTime\" = {DateTime.UtcNow.AddHours(-21)} WHERE \"FileName\" = {ProcessedDataSet.CoverageAuditedFileName}"
+        );
+        await processed.CompleteCoverageAudit(CancellationToken.None);
+
+        var rows = await processed.GetAll().AsNoTracking().ToListAsync();
+        rows.Should()
+            .ContainSingle()
+            .Which.FileName.Should()
+            .Be(ProcessedDataSet.CoverageAuditedFileName);
+        rows[0].CreationTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        Holdings13FRealtimeWorker.ParseDataSetEndDate(rows[0].FileName).Should().BeNull();
+        var coverage = new Equibles.Holdings.BusinessLogic.HoldingsImportCoverage(
+            new HoldingsImportFailureRepository(db),
+            processed,
+            new RealtimeSweepStateRepository(db),
+            new HoldingsCusipRescanRepository(db)
+        );
+        (await coverage.GetIncompleteReason(new DateOnly(2026, 6, 30)))
+            .Should()
+            .NotContain("being reconciled with SEC filings");
     }
 
     [Theory]
@@ -153,6 +380,7 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             new InstitutionalHolderRepository(db),
             new InstitutionalHoldingRepository(db),
             failures,
+            new HoldingsCusipRescanRepository(db),
             new HoldingsRealtimeReplaySignal(),
             Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
         );
@@ -444,6 +672,7 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             new InstitutionalHolderRepository(db),
             new InstitutionalHoldingRepository(db),
             new HoldingsImportFailureRepository(db),
+            new HoldingsCusipRescanRepository(db),
             new HoldingsRealtimeReplaySignal(),
             Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
         );

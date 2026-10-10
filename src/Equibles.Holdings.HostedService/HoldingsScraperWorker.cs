@@ -63,6 +63,17 @@ public class HoldingsScraperWorker : BaseScraperWorker
         _rescanSignal = rescanSignal;
     }
 
+    // When a source coverage audit skipped as current falls due; the next wait never passes it.
+    internal DateTime? CoverageAuditDueAt { get; set; }
+
+    // A restart that skips the audit would otherwise push it a full SleepInterval past its due time.
+    internal static TimeSpan UntilCoverageAuditDue(TimeSpan interval, DateTime? dueAt, DateTime now)
+    {
+        if (dueAt is not { } due || due - now >= interval)
+            return interval;
+        return due > now ? due - now : TimeSpan.Zero;
+    }
+
     // GH-852: wake immediately when StockCusipChangedConsumer requests a
     // rescan, instead of waiting up to the 24h SleepInterval. If the plain
     // delay wins, cancel the pending wait so it doesn't swallow a later signal.
@@ -71,6 +82,15 @@ public class HoldingsScraperWorker : BaseScraperWorker
         CancellationToken stoppingToken
     )
     {
+        var untilAudit = UntilCoverageAuditDue(interval, CoverageAuditDueAt, DateTime.UtcNow);
+        if (untilAudit < interval)
+        {
+            Logger.LogInformation(
+                "Holdings scraper waking in {Interval} for the due source coverage audit",
+                untilAudit
+            );
+            interval = untilAudit;
+        }
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var wake = _rescanSignal.WaitAsync(cts.Token);
         var delay = Task.Delay(interval, stoppingToken);
@@ -100,6 +120,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
+        CoverageAuditDueAt = null;
         await ApplyPendingCusipRescan(stoppingToken);
 
         // Before the walk, so a replay finds each stored position under its current label.
@@ -167,7 +188,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
         try
         {
             await using var auditScope = ScopeFactory.CreateAsyncScope();
-            await auditScope
+            CoverageAuditDueAt = await auditScope
                 .ServiceProvider.GetRequiredService<HoldingsArchiveCoverageService>()
                 .AuditLatest(minReportDate, stoppingToken);
         }
@@ -594,9 +615,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 );
                 // Persist intent before any amendment delete/upsert, even if the import fails
                 // or the process stops before a completion marker can be written.
-                await scope
-                    .ServiceProvider.GetRequiredService<ProcessedDataSetRepository>()
-                    .QueueRealtimeReplay(cancellationToken);
+                var ledger = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
+                await ledger.QueueRealtimeReplay(cancellationToken);
+                // The rewrite also outdates the last source audit, whether or not the import completes.
+                await ledger.ExpireCoverageAudit(cancellationToken);
                 var result = await importService.ImportDataSet(
                     archive,
                     minReportDate,

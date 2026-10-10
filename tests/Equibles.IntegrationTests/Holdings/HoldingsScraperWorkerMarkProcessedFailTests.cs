@@ -4,11 +4,13 @@ using System.Text;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.IntegrationTests.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -94,6 +96,9 @@ public class HoldingsScraperWorkerMarkProcessedFailTests : ParadeDbMcpTestBase
         // inside MarkAsProcessed, exercising its catch.
         var disposedCtx = Fixture.CreateDbContext();
         disposedCtx.Dispose();
+        await new ProcessedDataSetRepository(DbContext).CompleteCoverageAudit(
+            CancellationToken.None
+        );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext)),
@@ -134,5 +139,12 @@ public class HoldingsScraperWorkerMarkProcessedFailTests : ParadeDbMcpTestBase
             method.Invoke(worker, [FileName, new DateOnly(2024, 1, 1), CancellationToken.None]);
 
         result.Should().BeTrue("the import succeeded; a failed marker write is logged, not fatal");
+        (
+            await DbContext
+                .Set<ProcessedDataSet>()
+                .AnyAsync(row => row.FileName == ProcessedDataSet.CoverageAuditedFileName)
+        )
+            .Should()
+            .BeFalse("an import that rewrote holdings outdates the audit even without its marker");
     }
 }
