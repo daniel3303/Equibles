@@ -200,6 +200,47 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
             .Equal("GOOD", "OLD", "GOOD");
     }
 
+    [Fact]
+    public async Task RunBacktest_ListingDelistedInTheLiveMonth_SharesTheBucketButKeepsItsOwnTail()
+    {
+        var (stock, benchmark) = await SeedPair();
+        var gone = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Gone Co",
+            Cik: "444"
+        );
+        _dbContext.Add(gone);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, gone, "GONE");
+        // GONE ends on Feb 1, so its tail starts Jan 12; GOOD ends on To (Feb 3), tail from Jan 14.
+        var betweenTheTails = new DateOnly(2023, 1, 13);
+        var delistedOn = new DateOnly(2023, 2, 1);
+        AddPrice(stock, betweenTheTails, 10m);
+        AddPrice(gone, From, 10m);
+        AddPrice(gone, betweenTheTails, 10m);
+        AddPrice(gone, delistedOn, 11m);
+        await _dbContext.SaveChangesAsync();
+        var snapshots = Snapshots(stock.Id, gone.Id);
+        var loader = Loader();
+        (await loader.RunBacktest(snapshots, benchmark, "SPY", From, To)).Reason.Should().BeNull();
+
+        await SetClose(stock.Presentation.Listing.Id, betweenTheTails, 99m);
+        await SetClose(gone.Presentation.Listing.Id, betweenTheTails, 77m);
+        await loader.RunBacktest(snapshots, benchmark, "SPY", From, To);
+
+        _cache.TryGet(stock.Presentation.Listing.Id, WindowFrom, out var live).Should().BeTrue();
+        live.Segments.Single()
+            .Closes.Should()
+            .Equal(
+                [10m, 10m, 12m],
+                "Jan 13 is outside the live listing's own tail even though its bucket's read starts earlier"
+            );
+        _cache.TryGet(gone.Presentation.Listing.Id, WindowFrom, out var delisted).Should().BeTrue();
+        delisted
+            .Segments.Single()
+            .Closes.Should()
+            .Equal([10m, 77m, 11m], "Jan 13 is inside the delisted listing's own tail");
+    }
+
     private async Task SetClose(Guid listingId, DateOnly date, decimal close)
     {
         var row = await _dbContext
