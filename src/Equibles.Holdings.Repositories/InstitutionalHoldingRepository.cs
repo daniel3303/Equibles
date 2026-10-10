@@ -419,9 +419,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             return await Get13FReportDatesByStockSnapshotBacked(stock, cancellationToken);
 
         // Exact listings (ETF series, sibling classes) read their own snapshot rows under the
-        // same rules as the stock spine: bounded by the listing's newest live 13F date, which
-        // is prepended while the aggregate refresh lags; rows written before the per-listing
-        // figures existed, or no rows at all, keep the live DISTINCT.
+        // stock spine's rules: bounded by the listing's newest live 13F date, which is kept
+        // while the refresh lags. A quarter whose row predates the figures is resolved live.
         var latestLiveDate = await Get13FHistoryByListing(stock, listedTicker)
             .OrderByDescending(h => h.ReportDate)
             .Select(h => (DateOnly?)h.ReportDate)
@@ -431,18 +430,27 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var rows = await GetListingActivitySnapshots(stock, listedTicker)
             .AsNoTracking()
             .Where(row => row.ReportDate <= latest)
-            .OrderByDescending(row => row.ReportDate)
             .Select(row => new { row.ReportDate, row.CurrentFilerCount })
             .ToListAsync(cancellationToken);
-        if (rows.Count == 0 || rows.Any(row => row.CurrentFilerCount == null))
+        if (rows.Count == 0)
             return await Get13FReportDatesByListing(stock, listedTicker)
                 .ToListAsync(cancellationToken);
         var dates = rows.Where(row => row.CurrentFilerCount > 0)
             .Select(row => row.ReportDate)
+            .ToHashSet();
+        var unresolved = rows.Where(row => row.CurrentFilerCount == null)
+            .Select(row => row.ReportDate)
             .ToList();
-        if (dates.Count == 0 || latest > dates[0])
-            dates.Insert(0, latest);
-        return dates;
+        if (unresolved.Count > 0)
+            dates.UnionWith(
+                await Get13FHistoryByListing(stock, listedTicker)
+                    .Where(h => unresolved.Contains(h.ReportDate))
+                    .Select(h => h.ReportDate)
+                    .Distinct()
+                    .ToListAsync(cancellationToken)
+            );
+        dates.Add(latest);
+        return dates.OrderByDescending(date => date).ToList();
     }
 
     // Closed-quarter snapshot rows of one exact listing. The primary listing's rows are keyed
@@ -979,10 +987,9 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return snapshots;
     }
 
-    // Snapshot-first exact-listing trend. Quarters with filers come from the listing's own
-    // snapshot rows, bounded by its newest live 13F date; that date is aggregated live for the
-    // one quarter the refresh has not reached. Rows without the per-listing figures, or no rows
-    // at all, keep the corpus GROUP BY.
+    // Snapshot-first exact-listing trend: quarters with filers come from the listing's snapshot
+    // rows, bounded by its newest live 13F date. That date while the refresh lags, and any
+    // quarter whose row predates the figures, is aggregated live for that quarter alone.
     public async Task<List<StockQuarterlyActivity>> GetListingActivityHistory(
         EquityIssuer stock,
         string listedTicker,
@@ -999,15 +1006,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var rows = await GetListingActivitySnapshots(stock, listedTicker)
             .AsNoTracking()
             .Where(row => row.ReportDate <= latest)
-            .OrderBy(row => row.ReportDate)
             .ToListAsync(cancellationToken);
-        if (
-            rows.Count == 0
-            || rows.Any(row => row.CurrentFilerCount == null || row.CurrentValue == null)
-        )
+        if (rows.Count == 0)
             return await GetListingActivityHistoryLive(stock, listedTicker, cancellationToken);
 
-        var points = rows.Where(row => row.CurrentFilerCount > 0)
+        var points = rows.Where(row => row.CurrentFilerCount > 0 && row.CurrentValue != null)
             .Select(row => new ListingQuarterPoint(
                 row.ReportDate,
                 row.CurrentShares,
@@ -1015,17 +1018,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 row.CurrentFilerCount!.Value
             ))
             .ToList();
-        if (points.Count == 0 || latest > points[^1].ReportDate)
-        {
+        var liveDates = rows.Where(row => row.CurrentFilerCount == null || row.CurrentValue == null)
+            .Select(row => row.ReportDate)
+            .ToList();
+        if (points.All(point => point.ReportDate != latest) && !liveDates.Contains(latest))
+            liveDates.Add(latest);
+        if (liveDates.Count > 0)
             points.AddRange(
                 await LoadListingQuarterPoints(
                     Get13FHistoryByListing(stock, listedTicker)
-                        .Where(holding => holding.ReportDate == latest),
+                        .Where(holding => liveDates.Contains(holding.ReportDate)),
                     cancellationToken
                 )
             );
-        }
-        return BuildListingHistory(stock, listedTicker, points);
+        return BuildListingHistory(
+            stock,
+            listedTicker,
+            points.OrderBy(point => point.ReportDate).ToList()
+        );
     }
 
     private async Task<List<StockQuarterlyActivity>> GetListingActivityHistoryLive(

@@ -47,11 +47,12 @@ namespace Equibles.Migrations.Migrations
         }
 
         // Runs one DDL statement under a 3 s lock_timeout, sleeping between attempts for up to
-        // ten minutes; each attempt waits in the lock queue for at most those 3 s.
+        // twenty minutes; each attempt waits in the lock queue for at most those 3 s, and the
+        // timeout is reset so later migrations in the same batch keep the default.
         private static string WithLockRetry(string statement) =>
             "DO $$ DECLARE attempt int := 0; BEGIN LOOP attempt := attempt + 1; "
             + "BEGIN SET LOCAL lock_timeout = '3s'; "
-            + $"EXECUTE '{statement.Replace("'", "''")}'; RETURN; "
+            + $"EXECUTE '{statement.Replace("'", "''")}'; SET LOCAL lock_timeout TO DEFAULT; RETURN; "
             + "EXCEPTION WHEN lock_not_available THEN "
             + "IF attempt >= 200 THEN RAISE; END IF; PERFORM pg_sleep(3); END; "
             + "END LOOP; END $$;";

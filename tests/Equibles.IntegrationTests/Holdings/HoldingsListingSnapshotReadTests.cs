@@ -98,6 +98,9 @@ public class HoldingsListingSnapshotReadTests : IAsyncLifetime
         var liveSoldOutHistory = await new InstitutionalHoldingRepository(
             FreshContext()
         ).GetListingActivityHistory(stock, SoldOut);
+        var livePrimaryHistory = await new InstitutionalHoldingRepository(
+            FreshContext()
+        ).GetListingActivityHistory(stock, "trst");
 
         var service = BuildService();
         await service.RebuildQuarterAsync(QOld, CancellationToken.None);
@@ -164,6 +167,28 @@ public class HoldingsListingSnapshotReadTests : IAsyncLifetime
             await repository.GetListingActivityHistory(stock, SoldOut),
             liveSoldOutHistory
         );
+        // The presentation ticker in any spelling reads the primary series' rows.
+        AssertSameHistory(
+            await repository.GetListingActivityHistory(stock, "trst"),
+            livePrimaryHistory
+        );
+        await read.Set<StockQuarterlyListingActivity>()
+            .Where(row =>
+                row.EquityIssuerId == stock.Id
+                && row.ReportDate == QPrev
+                && !row.IsCombined
+                && row.PriceSeriesTicker == "TRST"
+            )
+            .ExecuteUpdateAsync(set => set.SetProperty(row => row.CurrentValue, 777L));
+        (
+            await new InstitutionalHoldingRepository(FreshContext()).GetListingActivityHistory(
+                stock,
+                "trst"
+            )
+        )
+            .Single(row => row.ReportDate == QPrev)
+            .CurrentValue.Should()
+            .Be(777L);
 
         // Proof the reads came from the snapshot: a stored figure shows up in the trend.
         await read.Set<StockQuarterlyListingActivity>()
@@ -212,7 +237,10 @@ public class HoldingsListingSnapshotReadTests : IAsyncLifetime
             .Should()
             .Equal(QCur, QPrev);
         var history = await repository.GetListingActivityHistory(stock, Sibling);
-        history.Select(row => row.CurrentValue).Should().Equal(100L, 300L);
+        history
+            .Select(row => (row.ReportDate, row.CurrentValue, row.PreviousValue))
+            .Should()
+            .Equal((QPrev, 100L, 0L), (QCur, 999L, 100L));
     }
 
     [Fact]

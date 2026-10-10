@@ -235,9 +235,18 @@ public class AumSnapshotRebuildWorker : BackgroundService
             .Select(s => s.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);
+        // A listing quarter counts only when every closed-quarter row carries the per-listing
+        // figures: rows an older worker wrote keep nulls, and only this backfill revisits
+        // quarters no import dirties (complete when no non-combined row has a null filer count).
         var listingQuarters = await dbContext
             .Set<StockQuarterlyListingActivity>()
             .Where(s => !s.IsCombined)
+            .Select(s => s.ReportDate)
+            .Distinct()
+            .CountAsync(cancellationToken);
+        listingQuarters -= await dbContext
+            .Set<StockQuarterlyListingActivity>()
+            .Where(s => !s.IsCombined && s.CurrentFilerCount == null)
             .Select(s => s.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);

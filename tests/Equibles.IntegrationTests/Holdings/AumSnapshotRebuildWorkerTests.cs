@@ -263,6 +263,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                         ReportDate = quarter,
                         PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                         CurrentShares = 1_000,
+                        CurrentValue = 100_000,
+                        CurrentFilerCount = 1,
+                        HolderValueSquaredSum = 100_000d * 100_000,
+                        TopOneValue = 100_000,
+                        TopFiveValue = 100_000,
+                        TopTenValue = 100_000,
                     }
                 );
             }
@@ -460,6 +466,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                         ReportDate = quarter,
                         PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                         CurrentShares = 1_000,
+                        CurrentValue = 100_000,
+                        CurrentFilerCount = 1,
+                        HolderValueSquaredSum = 100_000d * 100_000,
+                        TopOneValue = 100_000,
+                        TopFiveValue = 100_000,
+                        TopTenValue = 100_000,
                     }
                 );
             }
@@ -516,6 +528,46 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                 999_999_999,
                 "the oldest quarter is outside the safety-net window, so only the full backfill could rewrite it — and full coverage of the 13F quarters means it must not have run"
             );
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ListingRowsWithoutFigures_RunFullBackfill()
+    {
+        // Rows an older worker wrote carry null per-listing figures; the quarter is only
+        // covered once the figures exist, so the full backfill rewrites it on boot.
+        await SeedTwoQuarters();
+        await SeedFullCoverage(DateTime.UtcNow.AddHours(-1));
+        await using (var ctx = FreshContext())
+        {
+            await ctx.Set<StockQuarterlyListingActivity>()
+                .Where(row => row.ReportDate == Q3)
+                .ExecuteUpdateAsync(set =>
+                    set.SetProperty(row => row.CurrentFilerCount, (int?)null)
+                );
+        }
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(cts.Token);
+        // The backfill walks oldest-first, so wait for the last quarter's sentinel to go.
+        await WaitForSnapshots(async ctx =>
+            !await ctx.Set<AumQuarterlySnapshot>().AnyAsync(s => s.TotalValue == 999_999_999)
+        );
+        await worker.StopAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        (
+            await read.Set<StockQuarterlyListingActivity>()
+                .AnyAsync(row => !row.IsCombined && row.CurrentFilerCount == null)
+        )
+            .Should()
+            .BeFalse("the backfill rewrote the rows without figures");
     }
 
     [Fact]
@@ -676,6 +728,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                     ReportDate = quarter,
                     PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                     CurrentShares = 1_000,
+                    CurrentValue = 100_000,
+                    CurrentFilerCount = 1,
+                    HolderValueSquaredSum = 100_000d * 100_000,
+                    TopOneValue = 100_000,
+                    TopFiveValue = 100_000,
+                    TopTenValue = 100_000,
                     ComputedAt = computedAt,
                 }
             );
