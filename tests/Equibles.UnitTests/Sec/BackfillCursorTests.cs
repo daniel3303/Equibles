@@ -180,7 +180,7 @@ public class BackfillCursorTests
     {
         var cursor = new BackfillCursor("test");
         cursor.Advance(Now.AddDays(-1));
-        cursor.TryStartBoundedRescan(Now);
+        Rescan(cursor, Now);
 
         cursor.TryStartBoundedRescan(Now.AddMinutes(59)).Should().BeFalse();
     }
@@ -190,17 +190,144 @@ public class BackfillCursorTests
     {
         var cursor = new BackfillCursor("test");
         cursor.Advance(Now.AddDays(-1));
-        cursor.TryStartBoundedRescan(Now);
+        Rescan(cursor, Now);
 
         cursor.TryStartBoundedRescan(Now.AddMinutes(61)).Should().BeTrue();
     }
 
     [Fact]
-    public void BoundedRescanLookback_CoversAWeekBehindTheFloor()
+    public void TryStartBoundedRescan_FirstInProcess_LooksBackTheWholeWindow()
     {
-        // LoadBatch floors the bounded rescan at Floor − lookback; a week comfortably covers
-        // the realistic stragglers (read-skew commits, partially processed batches) while
-        // keeping the rescan an index-range query instead of a corpus scan.
-        BackfillCursor.BoundedRescanLookback.Should().Be(TimeSpan.FromDays(7));
+        // A fresh process cannot know which rows the previous one read, so its first rescan
+        // covers the full lookback behind the floor.
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddMinutes(-5);
+        Read(cursor, Now.AddMinutes(-30), frontier);
+
+        cursor.TryStartBoundedRescan(Now).Should().BeTrue();
+
+        cursor.BoundedRescanFloor.Should().Be(frontier - BackfillCursor.BoundedRescanLookback);
+    }
+
+    [Fact]
+    public void TryStartBoundedRescan_AfterFlooredBatches_StartsAtThePreviousRescansFloor()
+    {
+        // Floored batches read only rows at or above the floor, so after one rescan the next
+        // only needs the rows from where that rescan's floor stood, less the commit margin.
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddMinutes(-5);
+        cursor.Advance(frontier);
+        Rescan(cursor, Now);
+        Read(cursor, frontier.AddMinutes(1), frontier.AddMinutes(20));
+        Read(cursor, frontier.AddMinutes(20), frontier.AddMinutes(40));
+
+        cursor.TryStartBoundedRescan(Now.AddMinutes(61)).Should().BeTrue();
+
+        // A row stamped up to an hour before it commits can still land behind that floor.
+        cursor.BoundedRescanFloor.Should().Be(frontier.AddHours(-1));
+    }
+
+    [Fact]
+    public void TryStartBoundedRescan_AfterARescanBatch_StartsAtItsOldestRow()
+    {
+        // A rescan batch reads stragglers behind the floor; any it fails to process again stay
+        // there, so the next rescan must reach back to the batch's oldest row.
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddMinutes(-5);
+        cursor.Advance(frontier);
+        Rescan(cursor, Now);
+        var straggler = frontier.AddHours(-3);
+        Read(cursor, straggler, frontier.AddHours(-2));
+        Read(cursor, frontier.AddHours(-2), frontier.AddMinutes(30));
+
+        cursor.TryStartBoundedRescan(Now.AddMinutes(61)).Should().BeTrue();
+
+        cursor.BoundedRescanFloor.Should().Be(straggler - BackfillCursor.BoundedRescanCommitMargin);
+        cursor.Floor.Should().Be(frontier.AddMinutes(30));
+    }
+
+    [Fact]
+    public void TryStartBoundedRescan_NeverLooksBackFurtherThanTheWindow()
+    {
+        // A full rescan batch can read rows from years ago; the bounded tier still stops a
+        // lookback behind the floor and leaves those rows to the daily full scan.
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddMinutes(-5);
+        cursor.Advance(frontier);
+        Rescan(cursor, Now);
+        Read(cursor, Now.AddYears(-3), Now.AddYears(-2));
+        Read(cursor, Now.AddYears(-2), frontier);
+
+        cursor.TryStartBoundedRescan(Now.AddMinutes(61)).Should().BeTrue();
+
+        cursor.BoundedRescanFloor.Should().Be(frontier - BackfillCursor.BoundedRescanLookback);
+    }
+
+    [Fact]
+    public void TryStartBoundedRescan_QueryNeverCompleted_KeepsTheWindowDue()
+    {
+        // A rescan whose query faulted read nothing, so the next one must start from the same
+        // floor rather than from where the frontier stood when it was admitted.
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddMinutes(-5);
+        cursor.Advance(frontier);
+        Rescan(cursor, Now);
+        var straggler = frontier.AddHours(-4);
+        Read(cursor, straggler, frontier.AddMinutes(30));
+        cursor.TryStartBoundedRescan(Now.AddMinutes(61)).Should().BeTrue();
+        var failedFloor = cursor.BoundedRescanFloor;
+
+        cursor.Advance(frontier.AddMinutes(60));
+
+        cursor.TryStartBoundedRescan(Now.AddMinutes(122)).Should().BeTrue();
+        cursor.BoundedRescanFloor.Should().Be(failedFloor);
+        failedFloor.Should().Be(straggler.AddHours(-1));
+    }
+
+    [Fact]
+    public void NoteRead_BatchThatFaults_KeepsItsRowsInTheNextWindow()
+    {
+        // The manager records a batch's oldest row before processing it, so a batch that throws
+        // and never advances still leaves its rows inside the next rescan.
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddMinutes(-5);
+        cursor.Advance(frontier);
+        Rescan(cursor, Now);
+        var straggler = frontier.AddHours(-4);
+
+        cursor.NoteRead(straggler);
+
+        cursor.TryStartBoundedRescan(Now.AddMinutes(61)).Should().BeTrue();
+        cursor.BoundedRescanFloor.Should().Be(straggler.AddHours(-1));
+    }
+
+    [Fact]
+    public void TryStartBoundedRescan_RateLimited_KeepsThePendingWindow()
+    {
+        // A refused start must not consume the oldest row read, or the rescan after it would
+        // skip the batches read in between.
+        var cursor = new BackfillCursor("test");
+        var frontier = Now.AddMinutes(-5);
+        cursor.Advance(frontier);
+        Rescan(cursor, Now);
+        var straggler = frontier.AddHours(-2);
+        Read(cursor, straggler, frontier);
+
+        cursor.TryStartBoundedRescan(Now.AddMinutes(30)).Should().BeFalse();
+        cursor.TryStartBoundedRescan(Now.AddMinutes(61)).Should().BeTrue();
+
+        cursor.BoundedRescanFloor.Should().Be(straggler - BackfillCursor.BoundedRescanCommitMargin);
+    }
+
+    private static void Read(BackfillCursor cursor, DateTime first, DateTime last)
+    {
+        cursor.NoteRead(first);
+        cursor.Advance(last);
+    }
+
+    private static void Rescan(BackfillCursor cursor, DateTime at)
+    {
+        cursor.TryStartBoundedRescan(at).Should().BeTrue();
+        cursor.CompleteBoundedRescan();
     }
 }

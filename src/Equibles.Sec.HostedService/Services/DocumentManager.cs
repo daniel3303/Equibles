@@ -188,6 +188,7 @@ public class DocumentManager
             "Generating embeddings for {Count} chunks",
             chunksWithoutEmbeddings.Count
         );
+        cursor.NoteRead(chunksWithoutEmbeddings[0].CreationTime);
         await ProcessOrRewind(
             () => _documentProcessor.GenerateEmbeddings(chunksWithoutEmbeddings, cancellationToken),
             cursor
@@ -217,10 +218,10 @@ public class DocumentManager
         }
     }
 
-    // Floored batch first; when the frontier drains, an hourly rescan bounded a week behind the
-    // floor catches near-frontier stragglers cheaply, and an unfloored corpus scan runs at most
-    // daily as the backstop for re-queued work older than the bounded window. The cursor
-    // hydrates from its persisted BackfillState row on first use per process, so a restart
+    // Floored batch first; when the frontier drains, an hourly rescan from the oldest row read
+    // since the previous one catches near-frontier stragglers cheaply, and an unfloored corpus
+    // scan runs at most daily as the backstop for re-queued work older than the bounded window.
+    // The cursor hydrates from its persisted BackfillState row on first use per process, so a restart
     // resumes at the frontier instead of paying the corpus scan.
     private async Task<List<T>> LoadBatch<T>(
         Func<DateTime?, Task<List<T>>> query,
@@ -237,9 +238,10 @@ public class DocumentManager
         }
 
         var utcNow = DateTime.UtcNow;
-        if (cursor.Floor is { } drainedFloor && cursor.TryStartBoundedRescan(utcNow))
+        if (cursor.TryStartBoundedRescan(utcNow))
         {
-            var batch = await query(drainedFloor - BackfillCursor.BoundedRescanLookback);
+            var batch = await query(cursor.BoundedRescanFloor);
+            cursor.CompleteBoundedRescan();
             if (batch.Count > 0)
                 return batch;
         }
