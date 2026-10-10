@@ -32,5 +32,23 @@ public class StockQuarterlyListingActivity
 
     public long PreviousShares { get; set; }
 
+    // Current-quarter figures over this exact listing's 13F rows, so exact-listing request
+    // reads never group the holdings corpus; a rebuilt closed-quarter row carries them, zero
+    // when sold out. Null means an older worker or the combined lane wrote the row.
+    public long? CurrentValue { get; set; }
+
+    // Distinct 13F filers with a row in this listing-quarter.
+    public int? CurrentFilerCount { get; set; }
+
+    // Concentration numerators over each filer's summed value: HHI is
+    // 10,000 * HolderValueSquaredSum / CurrentValue^2 and top-k shares are TopKValue / CurrentValue.
+    public double? HolderValueSquaredSum { get; set; }
+
+    public long? TopOneValue { get; set; }
+
+    public long? TopFiveValue { get; set; }
+
+    public long? TopTenValue { get; set; }
+
     public DateTime ComputedAt { get; set; } = DateTime.UtcNow;
 }

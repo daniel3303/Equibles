@@ -75,6 +75,13 @@ public class HoldingsAggregateRefreshService
         );
     }
 
+    // Rebuilds the given quarters in order with the per-quarter error isolation of the bulk paths.
+    public Task RebuildReportDatesAsync(
+        IReadOnlyList<DateOnly> reportDates,
+        TimeSpan? commandTimeout,
+        CancellationToken cancellationToken
+    ) => RebuildReportDates(reportDates.ToList(), commandTimeout, cancellationToken);
+
     public Task RebuildAllAsync(CancellationToken cancellationToken) =>
         RebuildAllAsync(commandTimeout: null, cancellationToken);
 
@@ -778,6 +785,9 @@ public class HoldingsAggregateRefreshService
             await BuildChurnQuery(dbContext, reportDate, previousReportDate)
                 .ToListAsync(cancellationToken)
         ).ToDictionary(c => c.CommonStockId);
+        var concentrationByListing = (
+            await LoadListingConcentration(dbContext, reportDate, cancellationToken)
+        ).ToDictionary(row => (row.EquityIssuerId, row.PriceSeriesTicker));
 
         var computedAt = DateTime.UtcNow;
         var rows = activity
@@ -840,15 +850,30 @@ public class HoldingsAggregateRefreshService
             reportDate,
             isCombined: false,
             listingActivity
-                .Select(row => new StockQuarterlyListingActivity
+                .Select(row =>
                 {
-                    EquityIssuerId = row.EquityIssuerId,
-                    ReportDate = reportDate,
-                    IsCombined = false,
-                    PriceSeriesTicker = row.PriceSeriesTicker,
-                    CurrentShares = row.CurrentShares,
-                    PreviousShares = row.PreviousShares,
-                    ComputedAt = computedAt,
+                    // A listing with only prior-quarter rows is sold out this quarter: zeros,
+                    // never nulls, so readers do not fall back to the live aggregate for it.
+                    concentrationByListing.TryGetValue(
+                        (row.EquityIssuerId, row.PriceSeriesTicker),
+                        out var concentration
+                    );
+                    return new StockQuarterlyListingActivity
+                    {
+                        EquityIssuerId = row.EquityIssuerId,
+                        ReportDate = reportDate,
+                        IsCombined = false,
+                        PriceSeriesTicker = row.PriceSeriesTicker,
+                        CurrentShares = row.CurrentShares,
+                        PreviousShares = row.PreviousShares,
+                        CurrentValue = concentration?.TotalValue ?? 0L,
+                        CurrentFilerCount = concentration?.HolderCount ?? 0,
+                        HolderValueSquaredSum = concentration?.ValueSquaredSum ?? 0d,
+                        TopOneValue = concentration?.TopOneValue ?? 0L,
+                        TopFiveValue = concentration?.TopFiveValue ?? 0L,
+                        TopTenValue = concentration?.TopTenValue ?? 0L,
+                        ComputedAt = computedAt,
+                    };
                 })
                 .ToList(),
             cancellationToken
@@ -887,10 +912,112 @@ public class HoldingsAggregateRefreshService
                     {
                         CurrentShares = incoming.CurrentShares,
                         PreviousShares = incoming.PreviousShares,
+                        CurrentValue = incoming.CurrentValue,
+                        CurrentFilerCount = incoming.CurrentFilerCount,
+                        HolderValueSquaredSum = incoming.HolderValueSquaredSum,
+                        TopOneValue = incoming.TopOneValue,
+                        TopFiveValue = incoming.TopFiveValue,
+                        TopTenValue = incoming.TopTenValue,
                         ComputedAt = incoming.ComputedAt,
                     }
             )
             .RunAsync(cancellationToken);
+    }
+
+    // Per-listing concentration numerators for the quarter: each filer's value summed over its
+    // rows in that exact listing, then counted, totalled, squared and ranked, the figures the
+    // exact-listing request reads need without grouping the holdings corpus. Npgsql ranks in
+    // SQL over the same joins as the listing-shares query; other providers rank in memory.
+    internal static async Task<List<ListingConcentrationRow>> LoadListingConcentration(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await dbContext
+                .Database.SqlQuery<ListingConcentrationRow>(
+                    $"""
+                    WITH filer_values AS (
+                        SELECT i."EquityIssuerId",
+                               COALESCE(i."ListedTicker", e1."Ticker") AS "PriceSeriesTicker",
+                               i."InstitutionalHolderId",
+                               sum(i."Value") AS "Value"
+                        FROM "InstitutionalHolding" AS i
+                        INNER JOIN "EquityIssuer" AS e ON i."EquityIssuerId" = e."Id"
+                        LEFT JOIN "EquityIssuerPresentation" AS e0 ON e."Id" = e0."EquityIssuerId"
+                        LEFT JOIN "EquityListing" AS e1 ON e0."EquityListingId" = e1."Id"
+                        WHERE i."ReportDate" = {reportDate}
+                          AND i."FilingType" = {(int)FilingType.Form13F}
+                          AND e1."Active"
+                        GROUP BY i."EquityIssuerId", COALESCE(i."ListedTicker", e1."Ticker"), i."InstitutionalHolderId"
+                    ), ranked AS (
+                        SELECT *, row_number() OVER (
+                            PARTITION BY "EquityIssuerId", "PriceSeriesTicker" ORDER BY "Value" DESC
+                        ) AS "Rank"
+                        FROM filer_values
+                    )
+                    SELECT "EquityIssuerId",
+                           "PriceSeriesTicker",
+                           count(*)::int AS "HolderCount",
+                           sum("Value")::bigint AS "TotalValue",
+                           sum("Value"::float8 * "Value"::float8) AS "ValueSquaredSum",
+                           COALESCE(sum("Value") FILTER (WHERE "Rank" <= 1), 0)::bigint AS "TopOneValue",
+                           COALESCE(sum("Value") FILTER (WHERE "Rank" <= 5), 0)::bigint AS "TopFiveValue",
+                           COALESCE(sum("Value") FILTER (WHERE "Rank" <= 10), 0)::bigint AS "TopTenValue"
+                    FROM ranked
+                    GROUP BY "EquityIssuerId", "PriceSeriesTicker"
+                    """
+                )
+                .ToListAsync(cancellationToken);
+        }
+
+        var filerValues = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.ReportDate == reportDate
+                && h.FilingType == FilingType.Form13F
+                && h.Issuer.Presentation.Listing.Active
+            )
+            .Select(h => new
+            {
+                h.EquityIssuerId,
+                PriceSeriesTicker = h.ListedTicker ?? h.Issuer.Presentation.Listing.Ticker,
+                h.InstitutionalHolderId,
+                h.Value,
+            })
+            .ToListAsync(cancellationToken);
+        return filerValues
+            .GroupBy(row => new
+            {
+                row.EquityIssuerId,
+                row.PriceSeriesTicker,
+                row.InstitutionalHolderId,
+            })
+            .Select(group => new
+            {
+                group.Key.EquityIssuerId,
+                group.Key.PriceSeriesTicker,
+                Value = group.Sum(row => row.Value),
+            })
+            .GroupBy(filer => new { filer.EquityIssuerId, filer.PriceSeriesTicker })
+            .Select(group =>
+            {
+                var ordered = group.Select(filer => filer.Value).OrderByDescending(v => v).ToList();
+                return new ListingConcentrationRow
+                {
+                    EquityIssuerId = group.Key.EquityIssuerId,
+                    PriceSeriesTicker = group.Key.PriceSeriesTicker,
+                    HolderCount = ordered.Count,
+                    TotalValue = ordered.Sum(),
+                    ValueSquaredSum = ordered.Sum(v => (double)v * v),
+                    TopOneValue = ordered.Take(1).Sum(),
+                    TopFiveValue = ordered.Take(5).Sum(),
+                    TopTenValue = ordered.Take(10).Sum(),
+                };
+            })
+            .ToList();
     }
 
     // Per-stock churn: the same numbers GetQuarterlyNewSoldOutPositions defines ("new" =
@@ -928,4 +1055,18 @@ public class HoldingsAggregateRefreshService
                 NewFilerCount = g.Count(p => p.HasCurrent == 1 && p.HasPrevious == 0),
                 SoldOutFilerCount = g.Count(p => p.HasPrevious == 1 && p.HasCurrent == 0),
             });
+}
+
+// Ad hoc row of LoadListingConcentration. Public and unsealed because the lazy-loading proxy
+// convention validates every type a SqlQuery materialises.
+public class ListingConcentrationRow
+{
+    public Guid EquityIssuerId { get; set; }
+    public string PriceSeriesTicker { get; set; }
+    public int HolderCount { get; set; }
+    public long TotalValue { get; set; }
+    public double ValueSquaredSum { get; set; }
+    public long TopOneValue { get; set; }
+    public long TopFiveValue { get; set; }
+    public long TopTenValue { get; set; }
 }

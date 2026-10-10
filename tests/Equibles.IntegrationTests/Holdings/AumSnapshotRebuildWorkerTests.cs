@@ -263,6 +263,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                         ReportDate = quarter,
                         PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                         CurrentShares = 1_000,
+                        CurrentValue = 100_000,
+                        CurrentFilerCount = 1,
+                        HolderValueSquaredSum = 100_000d * 100_000,
+                        TopOneValue = 100_000,
+                        TopFiveValue = 100_000,
+                        TopTenValue = 100_000,
                     }
                 );
             }
@@ -460,6 +466,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                         ReportDate = quarter,
                         PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                         CurrentShares = 1_000,
+                        CurrentValue = 100_000,
+                        CurrentFilerCount = 1,
+                        HolderValueSquaredSum = 100_000d * 100_000,
+                        TopOneValue = 100_000,
+                        TopFiveValue = 100_000,
+                        TopTenValue = 100_000,
                     }
                 );
             }
@@ -516,6 +528,44 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                 999_999_999,
                 "the oldest quarter is outside the safety-net window, so only the full backfill could rewrite it — and full coverage of the 13F quarters means it must not have run"
             );
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ListingRowsWithoutFigures_RebuildOnlyThoseQuarters()
+    {
+        // Rows an older worker wrote carry null per-listing figures; boot rebuilds those
+        // quarters alone, so a restart resumes instead of walking every quarter again.
+        await SeedTwoQuarters();
+        await SeedFullCoverage(DateTime.UtcNow.AddHours(-1));
+        await using (var ctx = FreshContext())
+        {
+            await ctx.Set<StockQuarterlyListingActivity>()
+                .Where(row => row.ReportDate == Q3)
+                .ExecuteUpdateAsync(set =>
+                    set.SetProperty(row => row.CurrentFilerCount, (int?)null)
+                );
+        }
+
+        var scopeFactory = ScopeFactory();
+        var refreshService = new HoldingsAggregateRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance
+        );
+        var worker = new InstantTickWorker(scopeFactory, refreshService);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(cts.Token);
+        await WaitForSnapshots(async ctx =>
+            !await ctx.Set<StockQuarterlyListingActivity>()
+                .AnyAsync(row => !row.IsCombined && row.CurrentFilerCount == null)
+        );
+        await worker.StopAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var totals = await read.Set<AumQuarterlySnapshot>()
+            .ToDictionaryAsync(s => s.ReportDate, s => s.TotalValue);
+        totals[Q3].Should().NotBe(999_999_999, "the quarter missing figures was rebuilt");
+        totals[Q4].Should().Be(999_999_999, "a quarter whose rows carry figures is left alone");
     }
 
     [Fact]
@@ -676,6 +726,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                     ReportDate = quarter,
                     PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                     CurrentShares = 1_000,
+                    CurrentValue = 100_000,
+                    CurrentFilerCount = 1,
+                    HolderValueSquaredSum = 100_000d * 100_000,
+                    TopOneValue = 100_000,
+                    TopFiveValue = 100_000,
+                    TopTenValue = 100_000,
                     ComputedAt = computedAt,
                 }
             );
