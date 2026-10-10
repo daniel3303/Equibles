@@ -18,10 +18,14 @@ public class HoldingsArchiveCoverageService(
     InstitutionalHolderRepository holders,
     InstitutionalHoldingRepository holdings,
     HoldingsImportFailureRepository failures,
+    HoldingsCusipRescanRepository rescans,
     HoldingsRealtimeReplaySignal signal,
     ILogger<HoldingsArchiveCoverageService> logger
 )
 {
+    // The daily backstop, a little under the bulk cycle so a cycle's audit never slips a day.
+    internal static readonly TimeSpan AuditInterval = TimeSpan.FromHours(20);
+
     public async Task AuditLatest(DateOnly minReportDate, CancellationToken cancellationToken)
     {
         var names = await processed
@@ -39,12 +43,42 @@ public class HoldingsArchiveCoverageService(
             .FirstOrDefault();
         if (latest == null || latest.End < minReportDate)
             return;
+        if (await IsCurrent(cancellationToken))
+        {
+            logger.LogDebug("13F source coverage unchanged since its last audit");
+            return;
+        }
         await processed.QueueCoverageAudit(cancellationToken);
         using var archive = await dataSets.DownloadDataSet(latest.Name, cancellationToken);
         await Audit(archive, minReportDate, cancellationToken);
-        await processed
-            .GetByFileName(ProcessedDataSet.CoverageAuditPendingFileName)
-            .ExecuteDeleteAsync(cancellationToken);
+        await processed.CompleteCoverageAudit(cancellationToken);
+    }
+
+    // The audit compares the newest archive with every filer's stored book, so between data set
+    // imports, rescans and interrupted audits a rerun only repeats its last answer.
+    internal async Task<bool> IsCurrent(CancellationToken cancellationToken)
+    {
+        var audited = await processed
+            .GetByFileName(ProcessedDataSet.CoverageAuditedFileName)
+            .Select(row => (DateTime?)row.CreationTime)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (audited is not { } at || at < DateTime.UtcNow - AuditInterval)
+            return false;
+        // A data set import, a replay or rescan marker, or an audit interrupted since then.
+        if (
+            await processed
+                .GetAll()
+                .AnyAsync(
+                    row =>
+                        row.FileName != ProcessedDataSet.CoverageAuditedFileName
+                        && row.CreationTime > at,
+                    cancellationToken
+                )
+        )
+            return false;
+        return !await rescans
+            .GetAll()
+            .AnyAsync(row => row.CompletedAt == null || row.CompletedAt > at, cancellationToken);
     }
 
     internal async Task Audit(

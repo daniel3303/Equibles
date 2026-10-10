@@ -59,6 +59,7 @@ public class HoldingsScraperWorkerDoWorkTests : ParadeDbMcpTestBase
                     null,
                     null,
                     null,
+                    null,
                     new HoldingsRealtimeReplaySignal(),
                     Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
                 )

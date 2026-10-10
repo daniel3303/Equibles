@@ -15,6 +15,20 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
     public Task QueueCoverageAudit(CancellationToken cancellationToken) =>
         QueueMarker(ProcessedDataSet.CoverageAuditPendingFileName, cancellationToken);
 
+    public async Task CompleteCoverageAudit(CancellationToken cancellationToken)
+    {
+        await GetByFileName(ProcessedDataSet.CoverageAuditPendingFileName)
+            .ExecuteDeleteAsync(cancellationToken);
+        await DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "ProcessedDataSet" ("Id", "FileName", "SubmissionCount", "ParserVersion", "CreationTime")
+            VALUES ({Guid.NewGuid()}, {ProcessedDataSet.CoverageAuditedFileName}, 0, 0, clock_timestamp())
+            ON CONFLICT ("FileName") DO UPDATE SET "CreationTime" = EXCLUDED."CreationTime"
+            """,
+            cancellationToken
+        );
+    }
+
     private Task QueueMarker(string fileName, CancellationToken cancellationToken) =>
         DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""

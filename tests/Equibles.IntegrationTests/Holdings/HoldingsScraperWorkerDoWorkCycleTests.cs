@@ -106,6 +106,7 @@ public class HoldingsScraperWorkerDoWorkCycleTests : ParadeDbMcpTestBase
                     new InstitutionalHolderRepository(DbContext),
                     new InstitutionalHoldingRepository(DbContext),
                     new HoldingsImportFailureRepository(DbContext),
+                    new HoldingsCusipRescanRepository(DbContext),
                     new HoldingsRealtimeReplaySignal(),
                     Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
                 )
