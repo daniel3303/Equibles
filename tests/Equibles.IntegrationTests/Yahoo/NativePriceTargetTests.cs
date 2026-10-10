@@ -441,6 +441,41 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
                 .BeCloseTo(applied, TimeSpan.FromMilliseconds(1));
     }
 
+    [Fact]
+    public async Task SplitBoundaryAudit_ZeroVolumeStraddlingJump_StillRequeuesTheMarker()
+    {
+        // The traded-pair window skips stale zero-volume quotes, but the straddling pair keeps
+        // auditing every stored bar, as it did before the window existed.
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "WLFC");
+        var listing = issuer.Presentation.Listing;
+        DbContext.Add(issuer);
+        await DbContext.SaveChangesAsync();
+        DbContext.Add(
+            new StockSplit
+            {
+                Issuer = issuer,
+                Listing = listing,
+                PriceSeriesTicker = "WLFC",
+                EffectiveDate = new DateOnly(2026, 7, 21),
+                Numerator = 3,
+                Denominator = 1,
+                Source = StockSplitSource.Yahoo,
+                PriceAdjustmentAppliedTime = DateTime.UtcNow,
+            }
+        );
+        AddBoundaryPrice(listing, "WLFC", new DateOnly(2026, 7, 17), 63.88m);
+        AddBoundaryPrice(listing, "WLFC", new DateOnly(2026, 7, 20), 191.65m, volume: 0);
+        AddBoundaryPrice(listing, "WLFC", new DateOnly(2026, 7, 22), 63.12m, volume: 0);
+        AddBoundaryPrice(listing, "WLFC", new DateOnly(2026, 7, 23), 66.32m);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await RunSplitBoundaryAudit();
+
+        await using var read = Fixture.CreateDbContext();
+        (await read.Set<StockSplit>().SingleAsync()).PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
     private Task RunSplitBoundaryAudit() =>
         (Task)
             typeof(YahooPriceImportService)
@@ -457,7 +492,8 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         EquityListing listing,
         string sourceTicker,
         DateOnly date,
-        decimal close
+        decimal close,
+        long volume = 10
     ) =>
         DbContext.Add(
             new EquityDailyStockPrice
@@ -470,7 +506,7 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
                 Low = close,
                 Close = close,
                 AdjustedClose = close,
-                Volume = 10,
+                Volume = volume,
             }
         );
 

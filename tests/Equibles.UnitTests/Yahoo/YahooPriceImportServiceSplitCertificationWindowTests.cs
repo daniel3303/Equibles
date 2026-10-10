@@ -5,8 +5,8 @@ using Equibles.Yahoo.HostedService.Services;
 
 namespace Equibles.UnitTests.Yahoo;
 
-// Fixtures are recorded production series whose split was stamped applied while the pair
-// straddling the captured effective date was continuous.
+// The CXAI, WLFC, STKH, HBIA and NVDA fixtures are recorded production series; the rest are
+// synthetic edges of the same rule.
 public class YahooPriceImportServiceSplitCertificationWindowTests
 {
     [Fact]
@@ -176,6 +176,73 @@ public class YahooPriceImportServiceSplitCertificationWindowTests
         ];
 
         YahooPriceImportService.CertifiableSplits([first, second], serve).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(-10, true)]
+    [InlineData(-11, false)]
+    [InlineData(10, true)]
+    [InlineData(11, false)]
+    public void HasSplitBasisJumpNearEffectiveDate_CountsJumpsOnlyInsideTheInclusiveWindow(
+        int jumpOffsetDays,
+        bool flagged
+    )
+    {
+        var effective = new DateOnly(2026, 5, 20);
+        var jumpDate = effective.AddDays(jumpOffsetDays);
+        var bars = new[]
+        {
+            Traded(jumpDate.AddDays(-1), 1.00m),
+            Traded(jumpDate, 4.00m),
+            Traded(effective.AddDays(12), 4.02m),
+        };
+
+        YahooPriceImportService
+            .HasSplitBasisJumpNearEffectiveDate(bars, effective, 1m, 4m)
+            .Should()
+            .Be(flagged);
+    }
+
+    [Fact]
+    public void CertifiableSplits_GenuineRatioSizedMoveNearTheSplit_KeepsTheSplitPending()
+    {
+        // Accepted trade-off: a real +60% day beside a 1:2 reverse split is indistinguishable from an
+        // unrestated boundary, so the split stays unconfirmed rather than risk a false certification.
+        var split = Split(new DateOnly(2026, 4, 13), 1m, 2m);
+        List<HistoricalPrice> serve =
+        [
+            Bar(new DateOnly(2026, 4, 9), 2.00m, 400_000),
+            Bar(new DateOnly(2026, 4, 10), 2.04m, 380_000),
+            Bar(new DateOnly(2026, 4, 13), 2.02m, 900_000),
+            Bar(new DateOnly(2026, 4, 14), 3.25m, 9_000_000),
+        ];
+
+        YahooPriceImportService.CertifiableSplits([split], serve).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CertifiableSplits_InvalidCandleTheReplacementDrops_IsNotCertified()
+    {
+        // The replacement never stores an impossible candle, so it must not certify against one.
+        var split = Split(new DateOnly(2024, 6, 10), 10m, 1m);
+        List<HistoricalPrice> serve =
+        [
+            Bar(new DateOnly(2024, 6, 6), 120.998m, 664_696_000),
+            Bar(new DateOnly(2024, 6, 7), 120.888m, 412_386_000),
+            new()
+            {
+                Date = new DateOnly(2024, 6, 10),
+                Open = 1_217.90m,
+                High = 1_100.00m,
+                Low = 1_170.10m,
+                Close = 1_217.90m,
+                AdjustedClose = 1_217.90m,
+                Volume = 31_343_410,
+            },
+            Bar(new DateOnly(2024, 6, 11), 120.91m, 222_551_200),
+        ];
+
+        YahooPriceImportService.CertifiableSplits([split], serve).Should().ContainSingle();
     }
 
     private static PendingSplitSnapshot Split(
