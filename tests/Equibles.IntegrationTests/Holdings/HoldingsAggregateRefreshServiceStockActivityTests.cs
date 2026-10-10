@@ -128,6 +128,127 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RebuildQuarterAsync_13DGEventDate_RemovesItsActivityRowsAndStubOnly()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
+        var holderA = await SeedHolder(seed, "H001");
+        var holder13D = await SeedHolder(seed, "H004");
+        seed.AddRange(
+            MakeHolding(aapl, holderA, QPrev, 100_000, "acc-a-prev"),
+            MakeHolding(
+                aapl,
+                holder13D,
+                PollutionDate,
+                999_000_000,
+                "acc-13d",
+                filingType: FilingType.Schedule13D
+            ),
+            // The real quarter's rows must survive the event date's cleanup.
+            new StockQuarterlyActivity
+            {
+                EquityIssuerId = aapl.Id,
+                ReportDate = QPrev,
+                CurrentShares = 1_000,
+                CurrentValue = 100_000,
+                CurrentFilerCount = 1,
+            },
+            new StockQuarterlyListingActivity
+            {
+                EquityIssuerId = aapl.Id,
+                ReportDate = QPrev,
+                IsCombined = false,
+                PriceSeriesTicker = "AAPL",
+                CurrentShares = 1_000,
+                CurrentFilerCount = 1,
+            },
+            // Rows an older rebuild carried forward onto the event date, and the stub that
+            // dirtied it.
+            new StockQuarterlyActivity
+            {
+                EquityIssuerId = aapl.Id,
+                ReportDate = PollutionDate,
+                PreviousReportDate = QPrev,
+                PreviousShares = 10_000,
+                PreviousValue = 100_000,
+                PreviousFilerCount = 1,
+            },
+            new StockQuarterlyListingActivity
+            {
+                EquityIssuerId = aapl.Id,
+                ReportDate = PollutionDate,
+                IsCombined = false,
+                PriceSeriesTicker = "AAPL",
+                PreviousShares = 10_000,
+            },
+            new AumQuarterlySnapshot { ReportDate = PollutionDate, DirtyAt = DateTime.UtcNow }
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(PollutionDate, CancellationToken.None);
+
+        await using var read = FreshContext();
+        (await read.Set<StockQuarterlyActivity>().AnyAsync(s => s.ReportDate == PollutionDate))
+            .Should()
+            .BeFalse("a 13D/G event date is not a quarter");
+        (
+            await read.Set<StockQuarterlyListingActivity>()
+                .AnyAsync(s => s.ReportDate == PollutionDate)
+        )
+            .Should()
+            .BeFalse("the carried-forward sold-out rows are removed");
+        (await read.Set<AumQuarterlySnapshot>().AnyAsync(s => s.ReportDate == PollutionDate))
+            .Should()
+            .BeFalse("the stub that dirtied the date is gone");
+        (await read.Set<StockQuarterlyActivity>().CountAsync(s => s.ReportDate == QPrev))
+            .Should()
+            .Be(1, "the real quarter's stock row is untouched");
+        (await read.Set<StockQuarterlyListingActivity>().CountAsync(s => s.ReportDate == QPrev))
+            .Should()
+            .Be(1, "the real quarter's listing row is untouched");
+    }
+
+    [Fact]
+    public async Task RebuildQuarterAsync_DateWithOnlyAnEmptyRestatement_KeepsItsSoldOutRows()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
+        var holderA = await SeedHolder(seed, "H001");
+        seed.AddRange(
+            MakeHolding(aapl, holderA, QPrev, 100_000, "acc-a-prev"),
+            // The only 13F evidence for QCur: the filer restated its whole quarter away.
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-a-cur-empty",
+                InstitutionalHolderId = holderA.Id,
+                FilingDate = QCur.AddDays(45),
+                ReportDate = QCur,
+                IsAmendment = true,
+                FilingType = FilingType.Form13F,
+                PositionCount = 0,
+                TotalValue = 0,
+                DeclaredPositionCount = 0,
+                DeclaredTotalValue = 0,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(QCur, CancellationToken.None);
+
+        await using var read = FreshContext();
+        var listing = await read.Set<StockQuarterlyListingActivity>()
+            .SingleAsync(s => s.ReportDate == QCur && !s.IsCombined);
+        listing.PreviousShares.Should().Be(1_000);
+        listing.CurrentShares.Should().Be(0, "the filer sold out, the quarter exists");
+        listing.CurrentFilerCount.Should().Be(0, "a figure, never a null to resolve live");
+        (await read.Set<StockQuarterlyActivity>().AnyAsync(s => s.ReportDate == QCur))
+            .Should()
+            .BeTrue("an empty restatement still dates a quarter");
+    }
+
+    [Fact]
     public async Task RebuildQuarterAsync_PreservesExactListingShareBreakdown()
     {
         await using var seed = FreshContext();

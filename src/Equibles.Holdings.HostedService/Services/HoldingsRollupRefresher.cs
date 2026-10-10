@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Data.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
@@ -97,6 +98,50 @@ internal static class HoldingsRollupRefresher
         return realigned;
     }
 
+    // The dates among the given ones that are Form 13F quarters: a quarter has 13F positions
+    // or an empty 13F restatement. Positions are probed per date (one index seek each); the
+    // small filing table answers the restatement side in one query.
+    internal static async Task<HashSet<DateOnly>> Filter13FReportDates(
+        EquiblesFinancialDbContext dbContext,
+        IReadOnlyCollection<DateOnly> reportDates,
+        CancellationToken cancellationToken
+    )
+    {
+        var quarters = new HashSet<DateOnly>();
+        if (reportDates.Count == 0)
+        {
+            return quarters;
+        }
+        foreach (var reportDate in reportDates)
+        {
+            var hasPositions = await dbContext
+                .Set<InstitutionalHolding>()
+                .AnyAsync(
+                    h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F,
+                    cancellationToken
+                );
+            if (hasPositions)
+            {
+                quarters.Add(reportDate);
+            }
+        }
+        var restated = await dbContext
+            .Set<InstitutionalFiling>()
+            .Zero13FRestatements()
+            .Where(f => reportDates.Contains(f.ReportDate))
+            .Select(f => f.ReportDate)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        quarters.UnionWith(restated);
+        return quarters;
+    }
+
+    internal static async Task<bool> Is13FReportDate(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    ) => (await Filter13FReportDates(dbContext, [reportDate], cancellationToken)).Count > 0;
+
     /// <summary>
     /// Stamps the quarters' AUM snapshots and their immediate successors dirty so the drain
     /// worker rebuilds both the changed current values and the successor comparisons that embed
@@ -108,12 +153,6 @@ internal static class HoldingsRollupRefresher
         CancellationToken cancellationToken
     )
     {
-        var changedQuarters = reportDates.Distinct().ToList();
-        if (changedQuarters.Count == 0)
-        {
-            return;
-        }
-
         // The snapshot table is one bounded row per 13F quarter. Resolve the immediate successor
         // from that spine once, then stamp the union so a repaired prior-quarter value cannot
         // leave StockQuarterlyActivity's embedded comparison permanently stale.
@@ -122,6 +161,22 @@ internal static class HoldingsRollupRefresher
             .OrderBy(snapshot => snapshot.ReportDate)
             .Select(snapshot => snapshot.ReportDate)
             .ToListAsync(cancellationToken);
+        // A date without a snapshot gains one only when it is a Form 13F quarter; a Schedule
+        // 13D/G event date a repair passes would otherwise gain a stub the drain rebuilds for
+        // nothing.
+        var distinctDates = reportDates.Distinct().ToList();
+        var quarters13F = await Filter13FReportDates(
+            dbContext,
+            distinctDates.Where(date => !snapshotDates.Contains(date)).ToList(),
+            cancellationToken
+        );
+        var changedQuarters = distinctDates
+            .Where(date => snapshotDates.Contains(date) || quarters13F.Contains(date))
+            .ToList();
+        if (changedQuarters.Count == 0)
+        {
+            return;
+        }
         var quarters = changedQuarters.ToHashSet();
         foreach (var changed in changedQuarters)
         {
@@ -131,7 +186,6 @@ internal static class HoldingsRollupRefresher
                 quarters.Add(successor);
             }
         }
-
         var now = DateTime.UtcNow;
         var stubs = quarters
             .Select(reportDate => new AumQuarterlySnapshot
