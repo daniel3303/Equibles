@@ -245,6 +245,11 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
             .Set<InstitutionalHolding>()
             .AsNoTracking()
             .FirstAsync(h => h.ReportDate == reportDate);
+        // A few pending rows so the pair scan has entries to walk.
+        await context
+            .Set<InstitutionalHolding>()
+            .Where(h => h.InstitutionalHolderId == holding.InstitutionalHolderId)
+            .ExecuteUpdateAsync(set => set.SetProperty(h => h.ValuePending, true));
 
         var book = await context
             .Set<InstitutionalHolding>()
@@ -291,10 +296,12 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
             })
             .Distinct()
             .ToListAsync();
-        pairs.Should().BeEmpty();
+        pairs.Should().NotBeEmpty();
 
         var reads = capture
-            .Commands.Where(c => c.Text.Contains("FROM \"InstitutionalHolding\""))
+            .Commands.Where(c =>
+                c.Text.Contains("FROM \"InstitutionalHolding\"") && !c.Text.StartsWith("UPDATE")
+            )
             .ToList();
         CapturedCommand Read(string marker)
         {

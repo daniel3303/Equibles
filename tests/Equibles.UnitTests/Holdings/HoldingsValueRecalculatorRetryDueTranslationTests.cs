@@ -39,6 +39,8 @@ public class HoldingsValueRecalculatorRetryDueTranslationTests
             .Where(HoldingsValueRecalculator.RetryDue(now))
             .ToQueryString();
 
+        // RetryDue carries one branch per ladder step; a fourth delay needs a fourth branch.
+        HoldingsValueRecalculator.RetryDelays.Should().HaveCount(3);
         var where = sql[sql.IndexOf("WHERE", StringComparison.Ordinal)..];
         where.Should().Contain("\"ValueRetryCount\" = 0");
         where.Should().Contain("\"ValueRetryCount\" = 1");

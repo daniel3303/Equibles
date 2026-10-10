@@ -96,11 +96,17 @@ namespace Equibles.Migrations.Migrations
                 suppressTransaction: true
             );
             // An interrupted CONCURRENTLY build leaves an invalid index that IF NOT EXISTS would keep.
+            // Renaming it aside takes only SHARE UPDATE EXCLUSIVE; a plain DROP would queue every
+            // reader and writer of the table behind an ACCESS EXCLUSIVE lock.
             migrationBuilder.Sql(
                 "DO $$ BEGIN "
                     + "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid "
                     + $"WHERE c.relname = '{name}' AND NOT i.indisvalid) THEN "
-                    + $"EXECUTE 'DROP INDEX \"{name}\"'; END IF; END $$;",
+                    + $"EXECUTE 'ALTER INDEX \"{name}\" RENAME TO \"{name}_invalid\"'; END IF; END $$;",
+                suppressTransaction: true
+            );
+            migrationBuilder.Sql(
+                $"DROP INDEX CONCURRENTLY IF EXISTS \"{name}_invalid\";",
                 suppressTransaction: true
             );
             migrationBuilder.Sql(

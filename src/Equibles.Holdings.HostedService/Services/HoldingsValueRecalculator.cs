@@ -15,7 +15,7 @@ public class HoldingsValueRecalculator
     private const int MaxRetries = 3;
 
     // Backoff schedule: retry 1 → 1 day, retry 2 → 1 week, retry 3 → 1 month
-    private static readonly TimeSpan[] RetryDelays =
+    internal static readonly TimeSpan[] RetryDelays =
     [
         TimeSpan.FromDays(1),
         TimeSpan.FromDays(7),
@@ -421,13 +421,9 @@ public class HoldingsValueRecalculator
         }
     }
 
-    /// <summary>
-    /// Publishes the filer's own reported value on a row no honest derivation can price, splitting
-    /// it across manager legs in proportion to their shares (the only allocation the filing
-    /// supports — legs carry counts, not values).
-    /// </summary>
     // The ladder as a predicate: a row is due once its anchor (last retry, else creation) plus
-    // the delay for its retry count has passed. Mirrors the in-memory gate below it.
+    // the delay for its retry count has passed. Mirrors the in-memory gate over RetryDelays, one
+    // branch per step; a fourth step would need a fourth branch here.
     internal static System.Linq.Expressions.Expression<Func<InstitutionalHolding, bool>> RetryDue(
         DateTime now
     )
@@ -441,6 +437,11 @@ public class HoldingsValueRecalculator
             || (h.ValueRetryCount >= 2 && (h.ValueLastRetryAt ?? h.CreationTime) <= later);
     }
 
+    /// <summary>
+    /// Publishes the filer's own reported value on a row no honest derivation can price, splitting
+    /// it across manager legs in proportion to their shares (the only allocation the filing
+    /// supports — legs carry counts, not values).
+    /// </summary>
     internal static void ApplyFiledValue(InstitutionalHolding holding)
     {
         // A Filed row with no filed figure would be a permanently invisible zero: matched by
