@@ -152,7 +152,7 @@ public class Realtime13FIngestionService
             }
 
             attempted++;
-            var outcome = await ImportEntry(entry, minReportDate, cancellationToken);
+            var outcome = (await ImportEntry(entry, minReportDate, cancellationToken)).Outcome;
             if (outcome is EntryImportOutcome.Failed or EntryImportOutcome.Incomplete)
             {
                 retryFrom[entry.Cik.TrimStart('0')] = entry.DateFiled;
@@ -215,7 +215,7 @@ public class Realtime13FIngestionService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var outcome = await ImportEntry(entry, minReportDate, cancellationToken);
+            var outcome = (await ImportEntry(entry, minReportDate, cancellationToken)).Outcome;
             if (outcome != EntryImportOutcome.Imported)
                 continue;
 
@@ -228,7 +228,98 @@ public class Realtime13FIngestionService
         return imported;
     }
 
-    private enum EntryImportOutcome
+    /// <summary>
+    /// Recovery's ordered pass over one manager's verified filing tail. Pending and never-processed
+    /// filings always import; a processed filing is re-applied only after an earlier filing in the
+    /// pass may have changed holdings, because re-applying a tail nothing touched rewrites the same
+    /// rows and re-dirties every quarter it spans.
+    /// </summary>
+    public virtual async Task<RecoveryReplayResult> ReplayRecoveryTail(
+        IReadOnlyCollection<EdgarDailyIndexEntry> entries,
+        IReadOnlySet<string> pendingAccessions,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        // Originals before amendments — same ordering contract as the sweep.
+        var sorted = entries
+            .OrderBy(e => e.DateFiled)
+            .ThenBy(e => e.AccessionNumber, StringComparer.Ordinal)
+            .ToList();
+        var processed = await LoadProcessedAccessions(
+            sorted.Select(e => e.AccessionNumber),
+            cancellationToken
+        );
+        return await WalkRecoveryTail(
+            sorted,
+            pendingAccessions,
+            processed,
+            entry => ImportEntry(entry, minReportDate, cancellationToken),
+            accession => RecordProcessed([accession], cancellationToken),
+            cancellationToken
+        );
+    }
+
+    internal static async Task<RecoveryReplayResult> WalkRecoveryTail(
+        IReadOnlyList<EdgarDailyIndexEntry> sorted,
+        IReadOnlySet<string> pendingAccessions,
+        IReadOnlySet<string> processedAccessions,
+        Func<EdgarDailyIndexEntry, Task<EntryImport>> import,
+        Func<string, Task> recordProcessed,
+        CancellationToken cancellationToken
+    )
+    {
+        var replaying = false;
+        var skipped = 0;
+        var attempts = new List<(string Accession, bool Imported)>();
+        foreach (var entry in sorted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (
+                !replaying
+                && !pendingAccessions.Contains(entry.AccessionNumber)
+                && processedAccessions.Contains(entry.AccessionNumber)
+            )
+            {
+                skipped++;
+                continue;
+            }
+
+            var result = await import(entry);
+            var imported = result.Outcome == EntryImportOutcome.Imported;
+            if (imported)
+                await recordProcessed(entry.AccessionNumber);
+            // An import that may have written reorders the book, so every later filing re-applies.
+            if (!result.HoldingsUntouched)
+                replaying = true;
+            attempts.Add((entry.AccessionNumber, imported));
+        }
+
+        // A pending filing is settled once it and every later attempt in this pass imported; an
+        // older filing that still fails stays pending and anchors the next pass before it.
+        var resolvable = new List<string>();
+        var laterImported = true;
+        for (var index = attempts.Count - 1; index >= 0; index--)
+        {
+            var (accession, imported) = attempts[index];
+            laterImported &= imported;
+            if (laterImported && pendingAccessions.Contains(accession))
+                resolvable.Add(accession);
+        }
+        resolvable.Reverse();
+        return new RecoveryReplayResult(
+            attempts.Count,
+            attempts.Count(attempt => attempt.Imported),
+            skipped,
+            resolvable,
+            Complete: laterImported
+        );
+    }
+
+    // HoldingsUntouched: the attempt returned before any holdings write.
+    internal readonly record struct EntryImport(EntryImportOutcome Outcome, bool HoldingsUntouched);
+
+    internal enum EntryImportOutcome
     {
         // Source confirms the filing is outside the configured history boundary.
         Skipped,
@@ -250,7 +341,7 @@ public class Realtime13FIngestionService
     /// bulk-dataset pipeline, free of the caller's bookkeeping (processed-set,
     /// watermark) so the sweep and the reconciliation re-feed share one path.
     /// </summary>
-    private async Task<EntryImportOutcome> ImportEntry(
+    private async Task<EntryImport> ImportEntry(
         EdgarDailyIndexEntry entry,
         DateOnly minReportDate,
         CancellationToken cancellationToken
@@ -265,10 +356,10 @@ public class Realtime13FIngestionService
                 HoldingsImportFailureReason.UnreadableSource,
                 cancellationToken
             );
-            return EntryImportOutcome.Failed;
+            return new EntryImport(EntryImportOutcome.Failed, true);
         }
         if (filing.PeriodOfReport < minReportDate)
-            return EntryImportOutcome.Skipped;
+            return new EntryImport(EntryImportOutcome.Skipped, true);
 
         _logger.LogInformation(
             "Importing 13F-HR {Accession} (CIK {Cik}, period {Period})",
@@ -310,7 +401,7 @@ public class Realtime13FIngestionService
                 HoldingsImportFailureReason.ImportFailed,
                 cancellationToken
             );
-            return EntryImportOutcome.Failed;
+            return new EntryImport(EntryImportOutcome.Failed, false);
         }
 
         if (importResult.ConflictedFilings.Count > 0)
@@ -321,7 +412,7 @@ public class Realtime13FIngestionService
                 HoldingsImportFailureReason.IdentityConflict,
                 cancellationToken
             );
-            return EntryImportOutcome.Failed;
+            return new EntryImport(EntryImportOutcome.Failed, false);
         }
         if (!importResult.IsComplete)
         {
@@ -336,7 +427,7 @@ public class Realtime13FIngestionService
                     entry.AccessionNumber,
                     entry.Cik
                 );
-                return EntryImportOutcome.Imported;
+                return new EntryImport(EntryImportOutcome.Imported, false);
             }
             await RecordFailure(
                 entry,
@@ -344,7 +435,7 @@ public class Realtime13FIngestionService
                 HoldingsImportFailureReason.Incomplete,
                 cancellationToken
             );
-            return EntryImportOutcome.Incomplete;
+            return new EntryImport(EntryImportOutcome.Incomplete, importResult.HoldingsUntouched);
         }
 
         // A non-amendment original that imported "complete" yet inserted zero
@@ -366,10 +457,10 @@ public class Realtime13FIngestionService
                 HoldingsImportFailureReason.EmptyImport,
                 cancellationToken
             );
-            return EntryImportOutcome.Failed;
+            return new EntryImport(EntryImportOutcome.Failed, false);
         }
 
-        return EntryImportOutcome.Imported;
+        return new EntryImport(EntryImportOutcome.Imported, false);
     }
 
     internal static bool IsSourceConfirmedZeroOriginal(Parsed13FFiling filing) =>

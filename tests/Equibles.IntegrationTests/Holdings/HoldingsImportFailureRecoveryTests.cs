@@ -1,5 +1,6 @@
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
@@ -161,8 +162,9 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
         await ingestion
             .DidNotReceive()
-            .IngestSpecificFilings(
+            .ReplayRecoveryTail(
                 Arg.Any<IReadOnlyCollection<EdgarDailyIndexEntry>>(),
+                Arg.Any<IReadOnlySet<string>>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>()
             );
@@ -228,12 +230,17 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
             Substitute.For<ILogger<Realtime13FIngestionService>>()
         );
         ingestion
-            .IngestSpecificFilings(
+            .ReplayRecoveryTail(
                 Arg.Any<IReadOnlyCollection<EdgarDailyIndexEntry>>(),
+                Arg.Any<IReadOnlySet<string>>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(complete ? 2 : 1);
+            .Returns(
+                complete
+                    ? new RecoveryReplayResult(2, 2, 0, ["original"], Complete: true)
+                    : new RecoveryReplayResult(2, 1, 0, [], Complete: false)
+            );
         var recovery = new HoldingsImportRecoveryService(
             failures,
             new InstitutionalHoldingRepository(db),
@@ -244,15 +251,88 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
         await ingestion
             .Received(1)
-            .IngestSpecificFilings(
+            .ReplayRecoveryTail(
                 Arg.Is<IReadOnlyCollection<EdgarDailyIndexEntry>>(entries =>
                     entries.Count == 2 && entries.Any(e => e.AccessionNumber == "amendment")
                 ),
+                Arg.Is<IReadOnlySet<string>>(set => set.SetEquals(new[] { "original" })),
                 new DateOnly(2020, 1, 1),
                 Arg.Any<CancellationToken>()
             );
         var row = await failures.GetAll().AsNoTracking().SingleAsync();
         (row.ResolvedAt != null).Should().Be(complete);
+    }
+
+    [Fact]
+    public async Task Recovery_ResolvesOnlyThePendingFilingsWhoseLaterTailImported()
+    {
+        await using var db = fixture.CreateDbContext();
+        var failures = new HoldingsImportFailureRepository(db);
+        foreach (var (accession, filed) in new[] { ("stuck", 8), ("new", 9) })
+            await failures.Record(
+                accession,
+                "123",
+                new DateOnly(2026, filed, 1),
+                Quarter,
+                HoldingsImportFailureReason.Incomplete,
+                CancellationToken.None
+            );
+        await failures
+            .GetAll()
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(r => r.NextAttemptAt, DateTime.UtcNow.AddDays(-1))
+            );
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyFilings("123", null, new DateOnly(2026, 8, 1), Arg.Any<DateOnly?>())
+            .Returns(
+                new List<FilingData>
+                {
+                    new()
+                    {
+                        AccessionNumber = "stuck",
+                        Form = "13F-HR",
+                        FilingDate = new(2026, 8, 1),
+                        ReportDate = Quarter,
+                    },
+                    new()
+                    {
+                        AccessionNumber = "new",
+                        Form = "13F-HR/A",
+                        FilingDate = new(2026, 9, 1),
+                        ReportDate = Quarter,
+                    },
+                }
+            );
+        var ingestion = Substitute.For<Realtime13FIngestionService>(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            null,
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        ingestion
+            .ReplayRecoveryTail(
+                Arg.Any<IReadOnlyCollection<EdgarDailyIndexEntry>>(),
+                Arg.Any<IReadOnlySet<string>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new RecoveryReplayResult(2, 1, 0, ["new"], Complete: false));
+        var recovery = new HoldingsImportRecoveryService(
+            failures,
+            new InstitutionalHoldingRepository(db),
+            edgar,
+            ingestion,
+            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+        );
+
+        await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        var rows = await failures.GetAll().AsNoTracking().ToDictionaryAsync(r => r.AccessionNumber);
+        rows["new"].ResolvedAt.Should().NotBeNull();
+        rows["stuck"].ResolvedAt.Should().BeNull("the older filing still failed");
     }
 
     [Fact]
