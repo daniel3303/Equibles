@@ -37,7 +37,8 @@ public class HoldingsStockQuarterExposureIndexTests
                 "Shares",
                 "ListedTicker",
                 "FilingType",
-                "OptionType"
+                "OptionType",
+                "ShareType"
             );
         index.FindAnnotation("Npgsql:CreatedConcurrently").Value.Should().Be(true);
     }

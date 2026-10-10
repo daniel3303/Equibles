@@ -228,6 +228,112 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
         }
     }
 
+    // The request-path reads that production runs a million times a day each: the per-stock
+    // quarter book (grouped by the row grain), the holder's common-share total and the repricing
+    // lane's pending-pair scan. Each must be served index-only by its covering index; a missing
+    // include turns every row of a heavily held stock or a mega-filer into a heap fetch.
+    [Fact]
+    public async Task RequestPathReads_AreServedIndexOnlyByTheirCoveringIndexes()
+    {
+        var reportDate = new DateOnly(2024, 6, 30);
+        await SeedQuarter(reportDate, holders: 400, stocks: 400);
+        var capture = new CommandCapture();
+        await using var context = fixture.CreateDbContext(options =>
+            options.AddInterceptors(capture)
+        );
+        var holding = await context
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .FirstAsync(h => h.ReportDate == reportDate);
+        // A few pending rows so the pair scan has entries to walk.
+        await context
+            .Set<InstitutionalHolding>()
+            .Where(h => h.InstitutionalHolderId == holding.InstitutionalHolderId)
+            .ExecuteUpdateAsync(set => set.SetProperty(h => h.ValuePending, true));
+
+        var book = await context
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.EquityIssuerId == holding.EquityIssuerId
+                && h.ReportDate == reportDate
+                && h.FilingType == FilingType.Form13F
+            )
+            .GroupBy(h => new
+            {
+                h.InstitutionalHolderId,
+                h.ListedTicker,
+                h.ShareType,
+                h.OptionType,
+            })
+            .Select(g => new
+            {
+                g.Key.InstitutionalHolderId,
+                g.Key.ListedTicker,
+                g.Key.ShareType,
+                g.Key.OptionType,
+                Shares = g.Sum(h => h.Shares),
+                Value = g.Sum(h => h.Value),
+            })
+            .ToListAsync();
+        book.Should().NotBeEmpty();
+        var commonValue = await context
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.InstitutionalHolderId == holding.InstitutionalHolderId
+                && h.ReportDate == reportDate
+                && h.FilingType == FilingType.Form13F
+            )
+            .SumAsync(h => h.OptionType == null ? h.Value : 0L);
+        commonValue.Should().BePositive();
+        var pairs = await context
+            .Set<InstitutionalHolding>()
+            .Where(h => h.ValuePending && h.ShareType == ShareType.Shares)
+            .Select(h => new
+            {
+                h.EquityIssuerId,
+                h.ListedTicker,
+                h.ReportDate,
+            })
+            .Distinct()
+            .ToListAsync();
+        pairs.Should().NotBeEmpty();
+
+        var reads = capture
+            .Commands.Where(c =>
+                c.Text.Contains("FROM \"InstitutionalHolding\"") && !c.Text.StartsWith("UPDATE")
+            )
+            .ToList();
+        CapturedCommand Read(string marker)
+        {
+            reads
+                .Should()
+                .ContainSingle(
+                    c => c.Text.Contains(marker),
+                    string.Join(" ||| ", reads.Select(r => r.Text))
+                );
+            return reads.Single(c => c.Text.Contains(marker));
+        }
+        var plans = await Explain([Read("GROUP BY"), Read("sum(CASE"), Read("DISTINCT")]);
+        plans[0]
+            .Should()
+            .Contain(
+                "Index Only Scan using \"IX_InstitutionalHolding_StockQuarterExposure\"",
+                plans[0]
+            );
+        plans[1]
+            .Should()
+            .Contain(
+                "Index Only Scan using \"IX_InstitutionalHolding_InstitutionalHolderId_ReportDate\"",
+                plans[1]
+            );
+        plans[2]
+            .Should()
+            .Contain(
+                "Index Only Scan using \"IX_InstitutionalHolding_ValuePending_Pairs\"",
+                plans[2]
+            );
+    }
+
     // One trustworthy 200M-share issuer with two thousand ordinary positions that sit inside both
     // indexes without matching either scan, two positions bigger than the issuer, and two whose
     // derived value implies a per-share price in the billions; plus a 300k-share micro-float whose

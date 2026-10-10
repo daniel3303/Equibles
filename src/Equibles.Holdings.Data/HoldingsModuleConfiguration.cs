@@ -80,6 +80,9 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.ListedTicker,
                 h.FilingType,
                 h.OptionType,
+                // The per-stock quarter book groups by the row grain, so ShareType rides along;
+                // without it every row of the stock was a heap fetch (42 s for the most-held one).
+                h.ShareType,
             })
             .IsCreatedConcurrently();
 
@@ -149,6 +152,9 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.Shares,
                 h.FilingDate,
                 h.FilingType,
+                // The holder's common-share total (a position page's portfolio-weight denominator)
+                // sums Value where OptionType is null; it ran per request on every position page.
+                h.OptionType,
             });
 
         // Covering index for the per-stock 13F ranking pages (Most-Held Stocks,
@@ -211,6 +217,9 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.ReportDate,
             })
             .HasDatabaseName("IX_InstitutionalHolding_ValuePending_Pairs")
+            // The pair scan keeps only share rows; carrying ShareType keeps it index-only across
+            // millions of pending rows. ShareType is row identity and never changes, so HOT holds.
+            .IncludeProperties(h => h.ShareType)
             .HasFilter("\"ValuePending\"");
 
         // Worklist for the bounded stuck-zero repair. The table holds tens of millions of
