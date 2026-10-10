@@ -510,8 +510,6 @@ public class HoldingsScraperWorker : BaseScraperWorker
         await using var scope = ScopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
 
-        // A re-import rewrites the archive's positions, so the next audit must not count as current.
-        await repo.ExpireCoverageAudit();
         var existing = await repo.GetByFileName(fileName).FirstOrDefaultAsync();
         if (existing == null)
         {
@@ -617,9 +615,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 );
                 // Persist intent before any amendment delete/upsert, even if the import fails
                 // or the process stops before a completion marker can be written.
-                await scope
-                    .ServiceProvider.GetRequiredService<ProcessedDataSetRepository>()
-                    .QueueRealtimeReplay(cancellationToken);
+                var ledger = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
+                await ledger.QueueRealtimeReplay(cancellationToken);
+                // The rewrite also outdates the last source audit, whether or not the import completes.
+                await ledger.ExpireCoverageAudit(cancellationToken);
                 var result = await importService.ImportDataSet(
                     archive,
                     minReportDate,

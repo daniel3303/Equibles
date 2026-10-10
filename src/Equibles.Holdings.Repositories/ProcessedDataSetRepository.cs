@@ -29,7 +29,7 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
         );
     }
 
-    public Task ExpireCoverageAudit(CancellationToken cancellationToken = default) =>
+    public virtual Task ExpireCoverageAudit(CancellationToken cancellationToken) =>
         GetByFileName(ProcessedDataSet.CoverageAuditedFileName)
             .ExecuteDeleteAsync(cancellationToken);
 
