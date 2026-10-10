@@ -22,6 +22,10 @@ namespace Equibles.IntegrationTests.Finra;
 public class ListingHistoryIndexPlanTests(ParadeDbFixture fixture) : IAsyncLifetime
 {
     private const int Periods = 1_500;
+
+    // Many listings give the composite index a clear cost lead over walking the date index alone.
+    private const int FillerListings = 49;
+    private const int FillerPeriods = 300;
     private static readonly DateOnly First = new(1990, 1, 1);
 
     public Task InitializeAsync() => fixture.ResetAsync();
@@ -33,7 +37,7 @@ public class ListingHistoryIndexPlanTests(ParadeDbFixture fixture) : IAsyncLifet
     [InlineData(nameof(ShortInterest))]
     [InlineData(nameof(OffExchangeVolume))]
     [InlineData(nameof(FailToDeliver))]
-    public async Task LatestRead_WalksTheListingDateIndexBackward_WithoutSorting(string table)
+    public async Task LatestRead_WalksTheListingDateIndexBackward(string table)
     {
         var issuer = await Seed(table);
         var capture = new CommandCapture();
@@ -47,6 +51,7 @@ public class ListingHistoryIndexPlanTests(ParadeDbFixture fixture) : IAsyncLifet
         var plan = await Explain(capture.Commands.Single(c => c.Text.Contains($"\"{table}\"")));
         plan.Should()
             .MatchRegex($"Index (Only )?Scan Backward using \"IX_{table}_EquityListingId_")
+            .And.Contain("Index Cond: (\"EquityListingId\" = (InitPlan")
             .And.NotContain("Sort");
     }
 
@@ -54,7 +59,10 @@ public class ListingHistoryIndexPlanTests(ParadeDbFixture fixture) : IAsyncLifet
     {
         await using var db = fixture.CreateDbContext();
         EquityIssuer target = null;
-        foreach (var ticker in new[] { "TEST", "FILL" })
+        var tickers = new[] { "TEST" }.Concat(
+            Enumerable.Range(0, FillerListings).Select(index => $"FILL{index}")
+        );
+        foreach (var ticker in tickers)
         {
             var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
                 Id: Guid.NewGuid(),
@@ -63,12 +71,13 @@ public class ListingHistoryIndexPlanTests(ParadeDbFixture fixture) : IAsyncLifet
             );
             db.Add(issuer);
             var listing = Equibles.TestSupport.NativeListingSeed.ForStock(db, issuer, ticker);
-            for (var period = 0; period < Periods; period++)
+            var periods = ticker == "TEST" ? Periods : FillerPeriods;
+            for (var period = 0; period < periods; period++)
                 db.Add(Row(table, listing.Id, ticker, First.AddDays(period)));
             target ??= issuer;
         }
         await db.SaveChangesAsync();
-        await db.Database.ExecuteSqlRawAsync($"ANALYZE \"{table}\"");
+        await db.Database.ExecuteSqlRawAsync("ANALYZE \"" + table + "\"");
         return target;
     }
 
