@@ -332,18 +332,19 @@ public class BacktestPriceLoader
             }
         }
 
-        // The tail is re-read per distinct cached end so a listing that stopped trading never
-        // widens the read of the ones that trade daily.
-        foreach (var group in hits.GroupBy(hit => hit.Series.MaxDate))
+        // The tail is re-read per calendar month of cached end: a listing that stopped trading
+        // widens the read of the ones ending in its month by a month at most, never the read of
+        // the ones that trade daily, and a read costs a few dozen queries instead of one per
+        // distinct last date.
+        foreach (var bucket in TailBuckets(hits, priceWindowFrom))
         {
-            var tailFrom = TailFrom(group.Key, priceWindowFrom);
-            foreach (var batch in group.Chunk(ListingQueryBatchSize))
+            foreach (var batch in bucket.Hits.Chunk(ListingQueryBatchSize))
             {
                 var fresh = (
-                    tailFrom <= to
+                    bucket.TailFrom <= to
                         ? await QueryRows(
                             batch.Select(hit => hit.ListingId).ToArray(),
-                            tailFrom,
+                            bucket.TailFrom,
                             to,
                             cancellationToken
                         )
@@ -351,7 +352,12 @@ public class BacktestPriceLoader
                 ).ToLookup(row => row.EquityListingId);
                 foreach (var (listingId, series) in batch)
                 {
-                    var current = Replace(series, tailFrom, to, fresh[listingId]);
+                    var current = Replace(
+                        series,
+                        TailFrom(series.MaxDate, priceWindowFrom),
+                        to,
+                        fresh[listingId]
+                    );
                     if (!ReferenceEquals(current, series))
                     {
                         _seriesCache.Set(listingId, priceWindowFrom, current);
@@ -362,6 +368,20 @@ public class BacktestPriceLoader
         }
         return rows;
     }
+
+    // Hits grouped by the month their cached series ends in, each bucket read from the earliest
+    // tail among its listings; Replace still trims every listing to its own tail.
+    internal static IEnumerable<(
+        DateOnly TailFrom,
+        List<(Guid ListingId, CachedListingSeries Series)> Hits
+    )> TailBuckets(
+        IEnumerable<(Guid ListingId, CachedListingSeries Series)> hits,
+        DateOnly priceWindowFrom
+    ) =>
+        hits.GroupBy(hit => hit.Series.MaxDate is { } last ? (last.Year, last.Month) : (0, 0))
+            .Select(group =>
+                (group.Min(hit => TailFrom(hit.Series.MaxDate, priceWindowFrom)), group.ToList())
+            );
 
     // The first date a cached series is re-read from: the unsettled tail before its last row,
     // never earlier than the window itself.
