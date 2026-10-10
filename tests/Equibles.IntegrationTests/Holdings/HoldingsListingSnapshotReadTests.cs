@@ -207,7 +207,7 @@ public class HoldingsListingSnapshotReadTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RowsWithoutListingFigures_FallBackToLiveReads()
+    public async Task RowsWithoutListingFigures_AreResolvedLivePerQuarter()
     {
         await using var seed = FreshContext();
         var stock = await SeedStock(seed, "TRST");

@@ -235,18 +235,9 @@ public class AumSnapshotRebuildWorker : BackgroundService
             .Select(s => s.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);
-        // A listing quarter counts only when every closed-quarter row carries the per-listing
-        // figures: rows an older worker wrote keep nulls, and only this backfill revisits
-        // quarters no import dirties (complete when no non-combined row has a null filer count).
         var listingQuarters = await dbContext
             .Set<StockQuarterlyListingActivity>()
             .Where(s => !s.IsCombined)
-            .Select(s => s.ReportDate)
-            .Distinct()
-            .CountAsync(cancellationToken);
-        listingQuarters -= await dbContext
-            .Set<StockQuarterlyListingActivity>()
-            .Where(s => !s.IsCombined && s.CurrentFilerCount == null)
             .Select(s => s.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);
@@ -257,6 +248,7 @@ public class AumSnapshotRebuildWorker : BackgroundService
             && listingQuarters >= form13FQuarters
         )
         {
+            await BackfillListingFigures(dbContext, cancellationToken);
             return;
         }
 
@@ -271,5 +263,46 @@ public class AumSnapshotRebuildWorker : BackgroundService
         );
 
         await _refreshService.RebuildAllAsync(BackfillCommandTimeout, cancellationToken);
+    }
+
+    // Rows an older worker wrote lack the per-listing figures, and only a rebuild revisits a
+    // quarter no import dirties; each boot resumes with the 13F quarters still missing them.
+    // Complete when no non-combined row of a 13F quarter has a null CurrentFilerCount.
+    private async Task BackfillListingFigures(
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var nullFigureDates = await dbContext
+            .Set<StockQuarterlyListingActivity>()
+            .Where(s => !s.IsCombined && s.CurrentFilerCount == null)
+            .Select(s => s.ReportDate)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (nullFigureDates.Count == 0)
+        {
+            return;
+        }
+
+        var quarters = await InstitutionalHoldingReportDateQueries
+            .Get13FReportDates(dbContext)
+            .Where(date => nullFigureDates.Contains(date))
+            .OrderBy(date => date)
+            .ToListAsync(cancellationToken);
+        if (quarters.Count == 0)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Listing snapshot figures missing for {Quarters} 13F quarter(s) — rebuilding them with {Timeout}s command timeout",
+            quarters.Count,
+            BackfillCommandTimeout.TotalSeconds
+        );
+        await _refreshService.RebuildReportDatesAsync(
+            quarters,
+            BackfillCommandTimeout,
+            cancellationToken
+        );
     }
 }

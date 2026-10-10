@@ -531,10 +531,10 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExecuteAsync_ListingRowsWithoutFigures_RunFullBackfill()
+    public async Task ExecuteAsync_ListingRowsWithoutFigures_RebuildOnlyThoseQuarters()
     {
-        // Rows an older worker wrote carry null per-listing figures; the quarter is only
-        // covered once the figures exist, so the full backfill rewrites it on boot.
+        // Rows an older worker wrote carry null per-listing figures; boot rebuilds those
+        // quarters alone, so a restart resumes instead of walking every quarter again.
         await SeedTwoQuarters();
         await SeedFullCoverage(DateTime.UtcNow.AddHours(-1));
         await using (var ctx = FreshContext())
@@ -555,19 +555,17 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(cts.Token);
-        // The backfill walks oldest-first, so wait for the last quarter's sentinel to go.
         await WaitForSnapshots(async ctx =>
-            !await ctx.Set<AumQuarterlySnapshot>().AnyAsync(s => s.TotalValue == 999_999_999)
+            !await ctx.Set<StockQuarterlyListingActivity>()
+                .AnyAsync(row => !row.IsCombined && row.CurrentFilerCount == null)
         );
         await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
-        (
-            await read.Set<StockQuarterlyListingActivity>()
-                .AnyAsync(row => !row.IsCombined && row.CurrentFilerCount == null)
-        )
-            .Should()
-            .BeFalse("the backfill rewrote the rows without figures");
+        var totals = await read.Set<AumQuarterlySnapshot>()
+            .ToDictionaryAsync(s => s.ReportDate, s => s.TotalValue);
+        totals[Q3].Should().NotBe(999_999_999, "the quarter missing figures was rebuilt");
+        totals[Q4].Should().Be(999_999_999, "a quarter whose rows carry figures is left alone");
     }
 
     [Fact]
