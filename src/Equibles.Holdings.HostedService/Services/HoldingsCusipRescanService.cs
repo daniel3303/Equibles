@@ -53,7 +53,7 @@ public class HoldingsCusipRescanService(
                 .Select(value => value.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             using var source = await dataSets.DownloadDataSet(archive.Name, cancellationToken);
-            var affected = await HoldingsCusipArchiveScanner.FindAffectedFilers(
+            var affected = await HoldingsCusipArchiveScanner.FindAffectedFilings(
                 source,
                 cusips,
                 minReportDate,
@@ -78,7 +78,7 @@ public class HoldingsCusipRescanService(
             if (affected.Count != 0)
                 realtimeSignal.RequestReplay();
             logger.LogInformation(
-                "CUSIP rescan checked {Archive} and queued {Count} affected filers",
+                "CUSIP rescan checked {Archive} and queued {Count} affected filings",
                 archive.Name,
                 affected.Count
             );

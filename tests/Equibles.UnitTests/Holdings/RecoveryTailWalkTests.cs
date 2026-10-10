@@ -151,19 +151,30 @@ public class RecoveryTailWalkTests
     }
 
     [Fact]
-    public async Task AccessionsMatchTheLedgerCaseInsensitively()
+    public async Task InterruptedWalk_MarksNothing_SoTheNextWalkReimportsTheWriter()
     {
-        var walk = new Walk(("stuck", Stuck), ("STORED", Imported));
+        var walk = new Walk(
+            ("stuck", Stuck),
+            ("unmarked", Imported),
+            ("stored-amendment", Imported)
+        );
+        walk.CancelAt = "stored-amendment";
 
-        await walk.Run(pending: ["STUCK"], processed: ["stored"]);
+        var run = () => walk.Run(pending: ["stuck"], processed: ["stored-amendment"]);
 
-        walk.Attempted.Should().Equal(["stuck"]);
+        await run.Should().ThrowAsync<OperationCanceledException>();
+        walk.Attempted.Should().Equal(["stuck", "unmarked", "stored-amendment"]);
+        walk.Recorded.Should()
+            .BeEmpty(
+                "a marked writer would be skipped while the amendment behind it stays unapplied"
+            );
     }
 
     private sealed class Walk(params (string Accession, EntryImport Result)[] steps)
     {
         public List<string> Attempted { get; } = [];
         public List<string> Recorded { get; } = [];
+        public string CancelAt { get; set; }
 
         // The callers build both sets case-insensitively, as the ledger does.
         public Task<RecoveryReplayResult> Run(string[] pending, string[] processed)
@@ -188,11 +199,13 @@ public class RecoveryTailWalkTests
                 entry =>
                 {
                     Attempted.Add(entry.AccessionNumber);
+                    if (entry.AccessionNumber == CancelAt)
+                        throw new OperationCanceledException();
                     return Task.FromResult(results[entry.AccessionNumber]);
                 },
-                accession =>
+                accessions =>
                 {
-                    Recorded.Add(accession);
+                    Recorded.AddRange(accessions);
                     return Task.CompletedTask;
                 },
                 CancellationToken.None

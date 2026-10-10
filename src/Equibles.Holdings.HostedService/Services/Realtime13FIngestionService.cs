@@ -255,7 +255,7 @@ public class Realtime13FIngestionService
             pendingAccessions,
             processed,
             entry => ImportEntry(entry, minReportDate, cancellationToken),
-            accession => RecordProcessed([accession], cancellationToken),
+            accessions => RecordProcessed(accessions, cancellationToken),
             cancellationToken
         );
     }
@@ -265,7 +265,7 @@ public class Realtime13FIngestionService
         IReadOnlySet<string> pendingAccessions,
         IReadOnlySet<string> processedAccessions,
         Func<EdgarDailyIndexEntry, Task<EntryImport>> import,
-        Func<string, Task> recordProcessed,
+        Func<IReadOnlyCollection<string>, Task> recordProcessed,
         CancellationToken cancellationToken
     )
     {
@@ -286,14 +286,20 @@ public class Realtime13FIngestionService
             }
 
             var result = await import(entry);
-            var imported = result.Outcome == EntryImportOutcome.Imported;
-            if (imported)
-                await recordProcessed(entry.AccessionNumber);
             // An import that may have written reorders the book, so every later filing re-applies.
             if (!result.HoldingsUntouched)
                 replaying = true;
-            attempts.Add((entry.AccessionNumber, imported));
+            attempts.Add((entry.AccessionNumber, result.Outcome == EntryImportOutcome.Imported));
         }
+
+        // Mark only after the whole walk: a marker written before the replay behind it finished
+        // would let an interrupted walk skip that filing and leave it over a later amendment.
+        await recordProcessed(
+            attempts
+                .Where(attempt => attempt.Imported)
+                .Select(attempt => attempt.Accession)
+                .ToList()
+        );
 
         // A pending filing is settled once it and every later attempt in this pass imported; an
         // older filing that still fails stays pending and anchors the next pass before it.
