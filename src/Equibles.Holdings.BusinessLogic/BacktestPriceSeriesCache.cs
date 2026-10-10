@@ -17,8 +17,14 @@ public sealed class BacktestPriceSeriesCache : IDisposable
     // (roughly seven million rows) resident with headroom.
     public const long DefaultRowCapacity = 12_000_000;
 
-    // The window start moves daily, so entries for an old start are garbage after a day.
-    private static readonly TimeSpan EntryLifetime = TimeSpan.FromHours(36);
+    // Counted from the full read, never from the last delta, so a daily reader still re-reads
+    // the whole window within this bound; the window start usually moves sooner.
+    public static readonly TimeSpan EntryLifetime = TimeSpan.FromHours(36);
+
+    // The price lane resettles a bar's OHLC and volume for VolumeResettleWindowDays after it is
+    // first stored (15 on production); every read re-reads this tail so an unsettled close
+    // never outlives the next request.
+    public const int UnsettledTailDays = 20;
 
     private readonly MemoryCache _cache;
 
@@ -40,7 +46,8 @@ public sealed class BacktestPriceSeriesCache : IDisposable
             new MemoryCacheEntryOptions
             {
                 Size = Math.Max(1, series.RowCount),
-                AbsoluteExpirationRelativeToNow = EntryLifetime,
+                AbsoluteExpiration =
+                    new DateTimeOffset(series.LoadedAt, TimeSpan.Zero) + EntryLifetime,
             }
         );
 

@@ -61,7 +61,8 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
         var loader = new BacktestPriceLoader(
             new EquityDailyStockPriceRepository(_dbContext),
             new EquityIssuerRepository(_dbContext),
-            new StockSplitRepository(_dbContext)
+            new StockSplitRepository(_dbContext),
+            new BacktestPriceSeriesCache()
         );
 
         var result = await loader.RunBacktest(

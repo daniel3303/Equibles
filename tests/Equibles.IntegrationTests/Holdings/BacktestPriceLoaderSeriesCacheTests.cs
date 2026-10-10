@@ -17,13 +17,17 @@ namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
 /// The series cache must change what the backtest reads, never what it computes: a cached
-/// listing is served from memory, extended with closes stored later, re-read after a split, and
-/// keyed by the window start, and rows keep the symbol they were stored under.
+/// listing is served from memory outside its unsettled tail, re-read inside it, extended with
+/// closes stored later, re-read whole after a split or a new window start, and rows keep the
+/// symbol they were stored under.
 /// </summary>
 public class BacktestPriceLoaderSeriesCacheTests : IDisposable
 {
     private static readonly DateOnly From = new(2023, 1, 3);
     private static readonly DateOnly To = new(2023, 2, 3);
+    private static readonly DateOnly WindowFrom = From.AddDays(
+        -BacktestPriceLoader.PriceLookbackDays
+    );
 
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly BacktestPriceSeriesCache _cache = new();
@@ -44,31 +48,41 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
     }
 
     [Fact]
-    public async Task RunBacktest_CachedListing_IsServedFromMemoryUntilASplitOrNewWindowStart()
+    public async Task RunBacktest_CachedListing_IsServedFromMemoryOutsideItsTailUntilASplitOrNewWindowStart()
     {
         var (stock, benchmark) = await SeedPair();
-        var first = await RunBacktest(stock, benchmark, From);
-        first.Points[^1].PortfolioValue.Should().Be(120m);
-        var windowFrom = From.AddDays(-BacktestPriceLoader.PriceLookbackDays);
-        _cache.TryGet(stock.Presentation.Listing.Id, windowFrom, out var cached).Should().BeTrue();
+        var listingId = stock.Presentation.Listing.Id;
+        (await RunBacktest(stock, benchmark, From)).Points[^1].PortfolioValue.Should().Be(120m);
+        _cache.TryGet(listingId, WindowFrom, out var cached).Should().BeTrue();
         cached.MaxDate.Should().Be(To);
         cached.RowCount.Should().Be(2);
 
-        // A corrected historical close without a split is not seen until the window moves.
-        var row = await _dbContext
-            .Set<EquityDailyStockPrice>()
-            .SingleAsync(price =>
-                price.EquityListingId == stock.Presentation.Listing.Id && price.Date == To
-            );
-        row.Close = 15m;
-        await _dbContext.SaveChangesAsync();
+        // The first close is a month before the last cached date, outside the unsettled tail:
+        // a correction there without a split is served from memory.
+        await SetClose(listingId, From, 8m);
         (await RunBacktest(stock, benchmark, From)).Points[^1].PortfolioValue.Should().Be(120m);
-        (await RunBacktest(stock, benchmark, From.AddDays(1)))
+
+        // The last close is inside the tail and is re-read on the next request.
+        await SetClose(listingId, To, 15m);
+        (await RunBacktest(stock, benchmark, From))
             .Points[^1]
             .PortfolioValue.Should()
-            .Be(150m, "a new window start reads the rows again");
+            .Be(150m, "15 over the still-cached 10");
 
-        // A split captured after the load evicts the stock's series.
+        // A new window start reads the whole window again.
+        var nextFrom = From.AddDays(1);
+        (await RunBacktest(stock, benchmark, nextFrom))
+            .Points[^1]
+            .PortfolioValue.Should()
+            .Be(187.5m, "15 over the corrected 8");
+        _cache
+            .TryGet(listingId, WindowFrom, out _)
+            .Should()
+            .BeFalse("yesterday's window is released");
+
+        // A split captured after that read evicts the stock's series: a close outside the tail
+        // is re-read only because of it.
+        await SetClose(listingId, From, 9m);
         _dbContext.Add(
             new StockSplit
             {
@@ -80,13 +94,10 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
             }
         );
         await _dbContext.SaveChangesAsync();
-        var afterSplit = await RunBacktest(stock, benchmark, From);
+        var afterSplit = await RunBacktest(stock, benchmark, nextFrom);
         afterSplit.Points.Should().BeEmpty("a captured split in the window is uncertified");
-        _cache
-            .TryGet(stock.Presentation.Listing.Id, windowFrom, out var reloaded)
-            .Should()
-            .BeTrue();
-        reloaded.Segments.Single().Closes[^1].Should().Be(15m);
+        _cache.TryGet(listingId, WindowFrom.AddDays(1), out var reloaded).Should().BeTrue();
+        reloaded.Segments.Single().Closes.Should().Equal(9m, 15m);
     }
 
     [Fact]
@@ -105,20 +116,31 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
 
         var extended = await RunBacktest(stock, benchmark, From, later);
         extended.Points[^1].PortfolioValue.Should().Be(130m);
-        _cache
-            .TryGet(
-                stock.Presentation.Listing.Id,
-                From.AddDays(-BacktestPriceLoader.PriceLookbackDays),
-                out var cached
-            )
-            .Should()
-            .BeTrue();
+        _cache.TryGet(stock.Presentation.Listing.Id, WindowFrom, out var cached).Should().BeTrue();
         cached.MaxDate.Should().Be(later);
         cached.RowCount.Should().Be(3);
     }
 
     [Fact]
-    public async Task RunBacktest_ListingWithoutRows_GainsThemThroughTheDelta()
+    public async Task RunBacktest_EndEarlierThanTheCachedEnd_StopsThereAndKeepsTheCache()
+    {
+        var (stock, benchmark) = await SeedPair();
+        var middle = From.AddDays(14);
+        AddPrice(stock, middle, 11m);
+        AddPrice(benchmark, middle, 100m);
+        await _dbContext.SaveChangesAsync();
+        (await RunBacktest(stock, benchmark, From)).Points[^1].PortfolioValue.Should().Be(120m);
+
+        var earlierEnd = middle.AddDays(3);
+        var shorter = await RunBacktest(stock, benchmark, From, earlierEnd);
+        shorter.Points.Should().OnlyContain(point => point.Date <= earlierEnd);
+        shorter.Points[^1].PortfolioValue.Should().Be(110m);
+        _cache.TryGet(stock.Presentation.Listing.Id, WindowFrom, out var cached).Should().BeTrue();
+        cached.MaxDate.Should().Be(To, "a shorter read never truncates the cached series");
+    }
+
+    [Fact]
+    public async Task RunBacktest_ListingWithoutRows_GainsThemThroughTheReRead()
     {
         var (stock, benchmark) = await SeedPair();
         var empty = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -171,18 +193,20 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
             .Points.Select(point => (point.Date, point.PortfolioValue))
             .Should()
             .Equal(fresh.Points.Select(point => (point.Date, point.PortfolioValue)));
-        _cache
-            .TryGet(
-                listing.Id,
-                From.AddDays(-BacktestPriceLoader.PriceLookbackDays),
-                out var series
-            )
-            .Should()
-            .BeTrue();
+        _cache.TryGet(listing.Id, WindowFrom, out var series).Should().BeTrue();
         series
             .Segments.Select(segment => segment.SourceTicker)
             .Should()
             .Equal("GOOD", "OLD", "GOOD");
+    }
+
+    private async Task SetClose(Guid listingId, DateOnly date, decimal close)
+    {
+        var row = await _dbContext
+            .Set<EquityDailyStockPrice>()
+            .SingleAsync(price => price.EquityListingId == listingId && price.Date == date);
+        row.Close = close;
+        await _dbContext.SaveChangesAsync();
     }
 
     private async Task<(EquityIssuer Stock, EquityIssuer Benchmark)> SeedPair()

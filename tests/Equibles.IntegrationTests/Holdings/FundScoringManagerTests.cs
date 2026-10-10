@@ -41,7 +41,8 @@ public class FundScoringManagerTests : IDisposable
             new BacktestPriceLoader(
                 new EquityDailyStockPriceRepository(_dbContext),
                 new EquityIssuerRepository(_dbContext),
-                new StockSplitRepository(_dbContext)
+                new StockSplitRepository(_dbContext),
+                new BacktestPriceSeriesCache()
             ),
             _fundScoreRepository
         );
