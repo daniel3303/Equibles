@@ -219,7 +219,10 @@ public class EquityMarketDirectoryImporter(
         if (lastCapture == null || lastCapture <= now - ReverificationInterval)
             return false;
         // A regular line re-imports while its share is still presented on an extended-session line.
-        if (market.ExtendedSessionCodes.Count == 0 || market.IsExtendedSession(row.MarketIdentifierCode))
+        if (
+            market.ExtendedSessionCodes.Count == 0
+            || market.IsExtendedSession(row.MarketIdentifierCode)
+        )
             return true;
         var sessionCodes = market.ExtendedSessionCodes.ToArray();
         return !await listings

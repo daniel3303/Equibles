@@ -469,6 +469,25 @@ public class EquityMarketDirectoryImporterTests
                 Listing = security.Listings.Single(row => row.MarketIdentifierCode == presentedMic),
             };
             context.Add(issuer);
+            // Another share presented on its after-hours line must not reopen this one.
+            var other = new EquityIssuer { Name = "Other SpA", NameAliases = ["Other SpA"] };
+            var otherSecurity = new EquitySecurity { Issuer = other, Isin = "IT0003128367" };
+            other.Securities.Add(otherSecurity);
+            var otherLine = new EquityListing
+            {
+                Security = otherSecurity,
+                Ticker = "2ENEL",
+                MarketIdentifierCode = "MTAH",
+                MarketCountryCode = "IT",
+                IdentityState = EquityIdentityState.Verified,
+            };
+            otherSecurity.Listings.Add(otherLine);
+            other.Presentation = new EquityIssuerPresentation
+            {
+                Issuer = other,
+                Listing = otherLine,
+            };
+            context.Add(other);
             await context.SaveChangesAsync();
         }
         var harness = Build(
@@ -489,7 +508,9 @@ public class EquityMarketDirectoryImporterTests
                 .ImportListing(
                     Arg.Is<EquityDirectoryListingInput>(input =>
                         input.MarketIdentifierCode == "MTAA"
-                        && input.ExtendedSessionMarketIdentifierCodes.SequenceEqual(new[] { "MTAH" })
+                        && input.ExtendedSessionMarketIdentifierCodes.SequenceEqual(
+                            new[] { "MTAH" }
+                        )
                     ),
                     Arg.Any<CancellationToken>()
                 );

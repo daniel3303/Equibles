@@ -157,7 +157,9 @@ public class SourceDirectoryIdentityTests(HistoricalEquityDbFixture fixture)
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ARegularLine_TakesThePresentationFromItsShareExtendedSessionLine(bool extendedSession)
+    public async Task ARegularLine_TakesThePresentationFromItsShareExtendedSessionLine(
+        bool extendedSession
+    )
     {
         await using var services = Services();
         var importer = new EquityDirectoryIdentityImporter(
@@ -180,6 +182,57 @@ public class SourceDirectoryIdentityTests(HistoricalEquityDbFixture fixture)
         presentation.EquityListingId.Should().Be(extendedSession ? regular : afterHours);
         otherVenue.Should().NotBe(regular);
         (await DbContext.Set<EquityListing>().CountAsync(row => row.Active)).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task AnExistingRegularLine_TakesThePresentationOnItsNextImport()
+    {
+        await using var services = Services();
+        var importer = new EquityDirectoryIdentityImporter(
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+        EquityDirectoryListingInput Line(string ticker, string mic, bool extendedSession)
+        {
+            var input = Input(ticker, mic);
+            if (extendedSession)
+                input.ExtendedSessionMarketIdentifierCodes = ["MTAH"];
+            return input;
+        }
+        var afterHours = await importer.ImportListing(Line("2ALTR", "MTAH", true));
+        var regular = await importer.ImportListing(Line("ALTR", "MTAA", false));
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<EquityIssuerPresentation>().SingleAsync())
+            .EquityListingId.Should()
+            .Be(afterHours);
+
+        (await importer.ImportListing(Line("ALTR", "MTAA", true))).Should().Be(regular);
+
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<EquityIssuerPresentation>().SingleAsync())
+            .EquityListingId.Should()
+            .Be(regular);
+    }
+
+    [Fact]
+    public async Task AnotherShareRegularLine_LeavesThePresentationOnItsOwnShare()
+    {
+        await using var services = Services();
+        var importer = new EquityDirectoryIdentityImporter(
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+        var afterHours = Input("2ALTR", "MTAH");
+        afterHours.ExtendedSessionMarketIdentifierCodes = ["MTAH"];
+        var presented = await importer.ImportListing(afterHours);
+        var otherShare = Input("ALTRX", "MTAA");
+        otherShare.Isin = "US02209Y1001";
+        otherShare.ExtendedSessionMarketIdentifierCodes = ["MTAH"];
+        var otherListing = await importer.ImportListing(otherShare);
+
+        DbContext.ChangeTracker.Clear();
+        otherListing.Should().NotBe(presented);
+        (await DbContext.Set<EquityIssuerPresentation>().SingleAsync())
+            .EquityListingId.Should()
+            .Be(presented);
     }
 
     [Theory]

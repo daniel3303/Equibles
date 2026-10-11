@@ -25,7 +25,7 @@ public sealed record EquityMarket(
 )
 {
     // Venue codes that quote the market's own shares again in another session (Milan's after-hours MTAH);
-    // such a line never prices the share, so it never stays the issuer's presentation.
+    // such a line never prices the share, so it loses the presentation to its share's regular line.
     public IReadOnlyList<string> ExtendedSessionCodes { get; init; } = ExtendedSessionCodes ?? [];
 
     // The venue codes FIRDS records this market's lines under; a regulator files Xetra by segment, never as XETR.

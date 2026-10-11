@@ -71,7 +71,10 @@ public static class EquityMarketCatalog
             "MIL",
             "Europe/Rome",
             "MIL"
-        ) with { ExtendedSessionCodes = ["MTAH"] },
+        ) with
+        {
+            ExtendedSessionCodes = ["MTAH"],
+        },
         Euronext(
             "euronext-lisbon",
             "Euronext Lisbon",

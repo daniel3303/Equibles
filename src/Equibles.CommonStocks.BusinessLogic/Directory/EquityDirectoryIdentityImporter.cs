@@ -154,8 +154,14 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
         if (listing.TradingCurrency != null && listing.QuoteUnitMultiplier != null)
             listing.IdentityState = EquityIdentityState.Verified;
         if (issuer.Presentation == null)
-            issuer.Presentation = new EquityIssuerPresentation { Issuer = issuer, Listing = listing };
-        else if (DisplacesExtendedSessionPresentation(issuer.Presentation, security, listing, input))
+            issuer.Presentation = new EquityIssuerPresentation
+            {
+                Issuer = issuer,
+                Listing = listing,
+            };
+        else if (
+            DisplacesExtendedSessionPresentation(issuer.Presentation, security, listing, input)
+        )
             issuer.Presentation.Listing = listing;
         var recordId = await evidence.Append(
             input.Source,
