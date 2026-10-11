@@ -120,6 +120,10 @@ public class EsefAnnualPeriodTests
     [InlineData("aliased-segment", false)]
     [InlineData("default-scenario", false)]
     [InlineData("unrelated-default", true)]
+    [InlineData("default-inline-text", true)]
+    [InlineData("default-inline-number", false)]
+    [InlineData("aliased-inline-number", false)]
+    [InlineData("empty-unit-prefix", false)]
     [InlineData("malformed", false)]
     public void IsProvenInline_RequiresFaithfulXmlNamespaceResolution(string shape, bool expected)
     {
@@ -164,6 +168,20 @@ public class EsefAnnualPeriodTests
                 "<div>",
                 "<div><svg xmlns=\"http://www.w3.org/2000/svg\"/>"
             ),
+            // Danish OAM reports wrap explanatory text blocks in a default inline binding.
+            "default-inline-text" => html.Replace(
+                "<div>",
+                "<div><nonNumeric xmlns=\"http://www.xbrl.org/2013/inlineXBRL\" name=\"ifrs-full:DisclosureOfMaterialAccountingPolicyInformationExplanatory\" contextRef=\"year\" escape=\"true\"><p xmlns=\"http://www.w3.org/1999/xhtml\">Policies</p></nonNumeric>"
+            ),
+            "default-inline-number" => html.Replace(
+                "<div>",
+                "<div><nonFraction xmlns=\"http://www.xbrl.org/2013/inlineXBRL\" name=\"ifrs-full:Revenue\" contextRef=\"year\" unitRef=\"dkk\" decimals=\"0\">300</nonFraction>"
+            ),
+            "aliased-inline-number" => html.Replace(
+                "<div>",
+                "<div><inl:nonFraction xmlns:inl=\"http://www.xbrl.org/2013/inlineXBRL\" name=\"ifrs-full:Revenue\" contextRef=\"year\" unitRef=\"dkk\" decimals=\"0\">300</inl:nonFraction>"
+            ),
+            "empty-unit-prefix" => html.Replace("iso4217:DKK", ":DKK"),
             "malformed" => html.Replace("</html>", ""),
             _ => html,
         };
@@ -216,7 +234,8 @@ public class EsefAnnualPeriodTests
             facts.Should().BeEmpty();
     }
 
-    // An emissions or energy disclosure tagged in a registry unit must not refuse the whole report.
+    // An emissions, energy or headcount disclosure tagged in a registry or issuer unit must not
+    // refuse the whole report.
     [Theory]
     [InlineData("http://www.xbrl.org/2009/utr", "tCO2e", true)]
     [InlineData("http://www.xbrl.org/2009/utr", "MWh", true)]
@@ -225,8 +244,11 @@ public class EsefAnnualPeriodTests
     [InlineData("http://www.xbrl.org/2009/utr", "Usd", false)]
     [InlineData("http://www.xbrl.org/2009/utr", "shares", false)]
     [InlineData("http://www.xbrl.org/2009/utr", "Pure", false)]
-    [InlineData("https://example.org/units", "tCO2e", false)]
-    public void TryParse_AcceptsRegistryUnitsThatCannotReadAsReservedUnits(
+    [InlineData("https://example.org/units", "tCO2e", true)]
+    [InlineData("http://xbrl.example.dk/2025-12-31", "employee", true)]
+    [InlineData("http://xbrl.example.dk/2025-12-31", "DKK", false)]
+    [InlineData("http://xbrl.example.dk/2025-12-31", "shares", false)]
+    public void TryParse_AcceptsUnitsThatCannotReadAsReservedUnits(
         string unitNamespace,
         string unit,
         bool expected
@@ -258,6 +280,30 @@ public class EsefAnnualPeriodTests
         {
             facts.Should().BeEmpty();
         }
+    }
+
+    // The parser drops unit prefixes, so one bare name from two namespaces would merge two units.
+    [Theory]
+    [InlineData("http://www.xbrl.org/2009/utr", "measure", true)]
+    [InlineData("https://example.org/units", "measure", false)]
+    [InlineData("https://example.org/units", "MEASURE", false)]
+    public void TryParse_AcceptsOneBareUnitNameOnlyFromOneNamespace(
+        string secondNamespace,
+        string measureElement,
+        bool expected
+    )
+    {
+        var html = AnnualInline()
+            .Replace(
+                "</ix:resources>",
+                $"""
+                <xbrli:unit id="first"><xbrli:measure xmlns:utr="http://www.xbrl.org/2009/utr">utr:tCO2e</xbrli:measure></xbrli:unit>
+                <xbrli:unit id="second"><xbrli:{measureElement} xmlns:other="{secondNamespace}">other:TCO2E</xbrli:{measureElement}></xbrli:unit>
+                </ix:resources>
+                """
+            );
+
+        EsefInlineXbrlParser.TryParse(html, out _).Should().Be(expected);
     }
 
     private static string AnnualInline() =>
