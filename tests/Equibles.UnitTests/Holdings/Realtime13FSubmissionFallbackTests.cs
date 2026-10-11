@@ -121,13 +121,19 @@ public class Realtime13FSubmissionFallbackTests
             );
     }
 
-    [Fact]
-    public async Task UnavailableDirectory_KeepsTheEnvelopeRoute()
+    [Theory]
+    [InlineData(typeof(HttpRequestException))]
+    [InlineData(typeof(Newtonsoft.Json.JsonReaderException))]
+    [InlineData(typeof(TaskCanceledException))]
+    public async Task UnavailableDirectory_KeepsTheEnvelopeRoute(Type failure)
     {
+        // A 503, an HTML throttle page where index.json should be, or a client timeout.
         var (service, edgar) = CreateService();
         edgar
             .GetFilingArtifactNames(Entry.Cik, Entry.AccessionNumber, Arg.Any<CancellationToken>())
-            .Returns<List<string>>(_ => throw new HttpRequestException("directory 503"));
+            .Returns<List<string>>(_ =>
+                throw (Exception)Activator.CreateInstance(failure, "directory unavailable")
+            );
 
         var filing = await service.ParseFiling(Entry, CancellationToken.None);
 

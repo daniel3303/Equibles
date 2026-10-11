@@ -138,11 +138,9 @@ public class HoldingsImportService
                     or CusipMappingOutcome.UntrackedPositionsOnly
             && confirmedZeroRestatement == null
         )
-            // No tracked stock mapped — typically a cold start where the FTD
-            // scraper hasn't seeded CUSIPs yet. NOT terminal: leave the data
-            // set unprocessed so a later cycle backfills it once CUSIPs exist.
-            // UntrackedPositionsOnly tells a single-filing caller the directory is seeded, so
-            // the filing itself has nothing to track; the data-set contract stays unchanged.
+            // No tracked stock mapped, typically a cold start before CUSIPs seed: leave the data
+            // set unprocessed for a later cycle. UntrackedPositionsOnly tells a single-filing
+            // caller the directory is seeded, so the filing itself has nothing to track.
             return new ImportResult(
                 submissionCount,
                 IsComplete: false,

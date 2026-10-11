@@ -9,6 +9,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 
 namespace Equibles.Holdings.HostedService.Services;
 
@@ -802,21 +803,31 @@ public class Realtime13FIngestionService
     }
 
     // The directory can be unavailable while the envelope was readable; that is the envelope
-    // route's reason to exist, so a listing failure keeps whatever the envelope names produced.
+    // route's reason to exist, so a bounded listing failure keeps what the envelope names produced.
     private async Task<List<string>> TryListPublishedArtifacts(
         EdgarDailyIndexEntry entry,
         CancellationToken cancellationToken
     )
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
         try
         {
             return await _edgarClient.GetFilingArtifactNames(
                 entry.Cik,
                 entry.AccessionNumber,
-                cancellationToken
+                timeout.Token
             );
         }
-        catch (HttpRequestException exception)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Filing directory timed out for {Accession}; keeping the envelope's artifact names",
+                entry.AccessionNumber
+            );
+            return null;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
         {
             _logger.LogInformation(
                 exception,
