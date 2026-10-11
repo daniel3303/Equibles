@@ -253,7 +253,7 @@ public class Filing13FXmlParser
         );
 
     /// <summary>
-    /// Cover-page dates are <c>MM-DD-YYYY</c>; a few historical filings use
+    /// Header and cover-page dates are <c>MM-DD-YYYY</c>; a few historical filings use
     /// ISO. Returns <see cref="DateOnly.MinValue"/> when unparseable so the
     /// downstream pipeline filters the filing out rather than crashing.
     /// </summary>

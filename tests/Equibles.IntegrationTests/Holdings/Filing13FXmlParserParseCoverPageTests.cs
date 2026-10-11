@@ -10,7 +10,8 @@ public class Filing13FXmlParserParseCoverPageTests
         // Real SEC primary_doc.xml is namespaced (edgar/thirteenffiler + a com:
         // address namespace) and an otherManager block carries its OWN <cik>.
         // The reconciliation contract requires: PeriodOfReport parsed from the
-        // MM-DD-YYYY cover-page date exactly (it is part of the upsert key), the
+        // MM-DD-YYYY header period, or the cover-page date when the header has
+        // none, exactly (it is part of the upsert key), the
         // filer CIK taken from headerData — never the decoy otherManager CIK —
         // and isAmendment recognised. A namespace- or scope-regression here
         // silently mis-keys or misattributes every real-time holding.

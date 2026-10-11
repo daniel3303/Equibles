@@ -39,6 +39,19 @@ public class Filing13FXmlParserHeaderPeriodOfReportTests
     }
 
     [Fact]
+    public void ParseCoverPage_IsoHeaderPeriod_ParsesThroughTheSharedDateParser()
+    {
+        var result = _sut.ParseCoverPage(
+            Filing(headerPeriod: "2020-06-30", coverQuarter: "08-14-2020"),
+            accessionNumber: "0000000001-20-000003",
+            cik: "0000000001",
+            filingDate: new DateOnly(2020, 8, 14)
+        );
+
+        result.PeriodOfReport.Should().Be(new DateOnly(2020, 6, 30));
+    }
+
+    [Fact]
     public void ParseCoverPage_HeaderPeriodMissing_FallsBackToCoverPageQuarter()
     {
         var result = _sut.ParseCoverPage(
