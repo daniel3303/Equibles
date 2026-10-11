@@ -2175,6 +2175,7 @@ public class HoldingsImportService
             filingType == FilingType.Form13F && context.PeriodSweptAccessions.Add(accession)
                 ? await LoadDatesOutsideReportPeriod(
                     dbContext,
+                    holderId,
                     accession,
                     reportDate,
                     cancellationToken
@@ -2257,6 +2258,7 @@ public class HoldingsImportService
         if (vacatedDates.Count > 0)
             await DeleteRowsOutsideReportPeriod(
                 dbContext,
+                holderId,
                 accession,
                 reportDate,
                 vacatedDates,
@@ -2371,6 +2373,7 @@ public class HoldingsImportService
     // any other quarter are stale labels of this same filing.
     private static Task<List<DateOnly>> LoadDatesOutsideReportPeriod(
         EquiblesFinancialDbContext dbContext,
+        Guid holderId,
         string accession,
         DateOnly reportDate,
         CancellationToken cancellationToken
@@ -2378,7 +2381,8 @@ public class HoldingsImportService
         dbContext
             .Set<InstitutionalHolding>()
             .Where(h =>
-                h.AccessionNumber == accession
+                h.InstitutionalHolderId == holderId
+                && h.AccessionNumber == accession
                 && h.FilingType == FilingType.Form13F
                 && h.ReportDate != reportDate
             )
@@ -2391,6 +2395,7 @@ public class HoldingsImportService
     // swept by the accession's next import.
     private async Task DeleteRowsOutsideReportPeriod(
         EquiblesFinancialDbContext dbContext,
+        Guid holderId,
         string accession,
         DateOnly reportDate,
         List<DateOnly> vacatedDates,
@@ -2400,7 +2405,8 @@ public class HoldingsImportService
         var deleted = await dbContext
             .Set<InstitutionalHolding>()
             .Where(h =>
-                h.AccessionNumber == accession
+                h.InstitutionalHolderId == holderId
+                && h.AccessionNumber == accession
                 && h.FilingType == FilingType.Form13F
                 && vacatedDates.Contains(h.ReportDate)
             )
