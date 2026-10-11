@@ -17,6 +17,12 @@ public class Realtime13FSubmissionFallbackTests
         FormType = "13F-HR",
     };
 
+    private const string StandaloneTable = """
+        <informationTable><infoTable><cusip>464287242</cusip><value>4919</value>
+        <shrsOrPrnAmt><sshPrnamt>36515</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
+        </infoTable></informationTable>
+        """;
+
     private static string Source() =>
         File.ReadAllText(
             Path.Combine(
@@ -31,6 +37,11 @@ public class Realtime13FSubmissionFallbackTests
     public async Task MissingStandaloneTable_PreservesOriginalRowsWithoutVerifyingCoverTotals()
     {
         var (service, edgar) = CreateService();
+        // The directory confirms the bare name, so the table is truly unpublished and the
+        // envelope's own rows remain the only source.
+        edgar
+            .GetFilingArtifactNames(Entry.Cik, Entry.AccessionNumber, Arg.Any<CancellationToken>())
+            .Returns(["primary_doc.xml", "1972.xml"]);
 
         var filing = await service.ParseFiling(Entry, CancellationToken.None);
 
@@ -50,23 +61,90 @@ public class Realtime13FSubmissionFallbackTests
                 "1972.xml",
                 Arg.Any<CancellationToken>()
             );
+        // A published table beats the unreconciled envelope, so the directory is consulted once
+        // before the envelope rows are used.
         await edgar
-            .DidNotReceive()
-            .GetFilingArtifactNames(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
+            .Received(1)
+            .GetFilingArtifactNames(Entry.Cik, Entry.AccessionNumber, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("13F-HR")]
+    [InlineData("13F-HR/A")]
+    public async Task RenamedPublishedTable_IsReadFromTheDirectoryListing(string formType)
+    {
+        // EDGAR publishes some information tables as "<accession>-<name>.xml" while the
+        // envelope keeps the bare name; the amendment case previously imported as empty.
+        var source = Source();
+        var entry = Entry;
+        if (formType == "13F-HR/A")
+        {
+            source = source
+                .Replace("<TYPE>13F-HR", "<TYPE>13F-HR/A")
+                .Replace("<isAmendment>false", "<isAmendment>true");
+            entry = new EdgarDailyIndexEntry
+            {
+                Cik = Entry.Cik,
+                AccessionNumber = Entry.AccessionNumber,
+                DateFiled = Entry.DateFiled,
+                FormType = formType,
+            };
+        }
+        var (service, edgar) = CreateService(source);
+        var published = $"{Entry.AccessionNumber}-1972.xml";
+        edgar
+            .GetFilingArtifactNames(Entry.Cik, Entry.AccessionNumber, Arg.Any<CancellationToken>())
+            .Returns([published, "primary_doc.xml", $"{Entry.AccessionNumber}-index.html"]);
+        edgar
+            .GetDocumentFileBytes(
+                Entry.Cik,
+                Entry.AccessionNumber,
+                published,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Encoding.UTF8.GetBytes(StandaloneTable));
+
+        var filing = await service.ParseFiling(entry, CancellationToken.None);
+
+        filing.Should().NotBeNull();
+        filing.IsAmendment.Should().Be(formType == "13F-HR/A");
+        filing.Holdings.Should().ContainSingle();
+        filing.Holdings[0].Shares.Should().Be(36_515);
+        filing.CompleteSubmissionVerified.Should().BeFalse();
+        await edgar
+            .Received(1)
+            .GetDocumentFileBytes(
+                Entry.Cik,
+                Entry.AccessionNumber,
+                "1972.xml",
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Theory]
+    [InlineData(typeof(HttpRequestException))]
+    [InlineData(typeof(Newtonsoft.Json.JsonReaderException))]
+    [InlineData(typeof(TaskCanceledException))]
+    public async Task UnavailableDirectory_KeepsTheEnvelopeRoute(Type failure)
+    {
+        // A 503, an HTML throttle page where index.json should be, or a client timeout.
+        var (service, edgar) = CreateService();
+        edgar
+            .GetFilingArtifactNames(Entry.Cik, Entry.AccessionNumber, Arg.Any<CancellationToken>())
+            .Returns<List<string>>(_ =>
+                throw (Exception)Activator.CreateInstance(failure, "directory unavailable")
+            );
+
+        var filing = await service.ParseFiling(Entry, CancellationToken.None);
+
+        filing.Should().NotBeNull();
+        filing.Holdings.Should().HaveCount(10);
+        filing.CompleteSubmissionVerified.Should().BeFalse();
     }
 
     [Fact]
     public async Task AvailableStandaloneTable_RetainsPrecedenceOverUnreconciledSubmission()
     {
-        const string standalone = """
-            <informationTable><infoTable><cusip>464287242</cusip><value>4919</value>
-            <shrsOrPrnAmt><sshPrnamt>36515</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
-            </infoTable></informationTable>
-            """;
         var (service, edgar) = CreateService();
         edgar
             .GetDocumentFileBytes(
@@ -75,7 +153,7 @@ public class Realtime13FSubmissionFallbackTests
                 "1972.xml",
                 Arg.Any<CancellationToken>()
             )
-            .Returns(Encoding.UTF8.GetBytes(standalone));
+            .Returns(Encoding.UTF8.GetBytes(StandaloneTable));
 
         var filing = await service.ParseFiling(Entry, CancellationToken.None);
 
@@ -136,9 +214,11 @@ public class Realtime13FSubmissionFallbackTests
         result.OriginalFallback.Should().BeNull();
     }
 
-    private static (Realtime13FIngestionService Service, ISecEdgarClient Edgar) CreateService()
+    private static (Realtime13FIngestionService Service, ISecEdgarClient Edgar) CreateService(
+        string source = null
+    )
     {
-        var source = Source();
+        source ??= Source();
         var coverStart = source.IndexOf("<edgarSubmission", StringComparison.Ordinal);
         var coverEnd =
             source.IndexOf("</edgarSubmission>", StringComparison.Ordinal)

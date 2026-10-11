@@ -9,6 +9,7 @@ using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 
 namespace Equibles.Holdings.HostedService.Services;
 
@@ -454,6 +455,26 @@ public class Realtime13FIngestionService
                 );
                 return new EntryImport(EntryImportOutcome.Imported, false);
             }
+            // Nothing to store: a NEW HOLDINGS amendment adds no tracked position whatever the
+            // book holds; an original or restatement proves nothing about a retained book, so it
+            // completes only when that quarter holds no tracked rows. Nothing was written, so the
+            // recovery tail behind it need not replay.
+            if (
+                importResult.UntrackedPositionsOnly
+                && (
+                    IsNewHoldingsAmendment(filing)
+                    || !await HasRetainedBook(filing, cancellationToken)
+                )
+            )
+            {
+                _logger.LogInformation(
+                    "Completed 13F {Accession} (CIK {Cik}) with no tracked positions: none of its {Count} source position(s) resolves to a tracked security",
+                    entry.AccessionNumber,
+                    entry.Cik,
+                    filing.Holdings.Count
+                );
+                return new EntryImport(EntryImportOutcome.Imported, importResult.HoldingsUntouched);
+            }
             await RecordFailure(
                 entry,
                 filing.PeriodOfReport,
@@ -490,6 +511,14 @@ public class Realtime13FIngestionService
 
     internal static bool IsSourceConfirmedZeroOriginal(Parsed13FFiling filing) =>
         Filing13FZeroPositionEvidence.IsOriginal(filing);
+
+    internal static bool IsNewHoldingsAmendment(Parsed13FFiling filing) =>
+        filing.IsAmendment
+        && string.Equals(
+            filing.AmendmentType?.Trim(),
+            "NEW HOLDINGS",
+            StringComparison.OrdinalIgnoreCase
+        );
 
     private async Task<bool> HasRetainedBook(
         Parsed13FFiling filing,
@@ -737,6 +766,17 @@ public class Realtime13FIngestionService
         );
 
         filing.Holdings = await ResolveHoldings(entry, artifacts, cancellationToken);
+        if (filing.Holdings.Count == 0 && submission?.ArtifactNames != null)
+        {
+            // EDGAR publishes some information tables as "<accession>-<name>.xml" while the
+            // envelope keeps the bare name, so envelope names can miss; the directory has the
+            // real ones, and a published table beats the envelope's unreconciled positions.
+            var unseen = (await TryListPublishedArtifacts(entry, cancellationToken))
+                ?.Except(artifacts, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (unseen is { Count: > 0 })
+                filing.Holdings = await ResolveHoldings(entry, unseen, cancellationToken);
+        }
 
         // A non-amendment with no parseable holdings means we picked the wrong
         // artifact or the table failed to parse — never feed an empty original
@@ -760,6 +800,42 @@ public class Realtime13FIngestionService
         }
 
         return filing;
+    }
+
+    // The directory can be unavailable while the envelope was readable; that is the envelope
+    // route's reason to exist, so a bounded listing failure keeps what the envelope names produced.
+    private async Task<List<string>> TryListPublishedArtifacts(
+        EdgarDailyIndexEntry entry,
+        CancellationToken cancellationToken
+    )
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
+        {
+            return await _edgarClient.GetFilingArtifactNames(
+                entry.Cik,
+                entry.AccessionNumber,
+                timeout.Token
+            );
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Filing directory timed out for {Accession}; keeping the envelope's artifact names",
+                entry.AccessionNumber
+            );
+            return null;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
+        {
+            _logger.LogInformation(
+                exception,
+                "Filing directory unavailable for {Accession}; keeping the envelope's artifact names",
+                entry.AccessionNumber
+            );
+            return null;
+        }
     }
 
     // Complete submissions stay available when the artifact directory returns server errors.
