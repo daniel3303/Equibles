@@ -41,12 +41,20 @@ public class Filing13FXmlParser
 
         var xmlCik = Value(Descendant(headerData, "cik"));
 
+        // The header's periodOfReport is what SEC publishes as PERIODOFREPORT in its 13F data
+        // sets, so the bulk path already keys quarters by it. The cover page's
+        // reportCalendarOrQuarter is filer-typed and occasionally carries the signature date or
+        // the previous quarter, which stored the filing under a phantom or wrong quarter.
+        var periodOfReport = ParseSecDate(Value(Descendant(headerData, "periodOfReport")));
+        if (periodOfReport == DateOnly.MinValue)
+            periodOfReport = ParseSecDate(Value(Descendant(coverPage, "reportCalendarOrQuarter")));
+
         var filing = new Parsed13FFiling
         {
             AccessionNumber = accessionNumber,
             Cik = string.IsNullOrEmpty(xmlCik) ? cik?.TrimStart('0') : xmlCik.TrimStart('0'),
             FilingDate = filingDate,
-            PeriodOfReport = ParseSecDate(Value(Descendant(coverPage, "reportCalendarOrQuarter"))),
+            PeriodOfReport = periodOfReport,
             IsAmendment = IsAmendmentValue(Value(Descendant(coverPage, "isAmendment"))),
             AmendmentType = Value(Descendant(coverPage, "amendmentType")),
             FilingManagerName = Value(Child(filingManager, "name")),
