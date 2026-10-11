@@ -2169,13 +2169,34 @@ public class HoldingsImportService
             return new HoldingsFlushResult(0, SkippedStaleParent: true);
         TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
         var filingType = submission.FormType.ToHoldingsFilingType() ?? FilingType.Form13F;
+        // Quarters this accession is also stored under, read before any lock so every book lock
+        // is taken ascending ahead of the issuer locks, the order every other writer uses.
+        var vacatedDates =
+            filingType == FilingType.Form13F && context.PeriodSweptAccessions.Add(accession)
+                ? await LoadDatesOutsideReportPeriod(
+                    dbContext,
+                    accession,
+                    reportDate,
+                    cancellationToken
+                )
+                : [];
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var bookLock =
-            $"holdings-book:{holderId}:{reportDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:{(int)filingType}";
+        var bookLocks = vacatedDates
+            .Append(reportDate)
+            .Select(date =>
+                $"holdings-book:{holderId}:{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:{(int)filingType}"
+            )
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToArray();
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({bookLock}, 0))",
+            $"""
+            WITH ordered_books AS MATERIALIZED (
+                SELECT key FROM unnest({bookLocks}) AS books(key) ORDER BY key
+            )
+            SELECT pg_advisory_xact_lock(hashtextextended(key, 0)) FROM ordered_books
+            """,
             cancellationToken
         );
         // Validate the stable issuer owner immediately before writing. Removing a legacy
@@ -2233,16 +2254,14 @@ public class HoldingsImportService
             row.Cusip = identity.Cusip;
             row.ListedTicker = identity.ListedTicker;
         }
-        var vacatedDates =
-            filingType == FilingType.Form13F && context.PeriodSweptAccessions.Add(accession)
-                ? await DeleteRowsOutsideReportPeriod(
-                    dbContext,
-                    holderId,
-                    accession,
-                    reportDate,
-                    cancellationToken
-                )
-                : [];
+        if (vacatedDates.Count > 0)
+            await DeleteRowsOutsideReportPeriod(
+                dbContext,
+                accession,
+                reportDate,
+                vacatedDates,
+                cancellationToken
+            );
         await HandleAmendment(dbContext, accession, context, cancellationToken);
         if (safeHoldings.Count == 0)
         {
@@ -2349,48 +2368,50 @@ public class HoldingsImportService
     }
 
     // A filing's rows live only under its period of report; rows of this accession stored under
-    // any other quarter are stale labels of this same filing. Returns the quarters it vacated.
-    private async Task<List<DateOnly>> DeleteRowsOutsideReportPeriod(
+    // any other quarter are stale labels of this same filing.
+    private static Task<List<DateOnly>> LoadDatesOutsideReportPeriod(
         EquiblesFinancialDbContext dbContext,
-        Guid holderId,
         string accession,
         DateOnly reportDate,
         CancellationToken cancellationToken
-    )
-    {
-        var misdated = dbContext
+    ) =>
+        dbContext
             .Set<InstitutionalHolding>()
             .Where(h =>
                 h.AccessionNumber == accession
                 && h.FilingType == FilingType.Form13F
                 && h.ReportDate != reportDate
-            );
-        var staleDates = await misdated
+            )
             .Select(h => h.ReportDate)
             .Distinct()
             .OrderBy(date => date)
             .ToListAsync(cancellationToken);
-        if (staleDates.Count == 0)
-            return staleDates;
-        // Serialise against a flush of the vacated book, which locks its own key before writing.
-        foreach (var staleDate in staleDates)
-        {
-            var staleBookLock =
-                $"holdings-book:{holderId}:{staleDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:{(int)FilingType.Form13F}";
-            await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtextextended({staleBookLock}, 0))",
-                cancellationToken
-            );
-        }
-        var deleted = await misdated.ExecuteDeleteAsync(cancellationToken);
+
+    // Runs under the book locks of every vacated date; a date that appeared after the read is
+    // swept by the accession's next import.
+    private async Task DeleteRowsOutsideReportPeriod(
+        EquiblesFinancialDbContext dbContext,
+        string accession,
+        DateOnly reportDate,
+        List<DateOnly> vacatedDates,
+        CancellationToken cancellationToken
+    )
+    {
+        var deleted = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.AccessionNumber == accession
+                && h.FilingType == FilingType.Form13F
+                && vacatedDates.Contains(h.ReportDate)
+            )
+            .ExecuteDeleteAsync(cancellationToken);
         _logger.LogInformation(
             "Deleted {Count} row(s) of 13F {Accession} stored under {StaleDates}; its period of report is {Period}",
             deleted,
             accession,
-            staleDates,
+            vacatedDates,
             reportDate
         );
-        return staleDates;
     }
 
     private static Task MarkVacatedQuartersDirty(
