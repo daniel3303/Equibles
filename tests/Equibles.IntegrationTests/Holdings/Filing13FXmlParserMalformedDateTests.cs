@@ -7,8 +7,8 @@ public class Filing13FXmlParserMalformedDateTests
     [Fact]
     public void ParseCoverPage_UnparseableReportPeriod_ReturnsMinValueNotThrowOrBogusDate()
     {
-        // Contract: an unparseable <reportCalendarOrQuarter> must yield
-        // PeriodOfReport == DateOnly.MinValue — NOT an exception and NOT a
+        // Contract: an unparseable <reportCalendarOrQuarter> with no header
+        // <periodOfReport> must yield PeriodOfReport == DateOnly.MinValue — NOT an exception and NOT a
         // coerced/today date. The ingestion sweep relies on MinValue as the
         // "skip this filing" sentinel; a throw aborts the filing's catch path
         // and a bogus date silently mis-keys every holding in the upsert.
