@@ -410,6 +410,112 @@ public class EquityMarketDirectoryImporterTests
             .ImportListing(Arg.Any<EquityDirectoryListingInput>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("MTAH", "MTAA", 0)]
+    [InlineData("MTAA", "MTAA", 1)]
+    [InlineData("MTAH", "MTAH", 1)]
+    public async Task ARegularMilanLine_ReimportsWhileItsShareIsPresentedOnTheAfterHoursLine(
+        string presentedMic,
+        string rowMic,
+        int current
+    )
+    {
+        var milan = EquityMarketCatalog.TryGet("euronext-milan");
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        await SeedFirds(options, "IT0000062072", mic: "MTAA", venue: "MTAA", authority: "IT");
+        var regular = Row("IT0000062072", "G", mic: "MTAA");
+        var afterHours = Row("IT0000062072", "2G", mic: "MTAH");
+        using (var context = NewContext(options))
+        {
+            var issuer = new EquityIssuer
+            {
+                Name = regular.Name,
+                NameAliases = [regular.Name, afterHours.Name],
+                LegalEntityIdentifier = Lei,
+            };
+            var security = new EquitySecurity { Issuer = issuer, Isin = regular.Isin };
+            issuer.Securities.Add(security);
+            foreach (var line in new[] { regular, afterHours })
+            {
+                security.Listings.Add(
+                    new EquityListing
+                    {
+                        Security = security,
+                        Ticker = line.Symbol,
+                        MarketIdentifierCode = line.MarketIdentifierCode,
+                        MarketCountryCode = "IT",
+                        TradingCurrency = "EUR",
+                        QuoteUnitMultiplier = 1m,
+                        IdentityState = EquityIdentityState.Verified,
+                        IsDirectoryListed = true,
+                        IdentitySourceUrl = line.SourceUrl.AbsoluteUri,
+                    }
+                );
+                context.Add(
+                    new EquityDirectorySourceRecord
+                    {
+                        Source = "euronext",
+                        SourceRecordKey = line.SourceUrl.AbsoluteUri,
+                        PayloadHash = Guid.NewGuid().ToString("N"),
+                        PayloadJson = "{}",
+                        CapturedAt = DateTime.UtcNow.AddDays(-1),
+                    }
+                );
+            }
+            issuer.Presentation = new EquityIssuerPresentation
+            {
+                Issuer = issuer,
+                Listing = security.Listings.Single(row => row.MarketIdentifierCode == presentedMic),
+            };
+            context.Add(issuer);
+            // Another share presented on its after-hours line must not reopen this one.
+            var other = new EquityIssuer { Name = "Other SpA", NameAliases = ["Other SpA"] };
+            var otherSecurity = new EquitySecurity { Issuer = other, Isin = "IT0003128367" };
+            other.Securities.Add(otherSecurity);
+            var otherLine = new EquityListing
+            {
+                Security = otherSecurity,
+                Ticker = "2ENEL",
+                MarketIdentifierCode = "MTAH",
+                MarketCountryCode = "IT",
+                IdentityState = EquityIdentityState.Verified,
+            };
+            otherSecurity.Listings.Add(otherLine);
+            other.Presentation = new EquityIssuerPresentation
+            {
+                Issuer = other,
+                Listing = otherLine,
+            };
+            context.Add(other);
+            await context.SaveChangesAsync();
+        }
+        var harness = Build(
+            options,
+            "euronext",
+            "euronext-milan",
+            [rowMic == "MTAA" ? regular : afterHours]
+        );
+
+        var result = await harness.Importer.Import(milan, CancellationToken.None);
+
+        result.Skipped.Should().Be(0);
+        result.Current.Should().Be(current);
+        result.Imported.Should().Be(1 - current);
+        if (current == 0)
+            await harness
+                .Identity.Received(1)
+                .ImportListing(
+                    Arg.Is<EquityDirectoryListingInput>(input =>
+                        input.MarketIdentifierCode == "MTAA"
+                        && input.ExtendedSessionMarketIdentifierCodes.SequenceEqual(
+                            new[] { "MTAH" }
+                        )
+                    ),
+                    Arg.Any<CancellationToken>()
+                );
+    }
+
     [Fact]
     public async Task MissingLeiReopensRecentListingAndUsesExactFirdsRecovery()
     {

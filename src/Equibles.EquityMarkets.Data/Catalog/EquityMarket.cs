@@ -20,9 +20,14 @@ public sealed record EquityMarket(
     IReadOnlyList<string> HomeVenueCodes = null,
     string FirdsAuthority = "ESMA",
     int? YahooNumericSymbolWidth = null,
-    int? NumericTickerWidth = null
+    int? NumericTickerWidth = null,
+    IReadOnlyList<string> ExtendedSessionCodes = null
 )
 {
+    // Venue codes that quote the market's own shares again in another session (Milan's after-hours MTAH);
+    // such a line never prices the share, so it loses the presentation to its share's regular line.
+    public IReadOnlyList<string> ExtendedSessionCodes { get; init; } = ExtendedSessionCodes ?? [];
+
     // The venue codes FIRDS records this market's lines under; a regulator files Xetra by segment, never as XETR.
     public IReadOnlyList<string> FirdsVenueCodes { get; init; } =
         FirdsVenueCodes ?? MarketIdentifierCodes;
@@ -38,6 +43,10 @@ public sealed record EquityMarket(
     public bool IsFirdsVenue(string marketIdentifierCode) =>
         marketIdentifierCode != null
         && FirdsVenueCodes.Contains(marketIdentifierCode, StringComparer.Ordinal);
+
+    public bool IsExtendedSession(string marketIdentifierCode) =>
+        marketIdentifierCode != null
+        && ExtendedSessionCodes.Contains(marketIdentifierCode, StringComparer.Ordinal);
 
     public bool IsHomeVenue(string marketIdentifierCode) =>
         marketIdentifierCode != null
