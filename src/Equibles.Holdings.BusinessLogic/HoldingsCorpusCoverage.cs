@@ -77,6 +77,10 @@ public class HoldingsCorpusCoverage
         );
     }
 
+    // Form 13F reports as of a calendar quarter end; SEC's data sets carry no other period.
+    public static bool IsCalendarQuarterEnd(DateOnly date) =>
+        date.Month % 3 == 0 && date.Day == DateTime.DaysInMonth(date.Year, date.Month);
+
     public static DateOnly PreviousQuarterEnd(DateOnly quarterEnd)
     {
         var quarterStartMonth = ((quarterEnd.Month - 1) / 3) * 3 + 1;

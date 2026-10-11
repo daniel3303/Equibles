@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using System.Xml;
 using Equibles.Core.AutoWiring;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.Repositories;
@@ -366,6 +367,24 @@ public class Realtime13FIngestionService
         }
         if (filing.PeriodOfReport < minReportDate)
             return new EntryImport(EntryImportOutcome.Skipped, true);
+        if (!HoldingsCorpusCoverage.IsCalendarQuarterEnd(filing.PeriodOfReport))
+        {
+            // Form 13F reports as of a calendar quarter end; storing any other period publishes a
+            // phantom quarter on every stock the filer holds.
+            _logger.LogWarning(
+                "Refusing 13F-HR {Accession} (CIK {Cik}): period of report {Period} is not a calendar quarter end",
+                entry.AccessionNumber,
+                entry.Cik,
+                filing.PeriodOfReport
+            );
+            await RecordFailure(
+                entry,
+                filing.PeriodOfReport,
+                HoldingsImportFailureReason.OffQuarterReportPeriod,
+                cancellationToken
+            );
+            return new EntryImport(EntryImportOutcome.Failed, true);
+        }
 
         _logger.LogInformation(
             "Importing 13F-HR {Accession} (CIK {Cik}, period {Period})",

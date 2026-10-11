@@ -14,6 +14,7 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Extensions;
 using Equibles.Holdings.HostedService.Models;
@@ -300,11 +301,24 @@ public class HoldingsImportService
             return null;
 
         var submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase);
+        var offQuarter = new List<string>();
         await foreach (var row in context.TsvParser.ParseEntry(submissionEntry))
         {
             if (TryParseSubmissionRow(row, context.MinReportDate, out var submission))
                 submissions[submission.AccessionNumber] = submission;
+            else if (
+                IsForm13FOutsideQuarterEnd(row)
+                && TryParseDateOnly(GetValue(row, "PERIODOFREPORT"), out var period)
+                && period >= context.MinReportDate
+            )
+                offQuarter.Add(GetValue(row, AccessionNumberColumn));
         }
+        if (offQuarter.Count > 0)
+            _logger.LogWarning(
+                "Refused {Count} 13F submission(s) whose period of report is not a calendar quarter end, e.g. {Accession}",
+                offQuarter.Count,
+                offQuarter[0]
+            );
 
         if (submissions.Count == 0)
         {
@@ -341,6 +355,8 @@ public class HoldingsImportService
             && reportDateCheck < minReportDate
         )
             return false;
+        if (IsForm13FOutsideQuarterEnd(row))
+            return false;
 
         submission = new SubmissionRow
         {
@@ -352,6 +368,14 @@ public class HoldingsImportService
         };
         return true;
     }
+
+    // Form 13F reports as of a calendar quarter end; any other period is a filer or parser error
+    // that would publish a phantom quarter on every stock the filer holds, so the row is refused.
+    internal static bool IsForm13FOutsideQuarterEnd(Dictionary<string, string> row) =>
+        GetValue(row, "SUBMISSIONTYPE") is { } formType
+        && formType.ToHoldingsFilingType() == FilingType.Form13F
+        && TryParseDateOnly(GetValue(row, "PERIODOFREPORT"), out var period)
+        && !HoldingsCorpusCoverage.IsCalendarQuarterEnd(period);
 
     internal static void DeduplicateSubmissions(ImportContext context)
     {
@@ -2145,13 +2169,35 @@ public class HoldingsImportService
             return new HoldingsFlushResult(0, SkippedStaleParent: true);
         TryParseDateOnly(submission.PeriodOfReport, out var reportDate);
         var filingType = submission.FormType.ToHoldingsFilingType() ?? FilingType.Form13F;
+        // Quarters this accession is also stored under, read before any lock so every book lock
+        // is taken ascending ahead of the issuer locks, the order every other writer uses.
+        var vacatedDates =
+            filingType == FilingType.Form13F && context.PeriodSweptAccessions.Add(accession)
+                ? await LoadDatesOutsideReportPeriod(
+                    dbContext,
+                    holderId,
+                    accession,
+                    reportDate,
+                    cancellationToken
+                )
+                : [];
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var bookLock =
-            $"holdings-book:{holderId}:{reportDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:{(int)filingType}";
+        var bookLocks = vacatedDates
+            .Append(reportDate)
+            .Select(date =>
+                $"holdings-book:{holderId}:{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}:{(int)filingType}"
+            )
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToArray();
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({bookLock}, 0))",
+            $"""
+            WITH ordered_books AS MATERIALIZED (
+                SELECT key FROM unnest({bookLocks}) AS books(key) ORDER BY key
+            )
+            SELECT pg_advisory_xact_lock(hashtextextended(key, 0)) FROM ordered_books
+            """,
             cancellationToken
         );
         // Validate the stable issuer owner immediately before writing. Removing a legacy
@@ -2209,11 +2255,21 @@ public class HoldingsImportService
             row.Cusip = identity.Cusip;
             row.ListedTicker = identity.ListedTicker;
         }
+        if (vacatedDates.Count > 0)
+            await DeleteRowsOutsideReportPeriod(
+                dbContext,
+                holderId,
+                accession,
+                reportDate,
+                vacatedDates,
+                cancellationToken
+            );
         await HandleAmendment(dbContext, accession, context, cancellationToken);
         if (safeHoldings.Count == 0)
         {
             if (context.ConfirmedZeroRestatement is { } zero && zero.AccessionNumber == accession)
                 await StoreZeroRestatement(dbContext, zero, holderId, cancellationToken);
+            await MarkVacatedQuartersDirty(dbContext, vacatedDates, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return new HoldingsFlushResult(0, SkippedStaleParent: false);
         }
@@ -2304,11 +2360,78 @@ public class HoldingsImportService
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // Stamped last: the snapshot rows carry the drain's lease, so they must not stay locked
+        // behind the position upsert.
+        await MarkVacatedQuartersDirty(dbContext, vacatedDates, cancellationToken);
         if (transaction != null)
             await transaction.CommitAsync(cancellationToken);
 
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
     }
+
+    // A filing's rows live only under its period of report; rows of this accession stored under
+    // any other quarter are stale labels of this same filing.
+    private static Task<List<DateOnly>> LoadDatesOutsideReportPeriod(
+        EquiblesFinancialDbContext dbContext,
+        Guid holderId,
+        string accession,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    ) =>
+        dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.InstitutionalHolderId == holderId
+                && h.AccessionNumber == accession
+                && h.FilingType == FilingType.Form13F
+                && h.ReportDate != reportDate
+            )
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .OrderBy(date => date)
+            .ToListAsync(cancellationToken);
+
+    // Runs under the book locks of every vacated date; a date that appeared after the read is
+    // swept by the accession's next import.
+    private async Task DeleteRowsOutsideReportPeriod(
+        EquiblesFinancialDbContext dbContext,
+        Guid holderId,
+        string accession,
+        DateOnly reportDate,
+        List<DateOnly> vacatedDates,
+        CancellationToken cancellationToken
+    )
+    {
+        var deleted = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.InstitutionalHolderId == holderId
+                && h.AccessionNumber == accession
+                && h.FilingType == FilingType.Form13F
+                && vacatedDates.Contains(h.ReportDate)
+            )
+            .ExecuteDeleteAsync(cancellationToken);
+        _logger.LogInformation(
+            "Deleted {Count} row(s) of 13F {Accession} stored under {StaleDates}; its period of report is {Period}",
+            deleted,
+            accession,
+            vacatedDates,
+            reportDate
+        );
+    }
+
+    private static Task MarkVacatedQuartersDirty(
+        EquiblesFinancialDbContext dbContext,
+        List<DateOnly> vacatedDates,
+        CancellationToken cancellationToken
+    ) =>
+        vacatedDates.Count == 0
+            ? Task.CompletedTask
+            : HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+                dbContext,
+                vacatedDates,
+                cancellationToken
+            );
 
     private static async Task StoreZeroRestatement(
         EquiblesFinancialDbContext dbContext,
