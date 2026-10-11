@@ -102,4 +102,7 @@ public class ImportContext
     public string UnmappedCusipAccession { get; set; }
 
     public HashSet<string> UnmappedCusipsSeenInAccession { get; } = [];
+
+    // Accessions whose rows outside their period of report were already swept this import.
+    public HashSet<string> PeriodSweptAccessions { get; } = new(StringComparer.OrdinalIgnoreCase);
 }

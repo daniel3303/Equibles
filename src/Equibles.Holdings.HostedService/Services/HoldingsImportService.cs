@@ -14,6 +14,7 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Extensions;
 using Equibles.Holdings.HostedService.Models;
@@ -300,11 +301,19 @@ public class HoldingsImportService
             return null;
 
         var submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase);
+        var offQuarter = 0;
         await foreach (var row in context.TsvParser.ParseEntry(submissionEntry))
         {
             if (TryParseSubmissionRow(row, context.MinReportDate, out var submission))
                 submissions[submission.AccessionNumber] = submission;
+            else if (IsForm13FOutsideQuarterEnd(row))
+                offQuarter++;
         }
+        if (offQuarter > 0)
+            _logger.LogWarning(
+                "Refused {Count} 13F submission(s) whose period of report is not a calendar quarter end",
+                offQuarter
+            );
 
         if (submissions.Count == 0)
         {
@@ -341,6 +350,8 @@ public class HoldingsImportService
             && reportDateCheck < minReportDate
         )
             return false;
+        if (IsForm13FOutsideQuarterEnd(row))
+            return false;
 
         submission = new SubmissionRow
         {
@@ -352,6 +363,14 @@ public class HoldingsImportService
         };
         return true;
     }
+
+    // Form 13F reports as of a calendar quarter end; any other period is a filer or parser error
+    // that would publish a phantom quarter on every stock the filer holds, so the row is refused.
+    internal static bool IsForm13FOutsideQuarterEnd(Dictionary<string, string> row) =>
+        GetValue(row, "SUBMISSIONTYPE") is { } formType
+        && formType.ToHoldingsFilingType() == FilingType.Form13F
+        && TryParseDateOnly(GetValue(row, "PERIODOFREPORT"), out var period)
+        && !HoldingsCorpusCoverage.IsCalendarQuarterEnd(period);
 
     internal static void DeduplicateSubmissions(ImportContext context)
     {
@@ -2209,6 +2228,13 @@ public class HoldingsImportService
             row.Cusip = identity.Cusip;
             row.ListedTicker = identity.ListedTicker;
         }
+        if (filingType == FilingType.Form13F && context.PeriodSweptAccessions.Add(accession))
+            await DeleteRowsOutsideReportPeriod(
+                dbContext,
+                accession,
+                reportDate,
+                cancellationToken
+            );
         await HandleAmendment(dbContext, accession, context, cancellationToken);
         if (safeHoldings.Count == 0)
         {
@@ -2308,6 +2334,44 @@ public class HoldingsImportService
             await transaction.CommitAsync(cancellationToken);
 
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
+    }
+
+    // A filing's rows live only under its period of report. An earlier parser read the filer-typed
+    // cover-page date, so one accession could sit under a phantom or neighbouring quarter; this
+    // import's period is authoritative and the vacated quarter's snapshots rebuild without it.
+    private async Task DeleteRowsOutsideReportPeriod(
+        EquiblesFinancialDbContext dbContext,
+        string accession,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var misdated = dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.AccessionNumber == accession
+                && h.FilingType == FilingType.Form13F
+                && h.ReportDate != reportDate
+            );
+        var staleDates = await misdated
+            .Select(h => h.ReportDate)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (staleDates.Count == 0)
+            return;
+        var deleted = await misdated.ExecuteDeleteAsync(cancellationToken);
+        await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+            dbContext,
+            staleDates,
+            cancellationToken
+        );
+        _logger.LogInformation(
+            "Deleted {Count} row(s) of 13F {Accession} stored under {StaleDates}; its period of report is {Period}",
+            deleted,
+            accession,
+            staleDates,
+            reportDate
+        );
     }
 
     private static async Task StoreZeroRestatement(
