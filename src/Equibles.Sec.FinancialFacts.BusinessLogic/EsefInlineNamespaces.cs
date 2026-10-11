@@ -53,9 +53,14 @@ internal static class EsefInlineNamespaces
                     bindings[prefix] = value;
                 }
                 reader.MoveToElement();
+                // The shared parser matches element names in any case.
                 if (
                     reader.NamespaceURI == "http://www.xbrl.org/2003/instance"
-                    && reader.LocalName == "measure"
+                    && string.Equals(
+                        reader.LocalName,
+                        "measure",
+                        StringComparison.OrdinalIgnoreCase
+                    )
                     && !HasSupportedMeasure(reader, measures)
                 )
                     return false;
@@ -101,7 +106,11 @@ internal static class EsefInlineNamespaces
         using var measure = reader.ReadSubtree();
         measure.MoveToContent();
         var parts = measure.ReadElementContentAsString().Trim().Split(':');
-        if (parts.Length != 2 || !namespaces.TryGetValue(parts[0], out var ns))
+        if (
+            parts.Length != 2
+            || parts.Any(string.IsNullOrEmpty)
+            || !namespaces.TryGetValue(parts[0], out var ns)
+        )
             return false;
         XmlConvert.VerifyNCName(parts[0]);
         XmlConvert.VerifyNCName(parts[1]);

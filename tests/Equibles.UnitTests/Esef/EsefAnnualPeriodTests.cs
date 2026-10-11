@@ -123,6 +123,7 @@ public class EsefAnnualPeriodTests
     [InlineData("default-inline-text", true)]
     [InlineData("default-inline-number", false)]
     [InlineData("aliased-inline-number", false)]
+    [InlineData("empty-unit-prefix", false)]
     [InlineData("malformed", false)]
     public void IsProvenInline_RequiresFaithfulXmlNamespaceResolution(string shape, bool expected)
     {
@@ -180,6 +181,7 @@ public class EsefAnnualPeriodTests
                 "<div>",
                 "<div><inl:nonFraction xmlns:inl=\"http://www.xbrl.org/2013/inlineXBRL\" name=\"ifrs-full:Revenue\" contextRef=\"year\" unitRef=\"dkk\" decimals=\"0\">300</inl:nonFraction>"
             ),
+            "empty-unit-prefix" => html.Replace("iso4217:DKK", ":DKK"),
             "malformed" => html.Replace("</html>", ""),
             _ => html,
         };
@@ -282,10 +284,12 @@ public class EsefAnnualPeriodTests
 
     // The parser drops unit prefixes, so one bare name from two namespaces would merge two units.
     [Theory]
-    [InlineData("http://www.xbrl.org/2009/utr", true)]
-    [InlineData("https://example.org/units", false)]
-    public void TryParse_RefusesOneBareUnitNameFromTwoNamespaces(
+    [InlineData("http://www.xbrl.org/2009/utr", "measure", true)]
+    [InlineData("https://example.org/units", "measure", false)]
+    [InlineData("https://example.org/units", "MEASURE", false)]
+    public void TryParse_AcceptsOneBareUnitNameOnlyFromOneNamespace(
         string secondNamespace,
+        string measureElement,
         bool expected
     )
     {
@@ -294,7 +298,7 @@ public class EsefAnnualPeriodTests
                 "</ix:resources>",
                 $"""
                 <xbrli:unit id="first"><xbrli:measure xmlns:utr="http://www.xbrl.org/2009/utr">utr:tCO2e</xbrli:measure></xbrli:unit>
-                <xbrli:unit id="second"><xbrli:measure xmlns:other="{secondNamespace}">other:TCO2E</xbrli:measure></xbrli:unit>
+                <xbrli:unit id="second"><xbrli:{measureElement} xmlns:other="{secondNamespace}">other:TCO2E</xbrli:{measureElement}></xbrli:unit>
                 </ix:resources>
                 """
             );
