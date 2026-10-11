@@ -13,6 +13,9 @@ namespace Equibles.Holdings.HostedService.Models;
 /// to surface these, or the skip is invisible.
 /// <paramref name="HoldingsUntouched"/> is true only for the returns that precede every holdings
 /// write; recovery relies on it to skip re-applying a tail that nothing changed.
+/// <paramref name="UntrackedPositionsOnly"/> narrows <paramref name="NoTrackedStocks"/>: the source
+/// carried positions, none resolved, and the identity directory already holds tracked CUSIPs, so
+/// this is a filing with nothing to track rather than a cold start waiting for CUSIPs to seed.
 /// </summary>
 public record ImportResult(
     int SubmissionCount,
@@ -20,7 +23,8 @@ public record ImportResult(
     int InsertedHoldings = 0,
     IReadOnlyList<string> ConflictedFilings = null,
     bool NoTrackedStocks = false,
-    bool HoldingsUntouched = false
+    bool HoldingsUntouched = false,
+    bool UntrackedPositionsOnly = false
 )
 {
     public IReadOnlyList<string> ConflictedFilings { get; init; } = ConflictedFilings ?? [];

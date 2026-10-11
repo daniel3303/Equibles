@@ -350,5 +350,90 @@ public class HoldingsImportServiceTests
         result.SubmissionCount.Should().Be(1);
         result.IsComplete.Should().BeFalse();
         result.HoldingsUntouched.Should().BeTrue("this return precedes every holdings write");
+        result.NoTrackedStocks.Should().BeTrue();
+        result
+            .UntrackedPositionsOnly.Should()
+            .BeTrue(
+                "a seeded directory makes an unresolved CUSIP the filing's shape, not a cold start"
+            );
+    }
+
+    [Fact]
+    public async Task ImportDataSet_NoCusipSeededAnywhere_IsAColdStartNotAnUntrackedFiling()
+    {
+        var submissionTsv =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001234567\n";
+        var coverPageTsv =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\n" + "ACC-001\tN\tTest Manager\n";
+        var infoTableTsv = "ACCESSION_NUMBER\tCUSIP\n" + "ACC-001\t999999999\n";
+
+        using var db = CreateDb();
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submissionTsv),
+            ("COVERPAGE.tsv", coverPageTsv),
+            ("INFOTABLE.tsv", infoTableTsv)
+        );
+        var sut = CreateImporter(db);
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeFalse();
+        result.NoTrackedStocks.Should().BeTrue();
+        result
+            .UntrackedPositionsOnly.Should()
+            .BeFalse(
+                "with no CUSIP tracked anywhere this is a cold start that must stay retryable"
+            );
+    }
+
+    [Theory]
+    [InlineData("ACCESSION_NUMBER\tCUSIP\n")]
+    [InlineData("ACCESSION_NUMBER\tCUSIP\nACC-001\t\n")]
+    public async Task ImportDataSet_NoSourceCusipWithSeededDirectory_StaysRetryable(
+        string infoTableTsv
+    )
+    {
+        // An amendment whose table could not be fetched arrives with no rows; it must not pass as
+        // a filing with nothing to track, or a fetch failure would consume the filing forever.
+        var submissionTsv =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR/A\tACC-001\t2024-10-15\t2024-09-30\t0001234567\n";
+        var coverPageTsv =
+            "ACCESSION_NUMBER\tISAMENDMENT\tAMENDMENTTYPE\tFILINGMANAGER_NAME\n"
+            + "ACC-001\tY\tNEW HOLDINGS\tTest Manager\n";
+
+        using var db = CreateDb();
+        db.Set<EquityIssuer>()
+            .Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple",
+                    Cusip: "037833100"
+                )
+            );
+        await db.SaveChangesAsync();
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submissionTsv),
+            ("COVERPAGE.tsv", coverPageTsv),
+            ("INFOTABLE.tsv", infoTableTsv)
+        );
+        var sut = CreateImporter(db);
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeFalse();
+        result.NoTrackedStocks.Should().BeTrue();
+        result.UntrackedPositionsOnly.Should().BeFalse();
+        result.HoldingsUntouched.Should().BeTrue();
     }
 }

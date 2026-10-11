@@ -237,8 +237,10 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
         bool inconsistentDeclarations
     )
     {
-        // No CommonStock is seeded for the filing's CUSIP, so the import maps no
-        // tracked stock and returns IsComplete=false ("retry once CUSIPs exist").
+        // No CUSIP is seeded anywhere, so the import maps no tracked stock and returns
+        // IsComplete=false ("retry once CUSIPs exist"). Only this cold start stays retryable: with
+        // a seeded directory the same filing completes as untracked-only
+        // (Realtime13FIngestionUntrackedOnlyTests).
         var entry = new EdgarDailyIndexEntry
         {
             FormType = "13F-HR",

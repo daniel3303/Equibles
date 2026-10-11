@@ -132,15 +132,23 @@ public class HoldingsImportService
             // A malformed publication is not evidence of an empty quarter. Keep it
             // retryable so a corrected archive can recover without clearing a false success.
             return new ImportResult(submissionCount, IsComplete: false, HoldingsUntouched: true);
-        if (cusipResult == CusipMappingOutcome.NoTrackedStocks && confirmedZeroRestatement == null)
+        if (
+            cusipResult
+                is CusipMappingOutcome.NoTrackedStocks
+                    or CusipMappingOutcome.UntrackedPositionsOnly
+            && confirmedZeroRestatement == null
+        )
             // No tracked stock mapped — typically a cold start where the FTD
             // scraper hasn't seeded CUSIPs yet. NOT terminal: leave the data
             // set unprocessed so a later cycle backfills it once CUSIPs exist.
+            // UntrackedPositionsOnly tells a single-filing caller the directory is seeded, so
+            // the filing itself has nothing to track; the data-set contract stays unchanged.
             return new ImportResult(
                 submissionCount,
                 IsComplete: false,
                 NoTrackedStocks: true,
-                HoldingsUntouched: true
+                HoldingsUntouched: true,
+                UntrackedPositionsOnly: cusipResult == CusipMappingOutcome.UntrackedPositionsOnly
             );
         await BuildPriceMap(context, cancellationToken);
         await BuildSplitMap(context, cancellationToken);
@@ -548,6 +556,9 @@ public class HoldingsImportService
         Mapped,
         NoInfoTable,
         NoTrackedStocks,
+
+        // Source CUSIPs exist and none resolves while the directory already tracks CUSIPs.
+        UntrackedPositionsOnly,
     }
 
     private async Task<CusipMappingOutcome> BuildCusipMapping(
@@ -654,6 +665,22 @@ public class HoldingsImportService
 
         if (cusipMapping.Count == 0)
         {
+            // Placeholder rows (CUSIP 000000000), bonds, warrants and delisted or mistyped CUSIPs
+            // never resolve; with a seeded directory that is the filing's shape, not a cold start.
+            if (
+                uniqueCusips.Count > 0
+                && await query.AnyAsync(
+                    stock => stock.Securities.Any(security => security.Cusip != null),
+                    cancellationToken
+                )
+            )
+            {
+                _logger.LogInformation(
+                    "None of the {Count} source CUSIP(s) in this data set resolves to a tracked security",
+                    uniqueCusips.Count
+                );
+                return CusipMappingOutcome.UntrackedPositionsOnly;
+            }
             _logger.LogInformation(
                 "No tracked stocks mapped for this data set (CUSIPs may not be seeded yet) — will retry on a later cycle"
             );
