@@ -93,10 +93,7 @@ internal static class EsefInlineNamespaces
         }
     }
 
-    private static bool HasSupportedMeasure(
-        XmlReader reader,
-        Dictionary<string, string> measures
-    )
+    private static bool HasSupportedMeasure(XmlReader reader, Dictionary<string, string> measures)
     {
         var namespaces = ((IXmlNamespaceResolver)reader).GetNamespacesInScope(
             XmlNamespaceScope.All

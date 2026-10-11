@@ -284,7 +284,10 @@ public class EsefAnnualPeriodTests
     [Theory]
     [InlineData("http://www.xbrl.org/2009/utr", true)]
     [InlineData("https://example.org/units", false)]
-    public void TryParse_RefusesOneBareUnitNameFromTwoNamespaces(string secondNamespace, bool expected)
+    public void TryParse_RefusesOneBareUnitNameFromTwoNamespaces(
+        string secondNamespace,
+        bool expected
+    )
     {
         var html = AnnualInline()
             .Replace(
