@@ -153,7 +153,10 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
         listing.IdentitySourceUrl = input.SourceUrl;
         if (listing.TradingCurrency != null && listing.QuoteUnitMultiplier != null)
             listing.IdentityState = EquityIdentityState.Verified;
-        issuer.Presentation ??= new EquityIssuerPresentation { Issuer = issuer, Listing = listing };
+        if (issuer.Presentation == null)
+            issuer.Presentation = new EquityIssuerPresentation { Issuer = issuer, Listing = listing };
+        else if (DisplacesExtendedSessionPresentation(issuer.Presentation, security, listing, input))
+            issuer.Presentation.Listing = listing;
         var recordId = await evidence.Append(
             input.Source,
             input.SourceUrl,
@@ -233,5 +236,22 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
                 "Directory identifiers resolve to conflicting issuers; refusing an inferred merge."
             );
         return candidates.Count == 0 ? null : await repository.Get(candidates.Single());
+    }
+
+    // The first directory row seen sets the presentation; a regular line replaces its own share's extended-session line.
+    internal static bool DisplacesExtendedSessionPresentation(
+        EquityIssuerPresentation presentation,
+        EquitySecurity security,
+        EquityListing listing,
+        EquityDirectoryListingInput input
+    )
+    {
+        var sessionCodes = input.ExtendedSessionMarketIdentifierCodes;
+        var presented = security.Listings.FirstOrDefault(row =>
+            row.Id == presentation.EquityListingId
+        );
+        return presented != null
+            && sessionCodes.Contains(presented.MarketIdentifierCode, StringComparer.Ordinal)
+            && !sessionCodes.Contains(listing.MarketIdentifierCode, StringComparer.Ordinal);
     }
 }

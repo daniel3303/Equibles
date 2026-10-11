@@ -99,6 +99,7 @@ public class EquityMarketDirectoryImporter(
                 if (
                     await IsCurrent(
                         scope.ServiceProvider,
+                        market,
                         source.SourceKey,
                         row,
                         firds.Lei,
@@ -179,6 +180,7 @@ public class EquityMarketDirectoryImporter(
     // product page are the expensive calls, and a changed symbol, ISIN, venue or URL always re-verifies.
     private static async Task<bool> IsCurrent(
         IServiceProvider services,
+        EquityMarket market,
         string sourceKey,
         EquityMarketDirectoryRow row,
         string firdsLei,
@@ -214,7 +216,21 @@ public class EquityMarketDirectoryImporter(
             .GetAll()
             .Where(record => record.Source == sourceKey && record.SourceRecordKey == url)
             .MaxAsync(record => (DateTime?)record.CapturedAt, cancellationToken);
-        return lastCapture != null && lastCapture > now - ReverificationInterval;
+        if (lastCapture == null || lastCapture <= now - ReverificationInterval)
+            return false;
+        // A regular line re-imports while its share is still presented on an extended-session line.
+        if (market.ExtendedSessionCodes.Count == 0 || market.IsExtendedSession(row.MarketIdentifierCode))
+            return true;
+        var sessionCodes = market.ExtendedSessionCodes.ToArray();
+        return !await listings
+            .GetAll()
+            .AnyAsync(
+                listing =>
+                    listing.Presentation != null
+                    && listing.Security.Isin == row.Isin
+                    && sessionCodes.Contains(listing.MarketIdentifierCode),
+                cancellationToken
+            );
     }
 
     internal static EquityDirectoryListingInput CreateInput(
@@ -288,6 +304,7 @@ public class EquityMarketDirectoryImporter(
             Ticker = row.Symbol,
             MarketIdentifierCode = row.MarketIdentifierCode,
             MarketCountryCode = market.CountryCode,
+            ExtendedSessionMarketIdentifierCodes = [.. market.ExtendedSessionCodes],
             TradingCurrency = quoted ? currency : null,
             QuoteUnitMultiplier = quoted ? multiplier : null,
             SourceUrl = product.SourceUrl.AbsoluteUri,

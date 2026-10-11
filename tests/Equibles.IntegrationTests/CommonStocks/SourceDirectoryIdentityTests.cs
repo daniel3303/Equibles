@@ -155,6 +155,34 @@ public class SourceDirectoryIdentityTests(HistoricalEquityDbFixture fixture)
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ARegularLine_TakesThePresentationFromItsShareExtendedSessionLine(bool extendedSession)
+    {
+        await using var services = Services();
+        var importer = new EquityDirectoryIdentityImporter(
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+        EquityDirectoryListingInput Line(string ticker, string mic)
+        {
+            var input = Input(ticker, mic);
+            if (extendedSession)
+                input.ExtendedSessionMarketIdentifierCodes = ["MTAH"];
+            return input;
+        }
+        var afterHours = await importer.ImportListing(Line("2ALTR", "MTAH"));
+        var regular = await importer.ImportListing(Line("ALTR", "MTAA"));
+        await importer.ImportListing(Line("2ALTR", "MTAH"));
+        var otherVenue = await importer.ImportListing(Line("ALTR", "ENXL"));
+
+        DbContext.ChangeTracker.Clear();
+        var presentation = await DbContext.Set<EquityIssuerPresentation>().SingleAsync();
+        presentation.EquityListingId.Should().Be(extendedSession ? regular : afterHours);
+        otherVenue.Should().NotBe(regular);
+        (await DbContext.Set<EquityListing>().CountAsync(row => row.Active)).Should().Be(3);
+    }
+
+    [Theory]
     [InlineData("two-cusip-owners")]
     [InlineData("different-lei")]
     [InlineData("occupied-venue-symbol")]
