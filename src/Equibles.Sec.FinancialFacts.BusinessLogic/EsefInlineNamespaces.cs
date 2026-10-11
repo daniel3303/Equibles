@@ -7,6 +7,7 @@ internal static class EsefInlineNamespaces
     public static bool AreUnambiguous(string html)
     {
         var bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var measures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
         {
             using var input = new StringReader(html);
@@ -55,7 +56,19 @@ internal static class EsefInlineNamespaces
                 if (
                     reader.NamespaceURI == "http://www.xbrl.org/2003/instance"
                     && reader.LocalName == "measure"
-                    && !HasSupportedMeasure(reader)
+                    && !HasSupportedMeasure(reader, measures)
+                )
+                    return false;
+                // The shared parser finds numeric facts by their literal ix prefix, so one
+                // reached through a default or aliased inline binding would vanish silently.
+                if (
+                    IsInlineNamespace(reader.NamespaceURI)
+                    && string.Equals(
+                        reader.LocalName,
+                        "nonFraction",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                    && !string.Equals(reader.Prefix, "ix", StringComparison.OrdinalIgnoreCase)
                 )
                     return false;
                 if (
@@ -80,7 +93,10 @@ internal static class EsefInlineNamespaces
         }
     }
 
-    private static bool HasSupportedMeasure(XmlReader reader)
+    private static bool HasSupportedMeasure(
+        XmlReader reader,
+        Dictionary<string, string> measures
+    )
     {
         var namespaces = ((IXmlNamespaceResolver)reader).GetNamespacesInScope(
             XmlNamespaceScope.All
@@ -92,15 +108,21 @@ internal static class EsefInlineNamespaces
             return false;
         XmlConvert.VerifyNCName(parts[0]);
         XmlConvert.VerifyNCName(parts[1]);
-        // The shared parser drops unit prefixes. Only these namespaces give that
-        // abbreviated unit an unambiguous currency, ratio or share-count identity.
+        // The shared parser drops unit prefixes, so two namespaces sharing a bare name
+        // would merge into one unit.
+        if (measures.TryGetValue(parts[1], out var previous) && previous != ns)
+            return false;
+        measures[parts[1]] = ns;
+        // Only these namespaces give that abbreviated unit an unambiguous currency,
+        // ratio or share-count identity.
         if (ns == "http://www.xbrl.org/2003/iso4217")
             return true;
         if (ns == "http://www.xbrl.org/2003/instance")
             return parts[1] is "pure" or "shares";
-        // A registry unit such as tCO2e keeps its identity without the prefix, unless the
-        // bare name would read downstream as a currency code, ratio or share count.
-        return ns == "http://www.xbrl.org/2009/utr" && !ReadsAsReservedUnit(parts[1]);
+        // A registry or issuer unit such as utr:tCO2e or an extension's employee keeps its
+        // identity without the prefix, unless the bare name would read downstream as a
+        // currency code, ratio or share count.
+        return !ReadsAsReservedUnit(parts[1]);
     }
 
     // ISO 4217 list one (2026-09-17) plus retired codes ICU still recognises. Readers uppercase units,
@@ -128,6 +150,7 @@ internal static class EsefInlineNamespaces
 
     // The HTML parser identifies these elements by their literal prefixes. An alias
     // could hide a segment/scenario qualifier and turn it into consolidated evidence.
+    // A default inline binding only wraps text blocks: unprefixed numeric facts are refused.
     private static bool HasSupportedPrefix(string prefix, string value)
     {
         var expected = value switch
@@ -139,8 +162,12 @@ internal static class EsefInlineNamespaces
             _ => null,
         };
         return expected == null
-            || string.Equals(prefix, expected, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(prefix, expected, StringComparison.OrdinalIgnoreCase)
+            || (prefix.Length == 0 && IsInlineNamespace(value));
     }
+
+    private static bool IsInlineNamespace(string value) =>
+        value is "http://www.xbrl.org/2013/inlineXBRL" or "http://www.xbrl.org/2008/inlineXBRL";
 
     private static bool ValidReservedBinding(string prefix, string value) =>
         prefix.ToLowerInvariant() switch

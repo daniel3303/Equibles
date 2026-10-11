@@ -18,8 +18,8 @@
 - xBRL-JSON values are already scaled; `decimals` describes precision, and midnight instant/end timestamps map to the preceding inclusive calendar date.
 - Recovery is recurring reconciliation, not a one-time script; no extraction-version bump replays already captured HTML documents.
 - An ESEF index entry does not establish annual reporting: tagged interim reports use the same format.
-- Validate inline XML namespaces in scope before annual classification and fact extraction; ambiguous rebindings, spoofed instance namespaces and aliases unsupported by the shared parser keep the general type and refuse financial-fact publication.
-- Unit measures resolve only from ISO 4217, `xbrli:pure`/`xbrli:shares`, or the XBRL Unit Type Registry (`utr`); a registry name that reads as a currency code, `pure` or `shares` still refuses the report.
+- Validate inline XML namespaces in scope before annual classification and fact extraction; ambiguous rebindings, spoofed instance namespaces and aliases unsupported by the shared parser keep the general type and refuse financial-fact publication. A default inline-XBRL binding is accepted for text blocks; a numeric fact without the literal `ix` prefix still refuses the report.
+- Unit measures resolve from ISO 4217, `xbrli:pure`/`xbrli:shares`, or any other declared namespace (the XBRL Unit Type Registry or an issuer extension such as an employee count); a bare name that reads as a currency code, `pure` or `shares`, or one bare name declared in two namespaces, still refuses the report.
 - Retain refused originals for diagnosis; the extraction guard prevents new unsupported facts but does not remove previously stored rows or replay the completed corpus.
 - Classify a captured report as annual only with matching unqualified, conflict-free IFRS annual-duration and instant facts at its indexed end, and no later supported issuer facts.
 - Keep other captured reports as the general `EsefReport` type; preserve their envelope, financial extraction, normalization replay and history deduplication.
