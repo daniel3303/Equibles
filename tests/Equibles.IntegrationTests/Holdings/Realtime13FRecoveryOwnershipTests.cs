@@ -178,6 +178,7 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                 Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>()
             );
+        await edgar.Received(1).FilingExists("123", "new-tail", Arg.Any<CancellationToken>());
         (await failures.GetAll().CountAsync(r => r.ResolvedAt == null)).Should().Be(3);
     }
 
