@@ -38,6 +38,20 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
                     < Document.MaxReportedStatementsParseAttempts
             );
 
+    // Foreign-issuer forms replay first: consumers of a foreign issuer's statements wait until its
+    // whole annual corpus carries the current version, so they stay dark for the replay. Newest first.
+    internal static IQueryable<Document> ReplayOrder(IQueryable<Document> documents) =>
+        documents
+            .OrderByDescending(document =>
+                document.DocumentType == DocumentType.TwentyF
+                || document.DocumentType == DocumentType.TwentyFa
+                || document.DocumentType == DocumentType.FortyF
+                || document.DocumentType == DocumentType.FortyFa
+                || document.DocumentType == DocumentType.SixK
+                || document.DocumentType == DocumentType.SixKa
+            )
+            .ThenByDescending(document => document.ReportingDate);
+
     internal static void BeginCurrentParserAttempt(Document document)
     {
         if (
@@ -81,11 +95,12 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
             var parseService =
                 scope.ServiceProvider.GetRequiredService<ReportedStatementsParseService>();
 
-            // Captured bundles whose parse is below the current parser version, newest first.
-            var batch = await documentRepository
-                .GetByReportedStatementsStatus(XbrlCaptureStatus.Captured)
-                .Where(NeedsCurrentParser)
-                .OrderByDescending(d => d.ReportingDate)
+            // Captured bundles whose parse is below the current parser version.
+            var batch = await ReplayOrder(
+                    documentRepository
+                        .GetByReportedStatementsStatus(XbrlCaptureStatus.Captured)
+                        .Where(NeedsCurrentParser)
+                )
                 .Take(batchSize)
                 .ToListAsync(stoppingToken);
 

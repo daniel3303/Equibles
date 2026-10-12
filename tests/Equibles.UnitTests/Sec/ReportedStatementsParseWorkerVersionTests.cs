@@ -11,6 +11,51 @@ namespace Equibles.UnitTests.Sec;
 public class ReportedStatementsParseWorkerVersionTests
 {
     [Fact]
+    public void ReplayOrder_ParsesForeignIssuerFormsBeforeNewerDomesticFilings()
+    {
+        var documents = new[]
+        {
+            new Document
+            {
+                DocumentType = DocumentType.TenQ,
+                ReportingDate = new DateOnly(2026, 9, 30),
+            },
+            new Document
+            {
+                DocumentType = DocumentType.TwentyF,
+                ReportingDate = new DateOnly(2018, 12, 31),
+            },
+            new Document
+            {
+                DocumentType = DocumentType.SixK,
+                ReportingDate = new DateOnly(2026, 6, 30),
+            },
+            new Document
+            {
+                DocumentType = DocumentType.TenK,
+                ReportingDate = new DateOnly(2025, 12, 31),
+            },
+            new Document
+            {
+                DocumentType = DocumentType.FortyFa,
+                ReportingDate = new DateOnly(2024, 12, 31),
+            },
+        };
+
+        ReportedStatementsParseWorker
+            .ReplayOrder(documents.AsQueryable())
+            .Select(document => document.DocumentType)
+            .Should()
+            .Equal(
+                DocumentType.SixK,
+                DocumentType.FortyFa,
+                DocumentType.TwentyF,
+                DocumentType.TenQ,
+                DocumentType.TenK
+            );
+    }
+
+    [Fact]
     public void NeedsCurrentParser_OldAttemptBudgetReopensAfterVersionUpgrade()
     {
         var document = new Document
