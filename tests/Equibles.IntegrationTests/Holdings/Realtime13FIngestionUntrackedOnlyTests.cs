@@ -155,18 +155,34 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
     // shape: original | new-holdings | restatement | placeholder (declared 0 entries, one all-zero
     // 000000000 row, the form filers use for an empty quarter; its totals do not reconcile, so it
     // travels the artifact route rather than the verified-submission route).
+    // retained: none | earlier (an earlier filing's rows) | later (a later filing's rows) |
+    // same-day-later (filed the same day under a higher accession) | own (this filing's rows).
     [Theory]
-    [InlineData("original", false, true)]
-    [InlineData("original", true, false)]
-    [InlineData("new-holdings", true, true)]
-    [InlineData("restatement", true, false)]
-    [InlineData("placeholder", false, true)]
+    [InlineData("original", "none", true)]
+    [InlineData("original", "earlier", false)]
+    [InlineData("original", "later", true)]
+    [InlineData("original", "same-day-later", true)]
+    [InlineData("original", "own", false)]
+    [InlineData("new-holdings", "earlier", true)]
+    [InlineData("restatement", "earlier", false)]
+    [InlineData("restatement", "later", true)]
+    [InlineData("placeholder", "none", true)]
     public async Task UntrackedOnlyFiling_CompletesRecoveryUnlessItWouldHideARetainedBook(
         string shape,
-        bool retainedBook,
+        string retained,
         bool expectComplete
     )
     {
+        var retainedBook = retained != "none";
+        var laterRetained = retained is "later" or "same-day-later";
+        var (retainedFiled, retainedAccession) = retained switch
+        {
+            "earlier" => (Filed.AddDays(-1), "0004000000-26-000001"),
+            "later" => (Filed.AddDays(1), "0004000000-26-000003"),
+            "same-day-later" => (Filed, "0004000000-26-000003"),
+            "own" => (Filed, Accession),
+            _ => (default, null),
+        };
         var formType = shape is "new-holdings" or "restatement" ? "13F-HR/A" : "13F-HR";
         var amendmentType = shape switch
         {
@@ -198,15 +214,19 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
                         Cik = Cik,
                         Name = "UNTRACKED FUND",
                     },
-                    FilingDate = Filed.AddDays(-1),
+                    FilingDate = retainedFiled,
                     ReportDate = Report,
                     FilingType = FilingType.Form13F,
-                    AccessionNumber = "retained-earlier-filing",
+                    AccessionNumber = retainedAccession,
                     Cusip = "037833100",
                     Shares = 10,
                     Value = 100,
                 }
             );
+        // A later filing's rows are retained only while the submissions index offers that filing;
+        // its processed marker lets the walk skip it, since the pending filing writes nothing.
+        if (laterRetained)
+            db.Add(new ProcessedFiling { AccessionNumber = retainedAccession });
         await db.SaveChangesAsync();
         var failures = new HoldingsImportFailureRepository(db);
         await failures.Record(
@@ -228,17 +248,27 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
         edgar
             .GetDocumentFileBytes(Cik, Accession, "infotable.xml", Arg.Any<CancellationToken>())
             .Returns(System.Text.Encoding.UTF8.GetBytes(table));
-        edgar
-            .GetCompanyFilings(Cik, null, Filed, Arg.Any<DateOnly?>())
-            .Returns([
-                new FilingData
+        var offered = new List<FilingData>
+        {
+            new()
+            {
+                AccessionNumber = Accession,
+                Form = formType,
+                FilingDate = Filed,
+                ReportDate = Report,
+            },
+        };
+        if (laterRetained)
+            offered.Add(
+                new()
                 {
-                    AccessionNumber = Accession,
-                    Form = formType,
-                    FilingDate = Filed,
+                    AccessionNumber = retainedAccession,
+                    Form = "13F-HR/A",
+                    FilingDate = retainedFiled,
                     ReportDate = Report,
-                },
-            ]);
+                }
+            );
+        edgar.GetCompanyFilings(Cik, null, Filed, Arg.Any<DateOnly?>()).Returns(offered);
         var scopes = CreateScopeFactory();
         var importer = new HoldingsImportService(
             scopes,
@@ -275,8 +305,13 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
         holdings.Should().HaveCount(retainedBook ? 1 : 0, "nothing tracked is ever written");
         if (retainedBook)
         {
-            holdings[0].AccessionNumber.Should().Be("retained-earlier-filing");
+            holdings[0].AccessionNumber.Should().Be(retainedAccession);
+            holdings[0].FilingDate.Should().Be(retainedFiled);
             holdings[0].Shares.Should().Be(10);
         }
+        if (laterRetained)
+            (await verify.Set<ProcessedFiling>().CountAsync())
+                .Should()
+                .Be(expectComplete ? 2 : 1, "the later filing's marker is kept, never re-imported");
     }
 }
