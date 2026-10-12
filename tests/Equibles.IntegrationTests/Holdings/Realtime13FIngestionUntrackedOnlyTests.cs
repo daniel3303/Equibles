@@ -156,12 +156,14 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
     // 000000000 row, the form filers use for an empty quarter; its totals do not reconcile, so it
     // travels the artifact route rather than the verified-submission route).
     // retained: none | earlier (an earlier filing's rows) | later (a later filing's rows) |
-    // same-day-later (filed the same day under a higher accession) | own (this filing's rows).
+    // same-day-later / same-day-earlier (filed the same day under a higher / lower accession) |
+    // own (this filing's rows).
     [Theory]
     [InlineData("original", "none", true)]
     [InlineData("original", "earlier", false)]
     [InlineData("original", "later", true)]
     [InlineData("original", "same-day-later", true)]
+    [InlineData("original", "same-day-earlier", false)]
     [InlineData("original", "own", false)]
     [InlineData("new-holdings", "earlier", true)]
     [InlineData("restatement", "earlier", false)]
@@ -174,12 +176,15 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
     )
     {
         var retainedBook = retained != "none";
-        var laterRetained = retained is "later" or "same-day-later";
+        // A retained row filed on or after the pending filing must be offered by the submissions
+        // index, so these shapes also carry that filing and its processed marker.
+        var offeredRetained = retained is "later" or "same-day-later" or "same-day-earlier";
         var (retainedFiled, retainedAccession) = retained switch
         {
             "earlier" => (Filed.AddDays(-1), "0004000000-26-000001"),
             "later" => (Filed.AddDays(1), "0004000000-26-000003"),
             "same-day-later" => (Filed, "0004000000-26-000003"),
+            "same-day-earlier" => (Filed, "0004000000-26-000001"),
             "own" => (Filed, Accession),
             _ => (default, null),
         };
@@ -223,9 +228,8 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
                     Value = 100,
                 }
             );
-        // A later filing's rows are retained only while the submissions index offers that filing;
-        // its processed marker lets the walk skip it, since the pending filing writes nothing.
-        if (laterRetained)
+        // The marker lets the walk skip the offered filing, since the pending filing writes nothing.
+        if (offeredRetained)
             db.Add(new ProcessedFiling { AccessionNumber = retainedAccession });
         await db.SaveChangesAsync();
         var failures = new HoldingsImportFailureRepository(db);
@@ -258,7 +262,7 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
                 ReportDate = Report,
             },
         };
-        if (laterRetained)
+        if (offeredRetained)
             offered.Add(
                 new()
                 {
@@ -309,9 +313,12 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
             holdings[0].FilingDate.Should().Be(retainedFiled);
             holdings[0].Shares.Should().Be(10);
         }
-        if (laterRetained)
+        if (offeredRetained)
             (await verify.Set<ProcessedFiling>().CountAsync())
                 .Should()
-                .Be(expectComplete ? 2 : 1, "the later filing's marker is kept, never re-imported");
+                .Be(
+                    expectComplete ? 2 : 1,
+                    "the offered filing's marker is kept, never re-imported"
+                );
     }
 }

@@ -368,12 +368,14 @@ public class Realtime13FIngestionService
         }
         if (filing.PeriodOfReport < minReportDate)
             return new EntryImport(EntryImportOutcome.Skipped, true);
+        var form = filing.IsAmendment ? "13F-HR/A" : "13F-HR";
         if (!HoldingsCorpusCoverage.IsCalendarQuarterEnd(filing.PeriodOfReport))
         {
             // Form 13F reports as of a calendar quarter end; storing any other period publishes a
             // phantom quarter on every stock the filer holds.
             _logger.LogWarning(
-                "Refusing 13F-HR {Accession} (CIK {Cik}): period of report {Period} is not a calendar quarter end",
+                "Refusing {Form} {Accession} (CIK {Cik}): period of report {Period} is not a calendar quarter end",
+                form,
                 entry.AccessionNumber,
                 entry.Cik,
                 filing.PeriodOfReport
@@ -389,7 +391,7 @@ public class Realtime13FIngestionService
 
         _logger.LogInformation(
             "Importing {Form} {Accession} (CIK {Cik}, period {Period})",
-            filing.IsAmendment ? "13F-HR/A" : "13F-HR",
+            form,
             entry.AccessionNumber,
             entry.Cik,
             filing.PeriodOfReport
@@ -418,7 +420,8 @@ public class Realtime13FIngestionService
             // later cycle retries it.
             _logger.LogError(
                 ex,
-                "Failed to import 13F-HR {Accession} (CIK {Cik}); skipping filing",
+                "Failed to import {Form} {Accession} (CIK {Cik}); skipping filing",
+                form,
                 entry.AccessionNumber,
                 entry.Cik
             );
@@ -457,10 +460,9 @@ public class Realtime13FIngestionService
                 return new EntryImport(EntryImportOutcome.Imported, false);
             }
             // Nothing to store: a NEW HOLDINGS amendment adds no tracked position whatever the
-            // book holds; an original or restatement proves nothing about rows it or an earlier
-            // filing wrote, so it completes only when the quarter retains none of those. Rows a
-            // later filing wrote are that filing's to shape. Nothing was written, so the recovery
-            // tail behind it need not replay.
+            // book holds, while an original or restatement completes only when the quarter retains
+            // no rows it or an earlier filing wrote (a later filing's rows are its own to shape).
+            // Nothing was written, so the recovery tail behind it need not replay.
             if (
                 importResult.UntrackedPositionsOnly
                 && (
@@ -554,7 +556,10 @@ public class Realtime13FIngestionService
                         h.FilingDate < entry.DateFiled
                         || (
                             h.FilingDate == entry.DateFiled
-                            && string.Compare(h.AccessionNumber, entry.AccessionNumber) <= 0
+                            && (
+                                h.AccessionNumber == null
+                                || string.Compare(h.AccessionNumber, entry.AccessionNumber) <= 0
+                            )
                         )
                     ),
                 cancellationToken
