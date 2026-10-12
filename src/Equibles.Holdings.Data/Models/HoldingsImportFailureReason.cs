@@ -27,4 +27,7 @@ public enum HoldingsImportFailureReason
 
     [Display(Name = "Report period is not a calendar quarter end")]
     OffQuarterReportPeriod,
+
+    [Display(Name = "Filing withdrawn from EDGAR")]
+    SourceWithdrawn,
 }

@@ -128,6 +128,11 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
         edgarClient
             .GetCompanyFilings(Arg.Any<string>(), null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
             .Returns([]);
+        // EDGAR still publishes every omitted filing here, so the refusal, not the withdrawn
+        // rule, is what defers each filer.
+        edgarClient
+            .FilingExists(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         edgarClient
             .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(async _ =>

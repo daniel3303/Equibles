@@ -879,6 +879,25 @@ public class SecEdgarClient : ISecEdgarClient
             ?? [];
     }
 
+    public async Task<bool> FilingExists(
+        string cik,
+        string accessionNumber,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrEmpty(cik) || string.IsNullOrEmpty(accessionNumber))
+            throw new ArgumentException("cik and accessionNumber are required");
+
+        var url = BuildArchiveUrl(cik, accessionNumber, "index.json");
+
+        using var response = await SendWithRetryAsync(url, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return false;
+
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+
     // Send a retrying GET, throw on a non-success status, and return the fully-buffered body.
     private async Task<string> FetchStringAsync(
         string url,

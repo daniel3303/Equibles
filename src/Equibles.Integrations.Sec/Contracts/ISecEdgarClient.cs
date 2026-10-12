@@ -96,6 +96,16 @@ public interface ISecEdgarClient
     );
 
     /// <summary>
+    /// Whether EDGAR still publishes the filing's directory. Only a 404 answers false; any
+    /// other failure throws, so an unreachable directory never reads as a removed filing.
+    /// </summary>
+    Task<bool> FilingExists(
+        string cik,
+        string accessionNumber,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Fetches one page of EDGAR's "Latest Filings" ATOM feed — the real-time
     /// stream of accepted submissions across all filers. The feed is a rolling
     /// window of the most recent entries only, so callers that must not miss a

@@ -335,6 +335,147 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         rows["stuck"].ResolvedAt.Should().BeNull("the older filing still failed");
     }
 
+    // directory: gone (EDGAR removed the filing, resolve it as withdrawn) | published (the index
+    // only lags, refuse) | unreachable (refuse, nothing proven). A removed filing whose rows are
+    // still published is refused too, under its own message.
+    [Theory]
+    [InlineData("gone", true, false)]
+    [InlineData("gone", false, false)]
+    [InlineData("gone", true, true)]
+    [InlineData("published", true, false)]
+    [InlineData("unreachable", true, false)]
+    public async Task Recovery_ResolvesAPendingFilingEdgarRemoved_AndRefusesOneItStillPublishes(
+        string directory,
+        bool otherPending,
+        bool withdrawnWroteRows
+    )
+    {
+        await using var db = fixture.CreateDbContext();
+        if (withdrawnWroteRows)
+        {
+            var issuer = new Equibles.CommonStocks.Data.Models.EquityIssuer { Name = "Issuer" };
+            var holder = new InstitutionalHolder { Cik = "123", Name = "Manager" };
+            db.AddRange(issuer, holder);
+            db.Add(
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = issuer.Id,
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = Quarter,
+                    FilingDate = new(2026, 8, 1),
+                    FilingType = FilingType.Form13F,
+                    AccessionNumber = "withdrawn",
+                    Shares = 17,
+                }
+            );
+            await db.SaveChangesAsync();
+        }
+        var failures = new HoldingsImportFailureRepository(db);
+        await failures.Record(
+            "withdrawn",
+            "123",
+            new DateOnly(2026, 8, 1),
+            Quarter,
+            HoldingsImportFailureReason.UnreadableSource,
+            CancellationToken.None
+        );
+        if (otherPending)
+            await failures.Record(
+                "original",
+                "123",
+                new DateOnly(2026, 8, 2),
+                Quarter,
+                HoldingsImportFailureReason.Incomplete,
+                CancellationToken.None
+            );
+        await failures
+            .GetAll()
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(r => r.NextAttemptAt, DateTime.UtcNow.AddDays(-1))
+            );
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyFilings("123", null, new DateOnly(2026, 8, 1), Arg.Any<DateOnly?>())
+            .Returns(
+                otherPending
+                    ? new List<FilingData>
+                    {
+                        new()
+                        {
+                            AccessionNumber = "original",
+                            Form = "13F-HR",
+                            FilingDate = new(2026, 8, 2),
+                            ReportDate = Quarter,
+                        },
+                    }
+                    : []
+            );
+        if (directory == "unreachable")
+            edgar
+                .FilingExists("123", "withdrawn", Arg.Any<CancellationToken>())
+                .Returns<bool>(_ => throw new HttpRequestException("403 Forbidden"));
+        else
+            edgar
+                .FilingExists("123", "withdrawn", Arg.Any<CancellationToken>())
+                .Returns(directory == "published");
+        var ingestion = Substitute.For<Realtime13FIngestionService>(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            null,
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        ingestion
+            .ReplayRecoveryTail(
+                Arg.Any<IReadOnlyCollection<EdgarDailyIndexEntry>>(),
+                Arg.Any<IReadOnlySet<string>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new RecoveryReplayResult(1, 1, 0, ["original"], Complete: true));
+        var recovery = new HoldingsImportRecoveryService(
+            failures,
+            new InstitutionalHoldingRepository(db),
+            edgar,
+            ingestion,
+            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+        );
+
+        await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        var rows = await failures.GetAll().AsNoTracking().ToDictionaryAsync(r => r.AccessionNumber);
+        var gone = directory == "gone" && !withdrawnWroteRows;
+        await ingestion
+            .Received(gone && otherPending ? 1 : 0)
+            .ReplayRecoveryTail(
+                Arg.Any<IReadOnlyCollection<EdgarDailyIndexEntry>>(),
+                Arg.Is<IReadOnlySet<string>>(set => set.SetEquals(new[] { "original" })),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>()
+            );
+        (rows["withdrawn"].ResolvedAt != null).Should().Be(gone);
+        rows["withdrawn"]
+            .Reason.Should()
+            .Be(
+                gone
+                    ? HoldingsImportFailureReason.SourceWithdrawn
+                    : HoldingsImportFailureReason.UnreadableSource
+            );
+        if (otherPending)
+        {
+            (rows["original"].ResolvedAt != null).Should().Be(gone);
+            rows["original"].Reason.Should().Be(HoldingsImportFailureReason.Incomplete);
+        }
+        if (withdrawnWroteRows)
+        {
+            await edgar
+                .DidNotReceive()
+                .FilingExists(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            (await db.Set<InstitutionalHolding>().SingleAsync()).Shares.Should().Be(17);
+        }
+    }
+
     [Fact]
     public async Task Coverage_ReportsFailuresEvenWhenArchiveIsProcessed()
     {

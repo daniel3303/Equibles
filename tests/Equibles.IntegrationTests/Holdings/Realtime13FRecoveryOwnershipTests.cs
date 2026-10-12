@@ -135,7 +135,8 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
             );
         (await db.Set<ProcessedFiling>().CountAsync()).Should().Be(1);
 
-        // The newly discovered tail is durable evidence even if submissions omits it.
+        // The newly discovered tail is durable evidence even if submissions omits it: EDGAR still
+        // publishes the filing, so the index only lags and recovery keeps refusing.
         edgar
             .GetCompanyFilings("123", null, Filed.AddDays(-10), Arg.Any<DateOnly?>())
             .Returns([
@@ -152,6 +153,7 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                     FilingDate = Filed,
                 },
             ]);
+        edgar.FilingExists("123", "new-tail", Arg.Any<CancellationToken>()).Returns(true);
         var recoveryIngestion = Substitute.For<Realtime13FIngestionService>(
             edgar,
             new Filing13FXmlParser(),
@@ -176,6 +178,7 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                 Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>()
             );
+        await edgar.Received(1).FilingExists("123", "new-tail", Arg.Any<CancellationToken>());
         (await failures.GetAll().CountAsync(r => r.ResolvedAt == null)).Should().Be(3);
     }
 

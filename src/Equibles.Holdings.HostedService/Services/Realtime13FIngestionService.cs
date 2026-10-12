@@ -368,12 +368,14 @@ public class Realtime13FIngestionService
         }
         if (filing.PeriodOfReport < minReportDate)
             return new EntryImport(EntryImportOutcome.Skipped, true);
+        var form = filing.IsAmendment ? "13F-HR/A" : "13F-HR";
         if (!HoldingsCorpusCoverage.IsCalendarQuarterEnd(filing.PeriodOfReport))
         {
             // Form 13F reports as of a calendar quarter end; storing any other period publishes a
             // phantom quarter on every stock the filer holds.
             _logger.LogWarning(
-                "Refusing 13F-HR {Accession} (CIK {Cik}): period of report {Period} is not a calendar quarter end",
+                "Refusing {Form} {Accession} (CIK {Cik}): period of report {Period} is not a calendar quarter end",
+                form,
                 entry.AccessionNumber,
                 entry.Cik,
                 filing.PeriodOfReport
@@ -388,7 +390,8 @@ public class Realtime13FIngestionService
         }
 
         _logger.LogInformation(
-            "Importing 13F-HR {Accession} (CIK {Cik}, period {Period})",
+            "Importing {Form} {Accession} (CIK {Cik}, period {Period})",
+            form,
             entry.AccessionNumber,
             entry.Cik,
             filing.PeriodOfReport
@@ -417,7 +420,8 @@ public class Realtime13FIngestionService
             // later cycle retries it.
             _logger.LogError(
                 ex,
-                "Failed to import 13F-HR {Accession} (CIK {Cik}); skipping filing",
+                "Failed to import {Form} {Accession} (CIK {Cik}); skipping filing",
+                form,
                 entry.AccessionNumber,
                 entry.Cik
             );
@@ -445,7 +449,7 @@ public class Realtime13FIngestionService
             if (
                 importResult.NoTrackedStocks
                 && IsSourceConfirmedZeroOriginal(filing)
-                && !await HasRetainedBook(filing, cancellationToken)
+                && !await HasUnsupersededBook(filing, entry, cancellationToken)
             )
             {
                 _logger.LogInformation(
@@ -456,14 +460,14 @@ public class Realtime13FIngestionService
                 return new EntryImport(EntryImportOutcome.Imported, false);
             }
             // Nothing to store: a NEW HOLDINGS amendment adds no tracked position whatever the
-            // book holds; an original or restatement proves nothing about a retained book, so it
-            // completes only when that quarter holds no tracked rows. Nothing was written, so the
-            // recovery tail behind it need not replay.
+            // book holds, while an original or restatement completes only when the quarter retains
+            // no rows it or an earlier filing wrote (a later filing's rows are its own to shape).
+            // Nothing was written, so the recovery tail behind it need not replay.
             if (
                 importResult.UntrackedPositionsOnly
                 && (
                     IsNewHoldingsAmendment(filing)
-                    || !await HasRetainedBook(filing, cancellationToken)
+                    || !await HasUnsupersededBook(filing, entry, cancellationToken)
                 )
             )
             {
@@ -475,6 +479,13 @@ public class Realtime13FIngestionService
                 );
                 return new EntryImport(EntryImportOutcome.Imported, importResult.HoldingsUntouched);
             }
+            if (importResult.UntrackedPositionsOnly)
+                _logger.LogInformation(
+                    "13F {Accession} (CIK {Cik}) resolves to no tracked position but stays pending: its {Period} book retains rows this filing or an earlier one wrote",
+                    entry.AccessionNumber,
+                    entry.Cik,
+                    filing.PeriodOfReport
+                );
             await RecordFailure(
                 entry,
                 filing.PeriodOfReport,
@@ -520,20 +531,37 @@ public class Realtime13FIngestionService
             StringComparison.OrdinalIgnoreCase
         );
 
-    private async Task<bool> HasRetainedBook(
+    /// <summary>
+    /// Whether the filer's quarter retains tracked rows written by this filing or an earlier one.
+    /// Rows a later filing wrote are its own, so this filing cannot shape them whatever it
+    /// resolves to.
+    /// </summary>
+    private async Task<bool> HasUnsupersededBook(
         Parsed13FFiling filing,
+        EdgarDailyIndexEntry entry,
         CancellationToken cancellationToken
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var holdings = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
+        // Same ordering key as the recovery walk: filing date, then ordinal accession.
         return await holdings
             .GetAll()
             .AnyAsync(
                 h =>
                     h.InstitutionalHolder.Cik == filing.Cik
                     && h.ReportDate == filing.PeriodOfReport
-                    && h.FilingType == FilingType.Form13F,
+                    && h.FilingType == FilingType.Form13F
+                    && (
+                        h.FilingDate < entry.DateFiled
+                        || (
+                            h.FilingDate == entry.DateFiled
+                            && (
+                                h.AccessionNumber == null
+                                || string.Compare(h.AccessionNumber, entry.AccessionNumber) <= 0
+                            )
+                        )
+                    ),
                 cancellationToken
             );
     }
