@@ -101,26 +101,25 @@ public class HoldingsImportRecoveryService(
             .Select(entry => entry.AccessionNumber)
             .Concat(outOfScope)
             .ToHashSet();
-        if (retainedAccessions.Any(accession => !offeredAccessions.Contains(accession)))
-            throw new InvalidDataException(
-                "The SEC submissions response omitted a retained later filing; recovery was not attempted."
-            );
         var omitted = pending
             .Where(row =>
                 !outOfScope.Contains(row.AccessionNumber)
                 && !entries.Any(entry => entry.AccessionNumber == row.AccessionNumber)
             )
             .ToList();
+        // A withdrawn filing whose rows are still published is refused too: removing them is
+        // an operator decision, so it keeps its own message.
+        if (retainedAccessions.Any(accession => !offeredAccessions.Contains(accession)))
+            throw new InvalidDataException(
+                omitted.Any(row => retainedAccessions.Contains(row.AccessionNumber))
+                    ? "The SEC submissions response omitted a pending filing whose rows are retained; recovery was not attempted."
+                    : "The SEC submissions response omitted a retained later filing; recovery was not attempted."
+            );
         foreach (var row in omitted)
         {
             // EDGAR removes a filing the filer withdraws or SEC rejects after acceptance, and its
-            // directory goes with it; a directory still listed means the index only lags.
-            var artifacts = await edgar.GetFilingArtifactNames(
-                cik,
-                row.AccessionNumber,
-                cancellationToken
-            );
-            if (artifacts.Count > 0)
+            // directory goes with it; a directory still published means the index only lags.
+            if (await edgar.FilingExists(cik, row.AccessionNumber, cancellationToken))
                 throw new InvalidDataException(
                     "The SEC submissions response omitted a pending filing EDGAR still publishes; recovery was not attempted."
                 );

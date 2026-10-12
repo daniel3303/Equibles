@@ -336,18 +336,40 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
     }
 
     // directory: gone (EDGAR removed the filing, resolve it as withdrawn) | published (the index
-    // only lags, refuse) | unreachable (refuse, nothing proven).
+    // only lags, refuse) | unreachable (refuse, nothing proven). A removed filing whose rows are
+    // still published is refused too, under its own message.
     [Theory]
-    [InlineData("gone", true)]
-    [InlineData("gone", false)]
-    [InlineData("published", true)]
-    [InlineData("unreachable", true)]
+    [InlineData("gone", true, false)]
+    [InlineData("gone", false, false)]
+    [InlineData("gone", true, true)]
+    [InlineData("published", true, false)]
+    [InlineData("unreachable", true, false)]
     public async Task Recovery_ResolvesAPendingFilingEdgarRemoved_AndRefusesOneItStillPublishes(
         string directory,
-        bool otherPending
+        bool otherPending,
+        bool withdrawnWroteRows
     )
     {
         await using var db = fixture.CreateDbContext();
+        if (withdrawnWroteRows)
+        {
+            var issuer = new Equibles.CommonStocks.Data.Models.EquityIssuer { Name = "Issuer" };
+            var holder = new InstitutionalHolder { Cik = "123", Name = "Manager" };
+            db.AddRange(issuer, holder);
+            db.Add(
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = issuer.Id,
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = Quarter,
+                    FilingDate = new(2026, 8, 1),
+                    FilingType = FilingType.Form13F,
+                    AccessionNumber = "withdrawn",
+                    Shares = 17,
+                }
+            );
+            await db.SaveChangesAsync();
+        }
         var failures = new HoldingsImportFailureRepository(db);
         await failures.Record(
             "withdrawn",
@@ -388,18 +410,14 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
                     }
                     : []
             );
-        if (directory == "gone")
+        if (directory == "unreachable")
             edgar
-                .GetFilingArtifactNames("123", "withdrawn", Arg.Any<CancellationToken>())
-                .Returns([]);
-        else if (directory == "published")
-            edgar
-                .GetFilingArtifactNames("123", "withdrawn", Arg.Any<CancellationToken>())
-                .Returns(["primary_doc.xml"]);
+                .FilingExists("123", "withdrawn", Arg.Any<CancellationToken>())
+                .Returns<bool>(_ => throw new HttpRequestException("403 Forbidden"));
         else
             edgar
-                .GetFilingArtifactNames("123", "withdrawn", Arg.Any<CancellationToken>())
-                .Returns<List<string>>(_ => throw new HttpRequestException("403 Forbidden"));
+                .FilingExists("123", "withdrawn", Arg.Any<CancellationToken>())
+                .Returns(directory == "published");
         var ingestion = Substitute.For<Realtime13FIngestionService>(
             edgar,
             new Filing13FXmlParser(),
@@ -427,7 +445,7 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
 
         var rows = await failures.GetAll().AsNoTracking().ToDictionaryAsync(r => r.AccessionNumber);
-        var gone = directory == "gone";
+        var gone = directory == "gone" && !withdrawnWroteRows;
         await ingestion
             .Received(gone && otherPending ? 1 : 0)
             .ReplayRecoveryTail(
@@ -448,6 +466,13 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         {
             (rows["original"].ResolvedAt != null).Should().Be(gone);
             rows["original"].Reason.Should().Be(HoldingsImportFailureReason.Incomplete);
+        }
+        if (withdrawnWroteRows)
+        {
+            await edgar
+                .DidNotReceive()
+                .FilingExists(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            (await db.Set<InstitutionalHolding>().SingleAsync()).Shares.Should().Be(17);
         }
     }
 
