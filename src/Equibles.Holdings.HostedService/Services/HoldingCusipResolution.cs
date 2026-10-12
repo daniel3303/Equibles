@@ -54,7 +54,10 @@ internal static class HoldingCusipResolution
     )
     {
         var all = cusips == null;
-        var cusipList = cusips?.ToList() ?? [];
+        // SQL `IN` compares case-sensitively and the directory stores CUSIPs uppercase, so a
+        // filer's lowercase spelling must be uppercased here or it never resolves.
+        var cusipList =
+            cusips?.Select(cusip => cusip.ToUpperInvariant()).Distinct().ToList() ?? [];
         var securities = await issuers
             .SelectMany(issuer => issuer.Securities)
             .Where(security =>
