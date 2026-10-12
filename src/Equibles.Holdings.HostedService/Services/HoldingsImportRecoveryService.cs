@@ -1,4 +1,5 @@
 using Equibles.Core.AutoWiring;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
@@ -104,18 +105,43 @@ public class HoldingsImportRecoveryService(
             throw new InvalidDataException(
                 "The SEC submissions response omitted a retained later filing; recovery was not attempted."
             );
-        // Reapply the later tail after any filing that changes holdings, even if its markers
-        // already exist. Otherwise an old recovered original overwrites amendments imported while
-        // that original failed.
-        if (
-            pending.Any(row =>
+        var omitted = pending
+            .Where(row =>
                 !outOfScope.Contains(row.AccessionNumber)
                 && !entries.Any(entry => entry.AccessionNumber == row.AccessionNumber)
             )
-        )
-            throw new InvalidDataException(
-                "The SEC submissions response omitted a pending filing; recovery was not attempted."
+            .ToList();
+        foreach (var row in omitted)
+        {
+            // EDGAR removes a filing the filer withdraws or SEC rejects after acceptance, and its
+            // directory goes with it; a directory still listed means the index only lags.
+            var artifacts = await edgar.GetFilingArtifactNames(
+                cik,
+                row.AccessionNumber,
+                cancellationToken
             );
+            if (artifacts.Count > 0)
+                throw new InvalidDataException(
+                    "The SEC submissions response omitted a pending filing EDGAR still publishes; recovery was not attempted."
+                );
+            await failures.Resolve(
+                row.AccessionNumber,
+                cancellationToken,
+                startedAt,
+                HoldingsImportFailureReason.SourceWithdrawn
+            );
+            logger.LogInformation(
+                "Resolved 13F {Accession} (CIK {Cik}) as withdrawn: EDGAR no longer publishes it",
+                row.AccessionNumber,
+                cik
+            );
+        }
+        pending.RemoveAll(omitted.Contains);
+        if (pending.Count == 0)
+            return;
+        // Reapply the later tail after any filing that changes holdings, even if its markers
+        // already exist. Otherwise an old recovered original overwrites amendments imported while
+        // that original failed.
         var replay = await ingestion.ReplayRecoveryTail(
             entries,
             pending.Select(row => row.AccessionNumber).ToHashSet(StringComparer.OrdinalIgnoreCase),

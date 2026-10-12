@@ -55,10 +55,12 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
             cancellationToken
         );
 
+    // A reason restates why the row closed without an import (a withdrawn filing); null keeps it.
     public Task Resolve(
         string accession,
         CancellationToken cancellationToken,
-        DateTime? attemptedBefore = null
+        DateTime? attemptedBefore = null,
+        HoldingsImportFailureReason? reason = null
     ) =>
         GetAll()
             .Where(row =>
@@ -67,7 +69,10 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
                 && (attemptedBefore == null || row.LastAttemptAt <= attemptedBefore)
             )
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(row => row.ResolvedAt, DateTime.UtcNow),
+                setters =>
+                    setters
+                        .SetProperty(row => row.ResolvedAt, DateTime.UtcNow)
+                        .SetProperty(row => row.Reason, row => reason ?? row.Reason),
                 cancellationToken
             );
 
