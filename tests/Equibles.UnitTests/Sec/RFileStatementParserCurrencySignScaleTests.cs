@@ -143,6 +143,23 @@ public class RFileStatementParserCurrencySignScaleTests
             .Equal(1_000L);
     }
 
+    // An equity-statement member such as "Accumulated Net (Loss)" is not an ISO unit and its
+    // parenthetical is not a currency sign.
+    [Fact]
+    public void Parse_MemberParenthetical_IsNotReadAsASign()
+    {
+        Scales(
+                RFile(
+                    "USD ($) shares in Thousands, $ in Thousands",
+                    "1",
+                    "USD ($)",
+                    "Accumulated Net (Loss) [Member]"
+                )
+            )
+            .Should()
+            .Equal(1_000L, 1_000L);
+    }
+
     [Fact]
     public void Parse_CurrencyPinnedByCode_DoesNotShareTheSignsSegment()
     {

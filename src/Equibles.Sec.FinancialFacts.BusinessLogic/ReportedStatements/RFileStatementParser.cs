@@ -61,9 +61,10 @@ public static class RFileStatementParser
     );
 
     // An ISO code with its rendered sign, "KRW (₩)", "BRL (R$)", "SEK (kr)"; the sign is what a
-    // sign-only scale segment ("₩ in Millions") names.
+    // sign-only scale segment ("₩ in Millions") names. SEC renders the code in capitals, which
+    // keeps member labels such as "Net (Loss)" out.
     private static readonly Regex CurrencySignPattern = new(
-        @"(?<![A-Za-z])(?<code>[A-Za-z]{3})\s*\((?<sign>[^()\s]{1,4})\)",
+        @"(?<![A-Za-z])(?<code>[A-Z]{3})\s*\((?<sign>[^()\s]{1,4})\)",
         RegexOptions.Compiled
     );
 
