@@ -60,6 +60,13 @@ public static class RFileStatementParser
         RegexOptions.Compiled
     );
 
+    // An ISO code with its rendered sign, "KRW (₩)", "BRL (R$)"; the sign is what a
+    // symbol-only scale segment ("₩ in Millions") names.
+    private static readonly Regex CurrencySignPattern = new(
+        @"(?<![A-Za-z])(?<code>[A-Za-z]{3})\s*\((?<sign>[^()\s]{1,4})\)",
+        RegexOptions.Compiled
+    );
+
     private static readonly Regex DatePattern = new(
         @"(?<![A-Za-z])(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(?:\.|[a-z]+)?\s+\d{1,2},\s+\d{4}(?!\d)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
@@ -205,25 +212,40 @@ public static class RFileStatementParser
         var dateCells = dateRow.QuerySelectorAll("th.th").ToList();
         var titleCurrencies = ParseCurrencies(scaleNote);
         var unambiguousStatementCurrency = titleCurrencies.Count == 1 ? titleCurrencies[0] : null;
-        for (var i = 0; i < dateCells.Count; i++)
+        var titleSign =
+            unambiguousStatementCurrency == null
+                ? null
+                : ParseCurrencySign(scaleNote, unambiguousStatementCurrency);
+        var headers = dateCells.Select(cell => Clean(cell.TextContent)).ToList();
+        var columnUnits = headers
+            .Select(header =>
+            {
+                var explicitCurrency = ParseColumnCurrency(header);
+                return explicitCurrency != null
+                    ? new ColumnUnit(explicitCurrency, ParseCurrencySign(header, explicitCurrency))
+                    : new ColumnUnit(unambiguousStatementCurrency, titleSign);
+            })
+            .ToList();
+        var units = new StatementUnits(columnUnits.Where(unit => unit.Currency != null).ToList());
+        for (var i = 0; i < headers.Count; i++)
         {
-            var header = Clean(dateCells[i].TextContent);
+            var header = headers[i];
             var (label, periodEnd) = ParseDateLabel(header);
             var explicitCurrency = ParseColumnCurrency(header);
-            var scaleCurrency = explicitCurrency ?? unambiguousStatementCurrency;
+            var unit = columnUnits[i];
             var ambiguousCurrency = explicitCurrency == null && titleCurrencies.Count > 1;
             columns.Add(
                 new ReportedStatementColumn
                 {
                     Label = label,
                     PeriodEnd = periodEnd,
-                    Currency = explicitCurrency ?? unambiguousStatementCurrency,
+                    Currency = unit.Currency,
                     Scale = ambiguousCurrency
                         ? null
-                        : ParseColumnMoneyScale(header, scaleCurrency, scaleNote),
+                        : ParseColumnMoneyScale(header, unit, units, scaleNote),
                     PerShareScale = ambiguousCurrency
                         ? null
-                        : ParseColumnPerShareScale(header, scaleCurrency, scaleNote),
+                        : ParseColumnPerShareScale(header, unit, units, scaleNote),
                     Duration = i < durationByColumn.Count ? durationByColumn[i] : null,
                     IsInstant = !hasDurations,
                 }
@@ -232,23 +254,49 @@ public static class RFileStatementParser
         return columns;
     }
 
-    private static long? ParseColumnMoneyScale(string header, string currency, string scaleNote)
+    private static string ParseCurrencySign(string text, string currency) =>
+        CurrencySignPattern
+            .Matches(text ?? string.Empty)
+            .Where(match =>
+                string.Equals(
+                    match.Groups["code"].Value,
+                    currency,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            .Select(match => match.Groups["sign"].Value)
+            .FirstOrDefault(IsCurrencySign);
+
+    private static bool IsCurrencySign(string text) =>
+        !string.IsNullOrEmpty(text)
+        && text.Any(character =>
+            CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.CurrencySymbol
+        );
+
+    private static long? ParseColumnMoneyScale(
+        string header,
+        ColumnUnit unit,
+        StatementUnits units,
+        string scaleNote
+    )
     {
         var headerSegments = MoneyScaleSegments(header);
         if (headerSegments.Count > 0)
         {
-            return ResolveColumnMoneyScale(headerSegments, currency);
+            return ResolveColumnMoneyScale(headerSegments, unit, units);
         }
 
         var titleSegments = MoneyScaleSegments(scaleNote);
-        return titleSegments.Count == 0 ? 1L : ResolveColumnMoneyScale(titleSegments, currency);
+        return titleSegments.Count == 0 ? 1L : ResolveColumnMoneyScale(titleSegments, unit, units);
     }
 
     private static long? ResolveColumnMoneyScale(
         IReadOnlyList<MoneyScaleSegment> segments,
-        string currency
+        ColumnUnit unit,
+        StatementUnits units
     )
     {
+        var currency = unit.Currency;
         if (!string.IsNullOrWhiteSpace(currency))
         {
             var currencyScales = segments
@@ -264,6 +312,11 @@ public static class RFileStatementParser
             {
                 return null;
             }
+        }
+
+        if (!string.IsNullOrWhiteSpace(currency) && unit.Sign != null)
+        {
+            return ResolveSignedColumnScale(segments, unit, units);
         }
 
         var globalScales = segments
@@ -292,16 +345,61 @@ public static class RFileStatementParser
         return allScales.Count == 1 ? allScales[0] : null;
     }
 
-    private static long? ParseColumnPerShareScale(string header, string currency, string scaleNote)
+    // SEC writes one "<sign> in <magnitude>" segment per scaled unit ("$ in Thousands, ₩ in
+    // Millions"; CAD and USD give "$ in Thousands, $ in Thousands") and omits unscaled units.
+    // A sign shared by more currencies than it has segments cannot say which one is scaled.
+    private static long? ResolveSignedColumnScale(
+        IReadOnlyList<MoneyScaleSegment> segments,
+        ColumnUnit unit,
+        StatementUnits units
+    )
+    {
+        var signScales = segments
+            .Where(segment =>
+                segment.Currencies.Count == 0
+                && string.Equals(segment.Sign, unit.Sign, StringComparison.Ordinal)
+            )
+            .Select(segment => segment.Scale)
+            .ToList();
+        if (signScales.Count > 0)
+        {
+            return
+                signScales.Count == units.CurrenciesWithSign(unit.Sign)
+                && signScales.Distinct().Count() == 1
+                ? signScales[0]
+                : null;
+        }
+
+        var globalScales = segments
+            .Where(segment => segment.Currencies.Count == 0 && segment.Sign == null)
+            .Select(segment => segment.Scale)
+            .Distinct()
+            .ToList();
+        if (globalScales.Count > 0)
+        {
+            return globalScales.Count == 1 ? globalScales[0] : null;
+        }
+
+        // Every segment scales another sign's unit, so this one is printed unscaled; an ISO code
+        // naming a currency absent from the columns leaves the column unresolved.
+        return segments.All(units.CanScaleAnotherUnit) ? 1L : null;
+    }
+
+    private static long? ParseColumnPerShareScale(
+        string header,
+        ColumnUnit unit,
+        StatementUnits units,
+        string scaleNote
+    )
     {
         var headerSegments = PerShareScaleSegments(header);
         if (headerSegments.Count > 0)
         {
-            return ResolveColumnMoneyScale(headerSegments, currency);
+            return ResolveColumnMoneyScale(headerSegments, unit, units);
         }
 
         var titleSegments = PerShareScaleSegments(scaleNote);
-        return titleSegments.Count == 0 ? 1L : ResolveColumnMoneyScale(titleSegments, currency);
+        return titleSegments.Count == 0 ? 1L : ResolveColumnMoneyScale(titleSegments, unit, units);
     }
 
     private static List<MoneyScaleSegment> MoneyScaleSegments(string haystack)
@@ -326,7 +424,7 @@ public static class RFileStatementParser
                 .Select(match => match.Groups[1].Value.ToUpperInvariant())
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
-            result.Add(new MoneyScaleSegment(scale, currencies));
+            result.Add(new MoneyScaleSegment(scale, currencies, SegmentSign(subject, currencies)));
         }
         return result;
     }
@@ -356,7 +454,7 @@ public static class RFileStatementParser
                 .Select(match => match.Groups[1].Value.ToUpperInvariant())
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
-            result.Add(new MoneyScaleSegment(scale, currencies));
+            result.Add(new MoneyScaleSegment(scale, currencies, SegmentSign(subject, currencies)));
         }
         return result;
     }
@@ -635,5 +733,38 @@ public static class RFileStatementParser
         return builder.ToString().Trim();
     }
 
-    private sealed record MoneyScaleSegment(long Scale, IReadOnlyList<string> Currencies);
+    // A segment without an ISO code is named by its sign alone: "$ in Thousands", "R$ in Millions".
+    private static string SegmentSign(string subject, IReadOnlyList<string> currencies) =>
+        currencies.Count > 0
+            ? null
+            : subject
+                .Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault(IsCurrencySign);
+
+    private sealed record MoneyScaleSegment(
+        long Scale,
+        IReadOnlyList<string> Currencies,
+        string Sign
+    );
+
+    private sealed record ColumnUnit(string Currency, string Sign);
+
+    private sealed class StatementUnits(IReadOnlyList<ColumnUnit> units)
+    {
+        public int CurrenciesWithSign(string sign) =>
+            units
+                .Where(unit => string.Equals(unit.Sign, sign, StringComparison.Ordinal))
+                .Select(unit => unit.Currency)
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+
+        public bool CanScaleAnotherUnit(MoneyScaleSegment segment) =>
+            segment.Currencies.Count > 0
+                ? segment.Currencies.Any(currency =>
+                    units.Any(unit =>
+                        string.Equals(unit.Currency, currency, StringComparison.Ordinal)
+                    )
+                )
+                : segment.Sign != null;
+    }
 }

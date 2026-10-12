@@ -326,7 +326,7 @@ public class Document
     /// backoffice "pending" metric can reference it without depending on the hosted-service
     /// assembly. Bump after a parser change to re-derive the corpus.
     /// </summary>
-    public const int ReportedStatementsParserVersion = 3;
+    public const int ReportedStatementsParserVersion = 4;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
