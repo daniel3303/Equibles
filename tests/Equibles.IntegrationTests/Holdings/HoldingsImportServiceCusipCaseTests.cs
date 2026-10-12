@@ -185,7 +185,10 @@ public class HoldingsImportServiceCusipCaseTests : IAsyncLifetime
         holding.Shares.Should().Be(921231);
         holding
             .Cusip.Should()
-            .BeEquivalentTo("11259V106", "the filed identifier is kept whatever its case");
+            .Be(
+                "11259v106",
+                "the filed spelling is stored; retained-observation matching compares it exactly"
+            );
         (await verify.Set<UnmappedCusip>().AnyAsync())
             .Should()
             .BeFalse("a resolved CUSIP never lands on the unmapped worklist");
