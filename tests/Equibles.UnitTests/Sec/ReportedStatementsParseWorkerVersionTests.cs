@@ -11,7 +11,29 @@ namespace Equibles.UnitTests.Sec;
 public class ReportedStatementsParseWorkerVersionTests
 {
     [Fact]
-    public void ReplayOrder_ParsesForeignIssuerFormsBeforeNewerDomesticFilings()
+    public void ReplayTiers_PlaceEveryDocumentTypeInExactlyOneTier()
+    {
+        var types = typeof(DocumentType)
+            .GetFields(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static
+            )
+            .Where(field => field.FieldType == typeof(DocumentType))
+            .Select(field => (DocumentType)field.GetValue(null))
+            .Append(null)
+            .ToList();
+        var tiers = ReportedStatementsParseWorker
+            .ReplayTiers.Select(tier => tier.Compile())
+            .ToList();
+
+        types
+            .Should()
+            .OnlyContain(type =>
+                tiers.Count(tier => tier(new Document { DocumentType = type })) == 1
+            );
+    }
+
+    [Fact]
+    public void ReplayTiers_ReadForeignAnnualFormsThenSixKsThenTheRest()
     {
         var documents = new[]
         {
@@ -43,13 +65,18 @@ public class ReportedStatementsParseWorkerVersionTests
         };
 
         ReportedStatementsParseWorker
-            .ReplayOrder(documents.AsQueryable())
-            .Select(document => document.DocumentType)
+            .ReplayTiers.SelectMany(tier =>
+                documents
+                    .AsQueryable()
+                    .Where(tier)
+                    .OrderByDescending(document => document.ReportingDate)
+                    .Select(document => document.DocumentType)
+            )
             .Should()
             .Equal(
-                DocumentType.SixK,
                 DocumentType.FortyFa,
                 DocumentType.TwentyF,
+                DocumentType.SixK,
                 DocumentType.TenQ,
                 DocumentType.TenK
             );

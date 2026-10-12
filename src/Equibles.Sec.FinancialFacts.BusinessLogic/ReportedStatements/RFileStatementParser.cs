@@ -60,8 +60,8 @@ public static class RFileStatementParser
         RegexOptions.Compiled
     );
 
-    // An ISO code with its rendered sign, "KRW (₩)", "BRL (R$)"; the sign is what a
-    // symbol-only scale segment ("₩ in Millions") names.
+    // An ISO code with its rendered sign, "KRW (₩)", "BRL (R$)", "SEK (kr)"; the sign is what a
+    // sign-only scale segment ("₩ in Millions") names.
     private static readonly Regex CurrencySignPattern = new(
         @"(?<![A-Za-z])(?<code>[A-Za-z]{3})\s*\((?<sign>[^()\s]{1,4})\)",
         RegexOptions.Compiled
@@ -265,7 +265,7 @@ public static class RFileStatementParser
                 )
             )
             .Select(match => match.Groups["sign"].Value)
-            .FirstOrDefault(IsCurrencySign);
+            .FirstOrDefault();
 
     private static bool IsCurrencySign(string text) =>
         !string.IsNullOrEmpty(text)
@@ -363,15 +363,17 @@ public static class RFileStatementParser
             .ToList();
         if (signScales.Count > 0)
         {
-            return
-                signScales.Count == units.CurrenciesWithSign(unit.Sign)
-                && signScales.Distinct().Count() == 1
-                ? signScales[0]
+            // Units are never scaled whether listed or omitted; otherwise each currency sharing
+            // the sign needs its own segment, and surplus segments must agree.
+            var distinct = signScales.Distinct().ToList();
+            var sharing = units.CurrenciesWithSign(unit.Sign, units.PinnedByCode(segments));
+            return distinct.Count == 1 && (distinct[0] == 1L || signScales.Count >= sharing)
+                ? distinct[0]
                 : null;
         }
 
         var globalScales = segments
-            .Where(segment => segment.Currencies.Count == 0 && segment.Sign == null)
+            .Where(segment => segment.Currencies.Count == 0 && !units.BindsSign(segment))
             .Select(segment => segment.Scale)
             .Distinct()
             .ToList();
@@ -424,7 +426,7 @@ public static class RFileStatementParser
                 .Select(match => match.Groups[1].Value.ToUpperInvariant())
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
-            result.Add(new MoneyScaleSegment(scale, currencies, SegmentSign(subject, currencies)));
+            result.Add(Segment(scale, currencies, match.Groups["before"].Value));
         }
         return result;
     }
@@ -454,7 +456,7 @@ public static class RFileStatementParser
                 .Select(match => match.Groups[1].Value.ToUpperInvariant())
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
-            result.Add(new MoneyScaleSegment(scale, currencies, SegmentSign(subject, currencies)));
+            result.Add(Segment(scale, currencies, match.Groups["before"].Value));
         }
         return result;
     }
@@ -733,13 +735,37 @@ public static class RFileStatementParser
         return builder.ToString().Trim();
     }
 
-    // A segment without an ISO code is named by its sign alone: "$ in Thousands", "R$ in Millions".
-    private static string SegmentSign(string subject, IReadOnlyList<string> currencies) =>
-        currencies.Count > 0
-            ? null
-            : subject
-                .Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
-                .FirstOrDefault(IsCurrencySign);
+    // A segment's sign is the single token naming its unit: "$ in Thousands", "R$ in Millions",
+    // "kr in Millions", "$ / shares in Units". A title label before it ("KRW (₩) $ in Thousands")
+    // names the statement, not the scaled unit, when its own sign differs from that token.
+    private static MoneyScaleSegment Segment(
+        long scale,
+        IReadOnlyList<string> currencies,
+        string before
+    )
+    {
+        var unit = before.Split('/')[0].Trim();
+        var tokens = unit.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        var sign =
+            tokens.Length > 0 && tokens[^1].Length <= 4 && tokens[^1].IndexOfAny(['(', ')']) < 0
+                ? tokens[^1]
+                : null;
+        if (currencies.Count == 0)
+        {
+            return new MoneyScaleSegment(scale, currencies, tokens.Length == 1 ? sign : null);
+        }
+        var labelSigns = CurrencySignPattern
+            .Matches(before)
+            .Select(match => match.Groups["sign"].Value)
+            .ToList();
+        return
+            sign != null
+            && IsCurrencySign(sign)
+            && labelSigns.Count > 0
+            && !labelSigns.Contains(sign)
+            ? new MoneyScaleSegment(scale, [], sign)
+            : new MoneyScaleSegment(scale, currencies, null);
+    }
 
     private sealed record MoneyScaleSegment(
         long Scale,
@@ -751,12 +777,36 @@ public static class RFileStatementParser
 
     private sealed class StatementUnits(IReadOnlyList<ColumnUnit> units)
     {
-        public int CurrenciesWithSign(string sign) =>
+        public int CurrenciesWithSign(string sign, IReadOnlySet<string> pinned) =>
             units
-                .Where(unit => string.Equals(unit.Sign, sign, StringComparison.Ordinal))
+                .Where(unit =>
+                    string.Equals(unit.Sign, sign, StringComparison.Ordinal)
+                    && !pinned.Contains(unit.Currency)
+                )
                 .Select(unit => unit.Currency)
                 .Distinct(StringComparer.Ordinal)
                 .Count();
+
+        // Currencies an ISO-coded segment already scales cannot be the unit a shared sign names.
+        public IReadOnlySet<string> PinnedByCode(IReadOnlyList<MoneyScaleSegment> segments) =>
+            segments
+                .SelectMany(segment => segment.Currencies)
+                .Where(currency =>
+                    units.Any(unit =>
+                        string.Equals(unit.Currency, currency, StringComparison.Ordinal)
+                    )
+                )
+                .ToHashSet(StringComparer.Ordinal);
+
+        // A sign token binds when it is a currency symbol or the sign of a column of this table.
+        public bool BindsSign(MoneyScaleSegment segment) =>
+            segment.Sign != null
+            && (
+                IsCurrencySign(segment.Sign)
+                || units.Any(unit =>
+                    string.Equals(unit.Sign, segment.Sign, StringComparison.Ordinal)
+                )
+            );
 
         public bool CanScaleAnotherUnit(MoneyScaleSegment segment) =>
             segment.Currencies.Count > 0
@@ -765,6 +815,6 @@ public static class RFileStatementParser
                         string.Equals(unit.Currency, currency, StringComparison.Ordinal)
                     )
                 )
-                : segment.Sign != null;
+                : BindsSign(segment);
     }
 }

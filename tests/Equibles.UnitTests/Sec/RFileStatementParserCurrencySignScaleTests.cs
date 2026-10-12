@@ -7,7 +7,10 @@ namespace Equibles.UnitTests.Sec;
 // headers and first values below are copied from the named filings' R-files.
 public class RFileStatementParserCurrencySignScaleTests
 {
-    private static string RFile(string note, string value, params string[] units)
+    private static string RFile(string note, string value, params string[] units) =>
+        RFileTitled($"Consolidated Statements<br> {note}", value, units);
+
+    private static string RFileTitled(string title, string value, params string[] units)
     {
         var headers = string.Concat(
             units.Select(unit =>
@@ -17,7 +20,7 @@ public class RFileStatementParserCurrencySignScaleTests
         var cells = string.Concat(units.Select(_ => $"<td class=\"nump\">{value}</td>"));
         return $"""
             <html><body><table class="report">
-            <tr><th class="tl" rowspan="2"><div><strong>Consolidated Statements<br> {note}</strong></div></th><th class="th" colspan="{units.Length}">12 Months Ended</th></tr>
+            <tr><th class="tl" rowspan="2"><div><strong>{title}</strong></div></th><th class="th" colspan="{units.Length}">12 Months Ended</th></tr>
             <tr>{headers}</tr>
             <tr class="re"><td class="pl"><a onclick="Show.showAR( this, 'defref_ifrs-full_ProfitLoss', window );">Profit</a></td>{cells}</tr>
             </table></body></html>
@@ -100,13 +103,59 @@ public class RFileStatementParserCurrencySignScaleTests
             .Equal(1L, 1L);
     }
 
+    // Chunghwa Telecom 20-F 2025 (R4) lists its per-share unit once for both dollar signs.
     [Fact]
-    public void Parse_SignedSegments_DoNotScalePerShareColumns()
+    public void Parse_SharedSignPerShareUnits_LeavesEveryPerShareColumnUnscaled()
     {
         var columns = RFileStatementParser
-            .Parse(RFile("$ in Thousands", "15,410", "KRW (&#8361;)", "USD ($)"))
+            .Parse(RFile("$ / shares in Units, $ in Millions", "3.4", "TWD ($)", "USD ($)"))
             .Payload.Columns;
 
         columns.Select(column => column.PerShareScale).Should().Equal(1L, 1L);
+        columns.Select(column => column.Scale).Should().Equal(new long?[] { null, null });
+    }
+
+    [Fact]
+    public void Parse_SurplusAgreeingSegments_ScaleTheirColumn()
+    {
+        Scales(RFile("$ in Thousands, $ in Thousands", "1", "USD ($)")).Should().Equal(1_000L);
+    }
+
+    // Letter signs bind like symbols once a column of the table shows them.
+    [Theory]
+    [InlineData("$ in Thousands", "SEK (kr)", 1L, 1_000L)]
+    [InlineData("R in Millions", "ZAR (R)", 1_000_000L, 1L)]
+    public void Parse_LetterSigns_ScaleOnlyTheirOwnColumns(
+        string note,
+        string homeUnit,
+        long homeScale,
+        long dollarScale
+    )
+    {
+        Scales(RFile(note, "1", homeUnit, "USD ($)")).Should().Equal(homeScale, dollarScale);
+    }
+
+    [Fact]
+    public void Parse_BracketedTitleToken_IsNotReadAsASign()
+    {
+        Scales(RFileTitled("CONSOLIDATED BALANCE SHEETS (USD $) In Thousands", "1", "USD ($)"))
+            .Should()
+            .Equal(1_000L);
+    }
+
+    [Fact]
+    public void Parse_CurrencyPinnedByCode_DoesNotShareTheSignsSegment()
+    {
+        Scales(RFile("TWD ($) in Millions, $ in Thousands", "1", "TWD ($)", "USD ($)"))
+            .Should()
+            .Equal(1_000_000L, 1_000L);
+    }
+
+    [Fact]
+    public void Parse_TitleLabelBeforeAnotherSign_ScalesTheSignedColumn()
+    {
+        Scales(RFile("KRW (&#8361;) $ in Thousands", "1", "KRW (&#8361;)", "USD ($)"))
+            .Should()
+            .Equal(1L, 1_000L);
     }
 }
