@@ -59,7 +59,7 @@ public class RFileStatementParserTests
         const string html = """
             <html><body><table class="report">
             <tr>
-              <th class="tl" rowspan="2">CONSOLIDATED STATEMENTS - $ in Millions</th>
+              <th class="tl" rowspan="2">CONSOLIDATED STATEMENTS - $ in Millions, $ in Millions</th>
               <th class="th" colspan="3">12 Months Ended</th>
             </tr>
             <tr>

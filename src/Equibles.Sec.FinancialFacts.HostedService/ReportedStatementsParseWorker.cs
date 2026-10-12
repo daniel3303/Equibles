@@ -38,6 +38,52 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
                     < Document.MaxReportedStatementsParseAttempts
             );
 
+    // Foreign annual forms replay first, then 6-Ks, then everything else newest first: a foreign
+    // issuer's statement readers wait until its whole annual corpus carries the current version.
+    internal static readonly Expression<Func<Document, bool>>[] ReplayTiers =
+    [
+        document =>
+            document.DocumentType == DocumentType.TwentyF
+            || document.DocumentType == DocumentType.TwentyFa
+            || document.DocumentType == DocumentType.FortyF
+            || document.DocumentType == DocumentType.FortyFa,
+        document =>
+            document.DocumentType == DocumentType.SixK
+            || document.DocumentType == DocumentType.SixKa,
+        document =>
+            document.DocumentType != DocumentType.TwentyF
+            && document.DocumentType != DocumentType.TwentyFa
+            && document.DocumentType != DocumentType.FortyF
+            && document.DocumentType != DocumentType.FortyFa
+            && document.DocumentType != DocumentType.SixK
+            && document.DocumentType != DocumentType.SixKa,
+    ];
+
+    // One query per tier keeps each sort on a filtered set instead of ranking the whole backlog.
+    internal static async Task<List<Document>> NextReplayBatch(
+        IQueryable<Document> pending,
+        int batchSize,
+        CancellationToken cancellationToken
+    )
+    {
+        var batch = new List<Document>();
+        foreach (var tier in ReplayTiers)
+        {
+            if (batch.Count >= batchSize)
+            {
+                break;
+            }
+            batch.AddRange(
+                await pending
+                    .Where(tier)
+                    .OrderByDescending(document => document.ReportingDate)
+                    .Take(batchSize - batch.Count)
+                    .ToListAsync(cancellationToken)
+            );
+        }
+        return batch;
+    }
+
     internal static void BeginCurrentParserAttempt(Document document)
     {
         if (
@@ -81,13 +127,14 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
             var parseService =
                 scope.ServiceProvider.GetRequiredService<ReportedStatementsParseService>();
 
-            // Captured bundles whose parse is below the current parser version, newest first.
-            var batch = await documentRepository
-                .GetByReportedStatementsStatus(XbrlCaptureStatus.Captured)
-                .Where(NeedsCurrentParser)
-                .OrderByDescending(d => d.ReportingDate)
-                .Take(batchSize)
-                .ToListAsync(stoppingToken);
+            // Captured bundles whose parse is below the current parser version.
+            var batch = await NextReplayBatch(
+                documentRepository
+                    .GetByReportedStatementsStatus(XbrlCaptureStatus.Captured)
+                    .Where(NeedsCurrentParser),
+                batchSize,
+                stoppingToken
+            );
 
             if (batch.Count == 0)
             {
