@@ -15,7 +15,6 @@ namespace Equibles.Sec.Data.Models;
 // filing's lines and returns them value-ordered for paging without a separate sort, and its leading
 // column still serves every plain NportFilingId lookup. Supersedes the bare NportFilingId index.
 [Index(nameof(NportFilingId), nameof(ValueUsd))]
-[Index(nameof(Cusip))]
 public class NportHolding
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]

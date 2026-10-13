@@ -1,6 +1,7 @@
 using System.Globalization;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Errors.Repositories;
 using Equibles.Messaging.Contracts.Activity;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -176,6 +177,8 @@ public abstract class BaseScraperWorker : BackgroundService
         try
         {
             await DelayStartup(stoppingToken);
+            if (SkipStartupCycleWhenFresh)
+                await SkipStartupCycleIfFresh(stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -300,6 +303,8 @@ public abstract class BaseScraperWorker : BackgroundService
                 else
                 {
                     interval = SleepInterval;
+                    if (SkipStartupCycleWhenFresh)
+                        await RecordCycleCompletion(stoppingToken);
                     Logger.LogInformation(
                         "{Worker} cycle complete. Sleeping for {Interval}",
                         WorkerName,
@@ -361,6 +366,100 @@ public abstract class BaseScraperWorker : BackgroundService
         StartupDelay > TimeSpan.Zero ? Task.Delay(StartupDelay, stoppingToken) : Task.CompletedTask;
 
     protected virtual bool ValidateConfiguration() => true;
+
+    /// <summary>
+    /// Opt in when <see cref="SleepInterval"/> is the lane's real cadence and a cycle is
+    /// idempotent: a restart then skips the first cycle while the last completed one (a
+    /// <see cref="WorkerCycle"/> row) is younger than the interval, since deploys restart the
+    /// worker far more often than most lanes sleep. Only a cycle that would sleep the full
+    /// interval is recorded; a not-ready retry or a queued continuation is not a completion.
+    /// The skip waits with a plain delay, not <see cref="WaitForNextCycle"/>, so a lane that
+    /// wakes on a signal must not opt in.
+    /// </summary>
+    protected virtual bool SkipStartupCycleWhenFresh => false;
+
+    protected virtual async Task<DateTimeOffset?> ReadLastCycleCompletion(
+        CancellationToken stoppingToken
+    )
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var cycles = scope.ServiceProvider.GetService<WorkerCycleRepository>();
+        if (cycles is null)
+        {
+            Logger.LogWarning(
+                "{Worker} skips fresh startup cycles but no WorkerCycleRepository is registered",
+                WorkerName
+            );
+            return null;
+        }
+        return await cycles.GetCompletedAt(WorkerName, stoppingToken);
+    }
+
+    protected virtual async Task WriteCycleCompletion(
+        DateTimeOffset completedAt,
+        CancellationToken stoppingToken
+    )
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var cycles = scope.ServiceProvider.GetService<WorkerCycleRepository>();
+        if (cycles is not null)
+            await cycles.MarkCompleted(WorkerName, completedAt, stoppingToken);
+    }
+
+    // The stamp is best-effort both ways: a database fault must never park or fault the lane.
+    private async Task SkipStartupCycleIfFresh(CancellationToken stoppingToken)
+    {
+        DateTimeOffset? completedAt;
+        try
+        {
+            completedAt = await ReadLastCycleCompletion(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "{Worker} could not read its last cycle completion; running the startup cycle",
+                WorkerName
+            );
+            return;
+        }
+        if (completedAt is not { } completed)
+            return;
+        // A stamp from the future (clock skew) counts as just completed.
+        var age = DateTimeOffset.UtcNow - completed;
+        if (age < TimeSpan.Zero)
+            age = TimeSpan.Zero;
+        if (age >= SleepInterval)
+            return;
+        var remaining = SleepInterval - age;
+        Logger.LogInformation(
+            "{Worker} completed a cycle {Age} ago; skipping the startup cycle for {Interval}",
+            WorkerName,
+            FormatInterval(age),
+            FormatInterval(remaining)
+        );
+        await Task.Delay(remaining, stoppingToken);
+    }
+
+    private async Task RecordCycleCompletion(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await WriteCycleCompletion(DateTimeOffset.UtcNow, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "{Worker} could not record its cycle completion", WorkerName);
+        }
+    }
 
     /// <summary>
     /// Startup gate shared by every SEC-EDGAR-backed scraper: SEC 403-bans a

@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -232,6 +233,56 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
     // quarter book (grouped by the row grain), the holder's common-share total and the repricing
     // lane's pending-pair scan. Each must be served index-only by its covering index; a missing
     // include turns every row of a heavily held stock or a mega-filer into a heap fetch.
+    // The projection FundScoringManager.RunBacktest reads for every snapshot in a filer's window;
+    // every column must come from the holder index or each history row is a heap fetch.
+    [Fact]
+    public async Task FundScoringHistoryRead_IsServedIndexOnlyByTheHolderIndex()
+    {
+        var reportDate = new DateOnly(2024, 6, 30);
+        await SeedQuarter(reportDate, holders: 100, stocks: 100);
+        var capture = new CommandCapture();
+        await using var context = fixture.CreateDbContext(options =>
+            options.AddInterceptors(capture)
+        );
+        var holder = await context
+            .Set<InstitutionalHolder>()
+            .AsNoTracking()
+            .OrderBy(h => h.Cik)
+            .FirstAsync();
+        var relevant = new List<DateOnly>
+        {
+            reportDate,
+            reportDate.AddMonths(-3),
+            reportDate.AddMonths(-6),
+        };
+
+        var rows = await new InstitutionalHoldingRepository(context)
+            .Get13FHistoryByHolder(holder)
+            .Where(h => relevant.Contains(h.ReportDate))
+            .Select(h => new
+            {
+                h.ReportDate,
+                h.EquityIssuerId,
+                h.ListedTicker,
+                h.Shares,
+                h.Value,
+                h.OptionType,
+            })
+            .ToListAsync();
+        rows.Should().NotBeEmpty();
+
+        var read = capture
+            .Commands.Should()
+            .ContainSingle(c => c.Text.Contains("FROM \"InstitutionalHolding\""))
+            .Subject;
+        var plan = (await Explain([read])).Single();
+        plan.Should()
+            .Contain(
+                "Index Only Scan using \"IX_InstitutionalHolding_InstitutionalHolderId_ReportDate\"",
+                plan
+            );
+    }
+
     [Fact]
     public async Task RequestPathReads_AreServedIndexOnlyByTheirCoveringIndexes()
     {

@@ -103,9 +103,10 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
             .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<NportHolding>(b =>
         {
-            b.HasIndex(h => h.Cusip)
+            // A fund's position in one security is read per filing of the series, so the filing is
+            // a key column: as a payload, each join probe walked the CUSIP's whole entry range.
+            b.HasIndex(h => new { h.Cusip, h.NportFilingId })
                 .HasDatabaseName("IX_NportHolding_CusipFiling")
-                .IncludeProperties(h => h.NportFilingId)
                 .IsCreatedConcurrently();
             // Foreign securities carry no CUSIP, so a fund's position in them is found by ISIN.
             b.HasIndex(h => h.Isin)

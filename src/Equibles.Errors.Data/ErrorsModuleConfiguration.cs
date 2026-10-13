@@ -12,5 +12,6 @@ public class ErrorsModuleConfiguration : Equibles.Data.IFinancialModule
         {
             b.Property(e => e.Source).HasConversion(v => v.Value, v => new ErrorSource(v));
         });
+        builder.Entity<WorkerCycle>();
     }
 }

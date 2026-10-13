@@ -35,6 +35,7 @@ public class FundScoringWorkerTests : IDisposable
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly FundScoreRepository _fundScoreRepository;
     private readonly FundScoringWorker _worker;
+    private EquityIssuer _benchmark;
 
     public FundScoringWorkerTests()
     {
@@ -148,7 +149,116 @@ public class FundScoringWorkerTests : IDisposable
 
     // Every scope shares the one in-memory context so the worker's enumerate scope and per-holder
     // scopes all see the same seeded data and writes.
-    private IServiceScopeFactory SharedContextScopeFactory()
+    [Fact]
+    public async Task ScoreAllHolders_AnUnscoreableFilerIsVisitedOnceUntilItsDataChanges()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark(withPrices: false);
+
+        (await _worker.ScoreAllHolders(CancellationToken.None)).Should().Be(0);
+
+        _fundScoreRepository.GetAll().Should().BeEmpty();
+        var attempt = _dbContext.Set<FundScoreAttempt>().Should().ContainSingle().Subject;
+        attempt.InstitutionalHolderId.Should().Be(holder.Id);
+        attempt.CalculationVersion.Should().Be(FundScore.CurrentCalculationVersion);
+        attempt.AttemptedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        (await _worker.SelectHoldersNeedingScore(CancellationToken.None)).Should().BeEmpty();
+
+        // A rollup imported after the visit makes the filer due again; it is dated before the
+        // last filing already on file, so only the import time moves.
+        _dbContext
+            .Set<InstitutionalFiling>()
+            .Add(
+                new InstitutionalFiling
+                {
+                    AccessionNumber = "0001234567-26-999999",
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = Today.AddDays(-65),
+                    FilingDate = Today.AddDays(-20),
+                    PositionCount = 1,
+                    TotalValue = 100_000,
+                    CreationTime = DateTime.UtcNow.AddMinutes(1),
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        (await _worker.SelectHoldersNeedingScore(CancellationToken.None)).Should().Equal(holder.Id);
+    }
+
+    // A visit that faults is left unstamped, so the next cycle retries it.
+    [Fact]
+    public async Task ScoreAllHolders_AFaultedVisitIsNotStamped()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark();
+        var worker = new FundScoringWorker(
+            SharedContextScopeFactory(scoreStoreFaults: true),
+            NullLogger<FundScoringWorker>.Instance
+        );
+
+        (await worker.ScoreAllHolders(CancellationToken.None)).Should().Be(0);
+
+        _dbContext.Set<FundScoreAttempt>().Should().BeEmpty();
+        (await worker.SelectHoldersNeedingScore(CancellationToken.None)).Should().Equal(holder.Id);
+    }
+
+    // The benchmark is a cycle-wide precondition: without its prices no filer can score, so the
+    // cycle visits nobody rather than stamping the whole universe for the staleness floor.
+    [Fact]
+    public async Task ScoreAllHolders_WithoutBenchmarkPrices_VisitsNoFiler()
+    {
+        SeedDoublingPortfolioAgainstFlatBenchmark(withBenchmarkPrices: false);
+
+        (await _worker.ScoreAllHolders(CancellationToken.None)).Should().Be(0);
+        _dbContext.Set<FundScoreAttempt>().Should().BeEmpty();
+
+        AddPrice(_benchmark, EarlyPriceDate, 100m);
+        AddPrice(_benchmark, Today, 100m);
+        await _dbContext.SaveChangesAsync();
+
+        (await _worker.ScoreAllHolders(CancellationToken.None)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SelectHoldersNeedingScore_OrdersByTheLastVisitNotTheLastScore()
+    {
+        var visitedAnHourAgo = SeedFiler("0000000001");
+        var visitedTwoDaysAgo = SeedFiler("0000000002");
+        // Both scores are past the staleness floor; the older score belongs to the filer visited
+        // most recently, so ordering by the score stamp would put it first.
+        AddScore(visitedAnHourAgo, scoredAt: DateTime.UtcNow.AddDays(-10));
+        AddAttempt(visitedAnHourAgo, attemptedAt: DateTime.UtcNow.AddHours(-1));
+        AddScore(visitedTwoDaysAgo, scoredAt: DateTime.UtcNow.AddDays(-9));
+        AddAttempt(visitedTwoDaysAgo, attemptedAt: DateTime.UtcNow.AddDays(-2));
+        await _dbContext.SaveChangesAsync();
+
+        (await _worker.SelectHoldersNeedingScore(CancellationToken.None))
+            .Should()
+            .Equal(visitedTwoDaysAgo.Id, visitedAnHourAgo.Id);
+    }
+
+    [Fact]
+    public async Task SelectHoldersNeedingScore_AVisitUnderAnOlderCalculationBasisIsDueAgain()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark(withPrices: false);
+        _dbContext
+            .Set<FundScoreAttempt>()
+            .Add(
+                new FundScoreAttempt
+                {
+                    InstitutionalHolderId = holder.Id,
+                    BenchmarkTicker = "SPY",
+                    WindowYears = FundScoringManager.DefaultWindowYears,
+                    CalculationVersion = FundScore.CurrentCalculationVersion - 1,
+                    AttemptedAt = DateTime.UtcNow,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        (await _worker.SelectHoldersNeedingScore(CancellationToken.None)).Should().Equal(holder.Id);
+    }
+
+    // scoreStoreFaults makes persisting a score throw, after the backtest ran, so a visit faults
+    // inside the scoring call itself.
+    private IServiceScopeFactory SharedContextScopeFactory(bool scoreStoreFaults = false)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory
@@ -171,7 +281,9 @@ public class FundScoringWorkerTests : IDisposable
                             new StockSplitRepository(_dbContext),
                             new BacktestPriceSeriesCache()
                         ),
-                        new FundScoreRepository(_dbContext)
+                        scoreStoreFaults
+                            ? FaultingScoreStore()
+                            : new FundScoreRepository(_dbContext)
                     ));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(provider);
@@ -180,19 +292,83 @@ public class FundScoringWorkerTests : IDisposable
         return scopeFactory;
     }
 
+    private FundScoreRepository FaultingScoreStore()
+    {
+        var store = Substitute.ForPartsOf<FundScoreRepository>(_dbContext);
+        store
+            .When(s => s.SaveChanges())
+            .Throw(new InvalidOperationException("score store unavailable"));
+        return store;
+    }
+
+    private InstitutionalHolder SeedFiler(string cik)
+    {
+        var holder = new InstitutionalHolder { Cik = cik, Name = $"Filer {cik}" };
+        _dbContext.Set<InstitutionalHolder>().Add(holder);
+        _dbContext
+            .Set<InstitutionalFiling>()
+            .Add(
+                new InstitutionalFiling
+                {
+                    AccessionNumber = $"{cik}-26-000001",
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = Today.AddDays(-100),
+                    FilingDate = Today.AddDays(-30),
+                    PositionCount = 1,
+                    TotalValue = 100_000,
+                    CreationTime = DateTime.UtcNow.AddDays(-30),
+                }
+            );
+        _dbContext.SaveChanges();
+        return holder;
+    }
+
+    private void AddScore(InstitutionalHolder holder, DateTime scoredAt) =>
+        _fundScoreRepository.Add(
+            new FundScore
+            {
+                InstitutionalHolderId = holder.Id,
+                BenchmarkTicker = "SPY",
+                WindowYears = FundScoringManager.DefaultWindowYears,
+                CalculationVersion = FundScore.CurrentCalculationVersion,
+                AlphaPercent = 1m,
+                CreationTime = scoredAt,
+            }
+        );
+
+    private void AddAttempt(InstitutionalHolder holder, DateTime attemptedAt) =>
+        _dbContext
+            .Set<FundScoreAttempt>()
+            .Add(
+                new FundScoreAttempt
+                {
+                    InstitutionalHolderId = holder.Id,
+                    BenchmarkTicker = "SPY",
+                    WindowYears = FundScoringManager.DefaultWindowYears,
+                    CalculationVersion = FundScore.CurrentCalculationVersion,
+                    AttemptedAt = attemptedAt,
+                }
+            );
+
     private InstitutionalHolder SeedDoublingPortfolioAgainstFlatBenchmark(
-        bool withFilingRollups = true
+        bool withFilingRollups = true,
+        bool withPrices = true,
+        bool withBenchmarkPrices = true
     )
     {
-        SeedBenchmark();
+        SeedBenchmark(withBenchmarkPrices);
 
         EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "AAA",
             Name: "Alpha Co"
         );
         _dbContext.Set<EquityIssuer>().Add(held);
-        AddPrice(held, EarlyPriceDate, 100m);
-        AddPrice(held, Today, 200m);
+        // Without prices the backtest cannot run, which leaves the filer unscoreable.
+        if (withPrices)
+        {
+            AddPrice(held, EarlyPriceDate, 100m);
+            AddPrice(held, Today, 200m);
+        }
 
         var holder = new InstitutionalHolder { Cik = "0001234567", Name = "Doubler Capital" };
         _dbContext.Set<InstitutionalHolder>().Add(holder);
@@ -243,15 +419,18 @@ public class FundScoringWorkerTests : IDisposable
         return holder;
     }
 
-    private void SeedBenchmark()
+    private void SeedBenchmark(bool withPrices = true)
     {
-        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+        _benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "SPY",
             Name: "S&P 500 ETF"
         );
-        _dbContext.Set<EquityIssuer>().Add(benchmark);
-        AddPrice(benchmark, EarlyPriceDate, 100m);
-        AddPrice(benchmark, Today, 100m);
+        _dbContext.Set<EquityIssuer>().Add(_benchmark);
+        if (withPrices)
+        {
+            AddPrice(_benchmark, EarlyPriceDate, 100m);
+            AddPrice(_benchmark, Today, 100m);
+        }
         _dbContext.SaveChanges();
     }
 
