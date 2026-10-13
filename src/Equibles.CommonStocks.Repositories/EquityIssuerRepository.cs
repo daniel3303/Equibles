@@ -372,12 +372,15 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
     /// Loads and locks one stock with FOR NO KEY UPDATE until the caller's current transaction
     /// completes. Writers that key data by an authoritative listed ticker use this immediately
     /// before saving, so company sync cannot change ticker ownership between validation and the
-    /// write; competing stock writers stay serialized. The lock never blocks a child row insert,
-    /// which only takes KEY SHARE on the issuer: a holdings aggregate rebuild holds that for
-    /// minutes, and a FOR UPDATE load parked every identity writer behind it while it held the
-    /// global identity lock. No issuer writer deletes the row; an UPDATE of a unique key column
-    /// escalates to the stronger lock on its own. An unchanged tracked snapshot is refreshed
-    /// after the lock; pending changes are rejected rather than discarded.
+    /// write; competing stock writers stay serialized. The lock never blocks a plain foreign-key
+    /// child insert (aggregate snapshots, securities, listings, prices), which only takes KEY
+    /// SHARE on the issuer: a holdings aggregate rebuild holds that for minutes, and a FOR UPDATE
+    /// load parked every identity writer behind it while it held the global identity lock. The
+    /// holdings flush and the InstitutionalHolding insert trigger take NO KEY UPDATE on purpose,
+    /// so that lane stays serialized with identity writers. No issuer writer deletes the row; an
+    /// UPDATE of a unique key column escalates to the stronger lock on its own. An unchanged
+    /// tracked snapshot is refreshed after the lock; pending changes are rejected rather than
+    /// discarded.
     /// </summary>
     public Task<EquityIssuer> GetForUpdate(
         Guid commonStockId,

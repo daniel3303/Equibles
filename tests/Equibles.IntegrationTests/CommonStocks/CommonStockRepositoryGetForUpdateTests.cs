@@ -86,14 +86,20 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task WriteLock_ConcurrentStockWriter_StillBlocks(bool delete)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task WriteLock_ConcurrentStockWriter_StillBlocks(bool delete, bool directoryLock)
     {
         var stockId = await SeedStock();
         await using var context = _fixture.CreateDbContext();
         await using var transaction = await context.Database.BeginTransactionAsync();
-        await new EquityIssuerRepository(context).GetForUpdate(stockId);
+        var repository = new EquityIssuerRepository(context);
+        if (directoryLock)
+            await repository.LockIssuerForDirectoryWrite(stockId);
+        else
+            await repository.GetForUpdate(stockId);
         await using var writer = new NpgsqlConnection(_fixture.ConnectionString);
         await writer.OpenAsync();
         await using var timeout = new NpgsqlCommand("SET lock_timeout = '500ms'", writer);
