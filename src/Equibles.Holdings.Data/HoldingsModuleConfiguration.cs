@@ -155,6 +155,9 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 // The holder's common-share total (a position page's portfolio-weight denominator)
                 // sums Value where OptionType is null; it ran per request on every position page.
                 h.OptionType,
+                // The fund-scoring history read projects ListedTicker; without it every row of a
+                // filer's history was fetched from the heap, the worker's heaviest statement.
+                h.ListedTicker,
             });
 
         // Covering index for the per-stock 13F ranking pages (Most-Held Stocks,
@@ -304,6 +307,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<InstitutionalFiling>();
         builder.Entity<RealtimeSweepState>();
         builder.Entity<FundScore>();
+        builder.Entity<FundScoreAttempt>();
 
         // Audit trail for on-demand 13F reconciliation runs; its CreationTime and
         // InstitutionalHolderId indexes are declared as attributes on the entity.

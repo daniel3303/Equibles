@@ -1745,6 +1745,20 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("Errors");
                 });
 
+            modelBuilder.Entity("Equibles.Errors.Data.Models.WorkerCycle", b =>
+                {
+                    b.Property<string>("WorkerName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("WorkerName");
+
+                    b.ToTable("WorkerCycle");
+                });
+
             modelBuilder.Entity("Equibles.FdaCatalysts.Data.Models.FdaCatalyst", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2369,6 +2383,36 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FundScore");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.FundScoreAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BenchmarkTicker")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("CalculationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("InstitutionalHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("WindowYears")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstitutionalHolderId", "WindowYears", "BenchmarkTicker")
+                        .IsUnique();
+
+                    b.ToTable("FundScoreAttempt");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlySnapshot", b =>
                 {
                     b.Property<Guid>("InstitutionalHolderId")
@@ -2790,7 +2834,7 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("InstitutionalHolderId", "ReportDate");
 
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("InstitutionalHolderId", "ReportDate"), new[] { "EquityIssuerId", "Value", "Shares", "FilingDate", "FilingType", "OptionType" });
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("InstitutionalHolderId", "ReportDate"), new[] { "EquityIssuerId", "Value", "Shares", "FilingDate", "FilingType", "OptionType", "ListedTicker" });
 
                     b.HasIndex("ShareType", "Id")
                         .HasDatabaseName("IX_InstitutionalHolding_Principal")
@@ -4486,17 +4530,15 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Cusip")
-                        .HasDatabaseName("IX_NportHolding_CusipFiling")
-                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
-
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("Cusip"), new[] { "NportFilingId" });
-
                     b.HasIndex("Isin")
                         .HasDatabaseName("IX_NportHolding_IsinFiling")
                         .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("Isin"), new[] { "NportFilingId" });
+
+                    b.HasIndex("Cusip", "NportFilingId")
+                        .HasDatabaseName("IX_NportHolding_CusipFiling")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("NportFilingId", "ValueUsd");
 
@@ -5425,6 +5467,17 @@ namespace Equibles.Migrations.Migrations
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.FundScore", b =>
+                {
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
+                        .WithMany()
+                        .HasForeignKey("InstitutionalHolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InstitutionalHolder");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.FundScoreAttempt", b =>
                 {
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
                         .WithMany()

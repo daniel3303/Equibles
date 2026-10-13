@@ -97,6 +97,34 @@ public class FundScoringManager
         return await Upsert(holder, windowYears, benchmarkTicker, result);
     }
 
+    /// <summary>
+    /// Whether any filer can be scored against <paramref name="benchmarkTicker"/> at all: its
+    /// issuer is known and it has prices in the window. A cycle checks this once, since without
+    /// it every visit would come back unscored.
+    /// </summary>
+    public async Task<bool> CanScoreAgainst(
+        DateOnly asOf,
+        int windowYears = DefaultWindowYears,
+        string benchmarkTicker = DefaultBenchmark
+    )
+    {
+        benchmarkTicker = TickerNormalizer.NormalizeDashListed(benchmarkTicker);
+        if (benchmarkTicker == null)
+            return false;
+        var benchmarkStock = await _stockRepository.GetUsByTicker(benchmarkTicker);
+        if (benchmarkStock == null)
+            return false;
+        return await _priceLoader.HasPrices(
+            benchmarkStock,
+            benchmarkTicker,
+            WindowStart(asOf, windowYears),
+            asOf
+        );
+    }
+
+    private static DateOnly WindowStart(DateOnly asOf, int windowYears) =>
+        asOf.Year > windowYears ? asOf.AddYears(-windowYears) : DateOnly.MinValue;
+
     private async Task<(BacktestResult Result, bool Has13FSnapshots)> RunBacktest(
         InstitutionalHolder holder,
         DateOnly asOf,
@@ -113,7 +141,7 @@ public class FundScoringManager
         reportDates.Sort();
 
         var to = asOf;
-        var from = asOf.Year > windowYears ? asOf.AddYears(-windowYears) : DateOnly.MinValue;
+        var from = WindowStart(asOf, windowYears);
 
         var relevant = SelectRelevantSnapshotDates(reportDates, from, to);
         if (relevant.Count == 0)

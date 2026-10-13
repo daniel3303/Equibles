@@ -59,15 +59,19 @@ public class NportHolderCountIndexPostgresTests(ParadeDbFixture fixture)
                 """
             )
             .SingleAsync();
-        definition.Should().Contain("(\"Cusip\") INCLUDE (\"NportFilingId\")");
-        var oldIndex = await db
+        // The filing is a key column, so a per-filing probe seeks (Cusip, NportFilingId) instead of
+        // walking every entry of a widely held CUSIP.
+        definition.Should().Contain("(\"Cusip\", \"NportFilingId\")");
+        // Neither the ancient single-column index nor the concurrent replacement's renamed
+        // predecessor may survive the migration.
+        var leftovers = await db
             .Database.SqlQueryRaw<int>(
                 """
                 SELECT count(*)::int AS "Value" FROM pg_class
-                WHERE relname = 'IX_NportHolding_Cusip'
+                WHERE relname IN ('IX_NportHolding_Cusip', 'IX_NportHolding_CusipFiling_old')
                 """
             )
             .SingleAsync();
-        oldIndex.Should().Be(0);
+        leftovers.Should().Be(0);
     }
 }

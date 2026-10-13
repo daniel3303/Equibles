@@ -91,10 +91,7 @@ public class BacktestPriceLoader
         if (!listingKeys.Contains(benchmarkKey))
             listingKeys.Add(benchmarkKey);
 
-        var priceWindowFrom =
-            from > DateOnly.MinValue.AddDays(PriceLookbackDays)
-                ? from.AddDays(-PriceLookbackDays)
-                : DateOnly.MinValue;
+        var priceWindowFrom = PriceWindowStart(from);
         var splits = await _splitRepository
             .GetAll()
             .Where(split =>
@@ -283,6 +280,46 @@ public class BacktestPriceLoader
     }
 
     private static string NormalizeTicker(string ticker) => ticker?.Trim().ToUpperInvariant();
+
+    private static DateOnly PriceWindowStart(DateOnly from) =>
+        from > DateOnly.MinValue.AddDays(PriceLookbackDays)
+            ? from.AddDays(-PriceLookbackDays)
+            : DateOnly.MinValue;
+
+    /// <summary>
+    /// Whether the <paramref name="listedTicker"/> listing of <paramref name="stock"/> has any
+    /// close a backtest over <paramref name="from"/>..<paramref name="to"/> would read.
+    /// </summary>
+    public async Task<bool> HasPrices(
+        EquityIssuer stock,
+        string listedTicker,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var ticker = NormalizeTicker(listedTicker);
+        var listings = await _priceRepository
+            .GetUsListingReferences([stock.Id])
+            .Select(listing => new { listing.Id, listing.Ticker })
+            .ToListAsync(cancellationToken);
+        var listingIds = listings
+            .Where(listing => NormalizeTicker(listing.Ticker) == ticker)
+            .Select(listing => listing.Id)
+            .ToList();
+        if (listingIds.Count == 0)
+            return false;
+        var priceWindowFrom = PriceWindowStart(from);
+        return await _priceRepository
+            .GetUsSeries()
+            .AnyAsync(
+                price =>
+                    listingIds.Contains(price.EquityListingId)
+                    && price.Date >= priceWindowFrom
+                    && price.Date <= to,
+                cancellationToken
+            );
+    }
 
     // Every listing is read through the process-wide series cache. A miss, or a listing whose
     // stock gained a split since its rows were read, is read for the whole window; a cached
