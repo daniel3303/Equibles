@@ -80,7 +80,8 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         string factUnit = "shares",
         DateTime? capturedAt = null,
         int attempts = 0,
-        string accession = Accession
+        string accession = Accession,
+        DateOnly? reportingDate = null
     )
     {
         var file = await _fileManager.SaveInternalFile(
@@ -95,7 +96,7 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
             Id = Guid.NewGuid(),
             EquityIssuerId = _issuer.Id,
             DocumentType = type,
-            ReportingDate = new DateOnly(2025, 12, 17),
+            ReportingDate = reportingDate ?? new DateOnly(2025, 12, 17),
             AccessionNumber = accession,
             SourceUrl = $"https://www.sec.gov/Archives/edgar/data/1061574/{Accession}.txt",
             XbrlStatus = XbrlCaptureStatus.Captured,
@@ -168,6 +169,21 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         document.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
         (await _dbContext.Set<File>().AnyAsync(f => f.Id == previousFileId)).Should().BeFalse();
         (await _service.Pending().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Recapture_TakesAnnualReportsBeforeNewerSixKs()
+    {
+        var sixK = await Seed(DocumentType.SixK, reportingDate: new DateOnly(2026, 9, 30));
+        var annual = await Seed(DocumentType.FortyF, reportingDate: new DateOnly(2025, 12, 17));
+        _secEdgarClient
+            .GetDocumentContent(Accession, _issuer.Cik, Arg.Any<CancellationToken>())
+            .Returns(Submission(Cover));
+
+        await _service.Recapture(batchSize: 1);
+
+        annual.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
+        (await _service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(sixK.Id);
     }
 
     [Fact]

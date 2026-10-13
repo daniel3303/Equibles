@@ -95,8 +95,15 @@ public partial class XbrlDocumentSetRecaptureService
         if (batchSize <= 0)
             return result;
 
+        // Annual reports first: a cover-only 40-F or 20-F leaves its issuer without statements
+        // until re-read, while the queue is mostly 6-Ks.
         var batchIds = await Pending()
-            .OrderByDescending(d => d.ReportingDate)
+            .OrderByDescending(d =>
+                d.DocumentType == DocumentType.TenK
+                || d.DocumentType == DocumentType.TwentyF
+                || d.DocumentType == DocumentType.FortyF
+            )
+            .ThenByDescending(d => d.ReportingDate)
             .Take(batchSize)
             .Select(d => d.Id)
             .ToListAsync(cancellationToken);
