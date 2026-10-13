@@ -163,7 +163,9 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         result.Grown.Should().Be(1);
         document.XbrlContentId.Should().NotBe(previousFileId!.Value);
         (await CapturedText(document)).Should().Be(Cover + "\n" + Statements);
-        document.XbrlUncompressedSize.Should().Be(Encoding.UTF8.GetByteCount(Cover + "\n" + Statements));
+        document
+            .XbrlUncompressedSize.Should()
+            .Be(Encoding.UTF8.GetByteCount(Cover + "\n" + Statements));
         document.XbrlFactsVersion.Should().Be(0);
         document.XbrlFactsAttempts.Should().Be(0);
         document.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
@@ -171,19 +173,53 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         (await _service.Pending().AnyAsync()).Should().BeFalse();
     }
 
-    [Fact]
-    public async Task Recapture_TakesAnnualReportsBeforeNewerSixKs()
+    [Theory]
+    [InlineData("TenK", true)]
+    [InlineData("TwentyF", true)]
+    [InlineData("FortyF", true)]
+    [InlineData("TenKa", false)]
+    [InlineData("TwentyFa", false)]
+    [InlineData("FortyFa", false)]
+    [InlineData("TenQ", false)]
+    public async Task Recapture_TakesOriginalAnnualReportsBeforeNewerFilings(
+        string type,
+        bool first
+    )
     {
         var sixK = await Seed(DocumentType.SixK, reportingDate: new DateOnly(2026, 9, 30));
-        var annual = await Seed(DocumentType.FortyF, reportingDate: new DateOnly(2025, 12, 17));
+        var older = await Seed(
+            DocumentType.FromValue(type),
+            reportingDate: new DateOnly(2025, 12, 17)
+        );
         _secEdgarClient
             .GetDocumentContent(Accession, _issuer.Cik, Arg.Any<CancellationToken>())
             .Returns(Submission(Cover));
 
         await _service.Recapture(batchSize: 1);
 
-        annual.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
-        (await _service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(sixK.Id);
+        (await _service.Pending().Select(d => d.Id).ToListAsync())
+            .Should()
+            .Equal(first ? sixK.Id : older.Id);
+    }
+
+    [Fact]
+    public async Task Recapture_TakesTheRestNewestFirst()
+    {
+        var oldest = await Seed(DocumentType.SixK, reportingDate: new DateOnly(2024, 3, 1));
+        var newest = await Seed(DocumentType.SixK, reportingDate: new DateOnly(2026, 9, 30));
+        var older = await Seed(DocumentType.TenQ, reportingDate: new DateOnly(2025, 5, 1));
+        var newer = await Seed(DocumentType.SixKa, reportingDate: new DateOnly(2026, 6, 30));
+        _secEdgarClient
+            .GetDocumentContent(Accession, _issuer.Cik, Arg.Any<CancellationToken>())
+            .Returns(Submission(Cover));
+
+        await _service.Recapture(batchSize: 2);
+
+        newest.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
+        newer.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
+        (await _service.Pending().Select(d => d.Id).ToListAsync())
+            .Should()
+            .BeEquivalentTo([older.Id, oldest.Id]);
     }
 
     [Fact]
@@ -214,7 +250,10 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         var result = await _service.Recapture(batchSize: 10);
 
         result.Failed.Should().Be(1);
-        var stored = await _dbContext.Set<Document>().AsNoTracking().SingleAsync(d => d.Id == document.Id);
+        var stored = await _dbContext
+            .Set<Document>()
+            .AsNoTracking()
+            .SingleAsync(d => d.Id == document.Id);
         stored.XbrlCaptureAttempts.Should().Be(1);
         stored.XbrlFactsVersion.Should().Be(8);
         (await _service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(document.Id);
@@ -227,7 +266,13 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         var document = await Seed(DocumentType.FortyF);
         var failingStore = Substitute.For<IFileManager>();
         failingStore
-            .SaveInternalFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .SaveInternalFile(
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            )
             .Returns<Task<File>>(_ => throw new IOException("disk full"));
         var service = new XbrlDocumentSetRecaptureService(
             new DocumentRepository(_dbContext),
@@ -243,7 +288,10 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         var result = await service.Recapture(batchSize: 10);
 
         result.Failed.Should().Be(1);
-        var stored = await _dbContext.Set<Document>().AsNoTracking().SingleAsync(d => d.Id == document.Id);
+        var stored = await _dbContext
+            .Set<Document>()
+            .AsNoTracking()
+            .SingleAsync(d => d.Id == document.Id);
         stored.XbrlCaptureAttempts.Should().Be(1);
         stored.XbrlContentId.Should().Be(document.XbrlContentId);
         (await service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(document.Id);
