@@ -169,8 +169,9 @@ public class Document
     /// How many times the backfill has tried (and failed to reach a terminal result) to
     /// capture this document's XBRL. The backfill stops selecting a document once this hits
     /// its retry ceiling, so a permanently-unfetchable filing can't starve the rest of the
-    /// queue. Only meaningful while <see cref="XbrlStatus"/> is
-    /// <see cref="XbrlCaptureStatus.NotChecked"/>.
+    /// queue. Meaningful while <see cref="XbrlStatus"/> is
+    /// <see cref="XbrlCaptureStatus.NotChecked"/>, or while the inline document-set recapture
+    /// re-reads a captured filing; a finished re-read stamps the ceiling.
     /// </summary>
     public int XbrlCaptureAttempts { get; set; }
 

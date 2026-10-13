@@ -1,3 +1,6 @@
+using Equibles.Core.AutoWiring;
+using Equibles.Data;
+using Equibles.Media.BusinessLogic;
 using Equibles.Sec.HostedService;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Extensions;
@@ -411,4 +414,38 @@ public class SecHostedServiceCollectionExtensionsTests
                 "AddHostedService<FtdScraperWorker>() must register the worker as IHostedService so the daily SEC fails-to-deliver poll runs at startup"
             );
     }
+
+    // FileManager is wired only as IFileManager; a constructor asking for the concrete type
+    // compiles and passes hand-built tests, then fails to resolve in the worker host.
+    [Fact]
+    public void AddSecWorker_XbrlDocumentSetRecaptureServiceDependenciesAreRegistered()
+    {
+        var services = new ServiceCollection();
+        services.AutoWireServicesFrom<FileManager>();
+        services.AddSecWorker();
+
+        var unregistered = typeof(XbrlDocumentSetRecaptureService)
+            .GetConstructors()
+            .Single()
+            .GetParameters()
+            .Select(parameter => parameter.ParameterType)
+            .Where(type => !IsRepository(type) && !IsLogger(type))
+            .Where(type => services.All(descriptor => descriptor.ServiceType != type))
+            .ToList();
+
+        unregistered.Should().BeEmpty();
+    }
+
+    private static bool IsRepository(Type type)
+    {
+        for (var current = type; current != null; current = current.BaseType)
+        {
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == typeof(BaseRepository<,>))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsLogger(Type type) =>
+        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Microsoft.Extensions.Logging.ILogger<>);
 }

@@ -34,7 +34,7 @@ public class AsFiledHtmlCaptureService
     // Upper bound on the stitched page we'll store, matching the viewer's serve-time cap
     // (DocumentOriginalHtmlProvider.MaxOriginalHtmlBytes). A page bigger than this could never be
     // served, so we drop it at capture rather than persist an un-servable blob — the viewer then
-    // degrades to the primary-only inline-iXBRL page. Keep the two caps in sync.
+    // degrades to the captured inline-iXBRL document set. Keep the two caps in sync.
     private const long MaxHtmlBytes = 30L * 1024 * 1024;
 
     private readonly AsFiledHtmlCaptureOptions _options;

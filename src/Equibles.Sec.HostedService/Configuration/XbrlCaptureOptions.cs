@@ -10,4 +10,10 @@ public class XbrlCaptureOptions
 {
     /// <summary>Master switch — no capture happens unless this is true.</summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>How many captured filings the inline document-set recapture re-reads per cycle.</summary>
+    public int RecaptureBatchSize { get; set; } = 32;
+
+    /// <summary>Seconds between back-to-back recapture cycles while its backlog drains.</summary>
+    public int RecaptureDrainIntervalSeconds { get; set; } = 30;
 }
