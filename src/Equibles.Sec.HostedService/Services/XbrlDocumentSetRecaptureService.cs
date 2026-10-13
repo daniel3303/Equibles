@@ -28,7 +28,10 @@ public partial class XbrlDocumentSetRecaptureService
 
     private const int MaxFileNameLength = 256;
 
-    [GeneratedRegex(@"/Archives/edgar/data/\d+/(\d{10}-\d{2}-\d{6})\.txt$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(
+        @"/Archives/edgar/data/\d+/(\d{10}-\d{2}-\d{6})\.txt$",
+        RegexOptions.IgnoreCase
+    )]
     private static partial Regex EdgarSourceUrlAccession();
 
     private readonly DocumentRepository _documentRepository;
@@ -95,8 +98,16 @@ public partial class XbrlDocumentSetRecaptureService
         if (batchSize <= 0)
             return result;
 
+        // Annual reports first: a cover-only 40-F or 20-F leaves its issuer without statements
+        // until re-read, while the queue is mostly 6-Ks.
         var batchIds = await Pending()
-            .OrderByDescending(d => d.ReportingDate)
+            .OrderByDescending(d =>
+                d.DocumentType == DocumentType.TenK
+                || d.DocumentType == DocumentType.TwentyF
+                || d.DocumentType == DocumentType.FortyF
+            )
+            .ThenByDescending(d => d.ReportingDate)
+            .ThenBy(d => d.Id)
             .Take(batchSize)
             .Select(d => d.Id)
             .ToListAsync(cancellationToken);
@@ -166,7 +177,9 @@ public partial class XbrlDocumentSetRecaptureService
                 out var body
             )
         )
-            throw new InvalidOperationException("The submission no longer carries an XBRL envelope.");
+            throw new InvalidOperationException(
+                "The submission no longer carries an XBRL envelope."
+            );
 
         var raw = Encoding.UTF8.GetBytes(body);
         if (type == document.XbrlType && raw.LongLength == document.XbrlUncompressedSize)
@@ -193,7 +206,11 @@ public partial class XbrlDocumentSetRecaptureService
         return true;
     }
 
-    private async Task PersistAttempt(Guid documentId, int attempts, CancellationToken cancellationToken)
+    private async Task PersistAttempt(
+        Guid documentId,
+        int attempts,
+        CancellationToken cancellationToken
+    )
     {
         try
         {

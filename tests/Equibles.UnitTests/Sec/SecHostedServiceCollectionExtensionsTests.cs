@@ -440,12 +440,16 @@ public class SecHostedServiceCollectionExtensionsTests
     {
         for (var current = type; current != null; current = current.BaseType)
         {
-            if (current.IsGenericType && current.GetGenericTypeDefinition() == typeof(BaseRepository<,>))
+            if (
+                current.IsGenericType
+                && current.GetGenericTypeDefinition() == typeof(BaseRepository<,>)
+            )
                 return true;
         }
         return false;
     }
 
     private static bool IsLogger(Type type) =>
-        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Microsoft.Extensions.Logging.ILogger<>);
+        type.IsGenericType
+        && type.GetGenericTypeDefinition() == typeof(Microsoft.Extensions.Logging.ILogger<>);
 }

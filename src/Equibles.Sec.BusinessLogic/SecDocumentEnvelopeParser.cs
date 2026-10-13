@@ -128,7 +128,9 @@ public static class SecDocumentEnvelopeParser
             if (members.Count == 0)
                 members = [inlineDocuments[0]];
             var primary = Math.Max(
-                members.FindIndex(document => IsPrimary(document.FileName, primaryDocumentFileName)),
+                members.FindIndex(document =>
+                    IsPrimary(document.FileName, primaryDocumentFileName)
+                ),
                 0
             );
             type = XbrlType.InlineIxbrl;

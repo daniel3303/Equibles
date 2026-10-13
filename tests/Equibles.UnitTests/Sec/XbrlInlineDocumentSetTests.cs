@@ -39,7 +39,9 @@ public class XbrlInlineDocumentSetTests
         + "<ix:nonFraction name=\"ifrs-full:Revenue\" contextRef=\"c-1\" unitRef=\"CAD\" decimals=\"-3\" scale=\"3\">15,904,108</ix:nonFraction>"
         + "</body></html>";
 
-    private static string Submission(params (string Type, string FileName, string Body)[] documents) =>
+    private static string Submission(
+        params (string Type, string FileName, string Body)[] documents
+    ) =>
         "<SEC-DOCUMENT>\n"
         + string.Concat(
             documents.Select(
@@ -52,7 +54,13 @@ public class XbrlInlineDocumentSetTests
     private static string Capture(string envelope, string primary, out string sourceFileName)
     {
         SecDocumentEnvelopeParser
-            .TryExtractXbrlEnvelope(envelope, primary, out var type, out sourceFileName, out var content)
+            .TryExtractXbrlEnvelope(
+                envelope,
+                primary,
+                out var type,
+                out sourceFileName,
+                out var content
+            )
             .Should()
             .BeTrue();
         type.Should().Be(XbrlType.InlineIxbrl);
@@ -78,7 +86,10 @@ public class XbrlInlineDocumentSetTests
     [Fact]
     public void TryExtractXbrlEnvelope_UnmatchedPrimaryName_CapturesTheSetUnderItsFirstDocument()
     {
-        var envelope = Submission(("40-F", "gib-40f.htm", Cover), ("EX-99.2", "gib-ex992.htm", Statements));
+        var envelope = Submission(
+            ("40-F", "gib-40f.htm", Cover),
+            ("EX-99.2", "gib-ex992.htm", Statements)
+        );
 
         var content = Capture(envelope, "renamed.htm", out var sourceFileName);
 
@@ -89,7 +100,10 @@ public class XbrlInlineDocumentSetTests
     [Fact]
     public void ParseEnvelope_CapturedDocumentSet_ReadsExhibitFactsAndCoverListings()
     {
-        var envelope = Submission(("40-F", "gib-40f.htm", Cover), ("EX-99.2", "gib-ex992.htm", Statements));
+        var envelope = Submission(
+            ("40-F", "gib-40f.htm", Cover),
+            ("EX-99.2", "gib-ex992.htm", Statements)
+        );
 
         var result = new InlineXbrlParser().ParseEnvelope(Capture(envelope, "gib-40f.htm", out _));
 
@@ -132,7 +146,10 @@ public class XbrlInlineDocumentSetTests
     [Fact]
     public void TryExtractXbrlEnvelope_NoHtmlInlineDocument_KeepsTheFirstInlineBlock()
     {
-        var envelope = Submission(("40-F", "gib-40f.txt", Cover), ("EX-99.2", "gib-ex992.txt", Statements));
+        var envelope = Submission(
+            ("40-F", "gib-40f.txt", Cover),
+            ("EX-99.2", "gib-ex992.txt", Statements)
+        );
 
         Capture(envelope, "renamed.htm", out var sourceFileName).Should().Be(Cover);
         sourceFileName.Should().Be("gib-40f.txt");
@@ -141,7 +158,10 @@ public class XbrlInlineDocumentSetTests
     [Fact]
     public void JoinDocumentSet_OverTheParseCeiling_KeepsThePrimary()
     {
-        SecDocumentEnvelopeParser.JoinDocumentSet([Statements, Cover], 1, maxBytes: 100).Should().Be(Cover);
+        SecDocumentEnvelopeParser
+            .JoinDocumentSet([Statements, Cover], 1, maxBytes: 100)
+            .Should()
+            .Be(Cover);
         SecDocumentEnvelopeParser
             .JoinDocumentSet([Statements, Cover], 1, maxBytes: 10_000)
             .Should()
