@@ -13,7 +13,9 @@
          9.0.4 (NU1903 / GHSA-73j8-2gch-69rq) to the centrally-managed
          patched version. -->
     <PackageReference Include="Microsoft.Bcl.Memory" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase" />
