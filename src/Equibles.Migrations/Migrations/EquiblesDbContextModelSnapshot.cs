@@ -4464,6 +4464,12 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("EquityIssuerId", "FilingDate");
 
+                    b.HasIndex("SeriesId", "ReportPeriodDate")
+                        .HasDatabaseName("IX_NportFiling_SeriesPeriod")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("SeriesId", "ReportPeriodDate"), new[] { "EquityIssuerId", "RegistrantCik", "FilingDate", "AccessionNumber" });
+
                     b.ToTable("NportFiling");
                 });
 

@@ -95,12 +95,26 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
             .HasForeignKey(row => row.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<NCenServiceProvider>();
-        builder
-            .Entity<NportFiling>()
-            .HasOne(row => row.Issuer)
-            .WithMany()
-            .HasForeignKey(row => row.EquityIssuerId)
-            .OnDelete(DeleteBehavior.Restrict);
+        builder.Entity<NportFiling>(b =>
+        {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // A series' reports are read by its SEC series id from a period floor and the
+            // latest-per-period check re-reads that range; the issuer- and registrant-wide indexes
+            // made the planner start from every holding of the CUSIP instead.
+            b.HasIndex(f => new { f.SeriesId, f.ReportPeriodDate })
+                .IncludeProperties(f => new
+                {
+                    f.EquityIssuerId,
+                    f.RegistrantCik,
+                    f.FilingDate,
+                    f.AccessionNumber,
+                })
+                .HasDatabaseName("IX_NportFiling_SeriesPeriod")
+                .IsCreatedConcurrently();
+        });
         builder.Entity<NportHolding>(b =>
         {
             // A fund's position in one security is read per filing of the series, so the filing is
