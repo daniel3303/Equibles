@@ -46,10 +46,11 @@ public static class SecDocumentEnvelopeParser
 
     /// <summary>
     /// Extracts the raw XBRL envelope from a full SEC submission (the <c>{accession}.txt</c>
-    /// file). Prefers the inline iXBRL primary document; when the primary carries no inline
-    /// XBRL it falls back to the standalone XBRL instance — the <c>&lt;DOCUMENT&gt;</c> whose
-    /// SGML <c>&lt;TYPE&gt;</c> ends in <c>.INS</c> (e.g. <c>EX-101.INS</c>). Reading the
-    /// envelope already fetched for ingest means no extra EDGAR round-trip.
+    /// file). Prefers the inline iXBRL document set, every document carrying inline markers
+    /// joined primary first; when no document carries inline XBRL it falls back to the
+    /// standalone XBRL instance — the <c>&lt;DOCUMENT&gt;</c> whose SGML <c>&lt;TYPE&gt;</c>
+    /// ends in <c>.INS</c> (e.g. <c>EX-101.INS</c>). Reading the envelope already fetched for
+    /// ingest means no extra EDGAR round-trip.
     /// </summary>
     /// <returns>True when an XBRL envelope was found; otherwise the filing carries no XBRL.</returns>
     public static bool TryExtractXbrlEnvelope(
@@ -67,8 +68,7 @@ public static class SecDocumentEnvelopeParser
         if (string.IsNullOrEmpty(envelope))
             return false;
 
-        string inlineFallbackFileName = null;
-        string inlineFallbackBody = null;
+        var inlineDocuments = new List<(string FileName, string Body)>();
         string standaloneFileName = null;
         string standaloneBody = null;
 
@@ -77,41 +77,19 @@ public static class SecDocumentEnvelopeParser
             TryExtractSgmlTagValue(block, "FILENAME", out var blockFileName);
             TryExtractSgmlTagValue(block, "TYPE", out var blockType);
 
-            // Inline iXBRL is embedded in the primary document; prefer the named primary and
-            // return as soon as we confirm it actually carries inline markers.
+            // Every block carrying inline markers belongs to the filing's one inline document set;
+            // the cheap pre-check on the raw block avoids materializing bodies for other exhibits.
             if (
-                !string.IsNullOrEmpty(primaryDocumentFileName)
-                && string.Equals(
-                    blockFileName,
-                    primaryDocumentFileName,
-                    StringComparison.OrdinalIgnoreCase
-                )
-                && TryExtractTextBody(block, out var primaryBody)
-                && ContainsInlineXbrl(primaryBody)
+                ContainsInlineXbrl(block)
+                && TryExtractTextBody(block, out var inlineBody)
+                && ContainsInlineXbrl(inlineBody)
             )
             {
-                type = XbrlType.InlineIxbrl;
-                sourceFileName = blockFileName;
-                content = primaryBody;
-                return true;
-            }
-
-            // Fallback inline: any block whose body carries inline markers, covering filings
-            // whose PrimaryDocument name is missing or doesn't match the envelope's FILENAME —
-            // without it those would be wrongly recorded as NotPresent (terminal). The cheap
-            // pre-check on the raw block avoids materializing bodies for non-XBRL exhibits.
-            if (
-                inlineFallbackBody == null
-                && ContainsInlineXbrl(block)
-                && TryExtractTextBody(block, out var fallbackBody)
-            )
-            {
-                inlineFallbackFileName = blockFileName;
-                inlineFallbackBody = fallbackBody;
+                inlineDocuments.Add((blockFileName, inlineBody));
             }
 
             // Older filings ship the instance as a separate EX-10x.INS document. Remember the
-            // first one in case neither the named primary nor any block carries inline XBRL.
+            // first one in case no block carries inline XBRL.
             if (
                 standaloneBody == null
                 && !string.IsNullOrEmpty(blockType)
@@ -124,11 +102,34 @@ public static class SecDocumentEnvelopeParser
             }
         }
 
-        if (inlineFallbackBody != null)
+        if (inlineDocuments.Count > 0)
         {
+            // The named primary names the capture; a filing whose PrimaryDocument is missing or
+            // doesn't match the envelope's FILENAME takes its first inline block instead of
+            // being wrongly recorded as NotPresent (terminal).
+            var primary = inlineDocuments.FindIndex(document =>
+                !string.IsNullOrEmpty(primaryDocumentFileName)
+                && string.Equals(
+                    document.FileName,
+                    primaryDocumentFileName,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
             type = XbrlType.InlineIxbrl;
-            sourceFileName = inlineFallbackFileName ?? string.Empty;
-            content = inlineFallbackBody;
+            sourceFileName = inlineDocuments[Math.Max(primary, 0)].FileName ?? string.Empty;
+            // A 40-F or 6-K often tags only its cover in the primary and its statements in an
+            // exhibit; the set is captured whole, primary first, so one parse reads every fact.
+            content =
+                inlineDocuments.Count == 1
+                    ? inlineDocuments[0].Body
+                    : string.Join(
+                        '\n',
+                        inlineDocuments
+                            .Select((document, index) => (document, index))
+                            .OrderBy(entry => entry.index == primary ? 0 : 1)
+                            .ThenBy(entry => entry.index)
+                            .Select(entry => entry.document.Body)
+                    );
             return true;
         }
 
