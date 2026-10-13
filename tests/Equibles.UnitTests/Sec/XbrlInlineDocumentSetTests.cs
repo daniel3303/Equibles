@@ -1,6 +1,7 @@
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
+using Equibles.Sec.FinancialFacts.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -98,5 +99,60 @@ public class XbrlInlineDocumentSetTests
         revenue.Value.Should().Be(15_904_108_000m);
         revenue.PeriodEnd.Should().Be(new DateOnly(2025, 9, 30));
         result.CoverListings.Should().ContainSingle().Which.TradingSymbol.Should().Be("GIB");
+    }
+
+    // An empty <title/> swallows the rest of a page under HTML rules; once two roots are joined
+    // the parser can no longer expand it, so each document is expanded before the join.
+    [Fact]
+    public void ParseEnvelope_DocumentSetWithEmptyTitles_ReadsExhibitFactsAndCoverListings()
+    {
+        var envelope = Submission(
+            ("40-F", "gib-40f.htm", Cover.Replace("<title>40-F</title>", "<title/>")),
+            ("EX-99.2", "gib-ex992.htm", Statements.Replace("<title>EX-99.2</title>", "<title/>"))
+        );
+
+        var result = new InlineXbrlParser().ParseEnvelope(Capture(envelope, "gib-40f.htm", out _));
+
+        result.Facts.Should().ContainSingle().Which.Unit.Should().Be("CAD");
+        result.CoverListings.Should().ContainSingle().Which.TradingSymbol.Should().Be("GIB");
+    }
+
+    // A uuencoded image can spell "<IX:" by chance; it is never part of the document set.
+    [Fact]
+    public void TryExtractXbrlEnvelope_BinaryBlockSpellingAnInlineMarker_IsNotPartOfTheSet()
+    {
+        var envelope = Submission(
+            ("40-F", "gib-40f.htm", Cover),
+            ("GRAPHIC", "gib-logo.jpg", "begin 644 gib-logo.jpg\nM<IX:Q3#2\nend")
+        );
+
+        Capture(envelope, "gib-40f.htm", out _).Should().Be(Cover);
+    }
+
+    [Fact]
+    public void TryExtractXbrlEnvelope_NoHtmlInlineDocument_KeepsTheFirstInlineBlock()
+    {
+        var envelope = Submission(("40-F", "gib-40f.txt", Cover), ("EX-99.2", "gib-ex992.txt", Statements));
+
+        Capture(envelope, "renamed.htm", out var sourceFileName).Should().Be(Cover);
+        sourceFileName.Should().Be("gib-40f.txt");
+    }
+
+    [Fact]
+    public void JoinDocumentSet_OverTheParseCeiling_KeepsThePrimary()
+    {
+        SecDocumentEnvelopeParser.JoinDocumentSet([Statements, Cover], 1, maxBytes: 100).Should().Be(Cover);
+        SecDocumentEnvelopeParser
+            .JoinDocumentSet([Statements, Cover], 1, maxBytes: 10_000)
+            .Should()
+            .Be(Cover + "\n" + Statements);
+    }
+
+    [Fact]
+    public void MaxInlineDocumentSetBytes_MatchesTheFactParserCeiling()
+    {
+        SecDocumentEnvelopeParser
+            .MaxInlineDocumentSetBytes.Should()
+            .Be(XbrlFactExtractionService.MaxParseableEnvelopeBytes);
     }
 }

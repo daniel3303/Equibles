@@ -34,14 +34,14 @@ public partial class XbrlDocumentSetRecaptureService
     private readonly DocumentRepository _documentRepository;
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly ISecEdgarClient _secEdgarClient;
-    private readonly FileManager _fileManager;
+    private readonly IFileManager _fileManager;
     private readonly ILogger<XbrlDocumentSetRecaptureService> _logger;
 
     public XbrlDocumentSetRecaptureService(
         DocumentRepository documentRepository,
         FinancialFactRepository financialFactRepository,
         ISecEdgarClient secEdgarClient,
-        FileManager fileManager,
+        IFileManager fileManager,
         ILogger<XbrlDocumentSetRecaptureService> logger
     )
     {
@@ -113,8 +113,8 @@ public partial class XbrlDocumentSetRecaptureService
                 continue;
 
             result.Processed++;
-            // Counted up front so a failed fetch still advances the ceiling and drops out.
-            document.XbrlCaptureAttempts++;
+            // A failure counts one attempt; only a finished re-read stamps the ceiling.
+            var failedAttempts = document.XbrlCaptureAttempts + 1;
             try
             {
                 if (await Recapture(document, cancellationToken))
@@ -132,13 +132,14 @@ public partial class XbrlDocumentSetRecaptureService
                 result.Failed++;
                 _logger.LogWarning(
                     ex,
-                    "XBRL document-set recapture failed for document {DocumentId} ({Accession}); will retry.",
+                    "XBRL document-set recapture failed for document {DocumentId} ({Accession}), attempt {Attempt} of {MaxAttempts}.",
                     document.Id,
-                    document.AccessionNumber
+                    document.AccessionNumber,
+                    failedAttempts,
+                    Document.MaxXbrlCaptureAttempts
                 );
-                var attempts = document.XbrlCaptureAttempts;
                 _documentRepository.ClearChangeTracker();
-                await PersistAttempt(documentId, attempts, cancellationToken);
+                await PersistAttempt(documentId, failedAttempts, cancellationToken);
             }
         }
 
@@ -167,10 +168,12 @@ public partial class XbrlDocumentSetRecaptureService
         )
             throw new InvalidOperationException("The submission no longer carries an XBRL envelope.");
 
-        document.XbrlCaptureAttempts = Document.MaxXbrlCaptureAttempts;
         var raw = Encoding.UTF8.GetBytes(body);
         if (type == document.XbrlType && raw.LongLength == document.XbrlUncompressedSize)
+        {
+            document.XbrlCaptureAttempts = Document.MaxXbrlCaptureAttempts;
             return false;
+        }
 
         var previous = document.XbrlContent;
         document.XbrlContent = await _fileManager.SaveInternalFile(
@@ -183,6 +186,9 @@ public partial class XbrlDocumentSetRecaptureService
         document.XbrlUncompressedSize = raw.LongLength;
         document.XbrlFactsVersion = 0;
         document.XbrlFactsAttempts = 0;
+        document.XbrlCaptureAttempts = Document.MaxXbrlCaptureAttempts;
+        // Fact extraction keys the replacement's facts by the filing's accession.
+        document.AccessionNumber ??= accession;
         _fileManager.DeleteFile(previous);
         return true;
     }

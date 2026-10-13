@@ -79,7 +79,8 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         DocumentType type,
         string factUnit = "shares",
         DateTime? capturedAt = null,
-        int attempts = 0
+        int attempts = 0,
+        string accession = Accession
     )
     {
         var file = await _fileManager.SaveInternalFile(
@@ -95,7 +96,7 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
             EquityIssuerId = _issuer.Id,
             DocumentType = type,
             ReportingDate = new DateOnly(2025, 12, 17),
-            AccessionNumber = Accession,
+            AccessionNumber = accession,
             SourceUrl = $"https://www.sec.gov/Archives/edgar/data/1061574/{Accession}.txt",
             XbrlStatus = XbrlCaptureStatus.Captured,
             XbrlType = XbrlType.InlineIxbrl,
@@ -135,14 +136,16 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
     public async Task Pending_SelectsOnlyPreFixPeriodicCapturesWithoutACurrencyFact()
     {
         var coverOnly = await Seed(DocumentType.FortyF);
+        var sixK = await Seed(DocumentType.SixKa);
+        var perShareOnly = await Seed(DocumentType.FortyF, factUnit: "USD/shares");
         await Seed(DocumentType.FortyF, factUnit: "CAD");
-        await Seed(DocumentType.FortyF, capturedAt: new DateTime(2026, 10, 16, 0, 0, 0, DateTimeKind.Utc));
+        await Seed(DocumentType.FortyF, capturedAt: XbrlDocumentSetRecaptureService.Cutoff);
         await Seed(DocumentType.EightK);
         await Seed(DocumentType.FortyF, attempts: Document.MaxXbrlCaptureAttempts);
 
         var pending = await _service.Pending().Select(d => d.Id).ToListAsync();
 
-        pending.Should().Equal(coverOnly.Id);
+        pending.Should().BeEquivalentTo([coverOnly.Id, sixK.Id, perShareOnly.Id]);
     }
 
     [Fact]
@@ -161,6 +164,7 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         (await CapturedText(document)).Should().Be(Cover + "\n" + Statements);
         document.XbrlUncompressedSize.Should().Be(Encoding.UTF8.GetByteCount(Cover + "\n" + Statements));
         document.XbrlFactsVersion.Should().Be(0);
+        document.XbrlFactsAttempts.Should().Be(0);
         document.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
         (await _dbContext.Set<File>().AnyAsync(f => f.Id == previousFileId)).Should().BeFalse();
         (await _service.Pending().AnyAsync()).Should().BeFalse();
@@ -198,5 +202,48 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         stored.XbrlCaptureAttempts.Should().Be(1);
         stored.XbrlFactsVersion.Should().Be(8);
         (await _service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(document.Id);
+    }
+
+    // A store failure after a successful fetch is one failed attempt, never a finished re-read.
+    [Fact]
+    public async Task Recapture_StorageFailure_CountsAnAttemptAndStaysPending()
+    {
+        var document = await Seed(DocumentType.FortyF);
+        var failingStore = Substitute.For<IFileManager>();
+        failingStore
+            .SaveInternalFile(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns<Task<File>>(_ => throw new IOException("disk full"));
+        var service = new XbrlDocumentSetRecaptureService(
+            new DocumentRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            _secEdgarClient,
+            failingStore,
+            Substitute.For<ILogger<XbrlDocumentSetRecaptureService>>()
+        );
+        _secEdgarClient
+            .GetDocumentContent(Accession, _issuer.Cik, Arg.Any<CancellationToken>())
+            .Returns(Submission(Cover, Statements));
+
+        var result = await service.Recapture(batchSize: 10);
+
+        result.Failed.Should().Be(1);
+        var stored = await _dbContext.Set<Document>().AsNoTracking().SingleAsync(d => d.Id == document.Id);
+        stored.XbrlCaptureAttempts.Should().Be(1);
+        stored.XbrlContentId.Should().Be(document.XbrlContentId);
+        (await service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(document.Id);
+    }
+
+    [Fact]
+    public async Task Recapture_NoStoredAccession_ReadsTheSourceUrlAccessionAndKeepsIt()
+    {
+        var document = await Seed(DocumentType.FortyF, accession: null);
+        _secEdgarClient
+            .GetDocumentContent(Accession, _issuer.Cik, Arg.Any<CancellationToken>())
+            .Returns(Submission(Cover, Statements));
+
+        var result = await _service.Recapture(batchSize: 10);
+
+        result.Grown.Should().Be(1);
+        document.AccessionNumber.Should().Be(Accession);
     }
 }

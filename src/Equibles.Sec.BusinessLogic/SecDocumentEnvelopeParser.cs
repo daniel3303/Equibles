@@ -1,6 +1,7 @@
 using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using Equibles.Core.Documents;
 using Equibles.Sec.Data.Models;
 
 namespace Equibles.Sec.BusinessLogic;
@@ -15,6 +16,14 @@ public static class SecDocumentEnvelopeParser
     private const string DocumentEndTag = "</DOCUMENT>";
     private const string TextStartTag = "<TEXT>";
     private const string TextEndTag = "</TEXT>";
+
+    /// <summary>
+    /// The largest inline document set captured whole, matching the fact parser's envelope
+    /// ceiling; a larger set keeps only its primary so its cover still parses.
+    /// </summary>
+    public const long MaxInlineDocumentSetBytes = 50 * 1024 * 1024;
+
+    private static readonly string[] InlineDocumentExtensions = [".htm", ".html", ".xhtml"];
 
     /// <summary>
     /// Some SEC filings (typically &lt;PAPER&gt; 6-K submissions and other digitized filings) are
@@ -68,7 +77,7 @@ public static class SecDocumentEnvelopeParser
         if (string.IsNullOrEmpty(envelope))
             return false;
 
-        var inlineDocuments = new List<(string FileName, string Body)>();
+        var inlineDocuments = new List<(string FileName, string Body, bool IsSetMember)>();
         string standaloneFileName = null;
         string standaloneBody = null;
 
@@ -77,15 +86,23 @@ public static class SecDocumentEnvelopeParser
             TryExtractSgmlTagValue(block, "FILENAME", out var blockFileName);
             TryExtractSgmlTagValue(block, "TYPE", out var blockType);
 
-            // Every block carrying inline markers belongs to the filing's one inline document set;
-            // the cheap pre-check on the raw block avoids materializing bodies for other exhibits.
+            // Every HTML block carrying inline markers belongs to the filing's one inline document
+            // set; a uuencoded image can spell "<ix:" by chance. The cheap pre-check on the raw
+            // block avoids materializing bodies for other exhibits.
             if (
                 ContainsInlineXbrl(block)
                 && TryExtractTextBody(block, out var inlineBody)
                 && ContainsInlineXbrl(inlineBody)
             )
             {
-                inlineDocuments.Add((blockFileName, inlineBody));
+                inlineDocuments.Add(
+                    (
+                        blockFileName,
+                        inlineBody,
+                        IsPrimary(blockFileName, primaryDocumentFileName)
+                            || IsInlineDocumentFileName(blockFileName)
+                    )
+                );
             }
 
             // Older filings ship the instance as a separate EX-10x.INS document. Remember the
@@ -107,29 +124,20 @@ public static class SecDocumentEnvelopeParser
             // The named primary names the capture; a filing whose PrimaryDocument is missing or
             // doesn't match the envelope's FILENAME takes its first inline block instead of
             // being wrongly recorded as NotPresent (terminal).
-            var primary = inlineDocuments.FindIndex(document =>
-                !string.IsNullOrEmpty(primaryDocumentFileName)
-                && string.Equals(
-                    document.FileName,
-                    primaryDocumentFileName,
-                    StringComparison.OrdinalIgnoreCase
-                )
+            var members = inlineDocuments.Where(document => document.IsSetMember).ToList();
+            if (members.Count == 0)
+                members = [inlineDocuments[0]];
+            var primary = Math.Max(
+                members.FindIndex(document => IsPrimary(document.FileName, primaryDocumentFileName)),
+                0
             );
             type = XbrlType.InlineIxbrl;
-            sourceFileName = inlineDocuments[Math.Max(primary, 0)].FileName ?? string.Empty;
-            // A 40-F or 6-K often tags only its cover in the primary and its statements in an
-            // exhibit; the set is captured whole, primary first, so one parse reads every fact.
-            content =
-                inlineDocuments.Count == 1
-                    ? inlineDocuments[0].Body
-                    : string.Join(
-                        '\n',
-                        inlineDocuments
-                            .Select((document, index) => (document, index))
-                            .OrderBy(entry => entry.index == primary ? 0 : 1)
-                            .ThenBy(entry => entry.index)
-                            .Select(entry => entry.document.Body)
-                    );
+            sourceFileName = members[primary].FileName ?? string.Empty;
+            content = JoinDocumentSet(
+                members.Select(document => document.Body).ToList(),
+                primary,
+                MaxInlineDocumentSetBytes
+            );
             return true;
         }
 
@@ -142,6 +150,34 @@ public static class SecDocumentEnvelopeParser
         }
 
         return false;
+    }
+
+    private static bool IsPrimary(string fileName, string primaryDocumentFileName) =>
+        !string.IsNullOrEmpty(primaryDocumentFileName)
+        && string.Equals(fileName, primaryDocumentFileName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsInlineDocumentFileName(string fileName) =>
+        !string.IsNullOrEmpty(fileName)
+        && InlineDocumentExtensions.Any(extension =>
+            fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
+        );
+
+    // A 40-F or 6-K often tags only its cover in the primary and its statements in an exhibit;
+    // the set is captured whole, primary first, so one parse reads every fact. Each document's
+    // empty XHTML elements are expanded first, since the joined roots are no longer one XML document.
+    internal static string JoinDocumentSet(List<string> bodies, int primary, long maxBytes)
+    {
+        if (bodies.Count == 1)
+            return bodies[0];
+
+        var ordered = bodies
+            .Select((body, index) => (body, index))
+            .OrderBy(entry => entry.index == primary ? 0 : 1)
+            .ThenBy(entry => entry.index)
+            .Select(entry => XhtmlCompatibility.ExpandEmptyElements(entry.body))
+            .ToList();
+        var bytes = ordered.Sum(body => (long)Encoding.UTF8.GetByteCount(body)) + ordered.Count - 1;
+        return bytes <= maxBytes ? string.Join('\n', ordered) : bodies[primary];
     }
 
     /// <summary>
