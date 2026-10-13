@@ -21,10 +21,8 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task WriteLock_ModifiedTrackedStock_ThrowsWithoutDiscardingChanges(bool keyUpdate)
+    [Fact]
+    public async Task WriteLock_ModifiedTrackedStock_ThrowsWithoutDiscardingChanges()
     {
         var stockId = Guid.NewGuid();
         await using (var seed = _fixture.CreateDbContext())
@@ -47,7 +45,7 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
             IsolationLevel.ReadCommitted
         );
 
-        var action = async () => await Lock(repository, stockId, keyUpdate);
+        var action = async () => await repository.GetForUpdate(stockId);
 
         await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Modified*");
         tracked.Name.Should().Be("Pending local name");
@@ -55,15 +53,21 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         await transaction.RollbackAsync();
     }
 
+    // A child insert only takes KEY SHARE on the issuer; a lock that conflicted with it parked
+    // identity writers behind every multi-minute holdings rebuild.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task WriteLock_ForeignKeyInsert_OnlyKeyUpdateBlocks(bool keyUpdate)
+    public async Task WriteLock_ForeignKeyInsert_NeverBlocks(bool directoryLock)
     {
         var stockId = await SeedStock();
         await using var context = _fixture.CreateDbContext();
         await using var transaction = await context.Database.BeginTransactionAsync();
-        await Lock(new EquityIssuerRepository(context), stockId, keyUpdate);
+        var repository = new EquityIssuerRepository(context);
+        if (directoryLock)
+            await repository.LockIssuerForDirectoryWrite(stockId);
+        else
+            await repository.GetForUpdate(stockId);
 
         await using var writer = new NpgsqlConnection(_fixture.ConnectionString);
         await writer.OpenAsync();
@@ -78,28 +82,24 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         );
         insert.Parameters.AddWithValue("stock", stockId);
         insert.Parameters.AddWithValue("id", Guid.NewGuid());
-        if (keyUpdate)
-        {
-            var error = await Assert.ThrowsAsync<PostgresException>(() =>
-                insert.ExecuteNonQueryAsync()
-            );
-            error.SqlState.Should().Be(PostgresErrorCodes.LockNotAvailable);
-        }
-        else
-        {
-            (await insert.ExecuteNonQueryAsync()).Should().Be(1);
-        }
+        (await insert.ExecuteNonQueryAsync()).Should().Be(1);
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task NoKeyUpdate_ConcurrentStockWriter_StillBlocks(bool delete)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task WriteLock_ConcurrentStockWriter_StillBlocks(bool delete, bool directoryLock)
     {
         var stockId = await SeedStock();
         await using var context = _fixture.CreateDbContext();
         await using var transaction = await context.Database.BeginTransactionAsync();
-        await new EquityIssuerRepository(context).GetForNoKeyUpdate(stockId);
+        var repository = new EquityIssuerRepository(context);
+        if (directoryLock)
+            await repository.LockIssuerForDirectoryWrite(stockId);
+        else
+            await repository.GetForUpdate(stockId);
         await using var writer = new NpgsqlConnection(_fixture.ConnectionString);
         await writer.OpenAsync();
         await using var timeout = new NpgsqlCommand("SET lock_timeout = '500ms'", writer);
@@ -117,10 +117,8 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         error.SqlState.Should().Be(PostgresErrorCodes.LockNotAvailable);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task WriteLock_PreloadedSnapshot_RefreshesAfterLock(bool keyUpdate)
+    [Fact]
+    public async Task WriteLock_PreloadedSnapshot_RefreshesAfterLock()
     {
         var stockId = await SeedStock();
         await using var context = _fixture.CreateDbContext();
@@ -136,18 +134,16 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
                 );
         }
         await using var transaction = await context.Database.BeginTransactionAsync();
-        EquityIssuer locked = await Lock(repository, stockId, keyUpdate);
+        EquityIssuer locked = await repository.GetForUpdate(stockId);
         locked.Should().BeSameAs(tracked);
         locked.Name.Should().Be("Updated issuer");
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task WriteLock_WithoutTransaction_RefusesUnprotectedRead(bool keyUpdate)
+    [Fact]
+    public async Task WriteLock_WithoutTransaction_RefusesUnprotectedRead()
     {
         await using var context = _fixture.CreateDbContext();
-        var action = () => Lock(new EquityIssuerRepository(context), Guid.NewGuid(), keyUpdate);
+        var action = () => new EquityIssuerRepository(context).GetForUpdate(Guid.NewGuid());
         await action
             .Should()
             .ThrowAsync<InvalidOperationException>()
@@ -165,10 +161,4 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         await context.SaveChangesAsync();
         return stock.Id;
     }
-
-    private static Task<EquityIssuer> Lock(
-        EquityIssuerRepository repository,
-        Guid stockId,
-        bool keyUpdate
-    ) => keyUpdate ? repository.GetForUpdate(stockId) : repository.GetForNoKeyUpdate(stockId);
 }
