@@ -203,6 +203,24 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Recapture_FillsTheBatchWithTheNewestOtherFilings()
+    {
+        var annual = await Seed(DocumentType.TwentyF, reportingDate: new DateOnly(2024, 4, 30));
+        var older = await Seed(DocumentType.SixK, reportingDate: new DateOnly(2025, 1, 15));
+        var newer = await Seed(DocumentType.SixK, reportingDate: new DateOnly(2026, 8, 1));
+        _secEdgarClient
+            .GetDocumentContent(Accession, _issuer.Cik, Arg.Any<CancellationToken>())
+            .Returns(Submission(Cover));
+
+        var result = await _service.Recapture(batchSize: 2);
+
+        result.Processed.Should().Be(2);
+        annual.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
+        newer.XbrlCaptureAttempts.Should().Be(Document.MaxXbrlCaptureAttempts);
+        (await _service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(older.Id);
+    }
+
+    [Fact]
     public async Task Recapture_TakesTheRestNewestFirst()
     {
         var oldest = await Seed(DocumentType.SixK, reportingDate: new DateOnly(2024, 3, 1));

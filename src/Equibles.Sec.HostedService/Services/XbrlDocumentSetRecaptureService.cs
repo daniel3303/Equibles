@@ -57,7 +57,9 @@ public partial class XbrlDocumentSetRecaptureService
 
     /// <summary>
     /// Captured inline periodic filings written before <see cref="Cutoff"/> with no fact in a
-    /// three-letter currency unit; also the completion query for retiring this repair.
+    /// three-letter currency unit; also the completion query for retiring this repair. The fact
+    /// check is a first-row lookup, never NOT EXISTS: PostgreSQL misjudges the currency filter as
+    /// rare and plans NOT EXISTS as a scan of the whole fact table.
     /// </summary>
     public IQueryable<Document> Pending() =>
         _documentRepository
@@ -80,13 +82,15 @@ public partial class XbrlDocumentSetRecaptureService
                     || d.DocumentType == DocumentType.SixK
                     || d.DocumentType == DocumentType.SixKa
                 )
-                && !_financialFactRepository
+                && _financialFactRepository
                     .GetAll()
-                    .Any(fact =>
+                    .Where(fact =>
                         fact.DocumentId == d.Id
                         && fact.Unit.Length == 3
                         && fact.Unit.ToUpper() == fact.Unit
                     )
+                    .Select(fact => (Guid?)fact.Id)
+                    .FirstOrDefault() == null
             );
 
     public async Task<XbrlDocumentSetRecaptureResult> Recapture(
@@ -99,18 +103,33 @@ public partial class XbrlDocumentSetRecaptureService
             return result;
 
         // Annual reports first: a cover-only 40-F or 20-F leaves its issuer without statements
-        // until re-read, while the queue is mostly 6-Ks.
+        // until re-read, while the queue is mostly 6-Ks. Each query walks the date index and stops
+        // at the batch instead of sorting the whole cohort.
         var batchIds = await Pending()
-            .OrderByDescending(d =>
+            .Where(d =>
                 d.DocumentType == DocumentType.TenK
                 || d.DocumentType == DocumentType.TwentyF
                 || d.DocumentType == DocumentType.FortyF
             )
-            .ThenByDescending(d => d.ReportingDate)
-            .ThenBy(d => d.Id)
+            .OrderByDescending(d => d.ReportingDate)
             .Take(batchSize)
             .Select(d => d.Id)
             .ToListAsync(cancellationToken);
+        if (batchIds.Count < batchSize)
+        {
+            batchIds.AddRange(
+                await Pending()
+                    .Where(d =>
+                        d.DocumentType != DocumentType.TenK
+                        && d.DocumentType != DocumentType.TwentyF
+                        && d.DocumentType != DocumentType.FortyF
+                    )
+                    .OrderByDescending(d => d.ReportingDate)
+                    .Take(batchSize - batchIds.Count)
+                    .Select(d => d.Id)
+                    .ToListAsync(cancellationToken)
+            );
+        }
 
         foreach (var documentId in batchIds)
         {
