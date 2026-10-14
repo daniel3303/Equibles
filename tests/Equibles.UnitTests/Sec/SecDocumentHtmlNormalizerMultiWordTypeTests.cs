@@ -51,12 +51,11 @@ public class SecDocumentHtmlNormalizerMultiWordTypeTests
     [Fact]
     public void Normalize_UnknownMultiWordType_IsFiltered()
     {
-        // No token prefix of "PRE 14A" is a registered display name (preliminary
-        // proxies are deliberately not collected) and it is not an exhibit, so
-        // the document block must stay filtered out.
+        // No token prefix of "SC 13E3" (a going-private schedule, not collected) is a
+        // registered display name and it is not an exhibit, so the block stays filtered out.
         var sgml = """
             <DOCUMENT>
-            <TYPE>PRE 14A
+            <TYPE>SC 13E3
             <FILENAME>prelim.htm
             <TEXT>
             <html><body><p>Preliminary proxy body</p></body></html>

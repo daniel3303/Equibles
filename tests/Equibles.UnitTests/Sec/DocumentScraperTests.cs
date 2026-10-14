@@ -102,7 +102,7 @@ public class DocumentScraperTests
         EquityIssuer company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000123456", "10-K", null)
             .Returns([
                 new FilingData
                 {
@@ -179,7 +179,7 @@ public class DocumentScraperTests
         SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000123456", "10-K", null)
             .Returns([
                 new FilingData
                 {
@@ -257,7 +257,7 @@ public class DocumentScraperTests
         harness.FilingProcessors = [processor];
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0001318605", DocumentTypeFilter.FormFour, null)
+            .SecEdgarClient.GetCompanyFilings("0001318605", "4", null)
             .Returns([
                 new FilingData
                 {
@@ -322,13 +322,13 @@ public class DocumentScraperTests
         EquityIssuer beta = SeedCompany(dbContext, ticker: "BETA", cik: "0000222222");
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0000111111", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000111111", "10-K", null)
             .Returns([
                 BuildFiling("0000111111", "ACC-A1", "10-K"),
                 BuildFiling("0000111111", "ACC-A2", "10-K"),
             ]);
         harness
-            .SecEdgarClient.GetCompanyFilings("0000222222", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000222222", "10-K", null)
             .Returns([
                 BuildFiling("0000222222", "ACC-B1", "10-K"),
                 BuildFiling("0000222222", "ACC-B2", "10-K"),
@@ -427,7 +427,7 @@ public class DocumentScraperTests
         SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000123456", "10-K", null)
             .Returns([BuildFiling("0000123456", "0000123456-25-000009", "NOT-A-FORM")]);
 
         var options = new DocumentScraperOptions
@@ -469,7 +469,7 @@ public class DocumentScraperTests
         SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000123456", "10-K", null)
             .Returns([BuildFiling("0000123456", "0000123456-25-000010", "10-K")]);
         harness
             .Persistence.Exists(
@@ -509,7 +509,7 @@ public class DocumentScraperTests
         SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000123456", "10-K", null)
             .Returns<List<FilingData>>(_ => throw new HttpRequestException("SEC EDGAR 503"));
 
         var options = new DocumentScraperOptions
@@ -537,7 +537,7 @@ public class DocumentScraperTests
         SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         harness
-            .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
+            .SecEdgarClient.GetCompanyFilings("0000123456", "10-K", null)
             .Returns([BuildFiling("0000123456", "0000123456-25-000011", "10-K")]);
         harness
             .Persistence.Exists(
@@ -638,7 +638,7 @@ public class DocumentScraperTests
         EquityIssuer company = SeedCompany(dbContext, ticker: "BABA", cik: "0001577552");
 
         harness
-            .SecEdgarClient.GetMostRecentReportDate("0001577552", DocumentTypeFilter.TwentyF)
+            .SecEdgarClient.GetMostRecentReportDate("0001577552", "20-F")
             .Returns(new DateOnly(2024, 3, 31));
 
         await harness.BuildScraper(dbContext).ScrapeDocuments();
@@ -660,10 +660,10 @@ public class DocumentScraperTests
         EquityIssuer company = SeedCompany(dbContext, ticker: "CNQ", cik: "0001193125");
 
         harness
-            .SecEdgarClient.GetMostRecentReportDate("0001193125", DocumentTypeFilter.TwentyF)
+            .SecEdgarClient.GetMostRecentReportDate("0001193125", "20-F")
             .Returns((DateOnly?)null);
         harness
-            .SecEdgarClient.GetMostRecentReportDate("0001193125", DocumentTypeFilter.FortyF)
+            .SecEdgarClient.GetMostRecentReportDate("0001193125", "40-F")
             .Returns(new DateOnly(2024, 12, 31));
 
         await harness.BuildScraper(dbContext).ScrapeDocuments();
@@ -674,9 +674,7 @@ public class DocumentScraperTests
         persisted.FiscalYearEndMonth.Should().Be(12);
         persisted.FiscalYearEndDay.Should().Be(31);
 
-        await harness
-            .SecEdgarClient.Received(1)
-            .GetMostRecentReportDate("0001193125", DocumentTypeFilter.TwentyF);
+        await harness.SecEdgarClient.Received(1).GetMostRecentReportDate("0001193125", "20-F");
     }
 
     // ── helpers ──

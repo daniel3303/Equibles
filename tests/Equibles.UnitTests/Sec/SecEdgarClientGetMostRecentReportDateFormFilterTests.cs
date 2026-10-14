@@ -40,7 +40,7 @@ public class SecEdgarClientGetMostRecentReportDateFormFilterTests
             config
         );
 
-        var result = await sut.GetMostRecentReportDate("0000320193", DocumentTypeFilter.TenK);
+        var result = await sut.GetMostRecentReportDate("0000320193", "10-K");
 
         result.Should().Be(new DateOnly(2023, 12, 31));
     }

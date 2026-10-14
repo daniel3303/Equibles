@@ -4,43 +4,9 @@ namespace Equibles.Sec.HostedService.Configuration;
 
 public class DocumentScraperOptions
 {
-    // Amendments are first-class: periodic-report amendments store as their own
-    // document types, and Forms 3/A, 4/A, and 5/A supersede their originals'
-    // transactions in the insider pipeline. Omitting them left corrected filings
-    // invisible while the erroneous originals stayed live.
-    //
-    // 20-F/6-K/40-F and their amendments cover foreign private issuers. Forms
-    // 3/4/5 and their amendments cover initial, transactional, and annual insider
-    // ownership disclosures.
-    public List<DocumentType> DocumentTypesToSync { get; set; } =
-    [
-        DocumentType.TenK,
-        DocumentType.TenQ,
-        DocumentType.EightK,
-        DocumentType.TenKa,
-        DocumentType.TenQa,
-        DocumentType.EightKa,
-        DocumentType.TwentyF,
-        DocumentType.SixK,
-        DocumentType.FortyF,
-        DocumentType.TwentyFa,
-        DocumentType.SixKa,
-        DocumentType.FortyFa,
-        DocumentType.FormFour,
-        DocumentType.FormThree,
-        DocumentType.FormFive,
-        DocumentType.FormFourA,
-        DocumentType.FormThreeA,
-        DocumentType.FormFiveA,
-        DocumentType.Form144,
-        DocumentType.FormD,
-        DocumentType.FormDa,
-        DocumentType.NCen,
-        DocumentType.NCenA,
-        DocumentType.NportP,
-        DocumentType.NportPa,
-        DocumentType.Def14A,
-    ];
+    // Every form SecForms syncs by default, each original ahead of its amendment. Forms 3/A, 4/A
+    // and 5/A supersede their originals' transactions in the insider pipeline.
+    public List<DocumentType> DocumentTypesToSync { get; set; } = [.. SecForms.SyncedByDefault];
 
     // Event-driven discovery replaces the legacy sweep that re-fetched every
     // company's submissions JSON every cycle (>95% of those polls found nothing;
