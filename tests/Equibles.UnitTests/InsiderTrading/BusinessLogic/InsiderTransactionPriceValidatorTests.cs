@@ -194,9 +194,9 @@ public class InsiderTransactionPriceValidatorTests
         result.EffectivePrice.Should().Be(55m);
     }
 
-    // Derivatives carry the instrument's own price; never repaired, valid even
-    // far above the underlying close and even with no close on file. The kind is
-    // authoritative (from the Form 4 table), so the title is irrelevant.
+    // Derivatives carry the instrument's own price; without one-for-one evidence
+    // they are never repaired, valid even far above the underlying close and even
+    // with no close on file. The kind is authoritative (from the Form 4 table).
     [Fact]
     public void Evaluate_DerivativeWayAboveClose_IsValidUnchanged()
     {

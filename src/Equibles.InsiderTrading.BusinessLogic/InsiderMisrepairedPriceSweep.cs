@@ -143,4 +143,55 @@ public class InsiderMisrepairedPriceSweep
 
         return stranded.Count;
     }
+
+    /// <summary>
+    /// Re-enrolls derivative rows the old rule sealed valid as filed despite a unit price above
+    /// $1,000, so the parser-version reprocess replays their cached XML and re-runs the validator
+    /// with the one-for-one evidence stored rows lack. NOT self-terminating: rows that stay valid
+    /// as filed are stamped current again and re-match, so the caller gates this behind a
+    /// one-shot marker.
+    /// </summary>
+    public async Task<int> ReenrollDerivativeTotals(CancellationToken cancellationToken = default)
+    {
+        if (_dbContext.Database.IsRelational())
+        {
+            _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
+        }
+
+        var rows = await _transactionRepository
+            .GetAll()
+            .Where(t =>
+                t.SecurityKind == InsiderSecurityKind.Derivative
+                && t.IsPriceValid == true
+                && !t.PriceWasRepaired
+                && t.ReportedPricePerShare > 1000m
+                && t.Shares > 0
+                && t.ParserVersion == InsiderTransaction.CurrentParserVersion
+            )
+            .OrderBy(t => t.TransactionDate)
+            .ThenBy(t => t.Id)
+            .Take(MaxRowsPerCycle)
+            .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            row.ParserVersion = InsiderTransaction.CurrentParserVersion - 1;
+        }
+
+        await _transactionRepository.SaveChanges();
+
+        _logger.LogWarning(
+            "Misrepaired-price sweep: re-enrolled {Count} derivative row(s) priced above $1,000 "
+                + "for a reprocess with one-for-one evidence",
+            rows.Count
+        );
+
+        return rows.Count;
+    }
 }

@@ -204,5 +204,19 @@ public class InsiderTransaction
     /// </summary>
     public bool? IsPriceValid { get; set; }
 
+    /// <summary>
+    /// The derivative row's <c>underlyingSecurityShares</c>, read at parse time as evidence for
+    /// price validation only; never stored, so it is null on rows loaded from the database.
+    /// </summary>
+    [NotMapped]
+    public long? UnderlyingShares { get; set; }
+
+    /// <summary>
+    /// The derivative row's <c>conversionOrExercisePrice</c>, read at parse time as evidence for
+    /// price validation only; never stored, so it is null on rows loaded from the database.
+    /// </summary>
+    [NotMapped]
+    public decimal? ExercisePrice { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
