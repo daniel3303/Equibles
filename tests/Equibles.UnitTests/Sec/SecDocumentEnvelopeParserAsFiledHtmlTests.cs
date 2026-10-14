@@ -44,6 +44,24 @@ public class SecDocumentEnvelopeParserAsFiledHtmlTests
             """;
     }
 
+    // A multi-word form names its primary on a TYPE line of several words; read as its first
+    // word ("SC") it matched no form and the whole tender offer had no as-filed view.
+    [Fact]
+    public void TryBuildAsFiledHtml_MultiWordFormPrimary_StitchesItsExhibit()
+    {
+        var envelope = Submission("acme_8k.htm", withExhibit: true).Replace("<TYPE>8-K", "<TYPE>SC TO-T");
+
+        var built = SecDocumentEnvelopeParser.TryBuildAsFiledHtml(
+            envelope,
+            "acme_8k.htm",
+            out var content
+        );
+
+        built.Should().BeTrue();
+        content.Should().Contain("Item 9.01 Financial Statements and Exhibits");
+        content.Should().Contain("Acme reported revenue of $300M for the quarter.");
+    }
+
     [Fact]
     public void TryBuildAsFiledHtml_PrimaryWithExhibit_StitchesBothInAnchoredSections()
     {

@@ -383,8 +383,10 @@ public static class SecDocumentEnvelopeParser
         var docs = new List<AsFiledBlock>();
         foreach (var block in EnumerateDocumentBlocks(envelope))
         {
+            // The whole TYPE line: a multi-word form ("SC TO-T", "DEF 14A") read as its first
+            // word never resolves.
             if (
-                !TryExtractSgmlTagValue(block, "TYPE", out var blockType)
+                !SecSgmlEnvelope.TryGetTagLine(block, "TYPE", out var blockType)
                 || string.IsNullOrEmpty(blockType)
                 || !IsDisplayableDocumentType(blockType)
             )
@@ -415,7 +417,7 @@ public static class SecDocumentEnvelopeParser
 
         // Periodic reports need their referenced images even when no HTML exhibit is attached.
         var periodicPrimary = AsFiledHtmlDocumentTypes.Periodic.Contains(
-            DocumentType.FromDisplayName(primary.Type)
+            RegisteredTypeOf(primary.Type)
         );
         if (!periodicPrimary && (docs.Count < 2 || !docs.Exists(d => d.IsExhibit)))
             return false;
@@ -558,13 +560,10 @@ public static class SecDocumentEnvelopeParser
     // the markdown normalizer uses so the two representations cover the same documents.
     private static bool IsDisplayableDocumentType(string documentTypeLine)
     {
-        var tokens = documentTypeLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        for (var take = tokens.Length; take >= 1; take--)
-        {
-            if (DocumentType.FromDisplayName(string.Join(' ', tokens[..take])) != null)
-                return true;
-        }
+        if (RegisteredTypeOf(documentTypeLine) != null)
+            return true;
 
+        var tokens = documentTypeLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var documentType = tokens.Length > 0 ? tokens[0] : documentTypeLine;
         if (documentType.StartsWith("EX-", StringComparison.OrdinalIgnoreCase))
         {
@@ -574,6 +573,20 @@ public static class SecDocumentEnvelopeParser
         }
 
         return false;
+    }
+
+    // The registered type a TYPE line names: its longest leading run of tokens that is a display name.
+    private static DocumentType RegisteredTypeOf(string documentTypeLine)
+    {
+        var tokens = documentTypeLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var take = tokens.Length; take >= 1; take--)
+        {
+            var type = DocumentType.FromDisplayName(string.Join(' ', tokens[..take]));
+            if (type != null)
+                return type;
+        }
+
+        return null;
     }
 
     private static bool IsHtmlFilename(string filename) =>
