@@ -28,7 +28,7 @@ namespace Equibles.Migrations.Migrations
                 END;
                 $function$;
 
-                CREATE TRIGGER "TR_Chunk_InheritReportingDate"
+                CREATE OR REPLACE TRIGGER "TR_Chunk_InheritReportingDate"
                 BEFORE INSERT OR UPDATE OF "ReportingDate", "DocumentId" ON "Chunk"
                 FOR EACH ROW
                 EXECUTE FUNCTION public."InheritChunkReportingDate"();
@@ -47,19 +47,27 @@ namespace Equibles.Migrations.Migrations
                 END;
                 $function$;
 
-                CREATE TRIGGER "TR_Document_SyncChunkReportingDate"
+                CREATE OR REPLACE TRIGGER "TR_Document_SyncChunkReportingDate"
                 AFTER UPDATE OF "ReportingDate" ON "Document"
                 FOR EACH ROW
                 WHEN (OLD."ReportingDate" IS DISTINCT FROM NEW."ReportingDate")
                 EXECUTE FUNCTION public."SyncChunkReportingDate"();
+                """
+            );
 
+            // The repair scans every chunk, so it runs after the triggers commit: holding their
+            // table lock through the scan would block chunk and filing writers. Rows written in
+            // between already pass through the triggers.
+            migrationBuilder.Sql(
+                """
                 UPDATE "Chunk" AS c
                 SET "ReportingDate" = (d."ReportingDate"::timestamp AT TIME ZONE 'UTC')
                 FROM "Document" AS d
                 WHERE c."DocumentId" = d."Id"
                   AND c."ReportingDate" IS DISTINCT FROM
                       (d."ReportingDate"::timestamp AT TIME ZONE 'UTC');
-                """
+                """,
+                suppressTransaction: true
             );
         }
 
