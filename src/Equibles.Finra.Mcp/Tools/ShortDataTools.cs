@@ -401,7 +401,7 @@ public class ShortDataTools
                     .Where(day => day < latestDate)
                     .OrderByDescending(day => day)
                     .FirstOrDefaultAsync();
-                // Materialized once: the count, sort and page below all read this list.
+                // Materialized once so the sort, count and page never re-run the restatement.
                 var adjusted = rawRecords
                     .Where(row =>
                         !PriceSeriesSplitScope.HasUnresolvedBasis(
@@ -570,7 +570,7 @@ public class ShortDataTools
                         .Where(split => stockIds.Contains(split.EquityIssuerId))
                         .ToListAsync()
                 );
-                // Materialized once: the count, sort and page below all read this list.
+                // Materialized once so the sort, count and page never re-run the restatement.
                 var adjusted = rawRecords
                     .Where(row =>
                         !PriceSeriesSplitScope.HasUnresolvedBasis(

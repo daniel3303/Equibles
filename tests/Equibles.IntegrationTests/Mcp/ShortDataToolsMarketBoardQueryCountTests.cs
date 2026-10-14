@@ -34,7 +34,7 @@ public class ShortDataToolsMarketBoardQueryCountTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task GetLargestShortVolume_CommandCountDoesNotGrowWithRows()
+    public async Task GetLargestShortVolume_IssuesBoundedCommands()
     {
         var tickers = await Seed();
         var counter = new CommandCounter();
@@ -48,7 +48,7 @@ public class ShortDataToolsMarketBoardQueryCountTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetShortInterestSnapshot_CommandCountDoesNotGrowWithRows()
+    public async Task GetShortInterestSnapshot_IssuesBoundedCommands()
     {
         var tickers = await Seed();
         var counter = new CommandCounter();

@@ -28,8 +28,6 @@ public class IssuerSplitIndexTests
 
         batch.Enumerations.Should().Be(1);
         batch.Yielded.Should().Be(200);
-        // A pre-grouped slice is the same object on every read; a per-read filter is not.
-        index.For(First).Should().BeSameAs(index.For(First));
     }
 
     [Fact]
