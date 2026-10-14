@@ -10,7 +10,11 @@ public static class CommonEquityReferenceRules
         // Issuer-scoped observations of another venue would join the survivor's price series.
         new("UnattributedDailyStockPrice") { RefuseAnyRow = true },
         // Listing-bound actions must be re-inserted once their security belongs to the survivor.
-        new("CashDividend") { Reinsert = true, OnCollision = EquityReferenceCollision.KeepSurvivor },
+        new("CashDividend")
+        {
+            Reinsert = true,
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+        },
         new("StockSplit") { Reinsert = true, OnCollision = EquityReferenceCollision.KeepSurvivor },
         // Per-issuer state and evidence the survivor already keeps for the same company.
         new("EquityIssuerPresentation") { OnCollision = EquityReferenceCollision.KeepSurvivor },

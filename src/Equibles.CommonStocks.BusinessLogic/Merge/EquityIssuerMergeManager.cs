@@ -186,7 +186,10 @@ public class EquityIssuerMergeManager
             refusals.Add("Both issuers must exist.");
             return;
         }
-        if (string.IsNullOrWhiteSpace(request.EvidenceKind) || string.IsNullOrWhiteSpace(request.MergedBy))
+        if (
+            string.IsNullOrWhiteSpace(request.EvidenceKind)
+            || string.IsNullOrWhiteSpace(request.MergedBy)
+        )
             refusals.Add("A merge records its evidence kind and operator.");
         if (retired.Cik != null || retired.SecondaryCiks.Count > 0)
             refusals.Add("An SEC filer is never the retired issuer.");
@@ -200,8 +203,14 @@ public class EquityIssuerMergeManager
             .Securities.Where(security => security.Isin != null)
             .Select(security => security.Isin)
             .ToHashSet(StringComparer.Ordinal);
-        if (retired.Securities.Any(security => security.Isin != null && survivorIsins.Contains(security.Isin)))
-            refusals.Add("Both issuers hold a security with the same ISIN; merge the security first.");
+        if (
+            retired.Securities.Any(security =>
+                security.Isin != null && survivorIsins.Contains(security.Isin)
+            )
+        )
+            refusals.Add(
+                "Both issuers hold a security with the same ISIN; merge the security first."
+            );
 
         var evidence = request.EvidenceSourceRecordIds.Distinct().ToList();
         var found =

@@ -49,11 +49,7 @@ public sealed class EquityReferenceRekeyer
             database.CurrentTransaction?.GetDbTransaction()
             ?? throw new InvalidOperationException("Rekeying requires the caller's transaction.");
         var connection = database.GetDbConnection();
-        var catalog = await EquityReferenceCatalog.Load(
-            connection,
-            transaction,
-            cancellationToken
-        );
+        var catalog = await EquityReferenceCatalog.Load(connection, transaction, cancellationToken);
         return new EquityReferenceRekeyer(connection, transaction, catalog, policy, report);
     }
 
@@ -87,7 +83,10 @@ public sealed class EquityReferenceRekeyer
         foreach (var (table, column, stage) in _staged)
         {
             var columns = _catalog.InsertableColumns(table);
-            var values = string.Join(", ", columns.Select(name => name == column ? "@to" : Quote(name)));
+            var values = string.Join(
+                ", ",
+                columns.Select(name => name == column ? "@to" : Quote(name))
+            );
             await Execute(
                 $"INSERT INTO {Quote(table)} ({string.Join(", ", columns.Select(Quote))}) SELECT {values} FROM {stage}",
                 cancellationToken,
@@ -133,7 +132,9 @@ public sealed class EquityReferenceRekeyer
         var rule = _policy.Rule(table);
         if (_unruled.Contains(reference))
         {
-            Refuse($"{table}.{column} holds {count} rows but carries no foreign key or merge rule.");
+            Refuse(
+                $"{table}.{column} holds {count} rows but carries no foreign key or merge rule."
+            );
             return;
         }
         if (rule?.RefuseAnyRow == true)
@@ -160,12 +161,24 @@ public sealed class EquityReferenceRekeyer
         {
             if (rule?.OnCollision != EquityReferenceCollision.KeepSurvivor)
             {
-                Refuse($"{table}: {duplicates.Count} rows duplicate the survivor's on a unique key.");
+                Refuse(
+                    $"{table}: {duplicates.Count} rows duplicate the survivor's on a unique key."
+                );
                 return;
             }
             foreach (var (retired, survivor) in duplicates)
             {
-                if (!await DropDuplicate(table, key, rule, retired, survivor, depth, cancellationToken))
+                if (
+                    !await DropDuplicate(
+                        table,
+                        key,
+                        rule,
+                        retired,
+                        survivor,
+                        depth,
+                        cancellationToken
+                    )
+                )
                     return;
             }
         }
@@ -236,8 +249,12 @@ public sealed class EquityReferenceRekeyer
             var survivorId = key == null ? "NULL::text" : Quote(key) + "::text";
             var sql = $"""
                 SELECT r.id, s.id
-                FROM (SELECT {retiredId} AS id{selected} FROM {Quote(table)} WHERE {Quote(column)} = @from{predicate}) r
-                JOIN (SELECT {survivorId} AS id{selected} FROM {Quote(table)} WHERE {Quote(column)} = @to{predicate}) s
+                FROM (SELECT {retiredId} AS id{selected} FROM {Quote(table)} WHERE {Quote(
+                    column
+                )} = @from{predicate}) r
+                JOIN (SELECT {survivorId} AS id{selected} FROM {Quote(table)} WHERE {Quote(
+                    column
+                )} = @to{predicate}) s
                     ON {match}
                 """;
             await using var command = Command(sql, [("from", from), ("to", to)]);
@@ -305,7 +322,9 @@ public sealed class EquityReferenceRekeyer
                 continue;
             if (!rule.RekeyDependents)
             {
-                Refuse($"{table}: a duplicate row has {dependents} dependent rows in {child.Table}.");
+                Refuse(
+                    $"{table}: a duplicate row has {dependents} dependent rows in {child.Table}."
+                );
                 return false;
             }
             await RekeyCore(reference, retiredKey, survivorKey, depth + 1, cancellationToken);

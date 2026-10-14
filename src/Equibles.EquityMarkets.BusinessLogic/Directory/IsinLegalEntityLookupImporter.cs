@@ -123,7 +123,9 @@ public partial class IsinLegalEntityLookupImporter(
         CancellationToken cancellationToken
     )
     {
-        var row = await lookups.GetAll().SingleOrDefaultAsync(row => row.Isin == isin, cancellationToken);
+        var row = await lookups
+            .GetAll()
+            .SingleOrDefaultAsync(row => row.Isin == isin, cancellationToken);
         if (row != null)
             return row;
         row = new IsinLegalEntityLookup { Isin = isin };

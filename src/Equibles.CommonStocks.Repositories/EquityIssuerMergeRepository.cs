@@ -28,7 +28,8 @@ public class EquityIssuerMergeRepository(EquiblesFinancialDbContext dbContext)
                 row.RetiredIssuerId == retiredIssuerId && row.CustomerReferencesRepointedAt == null
             )
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(row => row.CustomerReferencesRepointedAt, repointedAt),
+                setters =>
+                    setters.SetProperty(row => row.CustomerReferencesRepointedAt, repointedAt),
                 cancellationToken
             );
 }

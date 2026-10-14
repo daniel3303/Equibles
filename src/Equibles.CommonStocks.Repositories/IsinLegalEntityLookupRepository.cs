@@ -28,7 +28,8 @@ public class IsinLegalEntityLookupRepository(EquiblesFinancialDbContext dbContex
                 GetAll()
                     .Where(row => row.Isin == isin)
                     .Select(row => (DateTime?)row.NextAttemptAt)
-                    .FirstOrDefault() ?? DateTime.MinValue
+                    .FirstOrDefault()
+                ?? DateTime.MinValue
             )
             .ThenBy(isin => isin)
             .Take(take)

@@ -52,7 +52,8 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
                 MarketCountryCode = "HK",
                 TradingCurrency = "HKD",
                 QuoteUnitMultiplier = 1m,
-                SourceUrl = "https://www.hkex.com.hk/eng/services/trading/securities/securitieslist",
+                SourceUrl =
+                    "https://www.hkex.com.hk/eng/services/trading/securities/securitieslist",
                 PayloadJson = "{\"code\":\"09988\"}",
             }
         );
@@ -74,7 +75,9 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
                     LegalName = "Alibaba Group Holding Limited",
                     RelatedIsins = [Isin, "US01609W1027"],
                     RelatedIsinCount = 2,
-                    SourceUrl = new Uri("https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=" + Isin),
+                    SourceUrl = new Uri(
+                        "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=" + Isin
+                    ),
                 }
             );
         var importer = new IsinLegalEntityLookupImporter(
@@ -113,7 +116,9 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
             .GetIssuerForIsin(Isin, Arg.Any<CancellationToken>())
             .ThrowsAsync(
                 answered
-                    ? new InvalidDataException("GLEIF must identify exactly one issuer for this ISIN.")
+                    ? new InvalidDataException(
+                        "GLEIF must identify exactly one issuer for this ISIN."
+                    )
                     : new HttpRequestException("Service unavailable")
             );
         var importer = new IsinLegalEntityLookupImporter(
@@ -128,7 +133,9 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
         var lookup = await DbContext.Set<IsinLegalEntityLookup>().SingleAsync();
         lookup.SourceRecordId.Should().BeNull();
         lookup.LastError.Should().NotBeNullOrEmpty();
-        lookup.NextAttemptAt.Should().BeCloseTo(DateTime.UtcNow.AddDays(days), TimeSpan.FromMinutes(5));
+        lookup
+            .NextAttemptAt.Should()
+            .BeCloseTo(DateTime.UtcNow.AddDays(days), TimeSpan.FromMinutes(5));
         (await importer.Refresh(CancellationToken.None)).Should().Be(0);
     }
 

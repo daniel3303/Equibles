@@ -183,7 +183,9 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .Include(row => row.Security)
             .SingleAsync(row => row.Id == listingId);
         listing.Security.EquityIssuerId.Should().Be(survivor.Id);
-        var movedDividend = await DbContext.Set<CashDividend>().SingleAsync(row => row.Id == dividend.Id);
+        var movedDividend = await DbContext
+            .Set<CashDividend>()
+            .SingleAsync(row => row.Id == dividend.Id);
         movedDividend.EquityIssuerId.Should().Be(survivor.Id);
         movedDividend.EquityListingId.Should().Be(listingId);
         var movedSplit = await DbContext.Set<StockSplit>().SingleAsync(row => row.Id == split.Id);
@@ -242,12 +244,15 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         await DbContext.SaveChangesAsync();
         var evidence = await Evidence();
 
-        var report = await Manager().Merge(Request(retired, survivor.Id, evidence.Id, execute: false));
+        var report = await Manager()
+            .Merge(Request(retired, survivor.Id, evidence.Id, execute: false));
 
         report.IsClean.Should().BeTrue();
         report.Executed.Should().BeFalse();
         report.WithdrawnFacts.Should().Be(1);
-        report.Changes.Should().Contain(change => change.Table == "EquitySecurity" && change.Moved == 1);
+        report
+            .Changes.Should()
+            .Contain(change => change.Table == "EquitySecurity" && change.Moved == 1);
         DbContext.ChangeTracker.Clear();
         (await DbContext.Set<EquityIssuer>().AnyAsync(row => row.Id == retired)).Should().BeTrue();
         (await DbContext.Set<FinancialFact>().CountAsync()).Should().Be(1);
@@ -267,7 +272,13 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         var concept = new FinancialConcept { Taxonomy = FactTaxonomy.IfrsFull, Tag = "Revenue" };
         DbContext.Add(concept);
         await DbContext.SaveChangesAsync();
-        DbContext.Add(Fact(retired, concept, defect == "governing-fact" ? "CNINFO-2026-0001" : "HKEX-2026-0001"));
+        DbContext.Add(
+            Fact(
+                retired,
+                concept,
+                defect == "governing-fact" ? "CNINFO-2026-0001" : "HKEX-2026-0001"
+            )
+        );
         if (defect == "duplicate-registration")
         {
             foreach (var issuer in new[] { retired, survivor.Id })
@@ -284,14 +295,19 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         await DbContext.SaveChangesAsync();
         if (defect is "sec-filer" or "different-lei")
         {
-            var row = await DbContext.Set<EquityIssuer>().SingleAsync(issuer => issuer.Id == retired);
+            var row = await DbContext
+                .Set<EquityIssuer>()
+                .SingleAsync(issuer => issuer.Id == retired);
             if (defect == "sec-filer")
                 row.Cik = "0000000001";
             else
             {
                 row.LegalEntityIdentifier = "5493001NTNQJDH60PM02";
-                (await DbContext.Set<EquityIssuer>().SingleAsync(issuer => issuer.Id == survivor.Id))
-                    .LegalEntityIdentifier = "529900T8BM49AURSDO55";
+                (
+                    await DbContext
+                        .Set<EquityIssuer>()
+                        .SingleAsync(issuer => issuer.Id == survivor.Id)
+                ).LegalEntityIdentifier = "529900T8BM49AURSDO55";
             }
             await DbContext.SaveChangesAsync();
         }
@@ -340,11 +356,20 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         await DbContext.SaveChangesAsync();
         var evidence = await Evidence();
 
-        (await Manager().Merge(Request(first.Id, second.Id, evidence.Id))).Refusals.Should().BeEmpty();
-        (await Manager().Merge(Request(second.Id, third.Id, evidence.Id))).Refusals.Should().BeEmpty();
+        (await Manager().Merge(Request(first.Id, second.Id, evidence.Id)))
+            .Refusals.Should()
+            .BeEmpty();
+        (await Manager().Merge(Request(second.Id, third.Id, evidence.Id)))
+            .Refusals.Should()
+            .BeEmpty();
 
         DbContext.ChangeTracker.Clear();
-        (await DbContext.Set<EquityIssuerMerge>().Select(row => row.SurvivingIssuerId).ToListAsync())
+        (
+            await DbContext
+                .Set<EquityIssuerMerge>()
+                .Select(row => row.SurvivingIssuerId)
+                .ToListAsync()
+        )
             .Should()
             .Equal(third.Id, third.Id);
         (await DbContext.Set<EquityIssuer>().SingleAsync())
@@ -364,8 +389,12 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         DbContext.AddRange(retired, survivor);
         await DbContext.SaveChangesAsync();
         var evidence = await Evidence();
-        Guid duplicate = Guid.NewGuid(), kept = Guid.NewGuid(), unique = Guid.NewGuid();
-        Guid child = Guid.NewGuid(), retiredSoft = Guid.NewGuid(), keptSoft = Guid.NewGuid();
+        Guid duplicate = Guid.NewGuid(),
+            kept = Guid.NewGuid(),
+            unique = Guid.NewGuid();
+        Guid child = Guid.NewGuid(),
+            retiredSoft = Guid.NewGuid(),
+            keptSoft = Guid.NewGuid();
         await DbContext.Database.ExecuteSqlRawAsync(
             """
             CREATE TABLE "MergeProbeParent" ("Id" uuid PRIMARY KEY,
@@ -412,10 +441,14 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             var report = await Manager(rules).Merge(Request(retired.Id, survivor.Id, evidence.Id));
 
             var parents = await DbContext
-                .Database.SqlQueryRaw<Guid>("SELECT \"EquityIssuerId\" AS \"Value\" FROM \"MergeProbeParent\" ORDER BY \"Url\", \"EquityIssuerId\"")
+                .Database.SqlQueryRaw<Guid>(
+                    "SELECT \"EquityIssuerId\" AS \"Value\" FROM \"MergeProbeParent\" ORDER BY \"Url\", \"EquityIssuerId\""
+                )
                 .ToListAsync();
             var childParent = await DbContext
-                .Database.SqlQueryRaw<Guid>("SELECT \"ParentId\" AS \"Value\" FROM \"MergeProbeChild\"")
+                .Database.SqlQueryRaw<Guid>(
+                    "SELECT \"ParentId\" AS \"Value\" FROM \"MergeProbeChild\""
+                )
                 .SingleAsync();
             var softRows = await DbContext
                 .Database.SqlQueryRaw<Guid>("SELECT \"Id\" AS \"Value\" FROM \"MergeProbeSoft\"")
@@ -423,18 +456,23 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             if (variant == "keep-survivor")
             {
                 report.Refusals.Should().BeEmpty();
-                report.Remaps.Should().Equal(
-                    new EquityKeyRemap("MergeProbeSoft", retiredSoft, keptSoft),
-                    new EquityKeyRemap("MergeProbeParent", duplicate, kept)
-                );
+                report
+                    .Remaps.Should()
+                    .Equal(
+                        new EquityKeyRemap("MergeProbeSoft", retiredSoft, keptSoft),
+                        new EquityKeyRemap("MergeProbeParent", duplicate, kept)
+                    );
                 parents.Should().Equal(survivor.Id, survivor.Id);
                 childParent.Should().Be(kept);
                 softRows.Should().Equal(keptSoft);
             }
             else
             {
-                report.Refusals.Should().ContainSingle()
-                    .Which.Should().Contain(variant == "unruled-column" ? "MergeProbeLoose" : "MergeProbeParent");
+                report
+                    .Refusals.Should()
+                    .ContainSingle()
+                    .Which.Should()
+                    .Contain(variant == "unruled-column" ? "MergeProbeLoose" : "MergeProbeParent");
                 report.Executed.Should().BeFalse();
                 parents.Should().HaveCount(3);
                 childParent.Should().Be(duplicate);
