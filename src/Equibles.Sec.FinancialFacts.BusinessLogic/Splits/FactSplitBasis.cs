@@ -90,8 +90,9 @@ public static class FactSplitBasis
         kind == FactSplitKind.ObservedShareCount ? periodEnd : filedDate;
 
     /// <summary>
-    /// Restates a fact by the splits of one exact listing. Splits the listing cannot claim
-    /// unambiguously after the basis date keep the filed value, marked unresolved.
+    /// Restates a fact by the issuer's share-count events seen from one exact listing
+    /// (<see cref="ShareCountSplitScope"/>). Splits that cannot be attributed after the basis date
+    /// keep the filed value, marked unresolved.
     /// </summary>
     public static FactSplitRestatement Restate(
         FinancialFact fact,
@@ -112,14 +113,14 @@ public static class FactSplitBasis
         if (kind == FactSplitKind.None)
             return new FactSplitRestatement(value, kind, Adjusted: false, Unresolved: false);
         var basisDate = BasisDate(kind, periodEnd, filedDate);
-        if (PriceSeriesSplitScope.HasUnresolvedBasis(splits, listingId, basisDate))
+        if (ShareCountSplitScope.HasUnresolvedBasis(splits, listingId, basisDate))
             return new FactSplitRestatement(value, kind, Adjusted: false, Unresolved: true);
         return Apply(
             value,
             kind,
             SplitAdjustment.ShareCountFactor(
                 basisDate,
-                PriceSeriesSplitScope.ForListing(splits, listingId)
+                ShareCountSplitScope.ForListing(splits, listingId)
             )
         );
     }

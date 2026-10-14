@@ -47,6 +47,17 @@ public class StockSplit
     public DateTime? PriceAdjustmentAppliedTime { get; set; }
 
     /// <summary>
+    /// What the issuer's cover-page share counts straddling the event say about this ratio; null
+    /// when they cannot tell. Share-count restatements read it; the price lane does not.
+    /// </summary>
+    public StockSplitShareCountEvidence? ShareCountEvidence { get; set; }
+
+    /// <summary>The as-of date of the post-event cover-page count that decided the evidence.</summary>
+    public DateOnly? ShareCountEvidenceAsOf { get; set; }
+
+    public DateTime? ShareCountEvidenceTime { get; set; }
+
+    /// <summary>
     /// True only when reconciliation ran on a UTC date after the effective date. Older workers
     /// could stamp announced future splits before the provider history incorporated them.
     /// </summary>

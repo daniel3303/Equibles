@@ -7,6 +7,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Core.Calendars;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.EquityMarkets.Data.Catalog;
@@ -1269,9 +1270,8 @@ public class YahooPriceImportService
             return;
         var auditedIds = boundaries.Select(boundary => boundary.SplitId).ToList();
 
-        var leadDays =
-            StockSplitCaptureManager.SameEventWindowDays + SplitAuditPredecessorSlackDays;
-        var trailDays = StockSplitCaptureManager.SameEventWindowDays;
+        var leadDays = SplitEvents.SameEventWindowDays + SplitAuditPredecessorSlackDays;
+        var trailDays = SplitEvents.SameEventWindowDays;
         var tradedBars = (
             await splitRepository
                 .GetAll()
@@ -1457,8 +1457,8 @@ public class YahooPriceImportService
         decimal denominator
     )
     {
-        var windowStart = effectiveDate.AddDays(-StockSplitCaptureManager.SameEventWindowDays);
-        var windowEnd = effectiveDate.AddDays(StockSplitCaptureManager.SameEventWindowDays);
+        var windowStart = effectiveDate.AddDays(-SplitEvents.SameEventWindowDays);
+        var windowEnd = effectiveDate.AddDays(SplitEvents.SameEventWindowDays);
         decimal? previousClose = null;
         foreach (
             var bar in bars.Where(bar => bar.Volume > 0 && bar.Close > 0m && bar.Date <= windowEnd)

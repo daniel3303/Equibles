@@ -44,6 +44,38 @@ public class StockSplitRepository : BaseRepository<StockSplit>
         return GetAll().Where(s => s.EffectiveDate <= asOf);
     }
 
+    /// <summary>
+    /// Records share-count evidence only while the row still carries the event that was judged; a
+    /// capture that changed it meanwhile cleared the evidence for the next pass. A set-based write,
+    /// so the listing include is not needed.
+    /// </summary>
+    public Task<int> SetShareCountEvidence(
+        StockSplit judged,
+        StockSplitShareCountEvidence? evidence,
+        DateOnly? asOf,
+        DateTime time,
+        CancellationToken cancellationToken
+    ) =>
+        base.GetAll()
+            .Where(split =>
+                split.Id == judged.Id
+                && split.EffectiveDate == judged.EffectiveDate
+                && split.Numerator == judged.Numerator
+                && split.Denominator == judged.Denominator
+                && split.Source == judged.Source
+            )
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(split => split.ShareCountEvidence, evidence)
+                        .SetProperty(split => split.ShareCountEvidenceAsOf, asOf)
+                        .SetProperty(
+                            split => split.ShareCountEvidenceTime,
+                            evidence == null ? null : time
+                        ),
+                cancellationToken
+            );
+
     public IQueryable<StockSplit> GetPendingPriceAdjustment()
     {
         // SQL-translatable mirror of StockSplit.IsPriceAdjustmentApplied: a marker written on or

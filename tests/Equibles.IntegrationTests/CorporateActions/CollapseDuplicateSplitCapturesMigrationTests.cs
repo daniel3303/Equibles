@@ -1,5 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
-using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Equibles.IntegrationTests.CorporateActions;
 
-// The finite correction behind StockSplitCaptureManager.SameEventWindowDays: one stored row per
+// The finite correction behind SplitEvents.SameEventWindowDays: one stored row per
 // event, chosen the way the writer chooses it, and nothing else touched.
 [Collection(ParadeDbCollection.Name)]
 public class CollapseDuplicateSplitCapturesMigrationTests(ParadeDbFixture fixture)
@@ -125,7 +125,7 @@ public class CollapseDuplicateSplitCapturesMigrationTests(ParadeDbFixture fixtur
         migration
             .Should()
             .Contain(
-                $"abs(survivor.\"EffectiveDate\" - duplicate.\"EffectiveDate\") <= {StockSplitCaptureManager.SameEventWindowDays}"
+                $"abs(survivor.\"EffectiveDate\" - duplicate.\"EffectiveDate\") <= {SplitEvents.SameEventWindowDays}"
             );
     }
 

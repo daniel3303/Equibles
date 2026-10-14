@@ -1252,6 +1252,16 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("ShareCountEvidence")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly?>("ShareCountEvidenceAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("ShareCountEvidenceTime")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("text");
