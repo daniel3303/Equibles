@@ -208,6 +208,19 @@ public abstract class BaseScraperWorker : BackgroundService
                 );
                 return;
             }
+            catch (Exception ex) when (stoppingToken.IsCancellationRequested)
+            {
+                // Teardown can surface a non-cancellation fault (a disposed provider, a per-item
+                // catch that stands down for shutdown); the next run retries the work, so it
+                // never reaches the Errors page.
+                Logger.LogWarning(ex, "{Worker} cycle interrupted by shutdown", WorkerName);
+                await PublishActivity(
+                    ScraperActivitySeverity.Warn,
+                    "cancelled",
+                    CancellationToken.None
+                );
+                return;
+            }
             catch (Exception ex)
             {
                 // A faulted cycle backs off briefly and retries instead of sleeping the full
