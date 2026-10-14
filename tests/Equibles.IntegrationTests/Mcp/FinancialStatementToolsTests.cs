@@ -323,13 +323,13 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         if (attributed)
         {
             result.Should().Contain("| EPS (Diluted) | $2.00 | USD/shares |");
-            result.Should().Contain("Per-share values are split-adjusted");
+            result.Should().Contain("are split-adjusted to today's share basis");
         }
         else
         {
             result.Should().Contain("| EPS (Diluted) | $8.00 (as filed) | USD/shares |");
             result.Should().Contain("split attribution is unresolved");
-            result.Should().NotContain("Per-share values are split-adjusted");
+            result.Should().NotContain("are split-adjusted to today's share basis");
         }
     }
 

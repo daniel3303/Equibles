@@ -202,13 +202,76 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
             : "$24.62";
         result.Should().Contain($"| {expected} | USD/shares |");
         if (splitScope == "primary")
-            result.Should().Contain("Per-share values are split-adjusted");
+            result.Should().Contain("are split-adjusted to today's share basis");
         else
-            result.Should().NotContain("Per-share values are split-adjusted");
+            result.Should().NotContain("are split-adjusted to today's share basis");
         if (splitScope == "unresolved")
             result.Should().Contain("split attribution is unresolved");
         else
             result.Should().NotContain("split attribution is unresolved");
+    }
+
+    // A share count is stated on its filing date's basis: Alphabet's FY2021 count from the
+    // FY2021 10-K (before the 20:1) multiplies; the FY2022 10-K's restated comparative stays.
+    [Theory]
+    [InlineData("2022-02-02", 662_000_000, "13,240,000,000", true)]
+    [InlineData("2023-02-03", 13_242_000_000, "13,242,000,000", false)]
+    public async Task GetFinancialFact_WeightedShareCount_RestatesFromItsFilingDate(
+        string filed,
+        long value,
+        string expected,
+        bool adjusted
+    )
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc.",
+            Cik: "0001652044"
+        );
+        var shares = AddConcept("WeightedAverageNumberOfDilutedSharesOutstanding");
+        DbContext.Set<EquityIssuer>().Add(stock);
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    EquityIssuerId = stock.Id,
+                    EquityListingId = stock.Presentation.EquityListingId,
+                    PriceSeriesTicker = "GOOGL",
+                    EffectiveDate = new DateOnly(2022, 7, 18),
+                    Numerator = 20m,
+                    Denominator = 1m,
+                }
+            );
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    EquityIssuerId = stock.Id,
+                    FinancialConceptId = shares.Id,
+                    Unit = "shares",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2021, 1, 1),
+                    PeriodEnd = new DateOnly(2021, 12, 31),
+                    Value = value,
+                    FiscalYear = 2021,
+                    FiscalPeriod = SecFiscalPeriod.FullYear,
+                    Form = DocumentType.TenK,
+                    FiledDate = DateOnly.Parse(filed),
+                    AccessionNumber = "googl-fy",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialFact("GOOGL", "weighted-average-shares-diluted");
+
+        result.Should().Contain($"| {expected} | shares |");
+        if (adjusted)
+            result.Should().Contain("are split-adjusted to today's share basis");
+        else
+            result.Should().NotContain("split-adjusted");
     }
 
     [Fact]
