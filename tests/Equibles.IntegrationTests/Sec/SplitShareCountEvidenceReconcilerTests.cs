@@ -28,9 +28,12 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
         StockSplit SpinOff,
         StockSplit UsFactor,
         StockSplit Milan
-    )> SeedHoneywell()
+    )> SeedHoneywell(Guid? issuerId = null)
     {
-        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "HONX");
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: issuerId ?? Guid.NewGuid(),
+            Ticker: "HONX"
+        );
         var cover = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -99,7 +102,7 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
     {
         var (_, spinOff, usFactor, milan) = await SeedHoneywell();
 
-        (await Reconciler().Reconcile(CancellationToken.None)).Should().Be(3);
+        (await Reconciler().Reconcile(CancellationToken.None)).Changed.Should().Be(3);
 
         (await Stored(spinOff))
             .ShareCountEvidence.Should()
@@ -111,7 +114,7 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
         confirmed.ShareCountEvidence.Should().Be(StockSplitShareCountEvidence.Confirmed);
         confirmed.ShareCountEvidenceAsOf.Should().Be(new DateOnly(2026, 6, 30));
         confirmed.ShareCountEvidenceTime.Should().NotBeNull();
-        (await Reconciler().Reconcile(CancellationToken.None)).Should().Be(0);
+        (await Reconciler().Reconcile(CancellationToken.None)).Changed.Should().Be(0);
     }
 
     [Theory]
@@ -142,8 +145,14 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
     [Fact]
     public async Task Reconcile_AnIssuerTheDatabaseRefuses_DoesNotStopTheOthers()
     {
-        var (refused, _, _, _) = await SeedHoneywell();
-        var other = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OTHR");
+        // Issuers run in id order, so the refused one comes first and the other must still be judged.
+        var (refused, _, _, _) = await SeedHoneywell(
+            Guid.Parse("00000000-0000-0000-0000-000000000001")
+        );
+        var other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.Parse("ffffffff-0000-0000-0000-000000000001"),
+            Ticker: "OTHR"
+        );
         DbContext.Add(other);
         await DbContext.SaveChangesAsync();
         var otherSplit = new StockSplit
@@ -171,9 +180,10 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
         await DbContext.Database.ExecuteSqlRawAsync(refuse);
         try
         {
-            var reconcile = () => Reconciler().Reconcile(CancellationToken.None);
+            var pass = await Reconciler().Reconcile(CancellationToken.None);
 
-            await reconcile.Should().ThrowAsync<AggregateException>();
+            pass.Failures.Select(failure => failure.IssuerId).Should().Equal(refused.Id);
+            pass.Changed.Should().Be(1);
             (await Stored(otherSplit))
                 .ShareCountEvidence.Should()
                 .Be(StockSplitShareCountEvidence.Confirmed);

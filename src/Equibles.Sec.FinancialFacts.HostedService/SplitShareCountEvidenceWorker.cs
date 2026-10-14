@@ -27,11 +27,19 @@ public class SplitShareCountEvidenceWorker(
         await using var scope = ScopeFactory.CreateAsyncScope();
         var reconciler =
             scope.ServiceProvider.GetRequiredService<SplitShareCountEvidenceReconciler>();
-        var changed = await reconciler.Reconcile(stoppingToken);
+        var pass = await reconciler.Reconcile(stoppingToken);
+        foreach (var (issuerId, error) in pass.Failures)
+            await ErrorReporter.Report(
+                ErrorSource,
+                "SplitShareCountEvidence.Reconcile",
+                error,
+                $"issuer: {issuerId}"
+            );
         Logger.LogInformation(
-            "{Worker} changed the evidence on {Changed} split rows",
+            "{Worker} changed the evidence on {Changed} split rows; {Failed} issuers failed",
             WorkerName,
-            changed
+            pass.Changed,
+            pass.Failures.Count
         );
     }
 }

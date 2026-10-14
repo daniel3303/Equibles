@@ -33,8 +33,8 @@ public class SplitShareCountEvidenceReconciler
         _conceptRepository = conceptRepository;
     }
 
-    /// <summary>Returns the number of rows whose evidence changed; failed issuers throw together at the end.</summary>
-    public async Task<int> Reconcile(CancellationToken cancellationToken)
+    /// <summary>Judges every issuer in id order; an issuer the database refuses is reported, not fatal.</summary>
+    public async Task<SplitShareCountEvidencePass> Reconcile(CancellationToken cancellationToken)
     {
         var conceptIds = await CoverPageConceptIds(cancellationToken);
         var issuerIds = await _splitRepository
@@ -44,7 +44,7 @@ public class SplitShareCountEvidenceReconciler
             .OrderBy(id => id)
             .ToListAsync(cancellationToken);
         var changed = 0;
-        var failures = new List<Exception>();
+        var failures = new List<(Guid IssuerId, Exception Error)>();
         foreach (var batch in issuerIds.Chunk(IssuerBatchSize))
         {
             var splits = await _splitRepository
@@ -71,7 +71,11 @@ public class SplitShareCountEvidenceReconciler
                 fact => new ShareCountObservation(fact.PeriodEnd, fact.FiledDate, fact.Value)
             );
             var now = DateTime.UtcNow;
-            foreach (var issuerSplits in splits.GroupBy(split => split.EquityIssuerId))
+            foreach (
+                var issuerSplits in splits
+                    .GroupBy(split => split.EquityIssuerId)
+                    .OrderBy(group => group.Key)
+            )
             {
                 try
                 {
@@ -87,18 +91,11 @@ public class SplitShareCountEvidenceReconciler
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
                     // One row a database guard refuses must not leave every later issuer unjudged.
-                    failures.Add(
-                        new InvalidOperationException(
-                            $"Split share-count evidence failed for issuer {issuerSplits.Key}.",
-                            exception
-                        )
-                    );
+                    failures.Add((issuerSplits.Key, exception));
                 }
             }
         }
-        if (failures.Count > 0)
-            throw new AggregateException(failures);
-        return changed;
+        return new SplitShareCountEvidencePass(changed, failures);
     }
 
     private async Task<int> Record(
