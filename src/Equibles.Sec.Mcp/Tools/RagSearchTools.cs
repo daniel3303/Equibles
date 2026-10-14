@@ -33,7 +33,7 @@ public class RagSearchTools
     // to round-trip through ParseDocumentType in THIS build, and EarningsCallTranscript
     // is registered by the commercial host only.
     private const string DocumentTypeDescription =
-        "Document type filter. Accepts a registered type value — 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF', 'TwentyFa', 'SixKa', 'FortyFa', 'Def14A', 'Defa14A', 'SOne', 'SThree', 'SFour', 'TenderOfferThirdParty', 'TenderOfferResponse', or 'LateTenK' — or its SEC form name (e.g. '10-K', '20-F/A', 'DEFA14A', 'S-1', 'S-3ASR', 'SC TO-T', 'SC 14D9', 'NT 10-Q'), plus any deployment-registered type, such as EarningsCallTranscript (display name: Earnings Call) for earnings-call transcripts where available. An unrecognized value returns an error listing every accepted value.";
+        "Document type filter: a registered value such as 'TenK', 'TenQa', 'EightK', 'TwentyF', 'Def14A', 'Defa14A', 'SThree' or 'TenderOfferThirdParty', or its SEC form name ('10-K', '20-F/A', 'DEFA14A', 'S-3ASR', 'SC TO-T', 'NT 10-Q'), plus deployment-registered types such as EarningsCallTranscript. An unrecognized value returns an error listing every accepted value.";
 
     private const string DocumentTypesDescription =
         "Optional document types. Accepts registered values such as TenK, TenQ, EightK, TwentyF, SixK, FortyF, Def14A, SOne, or deployment-registered types such as EarningsCallTranscript. SEC form names such as 10-K, DEFA14A, S-3, SC TO-T or NT 10-K are also accepted; an invalid value returns the full accepted list.";
