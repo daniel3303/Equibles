@@ -119,8 +119,9 @@ public class InsiderTransactionPriceValidator
     /// as-filed (per-ADS) figure that the caller keeps in ReportedPricePerShare.
     ///
     /// Derivatives are valid as filed unless the parse supplies one-for-one evidence
-    /// (<paramref name="underlyingShares"/> equal to <paramref name="shares"/>); only then is a
-    /// unit price above the share-or-strike (<paramref name="exercisePrice"/>) ceiling repaired.
+    /// (<paramref name="underlyingShares"/> equal to <paramref name="shares"/>) and a stated
+    /// <paramref name="exercisePrice"/>; only then is a unit price above the share-or-strike
+    /// ceiling repaired.
     /// </summary>
     public InsiderTransactionPriceEvaluation Evaluate(
         decimal reportedPrice,
@@ -249,11 +250,13 @@ public class InsiderTransactionPriceValidator
         };
 
         // Without the filing's own 1:1 evidence a high unit price can be real (a $1,000 preferred,
-        // a note counted by principal), and without a settled close there is no ceiling to test.
+        // a note counted by principal). Without a stated strike or a settled close there is no
+        // ceiling to test: an option expiring underwater can carry its strike as its price.
         var close = bar?.Close;
         if (
             shares <= 0
             || underlyingShares != shares
+            || exercisePrice == null
             || !close.HasValue
             || close.Value <= 0m
             || bar.SplitBasisAmbiguous
@@ -262,7 +265,7 @@ public class InsiderTransactionPriceValidator
 
         // Same as-filed basis as the non-derivative path; divide the price side so it cannot overflow.
         var factor = bar.SplitFactorToPresent > 0m ? bar.SplitFactorToPresent : 1m;
-        var ceiling = Math.Max(close.Value * factor, exercisePrice ?? 0m);
+        var ceiling = Math.Max(close.Value * factor, exercisePrice.Value);
         if (reportedPrice / MaxPriceToCloseMultiplier <= ceiling)
             return asFiled;
 

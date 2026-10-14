@@ -229,7 +229,7 @@ public class InsiderTransactionPriceValidatorDerivativeTotalTests
             shares: 1_000,
             bar: new DailyBarContext { Close = 100m },
             underlyingShares: 1_000,
-            exercisePrice: null
+            exercisePrice: 1m
         );
 
         result.IsPriceValid.Should().BeTrue();
@@ -238,19 +238,21 @@ public class InsiderTransactionPriceValidatorDerivativeTotalTests
     }
 
     [Fact]
-    public void Evaluate_OneForOneDerivativeWithoutStrikeValue_RepairsAgainstTheShareCeiling()
+    public void Evaluate_OneForOneDerivativeWithoutStrikeValue_IsValidAsFiled()
     {
+        // An option expiring underwater, its footnoted $50 strike filed as the price while the
+        // share trades at $3: with no stated strike there is no ceiling to repair against.
         var result = EvaluateDerivative(
-            reportedPrice: 3_659_027m,
-            shares: 183_640,
-            bar: new DailyBarContext { Close = 108m },
-            underlyingShares: 183_640,
+            reportedPrice: 50m,
+            shares: 10_000,
+            bar: new DailyBarContext { Close = 3m },
+            underlyingShares: 10_000,
             exercisePrice: null
         );
 
         result.IsPriceValid.Should().BeTrue();
-        result.WasRepaired.Should().BeTrue();
-        result.EffectivePrice.Should().Be(3_659_027m / 183_640m);
+        result.WasRepaired.Should().BeFalse();
+        result.EffectivePrice.Should().Be(50m);
     }
 
     [Fact]
@@ -263,7 +265,7 @@ public class InsiderTransactionPriceValidatorDerivativeTotalTests
             shares: 1_000,
             bar: new DailyBarContext { Close = 10m, SplitFactorToPresent = 10m },
             underlyingShares: 1_000,
-            exercisePrice: null
+            exercisePrice: 1m
         );
 
         result.IsPriceValid.Should().BeTrue();
