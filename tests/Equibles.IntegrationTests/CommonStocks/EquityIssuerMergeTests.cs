@@ -373,6 +373,8 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         var report = await Manager().Merge(request);
 
         report.Refusals.Should().NotBeEmpty();
+        if (defect == "self-merge")
+            report.Refusals.Should().Contain(reason => reason.Contains("into itself"));
         report.Executed.Should().BeFalse();
         DbContext.ChangeTracker.Clear();
         (await DbContext.Set<EquityIssuer>().AnyAsync(row => row.Id == retired)).Should().BeTrue();
