@@ -1,7 +1,9 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 
 namespace Equibles.UnitTests.Sec;
@@ -64,7 +66,19 @@ public class FinancialFactsToolsRenderFactHistoryTableLatestRestatedLabelTests
         var result = (string)
             method.Invoke(
                 null,
-                ["Revenues", stock, false, perPeriod, 0, null, Array.Empty<StockSplit>()]
+                [
+                    "Revenues",
+                    stock,
+                    false,
+                    perPeriod,
+                    0,
+                    null,
+                    Array.Empty<StockSplit>(),
+                    new Dictionary<Guid, FinancialConceptAliases.ConceptRef>
+                    {
+                        [Guid.Empty] = new(FactTaxonomy.UsGaap, "Revenues"),
+                    },
+                ]
             );
 
         result.Should().Contain("latest restated");

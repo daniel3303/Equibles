@@ -3,6 +3,7 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 
 namespace Equibles.UnitTests.Sec;
@@ -52,6 +53,10 @@ public class FinancialFactsToolsRenderComparisonTablePeriodEndTests
                     new List<string>(),
                     new Dictionary<Guid, List<StockSplit>>(),
                     new Dictionary<Guid, Guid> { [Guid.Empty] = Guid.NewGuid() },
+                    new Dictionary<Guid, FinancialConceptAliases.ConceptRef>
+                    {
+                        [Guid.Empty] = new(FactTaxonomy.UsGaap, "EarningsPerShareDiluted"),
+                    },
                 ]
             );
     }

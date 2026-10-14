@@ -15,6 +15,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
@@ -139,7 +140,7 @@ public class FinancialFactsTools
                 // conceptId → alias priority (0 = the alias's primary tag). Used
                 // to break ties deterministically when one period carries facts
                 // under several of the alias's tags (the ASC 606 transition).
-                var conceptPriority = await ResolveConceptPriority(conceptRefs);
+                var (conceptPriority, conceptsById) = await ResolveConcepts(conceptRefs);
                 if (conceptPriority.Count == 0)
                     return $"No '{concept}' data has been ingested for {stock.Presentation.Listing.Ticker}.";
 
@@ -205,7 +206,7 @@ public class FinancialFactsTools
                 if (shown.Count == 0)
                     return $"No '{concept}' data found for {stock.Presentation.Listing.Ticker} with the given filters.";
 
-                var splits = shown.Any(FinancialFactSplitAdjustment.IsPerShare)
+                var splits = shown.Any(f => SplitKind(f, conceptsById) != FactSplitKind.None)
                     ? await _stockSplitRepository
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
@@ -218,7 +219,8 @@ public class FinancialFactsTools
                     shown,
                     perPeriod.Count,
                     coverageNote,
-                    splits
+                    splits,
+                    conceptsById
                 );
             },
             "GetFinancialFact",
@@ -284,7 +286,7 @@ public class FinancialFactsTools
                 if (tickerError != null)
                     return tickerError;
 
-                var conceptPriority = await ResolveConceptPriority(conceptRefs);
+                var (conceptPriority, conceptsById) = await ResolveConcepts(conceptRefs);
                 if (conceptPriority.Count == 0)
                     return $"No '{concept}' data has been ingested.";
 
@@ -341,7 +343,7 @@ public class FinancialFactsTools
 
                 var (rows, skipped) = BuildComparisonRows(requested, stockByTicker, bestByStock);
                 var splitAdjustedStockIds = rows.Where(row =>
-                        FinancialFactSplitAdjustment.IsPerShare(row.Fact)
+                        SplitKind(row.Fact, conceptsById) != FactSplitKind.None
                     )
                     .Select(row => row.Fact.EquityIssuerId)
                     .Distinct()
@@ -370,7 +372,8 @@ public class FinancialFactsTools
                     stocks.ToDictionary(
                         stock => stock.Id,
                         stock => stock.Presentation.EquityListingId
-                    )
+                    ),
+                    conceptsById
                 );
             },
             "CompareFinancialFact",
@@ -403,7 +406,8 @@ public class FinancialFactsTools
         List<FinancialFact> perPeriod,
         int totalPeriods,
         string coverageNote,
-        IReadOnlyList<StockSplit> splits
+        IReadOnlyList<StockSplit> splits,
+        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
     )
     {
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
@@ -418,15 +422,16 @@ public class FinancialFactsTools
             perPeriod,
             f =>
             {
-                var value = FinancialFactSplitAdjustment.Restate(
+                var restated = FactSplitBasis.Restate(
                     f,
+                    SplitKind(f, conceptsById),
                     splits,
-                    stock.Presentation.EquityListingId,
-                    out var adjusted,
-                    out var unresolved
+                    stock.Presentation.EquityListingId
                 );
+                var value = restated.Value;
+                var unresolved = restated.Unresolved;
                 unresolvedBasis |= unresolved;
-                splitAdjusted |= adjusted;
+                splitAdjusted |= restated.Adjusted;
                 return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
                     + $"{f.FiscalPeriod.NameForHumans()} | "
                     + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")} | "
@@ -617,7 +622,8 @@ public class FinancialFactsTools
         List<(string Ticker, string Name, FinancialFact Fact)> rows,
         List<string> skipped,
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
-        IReadOnlyDictionary<Guid, Guid> listingIdsByStock
+        IReadOnlyDictionary<Guid, Guid> listingIdsByStock,
+        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
     )
     {
         var result = MarkdownTable.Start(
@@ -632,15 +638,16 @@ public class FinancialFactsTools
             r =>
             {
                 var splits = splitsByStock.GetValueOrDefault(r.Fact.EquityIssuerId) ?? [];
-                var value = FinancialFactSplitAdjustment.Restate(
+                var restated = FactSplitBasis.Restate(
                     r.Fact,
+                    SplitKind(r.Fact, conceptsById),
                     splits,
-                    listingIdsByStock[r.Fact.EquityIssuerId],
-                    out var adjusted,
-                    out var unresolved
+                    listingIdsByStock[r.Fact.EquityIssuerId]
                 );
+                var value = restated.Value;
+                var unresolved = restated.Unresolved;
                 unresolvedBasis |= unresolved;
-                splitAdjusted |= adjusted;
+                splitAdjusted |= restated.Adjusted;
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
                     + $"{FactMarkdown.Value(value, r.Fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
@@ -770,9 +777,12 @@ public class FinancialFactsTools
                 .First();
     }
 
-    private async Task<Dictionary<Guid, int>> ResolveConceptPriority(
-        IReadOnlyList<FinancialConceptAliases.ConceptRef> conceptRefs
-    )
+    // The alias's ingested concepts: their pick priority, and the variant each was reported
+    // under, which decides how a split moves its values.
+    private async Task<(
+        Dictionary<Guid, int> Priority,
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
+    )> ResolveConcepts(IReadOnlyList<FinancialConceptAliases.ConceptRef> conceptRefs)
     {
         var taxonomies = conceptRefs.Select(c => c.Taxonomy).Distinct().ToList();
         var tags = conceptRefs.Select(c => c.Tag).Distinct().ToList();
@@ -794,9 +804,18 @@ public class FinancialFactsTools
 
         // GetMatching is a taxonomy×tag cross product over a tiny alias tag set
         // (over-fetch is negligible here); narrow to the alias's exact pairs.
-        return rows.Where(r => priorityByPair.ContainsKey((r.Taxonomy, r.Tag)))
-            .ToDictionary(r => r.Id, r => priorityByPair[(r.Taxonomy, r.Tag)]);
+        var known = rows.Where(r => priorityByPair.ContainsKey((r.Taxonomy, r.Tag))).ToList();
+        return (
+            known.ToDictionary(r => r.Id, r => priorityByPair[(r.Taxonomy, r.Tag)]),
+            known.ToDictionary(r => r.Id, r => conceptRefs[priorityByPair[(r.Taxonomy, r.Tag)]])
+        );
     }
+
+    private static FactSplitKind SplitKind(
+        FinancialFact fact,
+        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
+    ) =>
+        FactSplitBasis.Classify(conceptsById.GetValueOrDefault(fact.FinancialConceptId), fact.Unit);
 
     // Accepts an absent bound (null/blank → no bound) but rejects a non-empty
     // value that is not an ISO yyyy-MM-dd date, so a typo can't silently widen

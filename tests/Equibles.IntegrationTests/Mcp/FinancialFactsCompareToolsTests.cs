@@ -231,9 +231,9 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
             : "$20.00";
         result.Should().Contain($"| GOOGL | Alphabet Inc. | {expected} | USD/shares |");
         if (splitScope == "primary")
-            result.Should().Contain("Per-share values are split-adjusted");
+            result.Should().Contain("are split-adjusted to today's share basis");
         else
-            result.Should().NotContain("Per-share values are split-adjusted");
+            result.Should().NotContain("are split-adjusted to today's share basis");
         if (splitScope == "unresolved")
             result.Should().Contain("split attribution is unresolved");
         else

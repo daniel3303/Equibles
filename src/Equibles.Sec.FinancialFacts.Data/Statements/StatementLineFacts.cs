@@ -327,9 +327,19 @@ public static class StatementLineFacts
         StatementLine line,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
         IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+    ) => PickConceptFact(line, conceptIdByKey, factByConceptId).Fact;
+
+    /// <summary>
+    /// <see cref="PickFact"/> with the concept variant the fact was reported under, which decides
+    /// how the value is read (a cover-page count and a balance-sheet count share one line).
+    /// </summary>
+    public static (FinancialConceptAliases.ConceptRef Concept, FinancialFact Fact) PickConceptFact(
+        StatementLine line,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
     )
     {
-        FinancialFact derivedFallback = null;
+        (FinancialConceptAliases.ConceptRef, FinancialFact) derivedFallback = (null, null);
         foreach (var reference in line.Concepts)
         {
             if (
@@ -338,8 +348,9 @@ public static class StatementLineFacts
             )
             {
                 if (!StatementQuarterDerivation.IsDerived(fact))
-                    return fact;
-                derivedFallback ??= fact;
+                    return (reference, fact);
+                if (derivedFallback.Item2 == null)
+                    derivedFallback = (reference, fact);
             }
         }
         return derivedFallback;
