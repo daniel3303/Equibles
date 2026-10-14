@@ -203,4 +203,35 @@ public class SplitAdjustmentTests
         currentQuarter.Should().Be(2_000);
         (currentQuarter - priorQuarter).Should().Be(0, "the split is not a real ownership change");
     }
+
+    // A spin-off price factor reported as a split (HON's 1061:1000) never moved the issuer's counts.
+    private static readonly StockSplit SpinOffPriceFactor = new()
+    {
+        EffectiveDate = new DateOnly(2024, 2, 1),
+        Numerator = 1061m,
+        Denominator = 1000m,
+        ShareCountEvidence = StockSplitShareCountEvidence.Contradicted,
+    };
+
+    [Fact]
+    public void ShareCountFactor_SkipsARowTheShareCountsContradict()
+    {
+        StockSplit[] splits = [SpinOffPriceFactor, Nvda10For1];
+
+        SplitAdjustment.ShareCountFactor(new DateOnly(2024, 1, 1), splits).Should().Be(10m);
+        SplitAdjustment
+            .AdjustShareCount(1_000L, new DateOnly(2024, 1, 1), splits)
+            .Should()
+            .Be(10_000L);
+    }
+
+    // Stored closes carry every factor the price series applied, so prices and their basis keep the row.
+    [Fact]
+    public void PriceFactors_KeepARowTheShareCountsContradict()
+    {
+        StockSplit[] splits = [SpinOffPriceFactor];
+
+        SplitAdjustment.PriceSeriesFactor(new DateOnly(2024, 1, 1), splits).Should().Be(1.061m);
+        SplitAdjustment.PriceFactor(new DateOnly(2024, 1, 1), splits).Should().Be(1m / 1.061m);
+    }
 }
