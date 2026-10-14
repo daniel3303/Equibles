@@ -119,4 +119,28 @@ public class FinancialFact
     /// exclusively from the iXBRL / standalone-XBRL extractor.
     /// </summary>
     public virtual List<FinancialFactDimension> Dimensions { get; set; } = [];
+
+    /// <summary>
+    /// A consolidated copy filed under another fiscal stamp, for read models that re-home a figure;
+    /// a copy, never a mutation, since the source rows may be EF-tracked.
+    /// </summary>
+    public FinancialFact Restamped(int fiscalYear, SecFiscalPeriod fiscalPeriod) =>
+        new()
+        {
+            EquityIssuerId = EquityIssuerId,
+            FinancialConceptId = FinancialConceptId,
+            DocumentId = DocumentId,
+            Unit = Unit,
+            PeriodType = PeriodType,
+            PeriodStart = PeriodStart,
+            PeriodEnd = PeriodEnd,
+            Value = Value,
+            FiscalYear = fiscalYear,
+            FiscalPeriod = fiscalPeriod,
+            Form = Form,
+            FiledDate = FiledDate,
+            AccessionNumber = AccessionNumber,
+            Frame = Frame,
+            DimensionsKey = DimensionsKey,
+        };
 }

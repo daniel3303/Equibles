@@ -1,12 +1,11 @@
-using System.Reflection;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FinancialFactsToolsPickBestFactInstantTests
+public class FinancialFactSeriesShaperPickBestFactInstantTests
 {
     // Instants qualify for every period because a balance-sheet line has no duration. That
     // also let a flow concept's declaration/record-date instant into an annual bucket, where
@@ -34,13 +33,12 @@ public class FinancialFactsToolsPickBestFactInstantTests
             fiscalPeriod: SecFiscalPeriod.FullYear
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var picked = FinancialFactSeriesShaper.PickBestFact(
+            new[] { paymentDate, fiscalYear },
+            conceptPriority,
+            false,
+            null
         );
-
-        var picked = (FinancialFact)
-            method!.Invoke(null, [new[] { paymentDate, fiscalYear }, conceptPriority, false, null]);
 
         picked
             .Should()
@@ -69,13 +67,12 @@ public class FinancialFactsToolsPickBestFactInstantTests
             fiscalPeriod: SecFiscalPeriod.FullYear
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var picked = FinancialFactSeriesShaper.PickBestFact(
+            new[] { comparative, yearEnd },
+            conceptPriority,
+            false,
+            null
         );
-
-        var picked = (FinancialFact)
-            method!.Invoke(null, [new[] { comparative, yearEnd }, conceptPriority, false, null]);
 
         picked.Should().BeSameAs(yearEnd);
     }

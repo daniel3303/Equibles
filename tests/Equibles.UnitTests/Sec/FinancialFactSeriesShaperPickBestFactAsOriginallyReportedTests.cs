@@ -1,17 +1,16 @@
-using System.Reflection;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FinancialFactsToolsPickBestFactAsOriginallyReportedTests
+public class FinancialFactSeriesShaperPickBestFactAsOriginallyReportedTests
 {
     [Fact]
     public void PickBestFact_AsOriginallyReportedTrue_PicksEarliestFiledFact()
     {
-        // PickBestFact's contract (FinancialFactsTools.cs:340-355) flips
+        // PickBestFact's contract (FinancialFactSeriesShaper) flips
         // filed-date / accession ordering based on `asOriginallyReported`:
         // default = latest-filed (the restated value); true = earliest-filed
         // (the original, pre-restatement value). The flag is the entire
@@ -57,13 +56,12 @@ public class FinancialFactsToolsPickBestFactAsOriginallyReportedTests
         };
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var result = FinancialFactSeriesShaper.PickBestFact(
+            new[] { restated, original },
+            conceptPriority,
+            true,
+            null
         );
-
-        var result = (FinancialFact)
-            method!.Invoke(null, [new[] { restated, original }, conceptPriority, true, null]);
 
         result.Value.Should().Be(1_000m);
         result.FiledDate.Should().Be(new DateOnly(2024, 5, 1));

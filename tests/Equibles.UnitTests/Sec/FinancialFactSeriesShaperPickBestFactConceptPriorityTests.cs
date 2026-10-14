@@ -1,12 +1,11 @@
-using System.Reflection;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FinancialFactsToolsPickBestFactConceptPriorityTests
+public class FinancialFactSeriesShaperPickBestFactConceptPriorityTests
 {
     [Fact]
     public void PickBestFact_HigherPriorityConceptOlderFiling_BeatsLowerPriorityNewerFiling()
@@ -64,13 +63,12 @@ public class FinancialFactsToolsPickBestFactConceptPriorityTests
             [synonymConceptId] = 1,
         };
 
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var result = FinancialFactSeriesShaper.PickBestFact(
+            new[] { synonym, primary },
+            conceptPriority,
+            false,
+            null
         );
-
-        var result = (FinancialFact)
-            method!.Invoke(null, [new[] { synonym, primary }, conceptPriority, false, null]);
 
         result.Value.Should().Be(100m);
         result.FinancialConceptId.Should().Be(primaryConceptId);

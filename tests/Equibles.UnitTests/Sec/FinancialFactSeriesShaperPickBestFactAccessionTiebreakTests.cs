@@ -1,17 +1,16 @@
-using System.Reflection;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FinancialFactsToolsPickBestFactAccessionTiebreakTests
+public class FinancialFactSeriesShaperPickBestFactAccessionTiebreakTests
 {
     [Fact]
     public void PickBestFact_TwoSameDayAmendmentsDefaultMode_AccessionTiebreakPicksLexicalLatest()
     {
-        // PickBestFact's source comment (FinancialFactsTools.cs:340-342) is
+        // PickBestFact's source comment (FinancialFactSeriesShaper) is
         // explicit: "AccessionNumber is the stable final tiebreak for same-day
         // amendments (Postgres has no implicit row order)." Existing pins
         // assert the asOriginallyReported flag flips overall ordering, but
@@ -58,13 +57,12 @@ public class FinancialFactsToolsPickBestFactAccessionTiebreakTests
         };
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var result = FinancialFactSeriesShaper.PickBestFact(
+            new[] { earlierAcc, laterAcc },
+            conceptPriority,
+            false,
+            null
         );
-
-        var result = (FinancialFact)
-            method!.Invoke(null, [new[] { earlierAcc, laterAcc }, conceptPriority, false, null]);
 
         result.Value.Should().Be(200m);
         result.AccessionNumber.Should().Be("0000320193-24-000999");

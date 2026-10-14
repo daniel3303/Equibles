@@ -1,7 +1,7 @@
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Helpers;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 

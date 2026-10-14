@@ -24,7 +24,7 @@ To track a single concept across periods rather than a whole statement:
 - "How has Apple's revenue changed over the last several years?"
 - "Show me Tesla's diluted EPS history."
 
-The assistant uses `GetFinancialFact`, which returns a time series with one row per fiscal period and the exact start/end span. Common concepts include revenue, net income, diluted EPS, total assets, and operating cash flow. If the alias ends more than roughly 18 months before the company's other structured facts, the result warns that the filer may have switched XBRL tags; an absent recent row is not treated as proof that the measure stopped.
+The assistant uses `GetFinancialFact`, which returns a time series with the exact start/end span: one row per fiscal period for flows such as revenue, and one row per as-of date for balances and share counts. Common concepts include revenue, net income, diluted EPS, total assets, and operating cash flow. If the alias ends more than roughly 18 months before the company's other structured facts, the result warns that the filer may have switched XBRL tags; an absent recent row is not treated as proof that the measure stopped.
 
 ## Compare companies side by side
 
