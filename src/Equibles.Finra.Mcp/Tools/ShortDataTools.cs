@@ -350,7 +350,7 @@ public class ShortDataTools
 
                 var query = _shortInterestRepository
                     .GetBySettlementDate(latestDate)
-                    .Include(s => s.Listing.Security.Issuer)
+                    .Include(s => s.Listing.Security.Issuer.Presentation.Listing)
                     .Where(s => s.DaysToCover != null)
                     .Where(s => s.AverageDailyVolume != null && s.AverageDailyVolume > 0);
 
@@ -390,21 +390,22 @@ public class ShortDataTools
                     .Select(row => row.Listing.Security.EquityIssuerId)
                     .Distinct()
                     .ToList();
-                var splitRows = await _stockSplitRepository
-                    .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                    .Where(split => stockIds.Contains(split.EquityIssuerId))
-                    .ToListAsync();
+                var splitsByIssuer = new IssuerSplitIndex(
+                    await _stockSplitRepository
+                        .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
+                        .Where(split => stockIds.Contains(split.EquityIssuerId))
+                        .ToListAsync()
+                );
                 var previousDate = await _shortInterestRepository
                     .GetAllSettlementDates()
                     .Where(day => day < latestDate)
                     .OrderByDescending(day => day)
                     .FirstOrDefaultAsync();
+                // Materialized once so the sort, count and page never re-run the restatement.
                 var adjusted = rawRecords
                     .Where(row =>
                         !PriceSeriesSplitScope.HasUnresolvedBasis(
-                            splitRows.Where(split =>
-                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
-                            ),
+                            splitsByIssuer.For(row.Listing.Security.EquityIssuerId),
                             row.ListedTicker,
                             previousDate
                         )
@@ -413,9 +414,7 @@ public class ShortDataTools
                     {
                         var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
-                            splitRows.Where(split =>
-                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
-                            ),
+                            splitsByIssuer.For(row.Listing.Security.EquityIssuerId),
                             row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
                         );
@@ -444,8 +443,9 @@ public class ShortDataTools
                             row.Row.AverageDailyVolume.Value,
                             row.Factor
                         ) >= minAvgDailyVolume
-                    );
-                adjusted =
+                    )
+                    .ToList();
+                var ranked = (
                     sortKey.Equals("shortPosition", StringComparison.OrdinalIgnoreCase)
                         ? adjusted
                             .OrderByDescending(row => row.Position)
@@ -459,9 +459,10 @@ public class ShortDataTools
                         .OrderBy(row => row.Row.DaysToCover >= FinraDaysToCoverCap ? 1 : 0)
                         .ThenByDescending(row => row.Row.DaysToCover)
                         .ThenByDescending(row => row.Position)
-                        .ThenBy(row => row.ListedTicker);
-                var total = adjusted.Count();
-                var records = adjusted.Skip(offset).Take(McpLimit.Clamp(maxResults)).ToList();
+                        .ThenBy(row => row.ListedTicker)
+                ).ToList();
+                var total = ranked.Count;
+                var records = ranked.Skip(offset).Take(McpLimit.Clamp(maxResults)).ToList();
                 if (records.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {total} rows match; lower offset.";
 
@@ -534,7 +535,7 @@ public class ShortDataTools
 
                 var query = _shortVolumeRepository
                     .GetByDate(tradingDay)
-                    .Include(d => d.Listing.Security.Issuer)
+                    .Include(d => d.Listing.Security.Issuer.Presentation.Listing)
                     .Where(d => d.TotalVolume > 0);
 
                 var sortKey = string.IsNullOrWhiteSpace(sortBy) ? "shortVolume" : sortBy.Trim();
@@ -563,16 +564,17 @@ public class ShortDataTools
                     .Select(row => row.Listing.Security.EquityIssuerId)
                     .Distinct()
                     .ToList();
-                var splitRows = await _stockSplitRepository
-                    .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                    .Where(split => stockIds.Contains(split.EquityIssuerId))
-                    .ToListAsync();
+                var splitsByIssuer = new IssuerSplitIndex(
+                    await _stockSplitRepository
+                        .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
+                        .Where(split => stockIds.Contains(split.EquityIssuerId))
+                        .ToListAsync()
+                );
+                // Materialized once so the sort, count and page never re-run the restatement.
                 var adjusted = rawRecords
                     .Where(row =>
                         !PriceSeriesSplitScope.HasUnresolvedBasis(
-                            splitRows.Where(split =>
-                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
-                            ),
+                            splitsByIssuer.For(row.Listing.Security.EquityIssuerId),
                             row.ListedTicker,
                             row.Date
                         )
@@ -581,9 +583,7 @@ public class ShortDataTools
                     {
                         var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
-                            splitRows.Where(split =>
-                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
-                            ),
+                            splitsByIssuer.For(row.Listing.Security.EquityIssuerId),
                             row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
                         );
@@ -599,17 +599,20 @@ public class ShortDataTools
                     })
                     .Where(row =>
                         row.ShortVolume >= minShortVolume && row.TotalVolume >= minTotalVolume
-                    );
-                adjusted = sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase)
-                    ? adjusted
-                        .OrderByDescending(row => row.Row.ShortVolume / row.Row.TotalVolume)
-                        .ThenByDescending(row => row.ShortVolume)
-                        .ThenBy(row => row.ListedTicker)
-                    : adjusted
-                        .OrderByDescending(row => row.ShortVolume)
-                        .ThenBy(row => row.ListedTicker);
-                var total = adjusted.Count();
-                var records = adjusted.Skip(offset).Take(McpLimit.Clamp(maxResults)).ToList();
+                    )
+                    .ToList();
+                var ranked = (
+                    sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase)
+                        ? adjusted
+                            .OrderByDescending(row => row.Row.ShortVolume / row.Row.TotalVolume)
+                            .ThenByDescending(row => row.ShortVolume)
+                            .ThenBy(row => row.ListedTicker)
+                        : adjusted
+                            .OrderByDescending(row => row.ShortVolume)
+                            .ThenBy(row => row.ListedTicker)
+                ).ToList();
+                var total = ranked.Count;
+                var records = ranked.Skip(offset).Take(McpLimit.Clamp(maxResults)).ToList();
                 if (records.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {total} rows match; lower offset.";
 

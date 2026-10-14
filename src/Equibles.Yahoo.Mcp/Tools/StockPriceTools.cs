@@ -262,6 +262,7 @@ public class StockPriceTools
                         .ToListAsync();
                 }
 
+                var splitsByIssuer = new IssuerSplitIndex(batchSplits);
                 foreach (var ticker in tickerList)
                 {
                     if (!latestByTicker.TryGetValue(ticker, out var selection))
@@ -281,7 +282,7 @@ public class StockPriceTools
                     // inside the requested year moves the comparison start to that split date.
                     var cutoff = price.Date.AddDays(-365);
                     var applicableSplits = PriceSeriesSplitScope.ForPriceComparison(
-                        batchSplits.Where(split => split.EquityIssuerId == stock.Id),
+                        splitsByIssuer.For(stock.Id),
                         priceTicker
                     );
                     var comparableWindow = ComparablePriceWindow.Resolve(
