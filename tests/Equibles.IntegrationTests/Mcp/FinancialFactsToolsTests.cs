@@ -362,6 +362,56 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         result.Split("15,550,061,000").Should().HaveCount(2, "one row per as-of date");
     }
 
+    // Company Facts files a reported discrete Q4 under fp=FY. The fiscal-period filter runs on the
+    // picked rows, so a Q4 request still sees the promoted quarter and an FY request the year.
+    [Fact]
+    public async Task GetFinancialFact_FiscalPeriodFilter_SeesThePromotedFourthQuarter()
+    {
+        var stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
+        var revenue = AddConcept("Revenues");
+        AddSpan(stock, revenue, "2019-01-28", "2020-01-26", SecFiscalPeriod.FullYear, 10_918m);
+        AddSpan(stock, revenue, "2019-10-28", "2020-01-26", SecFiscalPeriod.FullYear, 3_105m);
+        AddSpan(stock, revenue, "2019-07-29", "2019-10-27", SecFiscalPeriod.Q3, 3_014m);
+        await DbContext.SaveChangesAsync();
+
+        var fourth = await Sut().GetFinancialFact("AAPL", "revenue", fiscalPeriod: "Q4");
+        var year = await Sut().GetFinancialFact("AAPL", "revenue", fiscalPeriod: "FY");
+
+        fourth.Should().Contain("| 2019-10-28 | 2020-01-26 | 2020 | Q4 |");
+        fourth.Should().NotContain("2019-07-29").And.NotContain("| 2019-01-28 |");
+        year.Should().Contain("| 2019-01-28 | 2020-01-26 | 2020 | FY |");
+        year.Should().NotContain("| 2019-10-28 |");
+    }
+
+    private void AddSpan(
+        EquityIssuer stock,
+        FinancialConcept concept,
+        string start,
+        string end,
+        SecFiscalPeriod period,
+        decimal value
+    ) =>
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    EquityIssuerId = stock.Id,
+                    FinancialConceptId = concept.Id,
+                    Unit = "USD",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = DateOnly.Parse(start),
+                    PeriodEnd = DateOnly.Parse(end),
+                    Value = value,
+                    FiscalYear = 2020,
+                    FiscalPeriod = period,
+                    Form = DocumentType.TenK,
+                    FiledDate = new DateOnly(2020, 2, 20),
+                    AccessionNumber = "fy20",
+                }
+            );
+
     private void AddCount(
         EquityIssuer stock,
         FinancialConcept concept,
