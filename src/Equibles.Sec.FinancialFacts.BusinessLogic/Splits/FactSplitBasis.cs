@@ -7,12 +7,9 @@ using Equibles.Sec.FinancialFacts.Data.Statements;
 namespace Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 
 /// <summary>
-/// The one rule for restating a financial fact onto today's share basis, shared by every surface
-/// that serves facts. A filing issued after a split restates every per-share amount and share
-/// count its statements present (ASC 260, IAS 33, SAB Topic 4C), so a statement figure is on the
-/// basis of its filing date. The cover-page count is a literal count on its as-of date. Only the
-/// issuer's common-share counts listed here move with a split; preferred, authorized and other
-/// share quantities stay as filed.
+/// The one rule restating a fact onto today's share basis: statement figures are on their filing
+/// date's basis (ASC 260, SAB Topic 4C, IAS 33), literal counts on their as-of date. Only common-share
+/// counts and per-share values move; preferred, authorized and other share quantities stay as filed.
 /// </summary>
 public static class FactSplitBasis
 {
