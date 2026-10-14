@@ -32,11 +32,7 @@ public class DocumentScraperProcessDocTypeCatchTests
     {
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient
-            .GetCompanyFilings(
-                Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
-                Arg.Any<DateOnly?>()
-            )
+            .GetCompanyFilings(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateOnly?>())
             .Returns<Task<List<FilingData>>>(_ => throw new InvalidOperationException("boom"));
 
         var scraper = new DocumentScraper(
@@ -58,7 +54,7 @@ public class DocumentScraperProcessDocTypeCatchTests
             Name: "Apple Inc.",
             Cik: "0000320193"
         );
-        var secFilter = DocumentType.TenK.ToSecEdgarFilter()!.Value;
+        var secFilter = DocumentType.TenK.DisplayName;
         var result = new ScrapingResult();
 
         var method = typeof(DocumentScraper).GetMethod(

@@ -6,7 +6,6 @@ using System.Security.Authentication;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Integrations.Sec.Contracts;
-using Equibles.Integrations.Sec.Extensions;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Integrations.Sec.Models.Responses;
 using Microsoft.Extensions.Configuration;
@@ -335,7 +334,7 @@ public class SecEdgarClient : ISecEdgarClient
 
     public async Task<List<FilingData>> GetCompanyFilings(
         string cik,
-        DocumentTypeFilter? documentType = null,
+        string edgarForm = null,
         DateOnly? fromDate = null,
         DateOnly? toDate = null
     )
@@ -363,7 +362,7 @@ public class SecEdgarClient : ISecEdgarClient
             // Deduplicate in case recent and archive ranges overlap
             filings = filings.DistinctBy(f => f.AccessionNumber).ToList();
 
-            var filteredFilings = FilterFilings(filings, documentType, fromDate, toDate);
+            var filteredFilings = FilterFilings(filings, edgarForm, fromDate, toDate);
 
             _logger.LogInformation(
                 "Successfully retrieved {Count} filings for CIK: {Cik}",
@@ -379,7 +378,7 @@ public class SecEdgarClient : ISecEdgarClient
         }
     }
 
-    public async Task<DateOnly?> GetMostRecentReportDate(string cik, DocumentTypeFilter formType)
+    public async Task<DateOnly?> GetMostRecentReportDate(string cik, string edgarForm)
     {
         try
         {
@@ -391,9 +390,8 @@ public class SecEdgarClient : ISecEdgarClient
             var apiResponse = JsonConvert.DeserializeObject<SecApiResponse>(content);
             var recentFilings = MapToFilingData(apiResponse?.Filings?.Recent, cik);
 
-            var formName = formType.GetFormName();
             return recentFilings
-                .Where(f => f.Form == formName && f.ReportDate != DateOnly.MinValue)
+                .Where(f => f.Form == edgarForm && f.ReportDate != DateOnly.MinValue)
                 .OrderByDescending(f => f.ReportDate)
                 .Select(f => (DateOnly?)f.ReportDate)
                 .FirstOrDefault();
@@ -407,7 +405,7 @@ public class SecEdgarClient : ISecEdgarClient
             _logger.LogWarning(
                 ex,
                 "Could not retrieve most recent {FormType} report date for CIK {Cik}",
-                formType,
+                edgarForm,
                 cik
             );
             return null;
@@ -1332,14 +1330,14 @@ public class SecEdgarClient : ISecEdgarClient
 
     private static List<FilingData> FilterFilings(
         List<FilingData> filings,
-        DocumentTypeFilter? documentType,
+        string edgarForm,
         DateOnly? fromDate,
         DateOnly? toDate
     )
     {
         return filings
             .Where(f =>
-                (!documentType.HasValue || f.Form == documentType.Value.GetFormName())
+                (edgarForm == null || f.Form == edgarForm)
                 && (!fromDate.HasValue || f.FilingDate >= fromDate.Value)
                 && (!toDate.HasValue || f.FilingDate <= toDate.Value)
             )

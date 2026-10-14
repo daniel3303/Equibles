@@ -11,9 +11,9 @@ using Microsoft.Extensions.Options;
 namespace Equibles.Sec.HostedService;
 
 /// <summary>
-/// Builds the stitched as-filed HTML for 8-K documents ingested before the as-filed view
+/// Builds the stitched as-filed HTML for supported documents ingested before the as-filed view
 /// existed (or stitched by an older builder version). Runs by default and self-drains: each
-/// cycle stitches a batch of pending 8-Ks (newest first), and once every 8-K is at the current
+/// cycle stitches a batch of pending documents (newest first), and once every one is at the current
 /// builder version the work-set is empty and the cycle idles on the cheap selecting query — no
 /// operator opt-in needed. Bumping <see cref="AsFiledHtmlCaptureService.CurrentVersion"/>
 /// re-fills the work-set. Runs alongside the live scraper, sharing the EDGAR request budget.

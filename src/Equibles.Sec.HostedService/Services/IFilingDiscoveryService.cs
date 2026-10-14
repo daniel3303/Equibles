@@ -20,6 +20,15 @@ public interface IFilingDiscoveryService
     );
 
     /// <summary>
+    /// The real-time layer alone: the throttled ATOM poll plus due pending re-flags, without the
+    /// daily-index backstop. Cheap enough to call between companies of a long reconciliation batch.
+    /// </summary>
+    Task<List<EquityIssuer>> DiscoverCompaniesFromRecentFeed(
+        IReadOnlyList<EquityIssuer> trackedCompanies,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// True while any feed-flagged filing awaits confirmation by a company
     /// enumeration — the scraper only collects enumerated accessions for
     /// <see cref="MarkAccessionsEnumerated"/> when this is set.

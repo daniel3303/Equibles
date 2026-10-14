@@ -124,7 +124,7 @@ public class DocumentScraperEnumeratedAccessionReportingTests
         _secEdgarClient
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             )
@@ -188,7 +188,7 @@ public class DocumentScraperEnumeratedAccessionReportingTests
         _secEdgarClient
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             )
@@ -218,7 +218,7 @@ public class DocumentScraperEnumeratedAccessionReportingTests
         _secEdgarClient
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             )
