@@ -74,6 +74,7 @@ internal static class EquityDirectorySnapshotIdentity
             .ToDictionaryAsync(row => row.Isin, token);
         var retained = new HashSet<Guid>();
         var present = new HashSet<string>(StringComparer.Ordinal);
+        var conflicted = new HashSet<Guid>();
         foreach (var row in input.Listings)
         {
             present.Add(row.SourceListingIdentifier);
@@ -86,9 +87,12 @@ internal static class EquityDirectorySnapshotIdentity
                         && byIsin.Id != boundSecurity.EquitySecurityId
                 )
             )
-                throw new InvalidDataException(
-                    "Directory snapshot conflicts with its security ISIN."
-                );
+            {
+                // A venue reissues an ISIN under a stable code on routine corporate actions. That row's own import
+                // refuses it; the security it claims keeps its listings as they are, and the rest of the market applies.
+                conflicted.Add(boundSecurity.EquitySecurityId);
+                continue;
+            }
             if (!bindings.TryGetValue(row.SourceListingIdentifier, out var binding))
                 continue;
             var listing = binding.Listing;
@@ -113,7 +117,12 @@ internal static class EquityDirectorySnapshotIdentity
                 && input.MarketIdentifierCodes.Contains(binding.Listing.MarketIdentifierCode)
             )
         )
-            binding.IsDirectoryListed = present.Contains(binding.Identifier);
+        {
+            if (conflicted.Contains(binding.Listing.EquitySecurityId))
+                retained.Add(binding.EquityListingId);
+            else
+                binding.IsDirectoryListed = present.Contains(binding.Identifier);
+        }
         var independentlyListed = await issuers
             .GetListingIdentifiers()
             .Where(row => row.Source != input.Source && row.IsDirectoryListed)
