@@ -38,6 +38,23 @@ public class RagSearchToolsTimeoutMessageTests
         Assert.Contains("Retry the same call", fault.Message);
     }
 
+    // Shortening a phrase searches for a different phrase, so phrase advice only narrows scope.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PhraseTimeout_NarrowsTheScopeWithoutRewritingThePhrase(bool scoped)
+    {
+        var fault = await Assert.ThrowsAsync<McpToolFaultException>(() =>
+            RagSearchTools.SearchOrTimeoutFault(TimesOut, scoped, SearchMatch.Phrase)
+        );
+
+        Assert.Equal(
+            scoped ? SearchTimeoutAdvice.ScopedPhrase : SearchTimeoutAdvice.UnscopedPhrase,
+            fault.Message
+        );
+        Assert.DoesNotContain("shorten the query", fault.Message);
+    }
+
     [Fact]
     public async Task OtherFaults_EscapeUntouched()
     {

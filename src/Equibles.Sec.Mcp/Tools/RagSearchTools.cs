@@ -147,7 +147,8 @@ public class RagSearchTools
                                 broadenSparseResults: true,
                                 match: searchMatch
                             ),
-                        scoped: true
+                        scoped: true,
+                        match: searchMatch
                     );
                 }
                 else
@@ -165,7 +166,8 @@ public class RagSearchTools
                                 broadenSparseResults: true,
                                 match: searchMatch
                             ),
-                        scoped: false
+                        scoped: false,
+                        match: searchMatch
                     );
                 }
 
@@ -492,16 +494,13 @@ public class RagSearchTools
             ? $"startDate {McpFormat.Invariant(startDate.Value, "yyyy-MM-dd")} is after endDate {McpFormat.Invariant(endDate.Value, "yyyy-MM-dd")} — swap the values."
             : null;
 
-    // Signposts a result shortfall so the caller knows relaxing filters (not paging or
-    // retrying) is the next move. Empty results keep the plain empty-state message.
-    // A BM25 statement-budget timeout is the one search failure the caller can act on, so name
-    // the stall instead of the executor's catch-all (production, 2026-09-02).
     // Turns a BM25 statement-budget timeout into a fault the caller can act on, keeping the
     // original exception attached so the recorded Errors row still shows what actually failed.
     // Every other failure keeps the executor's catch-all wording.
     internal static async Task<List<Chunk>> SearchOrTimeoutFault(
         Func<Task<List<Chunk>>> search,
-        bool scoped
+        bool scoped,
+        SearchMatch match = SearchMatch.Ranked
     )
     {
         try
@@ -510,7 +509,7 @@ public class RagSearchTools
         }
         catch (ChunkSearchTimeoutException exception)
         {
-            throw new McpToolFaultException(SearchTimeoutAdvice.For(scoped), exception);
+            throw new McpToolFaultException(SearchTimeoutAdvice.For(scoped, match), exception);
         }
     }
 
@@ -530,6 +529,8 @@ public class RagSearchTools
         }
     }
 
+    // Signposts a result shortfall so the caller knows relaxing filters (not paging or
+    // retrying) is the next move. Empty results keep the plain empty-state message.
     private static string AppendShortfallNote(string context, int returned, int requested) =>
         returned > 0 && returned < requested
             ? context

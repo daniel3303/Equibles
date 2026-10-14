@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Data;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data.Models;
@@ -15,14 +16,14 @@ internal static class ChunkDateScope
     {
         if (startDate == null && endDate == null)
             return null;
-        // Chunks carry their filing date at midnight UTC, so a whole-day window is the half-open
-        // span from the first day's midnight to the midnight after the last day.
+        // Chunks carry their filing date at exactly midnight UTC, so a whole-day window is the
+        // closed span between the first and last days' midnights (no day after DateOnly.MaxValue).
         return ParadeDbJsonQuery.Range(
             nameof(Chunk.ReportingDate),
             startDate is { } start ? MidnightUtc(start) : null,
-            endDate is { } end ? MidnightUtc(end.AddDays(1)) : null,
+            endDate is { } end ? MidnightUtc(end) : null,
             lowerInclusive: true,
-            upperInclusive: false,
+            upperInclusive: true,
             isDatetime: true
         );
     }
@@ -52,6 +53,8 @@ internal static class ChunkDateScope
         return documents.AnyAsync(token);
     }
 
-    private static DateTime MidnightUtc(DateOnly date) =>
-        DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+    // Formatted here: the query builder renders a DateTime in the host's culture, which some
+    // locales turn into a time ParadeDB rejects or a non-Gregorian year.
+    private static string MidnightUtc(DateOnly date) =>
+        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T00:00:00Z";
 }

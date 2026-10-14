@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data.Models;
@@ -158,6 +159,54 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         );
 
         result.Select(chunk => chunk.Id).Should().BeEquivalentTo([lastDay.Id, firstDay.Id]);
+    }
+
+    [Fact]
+    public async Task Search_MaxEndDate_IsAnOpenUpperBound()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OPEN");
+        var hit = AddChunk(AddDocument(issuer, new DateOnly(2026, 2, 1)), 0, "orbital revenue");
+        AddChunk(AddDocument(issuer, new DateOnly(2025, 12, 31)), 0, "orbital revenue");
+        await DbContext.SaveChangesAsync();
+
+        var result = await new ChunkRepository(DbContext).HybridSearch(
+            "orbital revenue",
+            10,
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: DateOnly.MaxValue
+        );
+
+        result.Select(chunk => chunk.Id).Should().Equal(hit.Id);
+    }
+
+    // The window reaches ParadeDB as text; a culture-formatted time ("00.00.00") is rejected and
+    // a Buddhist-calendar year matches nothing.
+    [Theory]
+    [InlineData("fi-FI")]
+    [InlineData("th-TH")]
+    public async Task Search_DateWindow_IsCultureInvariant(string culture)
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "LOCALE");
+        var hit = AddChunk(AddDocument(issuer, new DateOnly(2026, 2, 1)), 0, "orbital revenue");
+        AddChunk(AddDocument(issuer, new DateOnly(2025, 12, 31)), 0, "orbital revenue");
+        await DbContext.SaveChangesAsync();
+        var original = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo(culture);
+        try
+        {
+            var result = await new ChunkRepository(DbContext).HybridSearch(
+                "orbital revenue",
+                10,
+                startDate: new DateOnly(2026, 1, 1),
+                endDate: new DateOnly(2026, 2, 1)
+            );
+
+            result.Select(chunk => chunk.Id).Should().Equal(hit.Id);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     [Fact]

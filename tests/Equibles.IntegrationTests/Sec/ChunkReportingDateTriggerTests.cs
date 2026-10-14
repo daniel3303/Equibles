@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data.Models;
+using Equibles.Migrations.Migrations;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,70 @@ public class ChunkReportingDateTriggerTests(ParadeDbFixture fixture) : ParadeDbM
         (await StoredDate(untouched.Id))
             .Should()
             .Be(new DateTime(2026, 9, 14, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task ChunkDateRewrite_IsOverriddenByItsDocumentDate()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "UPD");
+        var chunk = AddChunk(AddDocument(issuer, new DateOnly(2026, 3, 2)), 0);
+        await DbContext.SaveChangesAsync();
+
+        chunk.ReportingDate = new DateTime(2019, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        await DbContext.SaveChangesAsync();
+
+        (await StoredDate(chunk.Id))
+            .Should()
+            .Be(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task ChunkMovedToAnotherDocument_TakesTheNewParentsDate()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "MOV");
+        var chunk = AddChunk(AddDocument(issuer, new DateOnly(2026, 3, 2)), 0);
+        var target = AddDocument(issuer, new DateOnly(2024, 5, 6));
+        await DbContext.SaveChangesAsync();
+
+        chunk.Document = target;
+        await DbContext.SaveChangesAsync();
+
+        (await StoredDate(chunk.Id))
+            .Should()
+            .Be(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task Repair_RealignsChunksWrittenBeforeTheTriggers()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "FIX");
+        var chunk = AddChunk(AddDocument(issuer, new DateOnly(2023, 4, 25)), 0);
+        await DbContext.SaveChangesAsync();
+        await DbContext.Database.ExecuteSqlRawAsync(
+            """ALTER TABLE "Chunk" DISABLE TRIGGER "TR_Chunk_InheritReportingDate";"""
+        );
+        try
+        {
+            await DbContext.Database.ExecuteSqlRawAsync(
+                """UPDATE "Chunk" SET "ReportingDate" = '2026-09-14T00:00:00Z' WHERE "Id" = {0};""",
+                chunk.Id
+            );
+        }
+        finally
+        {
+            await DbContext.Database.ExecuteSqlRawAsync(
+                """ALTER TABLE "Chunk" ENABLE TRIGGER "TR_Chunk_InheritReportingDate";"""
+            );
+        }
+        (await StoredDate(chunk.Id))
+            .Should()
+            .Be(new DateTime(2026, 9, 14, 0, 0, 0, DateTimeKind.Utc));
+
+        await DbContext.Database.ExecuteSqlRawAsync(SyncChunkReportingDateWithDocument.RepairSql);
+
+        (await StoredDate(chunk.Id))
+            .Should()
+            .Be(new DateTime(2023, 4, 25, 0, 0, 0, DateTimeKind.Utc));
     }
 
     private async Task<DateTime> StoredDate(Guid chunkId)

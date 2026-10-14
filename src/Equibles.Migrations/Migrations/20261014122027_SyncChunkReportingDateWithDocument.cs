@@ -7,6 +7,16 @@ namespace Equibles.Migrations.Migrations
     /// <inheritdoc />
     public partial class SyncChunkReportingDateWithDocument : Migration
     {
+        // Realigns chunks a writer stamped before the triggers existed (13 rows on production).
+        public const string RepairSql = """
+            UPDATE "Chunk" AS c
+            SET "ReportingDate" = (d."ReportingDate"::timestamp AT TIME ZONE 'UTC')
+            FROM "Document" AS d
+            WHERE c."DocumentId" = d."Id"
+              AND c."ReportingDate" IS DISTINCT FROM
+                  (d."ReportingDate"::timestamp AT TIME ZONE 'UTC');
+            """;
+
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -58,17 +68,7 @@ namespace Equibles.Migrations.Migrations
             // The repair scans every chunk, so it runs after the triggers commit: holding their
             // table lock through the scan would block chunk and filing writers. Rows written in
             // between already pass through the triggers.
-            migrationBuilder.Sql(
-                """
-                UPDATE "Chunk" AS c
-                SET "ReportingDate" = (d."ReportingDate"::timestamp AT TIME ZONE 'UTC')
-                FROM "Document" AS d
-                WHERE c."DocumentId" = d."Id"
-                  AND c."ReportingDate" IS DISTINCT FROM
-                      (d."ReportingDate"::timestamp AT TIME ZONE 'UTC');
-                """,
-                suppressTransaction: true
-            );
+            migrationBuilder.Sql(RepairSql, suppressTransaction: true);
         }
 
         /// <inheritdoc />
