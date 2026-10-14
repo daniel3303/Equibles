@@ -53,12 +53,12 @@ public class InsiderFilingReprocessManagerDerivativeTotalTests : ParadeDbMcpTest
         + "<transactionCoding><transactionCode>P</transactionCode></transactionCoding>"
         + "<transactionAmounts>"
         + "<transactionShares><value>5000</value></transactionShares>"
-        + "<transactionPricePerShare><value>1000</value></transactionPricePerShare>"
+        + "<transactionPricePerShare><value>10000</value></transactionPricePerShare>"
         + "<transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>"
         + "</transactionAmounts>"
         + "<underlyingSecurity>"
         + "<underlyingSecurityTitle><value>Class A Common Stock</value></underlyingSecurityTitle>"
-        + "<underlyingSecurityShares><value>50000</value></underlyingSecurityShares>"
+        + "<underlyingSecurityShares><value>500000</value></underlyingSecurityShares>"
         + "</underlyingSecurity>"
         + "</derivativeTransaction>"
         + "</derivativeTable>"
@@ -109,7 +109,7 @@ public class InsiderFilingReprocessManagerDerivativeTotalTests : ParadeDbMcpTest
             };
 
         var call = Stored(0, "Call option (obligation to sell)", 183_640, 3_659_027m);
-        var preferred = Stored(1, "Series A Convertible Preferred Stock", 5_000, 1_000m);
+        var preferred = Stored(1, "Series A Convertible Preferred Stock", 5_000, 10_000m);
         var rawBytes = Encoding.UTF8.GetBytes(OwnershipXml);
 
         DbContext.Add(stock);
@@ -174,7 +174,7 @@ public class InsiderFilingReprocessManagerDerivativeTotalTests : ParadeDbMcpTest
         repairedCall.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
 
         var untouched = await verify.Set<InsiderTransaction>().FindAsync(preferred.Id);
-        untouched!.PricePerShare.Should().Be(1_000m);
+        untouched!.PricePerShare.Should().Be(10_000m);
         untouched.PriceWasRepaired.Should().BeFalse();
         untouched.IsPriceValid.Should().BeTrue();
         untouched.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);

@@ -68,19 +68,20 @@ public class InsiderTransactionPriceValidatorDerivativeTotalTests
     [Fact]
     public void Evaluate_ConvertiblePreferredWithStatedValueNotOneForOne_IsValidAsFiled()
     {
-        // 5,000 preferred shares at their $1,000 stated value, each converting into 10 commons.
+        // 5,000 preferred shares at their $10,000 stated value, each converting into 100 commons at
+        // $100: far above the ceiling, so only the missing one-for-one evidence keeps it as filed.
         var result = EvaluateDerivative(
-            reportedPrice: 1_000m,
+            reportedPrice: 10_000m,
             shares: 5_000,
             bar: new DailyBarContext { Close = 10m },
-            underlyingShares: 50_000,
+            underlyingShares: 500_000,
             exercisePrice: 100m,
             securityTitle: "Series A Convertible Preferred Stock"
         );
 
         result.IsPriceValid.Should().BeTrue();
         result.WasRepaired.Should().BeFalse();
-        result.EffectivePrice.Should().Be(1_000m);
+        result.EffectivePrice.Should().Be(10_000m);
     }
 
     [Fact]
@@ -253,6 +254,22 @@ public class InsiderTransactionPriceValidatorDerivativeTotalTests
         result.IsPriceValid.Should().BeTrue();
         result.WasRepaired.Should().BeFalse();
         result.EffectivePrice.Should().Be(50m);
+    }
+
+    [Fact]
+    public void Evaluate_OneForOneCandidateExactlyAtTheCeiling_IsRepaired()
+    {
+        var result = EvaluateDerivative(
+            reportedPrice: 100_000m,
+            shares: 1_000,
+            bar: new DailyBarContext { Close = 100m },
+            underlyingShares: 1_000,
+            exercisePrice: 1m
+        );
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeTrue();
+        result.EffectivePrice.Should().Be(100m);
     }
 
     [Fact]
