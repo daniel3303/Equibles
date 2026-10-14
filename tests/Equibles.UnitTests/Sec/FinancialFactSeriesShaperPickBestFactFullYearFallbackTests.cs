@@ -1,8 +1,7 @@
-using System.Reflection;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -12,7 +11,7 @@ namespace Equibles.UnitTests.Sec;
 // admits only a fiscal-calendar transition stub the surrounding annual windows
 // corroborate on both sides, and fails closed for callers with no corroboration
 // context (the cross-company comparison, which loads a single fiscal slice).
-public class FinancialFactsToolsPickBestFactFullYearFallbackTests
+public class FinancialFactSeriesShaperPickBestFactFullYearFallbackTests
 {
     [Fact]
     public void PickBestFact_FullYearBucketWithOnlyYtd_ReturnsNullDespiteContext()
@@ -38,7 +37,7 @@ public class FinancialFactsToolsPickBestFactFullYearFallbackTests
         };
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
-        var rejected = InvokePickBestFact([yearToDate], conceptPriority, context);
+        var rejected = Pick([yearToDate], conceptPriority, context);
 
         rejected.Should().BeNull("a year-to-date span must never publish as the annual value");
     }
@@ -71,7 +70,7 @@ public class FinancialFactsToolsPickBestFactFullYearFallbackTests
         };
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
-        var picked = InvokePickBestFact([stub], conceptPriority, context);
+        var picked = Pick([stub], conceptPriority, context);
 
         picked.Should().BeSameAs(stub, "both neighbouring annual windows corroborate the stub");
     }
@@ -88,24 +87,20 @@ public class FinancialFactsToolsPickBestFactFullYearFallbackTests
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
-        var rejected = InvokePickBestFact([stub], conceptPriority, context: null);
+        var rejected = Pick([stub], conceptPriority, context: null);
 
         rejected
             .Should()
             .BeNull("without context a sub-annual FullYear duration cannot be proven a stub");
     }
 
-    private static FinancialFact InvokePickBestFact(
+    private static FinancialFact Pick(
         FinancialFact[] group,
         Dictionary<Guid, int> conceptPriority,
         FinancialFact[] context
     )
     {
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
-        return (FinancialFact)method!.Invoke(null, [group, conceptPriority, false, context]);
+        return FinancialFactSeriesShaper.PickBestFact(group, conceptPriority, false, context);
     }
 
     private static FinancialFact MakeFact(

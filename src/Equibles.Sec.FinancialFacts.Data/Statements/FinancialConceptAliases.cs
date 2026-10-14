@@ -442,7 +442,51 @@ public static class FinancialConceptAliases
         ["apic"] = "additional-paid-in-capital",
     };
 
+    // Balance-sheet positions and share counts: each value is as of a date, so a series of
+    // them is identified by that date, never by the fiscal period the filing stamped on it.
+    private static readonly HashSet<string> InstantAliases =
+    [
+        "cash",
+        "short-term-investments",
+        "current-financial-assets-fvtpl",
+        "current-financial-assets-fvoci",
+        "current-financial-assets-amortised-cost",
+        "accounts-receivable",
+        "inventory",
+        "current-assets",
+        "property-plant-and-equipment",
+        "operating-lease-assets",
+        "goodwill",
+        "intangible-assets",
+        "long-term-investments",
+        "total-assets",
+        "accounts-payable",
+        "accrued-liabilities",
+        "deferred-revenue",
+        "short-term-debt",
+        "current-liabilities",
+        "long-term-debt",
+        "operating-lease-liabilities",
+        "deferred-revenue-noncurrent",
+        "total-liabilities",
+        "common-stock-value",
+        "additional-paid-in-capital",
+        "retained-earnings",
+        "accumulated-oci",
+        "treasury-stock",
+        "stockholders-equity",
+        "total-liabilities-and-equity",
+        "shares-outstanding",
+    ];
+
     public static IReadOnlyCollection<string> SupportedAliases => Map.Keys;
+
+    /// <summary>Whether the alias names a value as of a date rather than a flow over a period.</summary>
+    public static bool IsInstant(string alias)
+    {
+        var key = Normalize(alias);
+        return InstantAliases.Contains(Synonyms.GetValueOrDefault(key, key));
+    }
 
     public static bool TryResolve(string alias, out IReadOnlyList<ConceptRef> concepts)
     {

@@ -85,7 +85,15 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
                     "Directory source conflicts with the issuer's legal identity."
                 );
             issuer.LegalEntityIdentifier ??= input.LegalEntityIdentifier;
-            if (string.IsNullOrWhiteSpace(issuer.Name))
+            // Only the source that supplied the current name may replace it, and SEC names always govern.
+            if (
+                string.IsNullOrWhiteSpace(issuer.Name)
+                || issuer.Cik == null
+                    && input.ReplacedIssuerNames.Contains(
+                        issuer.Name,
+                        StringComparer.OrdinalIgnoreCase
+                    )
+            )
                 issuer.Name = input.IssuerName;
         }
         issuer.NameAliases = issuer

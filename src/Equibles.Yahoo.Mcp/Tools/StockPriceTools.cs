@@ -14,6 +14,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.Mcp.Contracts;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -34,17 +35,23 @@ public class StockPriceTools
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
+    // Injected as a sequence so the dependency stays optional: a deployment that releases every
+    // stored bar to every caller registers nothing and resolves an empty one.
+    private readonly IDailyBarRelease _release;
+
     public StockPriceTools(
         EquityDailyStockPriceRepository priceRepository,
         EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
-        ILogger<StockPriceTools> logger
+        ILogger<StockPriceTools> logger,
+        IEnumerable<IDailyBarRelease> releases = null
     )
     {
         _priceRepository = priceRepository;
         _commonStockRepository = commonStockRepository;
         _stockSplitRepository = stockSplitRepository;
+        _release = releases?.FirstOrDefault();
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -94,6 +101,7 @@ public class StockPriceTools
                     return rangeError;
 
                 maxResults = McpLimit.Clamp(maxResults);
+                var holdNote = ClampToRelease(await GetHold(), ref end);
 
                 var rangeQuery = _priceRepository.GetTradedByStock(stock, priceTicker, start, end);
                 var total = await rangeQuery.CountAsync();
@@ -104,7 +112,10 @@ public class StockPriceTools
                     .ToListAsync();
 
                 if (records.Count == 0)
-                    return $"No price data found for {priceTicker} in the specified date range.";
+                    return WithHoldNote(
+                        $"No price data found for {priceTicker} in the specified date range.",
+                        holdNote
+                    );
 
                 // The provider-adjusted series is replaced in full after captured splits and cash
                 // dividends. A differing column is useful evidence, but the provider response does
@@ -141,7 +152,7 @@ public class StockPriceTools
                         : "_Adj Close equals Close on every row shown. Captured splits and cash dividends trigger a full-history refresh, but equality does not prove that a split-spanning window uses one basis._"
                 );
 
-                return result.ToString();
+                return WithHoldNote(result.ToString(), holdNote);
             },
             "GetStockPrices",
             $"ticker: {ticker}"
@@ -208,6 +219,7 @@ public class StockPriceTools
                 var rowDates = new HashSet<DateOnly>();
                 var latestByTicker = new Dictionary<string, LatestPriceSelection>();
                 var placeholderByTicker = new Dictionary<string, string>();
+                var hold = await GetHold();
 
                 foreach (var ticker in tickerList)
                 {
@@ -220,8 +232,10 @@ public class StockPriceTools
 
                     // Newest two bars in one query: the latest row plus the prior close
                     // needed for the day-over-day change columns.
-                    var latestTwo = await _priceRepository
-                        .GetTradedByStock(stock, priceTicker)
+                    var latestTwo = await Released(
+                            _priceRepository.GetTradedByStock(stock, priceTicker),
+                            hold
+                        )
                         .OrderByDescending(p => p.Date)
                         .Take(2)
                         .ToListAsync();
@@ -316,7 +330,9 @@ public class StockPriceTools
                     }
                     var range = await _priceRepository
                         .GetTradedByStock(stock, priceTicker)
-                        .Where(p => p.Date >= comparableWindow.Start && p.Close > 0)
+                        .Where(p =>
+                            p.Date >= comparableWindow.Start && p.Date <= price.Date && p.Close > 0
+                        )
                         .GroupBy(p => 1)
                         .Select(g => new
                         {
@@ -405,7 +421,7 @@ public class StockPriceTools
                     );
                 }
 
-                return result.ToString();
+                return WithHoldNote(result.ToString(), hold?.Note);
             },
             "GetLatestClosingPrices",
             $"tickers: {string.Join(",", tickers ?? [])}"
@@ -454,7 +470,7 @@ public class StockPriceTools
 
                 // %K needs kPeriod bars and %D another dPeriod - 1 %K values, so this many
                 // extra bars before startDate make the first in-range row fully computable.
-                var (stock, priceTicker, records, renderFrom, error) =
+                var (stock, priceTicker, records, renderFrom, holdNote, error) =
                     await LoadAscendingPriceWindow(
                         ticker,
                         startDate,
@@ -486,7 +502,8 @@ public class StockPriceTools
                         var dCell = McpFormat.OrDash(d[i], "F2");
                         return $"| {DateAndCloseCells(records[i])} | {kCell} | {dCell} |";
                     },
-                    "_'—' marks rows with too little prior price history to fill the lookback window._"
+                    "_'—' marks rows with too little prior price history to fill the lookback window._",
+                    holdNote
                 );
             },
             "GetStochasticOscillator",
@@ -534,7 +551,7 @@ public class StockPriceTools
                 // Wilder smoothing is recursive, so the seed's influence decays rather than
                 // ends: two extra periods of pre-range bars push the seed far enough back
                 // that in-range values no longer depend on where the caller put startDate.
-                var (stock, priceTicker, records, renderFrom, error) =
+                var (stock, priceTicker, records, renderFrom, holdNote, error) =
                     await LoadAscendingPriceWindow(
                         ticker,
                         startDate,
@@ -559,7 +576,8 @@ public class StockPriceTools
                         var atrCell = McpFormat.OrDash(atr[i], "F4");
                         return $"| {DateAndCloseCells(records[i])} | {atrCell} |";
                     },
-                    "_ATR is in the stock's price units (USD). '—' marks rows with too little prior price history to fill the smoothing window._"
+                    "_ATR is in the stock's price units (USD). '—' marks rows with too little prior price history to fill the smoothing window._",
+                    holdNote
                 );
             },
             "GetAverageTrueRange",
@@ -598,12 +616,8 @@ public class StockPriceTools
 
                 // No warm-up: OBV is a running sum with no lookback window, and the tool
                 // contract deliberately anchors it at 0 on the range's first bar.
-                var (stock, priceTicker, records, _, error) = await LoadAscendingPriceWindow(
-                    ticker,
-                    startDate,
-                    endDate,
-                    warmupBars: 0
-                );
+                var (stock, priceTicker, records, _, holdNote, error) =
+                    await LoadAscendingPriceWindow(ticker, startDate, endDate, warmupBars: 0);
                 if (error != null)
                     return error;
 
@@ -620,7 +634,8 @@ public class StockPriceTools
                     maxResults,
                     i =>
                         $"| {DateAndCloseCells(records[i])} | {McpFormat.WholeNumber(records[i].Volume)} | {McpFormat.WholeNumber(obv[i])} |",
-                    $"_OBV is anchored at 0 on {records[0].Date:yyyy-MM-dd} (the first bar of the requested range); absolute values shift with startDate, so compare slopes, not levels._"
+                    $"_OBV is anchored at 0 on {records[0].Date:yyyy-MM-dd} (the first bar of the requested range); absolute values shift with startDate, so compare slopes, not levels._",
+                    holdNote
                 );
             },
             "GetOnBalanceVolume",
@@ -668,7 +683,7 @@ public class StockPriceTools
 
                 // The SMA window is exactly period bars, so period - 1 extra bars before
                 // startDate make the first in-range row fully computable.
-                var (stock, priceTicker, records, renderFrom, error) =
+                var (stock, priceTicker, records, renderFrom, holdNote, error) =
                     await LoadAscendingPriceWindow(
                         ticker,
                         startDate,
@@ -701,7 +716,8 @@ public class StockPriceTools
                         var bandwidth = Bandwidth(middle[i], upper[i], lower[i]);
                         return $"| {DateAndCloseCells(records[i])} | {lowerCell} | {middleCell} | {upperCell} | {McpFormat.OrDash(percentB, "F2")} | {McpFormat.OrDash(bandwidth, "F4")} |";
                     },
-                    "_'—' marks rows with too little prior price history to fill the moving-average window._"
+                    "_'—' marks rows with too little prior price history to fill the moving-average window._",
+                    holdNote
                 );
             },
             "GetBollingerBands",
@@ -828,12 +844,13 @@ public class StockPriceTools
         string PriceTicker,
         List<EquityDailyStockPrice> Records,
         int RenderFrom,
+        string HoldNote,
         string Error
     )> LoadAscendingPriceWindow(string ticker, string startDate, string endDate, int warmupBars)
     {
         var (stock, priceTicker, stockError) = await ResolveTicker(ticker);
         if (stockError != null)
-            return (null, null, null, 0, stockError);
+            return (null, null, null, 0, null, stockError);
 
         var rangeError = ParseRangeStrict(
             startDate,
@@ -843,8 +860,9 @@ public class StockPriceTools
             out var end
         );
         if (rangeError != null)
-            return (stock, priceTicker, null, 0, rangeError);
+            return (stock, priceTicker, null, 0, null, rangeError);
 
+        var holdNote = ClampToRelease(await GetHold(), ref end);
         var records = await _priceRepository
             .GetTradedByStock(stock, priceTicker, start, end)
             .OrderBy(p => p.Date)
@@ -856,7 +874,11 @@ public class StockPriceTools
                 priceTicker,
                 null,
                 0,
-                $"No price data found for {priceTicker} in the specified date range."
+                holdNote,
+                WithHoldNote(
+                    $"No price data found for {priceTicker} in the specified date range.",
+                    holdNote
+                )
             );
 
         // Warm-up look-back: indicators with a lookback window are computed over extra
@@ -879,8 +901,32 @@ public class StockPriceTools
             }
         }
 
-        return (stock, priceTicker, records, renderFrom, null);
+        return (stock, priceTicker, records, renderFrom, holdNote, null);
     }
+
+    // The session withheld from the current caller, or null when every stored bar is released.
+    private Task<DailyBarHold> GetHold() =>
+        _release?.GetHold() ?? Task.FromResult<DailyBarHold>(null);
+
+    private static IQueryable<EquityDailyStockPrice> Released(
+        IQueryable<EquityDailyStockPrice> bars,
+        DailyBarHold hold
+    ) => hold == null ? bars : bars.Where(p => p.Date < hold.Session);
+
+    // Ends a range before the withheld session and returns the note the caller is owed, or
+    // null when the range never reached that session.
+    private static string ClampToRelease(DailyBarHold hold, ref DateOnly end)
+    {
+        if (hold == null || end < hold.Session)
+            return null;
+        end = hold.Session.AddDays(-1);
+        return hold.Note;
+    }
+
+    private static string WithHoldNote(string output, string holdNote) =>
+        holdNote == null
+            ? output
+            : $"{output.TrimEnd()}{Environment.NewLine}{Environment.NewLine}{holdNote}{Environment.NewLine}";
 
     // Thin forwarder to the shared helper so the load-bearing title/blank/header/separator
     // sequence lives in one documented place; kept as a named method so existing
@@ -900,7 +946,8 @@ public class StockPriceTools
         int renderFrom,
         int maxResults,
         Func<int, string> formatRow,
-        string footnote = null
+        string footnote = null,
+        string holdNote = null
     )
     {
         var result = StartTable(title, columnsRow, separatorRow);
@@ -929,7 +976,7 @@ public class StockPriceTools
             result.AppendLine(footnote);
         }
 
-        return result.ToString();
+        return WithHoldNote(result.ToString(), holdNote);
     }
 
     private static void AppendNewestFirstRows(

@@ -14,6 +14,9 @@ public class EquityDirectoryListingInput
     public string SourceListingIdentifier { get; set; }
     public string IssuerName { get; set; }
     public List<string> IssuerNameAliases { get; set; } = [];
+
+    // Names this source supplied as IssuerName before; an issuer still carrying one takes IssuerName.
+    public List<string> ReplacedIssuerNames { get; set; } = [];
     public string LegalEntityIdentifier { get; set; }
     public List<string> RelatedIsins { get; set; } = [];
     public string Isin { get; set; }

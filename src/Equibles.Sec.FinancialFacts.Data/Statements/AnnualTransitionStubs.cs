@@ -21,15 +21,6 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// </summary>
 public static class AnnualTransitionStubs
 {
-    // Aligned with the annual gates used by every per-period picker (350-380 days,
-    // sized for 52/53-week calendars). A span at or above the floor is an ordinary
-    // annual fact and never needs corroboration; one above the ceiling is multi-year
-    // or inception-to-date and is never publishable as a year — without the floor cut
-    // a two-year cumulative would corroborate, because the years on either side of it
-    // abut it exactly the way a transition stub's neighbours do.
-    public const int MinAnnualSpanDays = 350;
-    public const int MaxAnnualSpanDays = 380;
-
     // Calendar drift headroom for the seam test: a 52/53-week filer's year end moves
     // by up to a week against the calendar, so "ends where the stub starts" is exact
     // to within that drift (the same allowance the year-turn stamping rules use).
@@ -65,7 +56,7 @@ public static class AnnualTransitionStubs
     )
     {
         var stubSpan = stubEnd.DayNumber - stubStart.DayNumber;
-        if (stubSpan < 0 || stubSpan >= MinAnnualSpanDays)
+        if (stubSpan < 0 || stubSpan >= FiscalPeriodSpanDays.MinAnnual)
             return false;
 
         var previousYearAbuts = false;
@@ -73,7 +64,7 @@ public static class AnnualTransitionStubs
         foreach (var (start, end) in durations)
         {
             var span = end.DayNumber - start.DayNumber;
-            if (span is < MinAnnualSpanDays or > MaxAnnualSpanDays)
+            if (span is < FiscalPeriodSpanDays.MinAnnual or > FiscalPeriodSpanDays.MaxAnnual)
                 continue;
             if (Math.Abs(end.DayNumber - (stubStart.DayNumber - 1)) <= AbutmentToleranceDays)
                 previousYearAbuts = true;

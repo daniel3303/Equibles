@@ -44,6 +44,7 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<FirdsUniverseWorker>();
         services.AddHostedService<EquityMarketDirectoryWorker>();
+        services.AddHostedService<IsinLegalEntityLookupWorker>();
         return services;
     }
 
