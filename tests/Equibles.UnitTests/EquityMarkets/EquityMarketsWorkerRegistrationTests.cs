@@ -33,4 +33,24 @@ public class EquityMarketsWorkerRegistrationTests
         using var provider = services.BuildServiceProvider();
         provider.GetRequiredService(client).Should().BeOfType(client);
     }
+
+    [Fact]
+    public void TheGleifIsinLookupRunsAsAHostedWorker()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddEquityMarketsWorker();
+        services
+            .Should()
+            .Contain(descriptor =>
+                descriptor.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)
+                && descriptor.ImplementationType
+                    == typeof(Equibles.EquityMarkets.HostedService.IsinLegalEntityLookupWorker)
+            );
+        using var provider = services.BuildServiceProvider();
+        provider
+            .GetRequiredService<Equibles.EquityMarkets.BusinessLogic.Directory.IsinLegalEntityLookupImporter>()
+            .Should()
+            .NotBeNull();
+    }
 }

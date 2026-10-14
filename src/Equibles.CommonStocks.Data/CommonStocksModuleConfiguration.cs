@@ -47,6 +47,18 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
     {
         builder.Entity<EquityDirectorySourceRecord>();
         builder
+            .Entity<EquityIssuerMerge>()
+            .HasOne(row => row.SurvivingIssuer)
+            .WithMany()
+            .HasForeignKey(row => row.SurvivingIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<IsinLegalEntityLookup>()
+            .HasOne(row => row.SourceRecord)
+            .WithMany()
+            .HasForeignKey(row => row.SourceRecordId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
             .Entity<EquityDirectorySnapshotState>()
             .HasOne(row => row.SourceRecord)
             .WithMany()
