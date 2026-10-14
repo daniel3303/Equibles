@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Repositories.Extensions;
@@ -6,11 +7,28 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.Repositories;
 
+// A filing-date window reaches the BM25 index as a range on Chunk.ReportingDate, which the
+// Document trigger keeps equal to the parent date; the parent stays the membership authority.
 internal static class ChunkDateScope
 {
-    private const int MaximumDocuments = 4096;
+    internal static ParadeDbJsonQuery IndexFilter(DateOnly? startDate, DateOnly? endDate)
+    {
+        if (startDate == null && endDate == null)
+            return null;
+        // Chunks carry their filing date at midnight UTC, so a whole-day window is the half-open
+        // span from the first day's midnight to the midnight after the last day.
+        return ParadeDbJsonQuery.Range(
+            nameof(Chunk.ReportingDate),
+            startDate is { } start ? MidnightUtc(start) : null,
+            endDate is { } end ? MidnightUtc(end.AddDays(1)) : null,
+            lowerInclusive: true,
+            upperInclusive: false,
+            isDatetime: true
+        );
+    }
 
-    internal static async Task<Guid[]> Read(
+    // One indexed probe so an empty window answers without touching the BM25 index.
+    internal static Task<bool> HasParents(
         EquiblesFinancialDbContext context,
         string ticker,
         Guid? documentId,
@@ -20,8 +38,6 @@ internal static class ChunkDateScope
         CancellationToken token
     )
     {
-        if (startDate == null && endDate == null)
-            return null;
         IQueryable<Document> documents = context.Set<Document>();
         if (ticker != null)
             documents = documents.ForUsTicker(ticker, context);
@@ -33,11 +49,9 @@ internal static class ChunkDateScope
             documents = documents.Where(document => document.ReportingDate >= start);
         if (endDate is { } end)
             documents = documents.Where(document => document.ReportingDate <= end);
-        var ids = await documents
-            .Select(document => document.Id)
-            .Take(MaximumDocuments + 1)
-            .ToArrayAsync(token);
-        // A partial list would silently lose matches; large windows retain ranked-prefix validation.
-        return ids.Length <= MaximumDocuments ? ids : null;
+        return documents.AnyAsync(token);
     }
+
+    private static DateTime MidnightUtc(DateOnly date) =>
+        DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
 }

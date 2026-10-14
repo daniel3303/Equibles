@@ -84,24 +84,23 @@ public class ChunkRepository : BaseRepository<Chunk>
         deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
-            var documentIds = await ChunkDateScope.Read(
-                DbContext,
-                ticker,
-                documentId,
-                documentTypes,
-                startDate,
-                endDate,
-                deadline.Token
-            );
-            if (documentIds is { Length: 0 })
-                return [];
-            if (documentIds != null)
-                clauses.Add(
-                    ParadeDbJsonQuery.TermSet(
-                        nameof(Chunk.DocumentId),
-                        documentIds.Cast<object>().ToArray()
+            var dateFilter = ChunkDateScope.IndexFilter(startDate, endDate);
+            if (dateFilter != null)
+            {
+                if (
+                    !await ChunkDateScope.HasParents(
+                        DbContext,
+                        ticker,
+                        documentId,
+                        documentTypes,
+                        startDate,
+                        endDate,
+                        deadline.Token
                     )
-                );
+                )
+                    return [];
+                clauses.Add(dateFilter);
+            }
             var searchQuery = ParadeDbJsonQuery
                 .Boolean(b =>
                 {
