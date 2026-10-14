@@ -117,6 +117,10 @@ public class InsiderTransactionPriceValidator
     /// downstream Shares × EffectivePrice is a real value — see
     /// <see cref="AdsRatioExtractor"/>. <paramref name="reportedPrice"/> stays the
     /// as-filed (per-ADS) figure that the caller keeps in ReportedPricePerShare.
+    ///
+    /// Derivatives are valid as filed unless the parse supplies one-for-one evidence
+    /// (<paramref name="underlyingShares"/> equal to <paramref name="shares"/>); only then is a
+    /// unit price above the share-or-strike (<paramref name="exercisePrice"/>) ceiling repaired.
     /// </summary>
     public InsiderTransactionPriceEvaluation Evaluate(
         decimal reportedPrice,
@@ -124,12 +128,14 @@ public class InsiderTransactionPriceValidator
         InsiderSecurityKind kind,
         string securityTitle,
         DailyBarContext bar,
-        IReadOnlyList<string> notes = null
+        IReadOnlyList<string> notes = null,
+        long? underlyingShares = null,
+        decimal? exercisePrice = null
     )
     {
-        // Zero/negative prices (holdings, sentinels) and derivatives need no
-        // close — they're valid as-is and never repaired.
-        if (reportedPrice <= 0m || IsDerivative(kind, securityTitle))
+        // Zero/negative prices (holdings, sentinels) need no close — they're
+        // valid as-is and never repaired.
+        if (reportedPrice <= 0m)
         {
             return new InsiderTransactionPriceEvaluation
             {
@@ -137,6 +143,9 @@ public class InsiderTransactionPriceValidator
                 EffectivePrice = reportedPrice,
             };
         }
+
+        if (IsDerivative(kind, securityTitle))
+            return EvaluateDerivative(reportedPrice, shares, bar, underlyingShares, exercisePrice);
 
         // ADS/ADR unit normalization: when the footnotes show the price is per
         // ADS but the share count is the underlying ordinary count, restate the
@@ -220,6 +229,59 @@ public class InsiderTransactionPriceValidator
         {
             IsPriceValid = false,
             EffectivePrice = basePrice,
+        };
+    }
+
+    // A unit that delivers one share is worth at most the share (call, warrant) or the strike
+    // (put), so a one-for-one row priced far above both carries a total in its per-unit field.
+    private static InsiderTransactionPriceEvaluation EvaluateDerivative(
+        decimal reportedPrice,
+        long shares,
+        DailyBarContext bar,
+        long? underlyingShares,
+        decimal? exercisePrice
+    )
+    {
+        var asFiled = new InsiderTransactionPriceEvaluation
+        {
+            IsPriceValid = true,
+            EffectivePrice = reportedPrice,
+        };
+
+        // Without the filing's own 1:1 evidence a high unit price can be real (a $1,000 preferred,
+        // a note counted by principal), and without a settled close there is no ceiling to test.
+        var close = bar?.Close;
+        if (
+            shares <= 0
+            || underlyingShares != shares
+            || !close.HasValue
+            || close.Value <= 0m
+            || bar.SplitBasisAmbiguous
+        )
+            return asFiled;
+
+        // Same as-filed basis as the non-derivative path; divide the price side so it cannot overflow.
+        var factor = bar.SplitFactorToPresent > 0m ? bar.SplitFactorToPresent : 1m;
+        var ceiling = Math.Max(close.Value * factor, exercisePrice ?? 0m);
+        if (reportedPrice / MaxPriceToCloseMultiplier <= ceiling)
+            return asFiled;
+
+        // The total divided by the units is accepted only when it lands back under the ceiling.
+        var candidate = reportedPrice / shares;
+        if (candidate <= ceiling)
+        {
+            return new InsiderTransactionPriceEvaluation
+            {
+                IsPriceValid = true,
+                EffectivePrice = candidate,
+                WasRepaired = true,
+            };
+        }
+
+        return new InsiderTransactionPriceEvaluation
+        {
+            IsPriceValid = false,
+            EffectivePrice = reportedPrice,
         };
     }
 

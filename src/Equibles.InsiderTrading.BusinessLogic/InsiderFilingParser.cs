@@ -334,6 +334,16 @@ public static class InsiderFilingParser
         if (!IsPlausibleTransactionDate(transactionDate, filing.FilingDate))
             transactionDate = filing.ReportDate;
 
+        // Derivative rows carry the 1:1 evidence the price validator needs to repair a total
+        // typed into the per-unit field; a footnote-only or absent value stays null.
+        var isDerivative = kind == InsiderSecurityKind.Derivative;
+        var underlyingShares = isDerivative
+            ? ParseNullableLong(Wrapped("underlyingSecurity", "underlyingSecurityShares"))
+            : null;
+        var exercisePrice = isDerivative
+            ? ParseNullableDecimal(Wrapped("conversionOrExercisePrice"))
+            : null;
+
         return new InsiderTransaction
         {
             InsiderOwnerId = owner.Id,
@@ -353,6 +363,8 @@ public static class InsiderFilingParser
             SecurityKind = kind,
             ParserVersion = InsiderTransaction.CurrentParserVersion,
             Notes = ExtractNotes(txElement, footnotes),
+            UnderlyingShares = underlyingShares,
+            ExercisePrice = exercisePrice,
         };
     }
 
@@ -537,6 +549,30 @@ public static class InsiderFilingParser
             return result;
         var d = ParseDecimal(value);
         return d > long.MaxValue || d < long.MinValue ? 0 : (long)d;
+    }
+
+    // Null when the field is absent, blank, unparseable or out of range, so missing evidence
+    // stays distinct from a filed zero; truncates like ParseLong.
+    internal static long? ParseNullableLong(string value)
+    {
+        var parsed = ParseNullableDecimal(value);
+        if (parsed == null || parsed > long.MaxValue || parsed < long.MinValue)
+            return null;
+        return (long)parsed.Value;
+    }
+
+    internal static decimal? ParseNullableDecimal(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        return decimal.TryParse(
+            value,
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var result
+        )
+            ? result
+            : null;
     }
 
     internal static decimal ParseDecimal(string value)

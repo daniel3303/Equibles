@@ -49,6 +49,10 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
     // exactly once and the marker keeps it off every later cycle.
     private const string ShareslessReopenMarker = "InsiderTrading.ShareslessVerdictReopen";
 
+    // One-shot marker for re-enrolling derivative rows the old rule sealed valid as filed; its
+    // predicate re-matches every row the reprocess leaves valid as filed, so it runs once.
+    private const string DerivativeTotalsReenrollMarker = "InsiderTrading.DerivativeTotalsReenroll";
+
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
         // Restore rows the old basis-blind validator misrepaired BEFORE the version-driven
@@ -65,23 +69,17 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
 
             var backfillStateRepo =
                 sweepScope.ServiceProvider.GetRequiredService<BackfillStateRepository>();
-            if (await backfillStateRepo.GetByName(ShareslessReopenMarker) == null)
-            {
-                var reopened = await sweep.ReopenShareslessVerdicts(stoppingToken);
-                if (reopened < InsiderMisrepairedPriceSweep.MaxRowsPerCycle)
-                {
-                    // Drained in this pass — stamp the marker so the non-self-terminating
-                    // predicate never re-opens rows the fixed validator re-flagged.
-                    backfillStateRepo.Add(
-                        new BackfillState
-                        {
-                            Name = ShareslessReopenMarker,
-                            LastFullRescanAt = DateTime.UtcNow,
-                        }
-                    );
-                    await backfillStateRepo.SaveChanges();
-                }
-            }
+            await RunOneShot(
+                backfillStateRepo,
+                ShareslessReopenMarker,
+                () => sweep.ReopenShareslessVerdicts(stoppingToken)
+            );
+            // Runs before the reprocess below so the re-enrolled filings drain this same cycle.
+            await RunOneShot(
+                backfillStateRepo,
+                DerivativeTotalsReenrollMarker,
+                () => sweep.ReenrollDerivativeTotals(stoppingToken)
+            );
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -117,5 +115,26 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
                     backfillResult.Pending
                 );
         }
+    }
+
+    // Runs a non-self-terminating pass until one drains below the cycle bound, then stamps the
+    // marker so the pass never re-touches rows the validator has since re-judged.
+    private static async Task RunOneShot(
+        BackfillStateRepository backfillStateRepo,
+        string markerName,
+        Func<Task<int>> pass
+    )
+    {
+        if (await backfillStateRepo.GetByName(markerName) != null)
+            return;
+
+        var touched = await pass();
+        if (touched >= InsiderMisrepairedPriceSweep.MaxRowsPerCycle)
+            return;
+
+        backfillStateRepo.Add(
+            new BackfillState { Name = markerName, LastFullRescanAt = DateTime.UtcNow }
+        );
+        await backfillStateRepo.SaveChanges();
     }
 }

@@ -1334,7 +1334,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 transaction.SecurityKind,
                 transaction.SecurityTitle,
                 bar,
-                transaction.Notes
+                transaction.Notes,
+                transaction.UnderlyingShares,
+                transaction.ExercisePrice
             );
             transaction.PricePerShare = evaluation.EffectivePrice;
             transaction.IsPriceValid = evaluation.IsPriceValid;

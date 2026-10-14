@@ -508,6 +508,9 @@ public class InsiderFilingReprocessManager
                 }
                 // Re-derive footnotes (added in parser v2); cheap to always copy.
                 row.Notes = reparsed.Notes;
+                // Transient one-for-one evidence for the derivative price check below; not stored.
+                row.UnderlyingShares = reparsed.UnderlyingShares;
+                row.ExercisePrice = reparsed.ExercisePrice;
             }
         }
 
@@ -569,7 +572,9 @@ public class InsiderFilingReprocessManager
                 row.SecurityKind,
                 row.SecurityTitle,
                 bar,
-                row.Notes
+                row.Notes,
+                row.UnderlyingShares,
+                row.ExercisePrice
             );
             row.PricePerShare = evaluation.EffectivePrice;
             row.IsPriceValid = evaluation.IsPriceValid;
