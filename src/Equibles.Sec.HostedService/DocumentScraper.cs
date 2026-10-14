@@ -85,31 +85,36 @@ public class DocumentScraper : IDocumentScraper
 
             var companiesUntracked = await GetAllCompaniesWithNoTracking();
 
-            var targets = _options.UseEventDrivenDiscovery
-                ? await SelectEventDrivenTargets(companiesUntracked, cancellationToken)
-                : companiesUntracked;
-
-            _logger.LogInformation(
-                "Found {CompanyCount} companies to process for documents",
-                targets.Count
-            );
-
-            foreach (EquityIssuer companyUntracked in targets)
+            if (_options.UseEventDrivenDiscovery)
             {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                var companyExists = await ProcessCompanyDocumentsWithScope(
-                    companyUntracked,
-                    result
+                var (discovered, reconciliation) = await SelectEventDrivenTargets(
+                    companiesUntracked,
+                    cancellationToken
                 );
-                if (!companyExists)
-                    continue;
-
-                if (_options.UseEventDrivenDiscovery)
-                    await StampFilingSyncState(companyUntracked);
-
-                result.CompaniesProcessed++;
+                await ProcessPreemptingReconciliation(
+                    discovered,
+                    reconciliation,
+                    () =>
+                        _filingDiscoveryService.DiscoverCompaniesFromRecentFeed(
+                            companiesUntracked,
+                            cancellationToken
+                        ),
+                    company => ProcessTarget(company, stampSyncState: true, result),
+                    cancellationToken
+                );
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Found {CompanyCount} companies to process for documents",
+                    companiesUntracked.Count
+                );
+                foreach (var company in companiesUntracked)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+                    await ProcessTarget(company, stampSyncState: false, result);
+                }
             }
 
             if (result.DeferredFilings.Count > 0)
@@ -151,13 +156,13 @@ public class DocumentScraper : IDocumentScraper
     /// The cycle's work list under event-driven discovery: companies flagged by
     /// the real-time feeds, plus the reconciliation batch — never-synced
     /// companies (fresh onboarding, full historical backfill) and companies
-    /// whose last enumeration went stale. Discovery targets come first so a
-    /// fresh filing is never queued behind a long reconciliation batch.
+    /// whose last enumeration went stale. Discovery targets come first, and the
+    /// cycle re-polls discovery before each reconciliation company.
     /// </summary>
-    private async Task<List<EquityIssuer>> SelectEventDrivenTargets(
-        List<EquityIssuer> companies,
-        CancellationToken cancellationToken
-    )
+    private async Task<(
+        List<EquityIssuer> Discovered,
+        List<EquityIssuer> Reconciliation
+    )> SelectEventDrivenTargets(List<EquityIssuer> companies, CancellationToken cancellationToken)
     {
         var discovered = await _filingDiscoveryService.DiscoverCompaniesWithNewFilings(
             companies,
@@ -179,7 +184,59 @@ public class DocumentScraper : IDocumentScraper
             );
         }
 
-        return [.. discovered, .. reconciliation];
+        return (discovered, reconciliation);
+    }
+
+    /// <summary>
+    /// Processes the discovered companies, then the reconciliation batch with fresh filings preempting it:
+    /// a re-sweep can ingest years of filings, so newly flagged companies run before each one, and a company
+    /// already processed this cycle is not re-swept.
+    /// </summary>
+    internal static async Task ProcessPreemptingReconciliation(
+        IEnumerable<EquityIssuer> discovered,
+        IEnumerable<EquityIssuer> reconciliation,
+        Func<Task<List<EquityIssuer>>> pollFresh,
+        Func<EquityIssuer, Task> process,
+        CancellationToken cancellationToken
+    )
+    {
+        var processed = new HashSet<Guid>();
+
+        async Task Run(IEnumerable<EquityIssuer> companies)
+        {
+            foreach (var company in companies)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return;
+                processed.Add(company.Id);
+                await process(company);
+            }
+        }
+
+        await Run(discovered);
+        foreach (var company in reconciliation)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                return;
+            await Run(await pollFresh());
+            if (!processed.Contains(company.Id))
+                await Run([company]);
+        }
+    }
+
+    private async Task ProcessTarget(
+        EquityIssuer company,
+        bool stampSyncState,
+        ScrapingResult result
+    )
+    {
+        if (!await ProcessCompanyDocumentsWithScope(company, result))
+            return;
+
+        if (stampSyncState)
+            await StampFilingSyncState(company);
+
+        result.CompaniesProcessed++;
     }
 
     private async Task<List<EquityIssuer>> SelectReconciliationBatch(

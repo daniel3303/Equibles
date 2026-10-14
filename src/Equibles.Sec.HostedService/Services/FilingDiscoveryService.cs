@@ -59,9 +59,21 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         _logger = logger;
     }
 
-    public async Task<List<EquityIssuer>> DiscoverCompaniesWithNewFilings(
+    public Task<List<EquityIssuer>> DiscoverCompaniesWithNewFilings(
         IReadOnlyList<EquityIssuer> trackedCompanies,
         CancellationToken cancellationToken = default
+    ) => Discover(trackedCompanies, includeDailyIndex: true, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<List<EquityIssuer>> DiscoverCompaniesFromRecentFeed(
+        IReadOnlyList<EquityIssuer> trackedCompanies,
+        CancellationToken cancellationToken = default
+    ) => Discover(trackedCompanies, includeDailyIndex: false, cancellationToken);
+
+    private async Task<List<EquityIssuer>> Discover(
+        IReadOnlyList<EquityIssuer> trackedCompanies,
+        bool includeDailyIndex,
+        CancellationToken cancellationToken
     )
     {
         var cikToCompany = BuildCikMap(trackedCompanies);
@@ -74,7 +86,8 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         var utcNow = DateTime.UtcNow;
 
         await CollectFromRecentFeed(cikToCompany, syncedForms, dirty, cancellationToken);
-        await CollectFromDailyIndex(cikToCompany, syncedForms, dirty, cancellationToken);
+        if (includeDailyIndex)
+            await CollectFromDailyIndex(cikToCompany, syncedForms, dirty, cancellationToken);
         ReflagPendingAccessions(cikToCompany, dirty, utcNow);
 
         return [.. dirty.Values];
