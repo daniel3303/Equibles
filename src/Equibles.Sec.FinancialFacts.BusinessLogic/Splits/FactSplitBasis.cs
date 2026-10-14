@@ -11,7 +11,8 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 /// that serves facts. A filing issued after a split restates every per-share amount and share
 /// count its statements present (ASC 260, IAS 33, SAB Topic 4C), so a statement figure is on the
 /// basis of its filing date. The cover-page count is a literal count on its as-of date. Only the
-/// issuer's common-share count moves with a split; preferred and authorized counts stay as filed.
+/// issuer's common-share counts listed here move with a split; preferred, authorized and other
+/// share quantities stay as filed.
 /// </summary>
 public static class FactSplitBasis
 {
@@ -23,6 +24,16 @@ public static class FactSplitBasis
         "weighted-average-shares-diluted",
     ];
 
+    // Common-share counts a statement restates that no alias names (charts reach raw concepts).
+    private static readonly (FactTaxonomy Taxonomy, string Tag)[] UnaliasedCommonShareCounts =
+    [
+        (FactTaxonomy.UsGaap, "CommonStockSharesIssued"),
+        (FactTaxonomy.UsGaap, "TreasuryStockShares"),
+        (FactTaxonomy.UsGaap, "TreasuryStockCommonShares"),
+        (FactTaxonomy.IfrsFull, "WeightedAverageShares"),
+        (FactTaxonomy.IfrsFull, "AdjustedWeightedAverageShares"),
+    ];
+
     private static readonly HashSet<(FactTaxonomy Taxonomy, string Tag)> CommonShareCountConcepts =
         CommonShareCountAliases
             .SelectMany(alias =>
@@ -31,6 +42,7 @@ public static class FactSplitBasis
                     : throw new InvalidOperationException($"Unknown share-count alias '{alias}'.")
             )
             .Select(concept => (concept.Taxonomy, concept.Tag))
+            .Concat(UnaliasedCommonShareCounts)
             .ToHashSet();
 
     /// <summary>
