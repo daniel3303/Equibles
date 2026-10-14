@@ -10,7 +10,8 @@ public static class SecSubmissionHeader
     // null when the header lacks a valid stamp. Only the header is read, so a quoted tag in a body never counts.
     public static DateTime? AcceptedAt(string submission)
     {
-        var headerEnd = submission?.IndexOf("</SEC-HEADER>", StringComparison.OrdinalIgnoreCase) ?? -1;
+        var headerEnd =
+            submission?.IndexOf("</SEC-HEADER>", StringComparison.OrdinalIgnoreCase) ?? -1;
         if (headerEnd < 0)
             return null;
 
