@@ -23,7 +23,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
-| **SEC Filings** | SEC EDGAR | ✅ | ✅ | 10-K, 10-Q, 8-K annual/quarterly/current reports with full-text search |
+| **SEC Filings** | SEC EDGAR | ✅ | ✅ | Annual, quarterly and current reports (10-K, 10-Q, 8-K, 20-F, 6-K, 40-F), proxies (DEF 14A, DEFA14A, PRE 14A), registration statements (S-1, S-3, S-4, F-1, F-3, F-4), tender offers (SC TO, SC 14D9), late-filing notices (NT 10-K, NT 10-Q) and annual reports to holders (ARS), with full-text search |
 | **Financial Statements** | SEC XBRL | ✅ | ✅ | Parsed income statement, balance sheet, and cash flow facts per fiscal period |
 | **Holdings** | SEC 13F-HR | ✅ | ✅ | Institutional ownership — who owns what, how much, and trend over time |
 | **Fund Filings** | SEC NPORT / N-CEN / Form D | ✅ | ✅ | Fund portfolio holdings, registered-fund operations (service providers), and exempt offerings (private placements) |
