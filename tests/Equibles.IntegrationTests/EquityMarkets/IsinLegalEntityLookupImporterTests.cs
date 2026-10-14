@@ -40,7 +40,7 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
         return await importer.ImportListing(
             new EquityDirectoryListingInput
             {
-                Source = "hkex-securities",
+                Source = "venue-directory",
                 SourceIssuerIdentifier = "security:" + isin,
                 IssuerName = "BABA-W",
                 SourceSecurityIdentifier = isin,
@@ -52,8 +52,7 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
                 MarketCountryCode = "HK",
                 TradingCurrency = "HKD",
                 QuoteUnitMultiplier = 1m,
-                SourceUrl =
-                    "https://www.hkex.com.hk/eng/services/trading/securities/securitieslist",
+                SourceUrl = "https://example.org/venue/securities",
                 PayloadJson = "{\"code\":\"09988\"}",
             }
         );

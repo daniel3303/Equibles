@@ -17,13 +17,12 @@ namespace Equibles.IntegrationTests.CommonStocks;
 [Collection(ParadeDbCollection.Name)]
 public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
 {
-    private const string HongKongSource =
-        "https://www.hkex.com.hk/eng/services/trading/securities/securitieslist";
+    private const string VenueSource = "https://example.org/venue/securities";
 
     private static EquityDirectoryListingInput HongKong() =>
         new()
         {
-            Source = "hkex-securities",
+            Source = "venue-directory",
             SourceIssuerIdentifier = "security:09988",
             IssuerName = "BABA-W",
             SourceSecurityIdentifier = "09988",
@@ -35,7 +34,7 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             MarketCountryCode = "HK",
             TradingCurrency = "HKD",
             QuoteUnitMultiplier = 1m,
-            SourceUrl = HongKongSource,
+            SourceUrl = VenueSource,
             PayloadJson = JsonConvert.SerializeObject(new { code = "09988", name = "BABA-W" }),
         };
 
@@ -82,7 +81,7 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             EvidenceKind = "gleif-related-isin",
             EvidenceSourceRecordIds = [evidence],
             MergedBy = "operator@example.org",
-            WithdrawnFactPrefixes = ["HKEX-"],
+            WithdrawnFactPrefixes = ["VENUE-"],
             Execute = execute,
         };
 
@@ -104,7 +103,7 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             DimensionsKey = "",
         };
 
-    // A Hong Kong secondary listing imported as its own issuer, beside the SEC filer it duplicates.
+    // A secondary venue listing imported as its own issuer, beside the SEC filer it duplicates.
     private async Task<(Guid Retired, EquityIssuer Survivor, Guid Listing)> SeedDuplicate(
         ServiceProvider services
     )
@@ -167,7 +166,7 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             }
         );
         await DbContext.SaveChangesAsync();
-        DbContext.Add(Fact(retired, concept, "HKEX-2026-0001"));
+        DbContext.Add(Fact(retired, concept, "VENUE-2026-0001"));
         await DbContext.SaveChangesAsync();
         var evidence = await Evidence();
 
@@ -240,7 +239,7 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         var concept = new FinancialConcept { Taxonomy = FactTaxonomy.IfrsFull, Tag = "Revenue" };
         DbContext.Add(concept);
         await DbContext.SaveChangesAsync();
-        DbContext.Add(Fact(retired, concept, "HKEX-2026-0001"));
+        DbContext.Add(Fact(retired, concept, "VENUE-2026-0001"));
         await DbContext.SaveChangesAsync();
         var evidence = await Evidence();
 
@@ -276,7 +275,7 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             Fact(
                 retired,
                 concept,
-                defect == "governing-fact" ? "CNINFO-2026-0001" : "HKEX-2026-0001"
+                defect == "governing-fact" ? "FILING-2026-0001" : "VENUE-2026-0001"
             )
         );
         if (defect == "duplicate-registration")
