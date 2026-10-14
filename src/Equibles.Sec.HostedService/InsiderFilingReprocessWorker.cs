@@ -49,10 +49,6 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
     // exactly once and the marker keeps it off every later cycle.
     private const string ShareslessReopenMarker = "InsiderTrading.ShareslessVerdictReopen";
 
-    // One-shot marker for re-enrolling derivative rows the old rule sealed valid as filed; its
-    // predicate re-matches every row the reprocess leaves valid as filed, so it runs once.
-    private const string DerivativeTotalsReenrollMarker = "InsiderTrading.DerivativeTotalsReenroll";
-
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
         // Restore rows the old basis-blind validator misrepaired BEFORE the version-driven
@@ -73,12 +69,6 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
                 backfillStateRepo,
                 ShareslessReopenMarker,
                 () => sweep.ReopenShareslessVerdicts(stoppingToken)
-            );
-            // Runs before the reprocess below so the re-enrolled filings drain this same cycle.
-            await RunOneShot(
-                backfillStateRepo,
-                DerivativeTotalsReenrollMarker,
-                () => sweep.ReenrollDerivativeTotals(stoppingToken)
             );
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
