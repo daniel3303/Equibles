@@ -70,6 +70,7 @@ public class SecDocumentEnvelopeParserAsFiledHtmlTests
     [InlineData("S-3ASR", true)]
     [InlineData("NT 10-K", true)]
     [InlineData("8-K", false)]
+    [InlineData("DEF 14A", false)]
     public void TryBuildAsFiledHtml_PrimaryWithoutExhibits_BuildsOnlyForStandaloneForms(
         string form,
         bool builds
