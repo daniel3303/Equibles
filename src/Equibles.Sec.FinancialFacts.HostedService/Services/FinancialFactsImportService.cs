@@ -641,7 +641,7 @@ public class FinancialFactsImportService
             FiscalYear = fiscalIdentity.Year,
             FiscalPeriod = fiscalIdentity.Period,
             // SEC emits many form strings outside the known DocumentTypes
-            // (NT 10-K, S-1, 485BPOS, …); fold them into Other rather than
+            // (485BPOS, 424B4, …); fold them into Other rather than
             // fabricating untracked DocumentType instances.
             Form = DocumentType.FromDisplayName(p.Form) ?? DocumentType.Other,
             FiledDate = p.Filed,

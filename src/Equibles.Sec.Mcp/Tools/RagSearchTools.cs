@@ -33,10 +33,10 @@ public class RagSearchTools
     // to round-trip through ParseDocumentType in THIS build, and EarningsCallTranscript
     // is registered by the commercial host only.
     private const string DocumentTypeDescription =
-        "Document type filter. Accepts a registered type value — 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF', 'TwentyFa', 'SixKa', or 'FortyFa' — or its display name (e.g. '10-K', '20-F/A'), plus any deployment-registered type, such as EarningsCallTranscript (display name: Earnings Call) for earnings-call transcripts where available. An unrecognized value returns an error listing every accepted value.";
+        "Document type filter: a registered value such as 'TenK', 'TenQa', 'EightK', 'TwentyF', 'Def14A', 'Defa14A', 'SThree' or 'TenderOfferThirdParty', or its SEC form name ('10-K', '20-F/A', 'DEFA14A', 'S-3ASR', 'SC TO-T', 'NT 10-Q'), plus deployment-registered types such as EarningsCallTranscript. An unrecognized value returns an error listing every accepted value.";
 
     private const string DocumentTypesDescription =
-        "Optional document types. Accepts registered values such as TenK, TenQ, EightK, TwentyF, SixK, FortyF, or deployment-registered types such as EarningsCallTranscript. Display names such as 10-K are also accepted; an invalid value returns the full accepted list.";
+        "Optional document types. Accepts registered values such as TenK, TenQ, EightK, TwentyF, SixK, FortyF, Def14A, SOne, or deployment-registered types such as EarningsCallTranscript. SEC form names such as 10-K, DEFA14A, S-3, SC TO-T or NT 10-K are also accepted; an invalid value returns the full accepted list.";
 
     private const string MaxExcerptCharsDescription =
         "Maximum characters per excerpt (default: 0 = full excerpt). Set a small value (e.g. 400) for a compact scan across many results; truncated excerpts end with an explicit note.";

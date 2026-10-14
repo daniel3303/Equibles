@@ -192,7 +192,7 @@ public class Holdings13FReconciliationService
             // the deep archive (those are the bulk import's job).
             edgarFilings = await _edgarClient.GetCompanyFilings(
                 holder.Cik,
-                documentType: null,
+                edgarForm: null,
                 fromDate: windowFloor,
                 toDate: today
             );

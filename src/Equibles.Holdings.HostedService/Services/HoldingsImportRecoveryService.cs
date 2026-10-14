@@ -74,7 +74,7 @@ public class HoldingsImportRecoveryService(
         var from = pending.Min(row => row.FilingDate);
         var filings = await edgar.GetCompanyFilings(
             cik,
-            documentType: null,
+            edgarForm: null,
             fromDate: from,
             toDate: DateOnly.FromDateTime(DateTime.UtcNow)
         );

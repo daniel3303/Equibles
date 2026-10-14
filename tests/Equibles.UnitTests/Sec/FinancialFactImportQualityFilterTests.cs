@@ -129,9 +129,8 @@ public class FinancialFactImportQualityFilterTests
         result.Accepted.Should().ContainSingle().Which.Should().BeSameAs(tenK);
     }
 
-    // The RealReal shape (MCP feedback 4cbb4cd8): a PRELIMINARY proxy, whose form name
-    // DocumentType does not map, so it is stored as Other and shares the proxy's lowest
-    // source rank. It restated FY2025 net income with the sign flipped and a thousand-fold
+    // The RealReal shape (MCP feedback 4cbb4cd8): a PRELIMINARY proxy, which shares the
+    // proxy's lowest source rank. It restated FY2025 net income with the sign flipped and a thousand-fold
     // scale, which the scale rule cannot catch (it requires the candidate and the quarter
     // sum to share a sign), and the derived-Q4 synthesis then picked it as the latest-filed
     // annual and published a $41.76B TTM net income for a company that lost $41.8M.
@@ -150,7 +149,7 @@ public class FinancialFactImportQualityFilterTests
             tenK.PeriodStart,
             tenK.PeriodEnd,
             41_799_000_000m,
-            DocumentType.Other,
+            DocumentType.Pre14A,
             new DateOnly(2026, 4, 15),
             "0001573221-26-000026"
         );

@@ -52,6 +52,48 @@ public sealed class DocumentType
     public static readonly DocumentType NportP = new("NportP", "NPORT-P");
     public static readonly DocumentType NportPa = new("NportPa", "NPORT-P/A");
     public static readonly DocumentType Def14A = new("Def14A", "DEF 14A");
+    public static readonly DocumentType Defa14A = new("Defa14A", "DEFA14A");
+    public static readonly DocumentType Defm14A = new("Defm14A", "DEFM14A");
+    public static readonly DocumentType Defr14A = new("Defr14A", "DEFR14A");
+    public static readonly DocumentType Pre14A = new("Pre14A", "PRE 14A");
+    public static readonly DocumentType Prem14A = new("Prem14A", "PREM14A");
+    public static readonly DocumentType SOne = new("SOne", "S-1");
+    public static readonly DocumentType SOneA = new("SOneA", "S-1/A");
+    public static readonly DocumentType SThree = new("SThree", "S-3");
+    public static readonly DocumentType SThreeA = new("SThreeA", "S-3/A");
+    public static readonly DocumentType SThreeAsr = new("SThreeAsr", "S-3ASR");
+    public static readonly DocumentType SFour = new("SFour", "S-4");
+    public static readonly DocumentType SFourA = new("SFourA", "S-4/A");
+    public static readonly DocumentType FOne = new("FOne", "F-1");
+    public static readonly DocumentType FOneA = new("FOneA", "F-1/A");
+    public static readonly DocumentType FThree = new("FThree", "F-3");
+    public static readonly DocumentType FThreeA = new("FThreeA", "F-3/A");
+    public static readonly DocumentType FThreeAsr = new("FThreeAsr", "F-3ASR");
+    public static readonly DocumentType FFour = new("FFour", "F-4");
+    public static readonly DocumentType FFourA = new("FFourA", "F-4/A");
+    public static readonly DocumentType TenderOfferThirdParty = new(
+        "TenderOfferThirdParty",
+        "SC TO-T"
+    );
+    public static readonly DocumentType TenderOfferThirdPartyA = new(
+        "TenderOfferThirdPartyA",
+        "SC TO-T/A"
+    );
+    public static readonly DocumentType TenderOfferIssuer = new("TenderOfferIssuer", "SC TO-I");
+    public static readonly DocumentType TenderOfferIssuerA = new("TenderOfferIssuerA", "SC TO-I/A");
+    public static readonly DocumentType TenderOfferCommunication = new(
+        "TenderOfferCommunication",
+        "SC TO-C"
+    );
+    public static readonly DocumentType TenderOfferResponse = new("TenderOfferResponse", "SC 14D9");
+    public static readonly DocumentType TenderOfferResponseA = new(
+        "TenderOfferResponseA",
+        "SC 14D9/A"
+    );
+    public static readonly DocumentType LateTenK = new("LateTenK", "NT 10-K");
+    public static readonly DocumentType LateTenQ = new("LateTenQ", "NT 10-Q");
+    public static readonly DocumentType LateTwentyF = new("LateTwentyF", "NT 20-F");
+    public static readonly DocumentType AnnualReportToHolders = new("AnnualReportToHolders", "ARS");
 
     // The annual financial report a European issuer files under the ESEF regulation. It is not an SEC filing,
     // so it stays out of unfiltered filing lists the way registered non-filing types do.
@@ -72,75 +114,77 @@ public sealed class DocumentType
 
     public static readonly DocumentType Other = new("Other", "Other");
 
+    // Every built-in type; commercial modules add theirs through Register.
+    private static readonly DocumentType[] BuiltIn =
+    [
+        TenK,
+        TenQ,
+        EightK,
+        TenKa,
+        TenQa,
+        EightKa,
+        TwentyF,
+        SixK,
+        FortyF,
+        TwentyFa,
+        SixKa,
+        FortyFa,
+        FormFour,
+        FormThree,
+        FormFive,
+        FormFourA,
+        FormThreeA,
+        FormFiveA,
+        Form144,
+        FormD,
+        FormDa,
+        NCen,
+        NCenA,
+        NportP,
+        NportPa,
+        Def14A,
+        Defa14A,
+        Defm14A,
+        Defr14A,
+        Pre14A,
+        Prem14A,
+        SOne,
+        SOneA,
+        SThree,
+        SThreeA,
+        SThreeAsr,
+        SFour,
+        SFourA,
+        FOne,
+        FOneA,
+        FThree,
+        FThreeA,
+        FThreeAsr,
+        FFour,
+        FFourA,
+        TenderOfferThirdParty,
+        TenderOfferThirdPartyA,
+        TenderOfferIssuer,
+        TenderOfferIssuerA,
+        TenderOfferCommunication,
+        TenderOfferResponse,
+        TenderOfferResponseA,
+        LateTenK,
+        LateTenQ,
+        LateTwentyF,
+        AnnualReportToHolders,
+        EsefAnnualReport,
+        EsefReport,
+        Other,
+    ];
+
     private static readonly ConcurrentDictionary<string, DocumentType> AllByValue = new(
-        new[]
-        {
-            new KeyValuePair<string, DocumentType>(TenK.Value, TenK),
-            new KeyValuePair<string, DocumentType>(TenQ.Value, TenQ),
-            new KeyValuePair<string, DocumentType>(EightK.Value, EightK),
-            new KeyValuePair<string, DocumentType>(TenKa.Value, TenKa),
-            new KeyValuePair<string, DocumentType>(TenQa.Value, TenQa),
-            new KeyValuePair<string, DocumentType>(EightKa.Value, EightKa),
-            new KeyValuePair<string, DocumentType>(TwentyF.Value, TwentyF),
-            new KeyValuePair<string, DocumentType>(SixK.Value, SixK),
-            new KeyValuePair<string, DocumentType>(FortyF.Value, FortyF),
-            new KeyValuePair<string, DocumentType>(TwentyFa.Value, TwentyFa),
-            new KeyValuePair<string, DocumentType>(SixKa.Value, SixKa),
-            new KeyValuePair<string, DocumentType>(FortyFa.Value, FortyFa),
-            new KeyValuePair<string, DocumentType>(FormFour.Value, FormFour),
-            new KeyValuePair<string, DocumentType>(FormThree.Value, FormThree),
-            new KeyValuePair<string, DocumentType>(FormFive.Value, FormFive),
-            new KeyValuePair<string, DocumentType>(FormFourA.Value, FormFourA),
-            new KeyValuePair<string, DocumentType>(FormThreeA.Value, FormThreeA),
-            new KeyValuePair<string, DocumentType>(FormFiveA.Value, FormFiveA),
-            new KeyValuePair<string, DocumentType>(Form144.Value, Form144),
-            new KeyValuePair<string, DocumentType>(FormD.Value, FormD),
-            new KeyValuePair<string, DocumentType>(FormDa.Value, FormDa),
-            new KeyValuePair<string, DocumentType>(NCen.Value, NCen),
-            new KeyValuePair<string, DocumentType>(NCenA.Value, NCenA),
-            new KeyValuePair<string, DocumentType>(NportP.Value, NportP),
-            new KeyValuePair<string, DocumentType>(NportPa.Value, NportPa),
-            new KeyValuePair<string, DocumentType>(Def14A.Value, Def14A),
-            new KeyValuePair<string, DocumentType>(EsefAnnualReport.Value, EsefAnnualReport),
-            new KeyValuePair<string, DocumentType>(EsefReport.Value, EsefReport),
-            new KeyValuePair<string, DocumentType>(Other.Value, Other),
-        },
+        BuiltIn.Select(t => KeyValuePair.Create(t.Value, t)),
         StringComparer.OrdinalIgnoreCase
     );
 
     private static readonly ConcurrentDictionary<string, DocumentType> AllByDisplayName = new(
-        new[]
-        {
-            new KeyValuePair<string, DocumentType>(TenK.DisplayName, TenK),
-            new KeyValuePair<string, DocumentType>(TenQ.DisplayName, TenQ),
-            new KeyValuePair<string, DocumentType>(EightK.DisplayName, EightK),
-            new KeyValuePair<string, DocumentType>(TenKa.DisplayName, TenKa),
-            new KeyValuePair<string, DocumentType>(TenQa.DisplayName, TenQa),
-            new KeyValuePair<string, DocumentType>(EightKa.DisplayName, EightKa),
-            new KeyValuePair<string, DocumentType>(TwentyF.DisplayName, TwentyF),
-            new KeyValuePair<string, DocumentType>(SixK.DisplayName, SixK),
-            new KeyValuePair<string, DocumentType>(FortyF.DisplayName, FortyF),
-            new KeyValuePair<string, DocumentType>(TwentyFa.DisplayName, TwentyFa),
-            new KeyValuePair<string, DocumentType>(SixKa.DisplayName, SixKa),
-            new KeyValuePair<string, DocumentType>(FortyFa.DisplayName, FortyFa),
-            new KeyValuePair<string, DocumentType>(FormFour.DisplayName, FormFour),
-            new KeyValuePair<string, DocumentType>(FormThree.DisplayName, FormThree),
-            new KeyValuePair<string, DocumentType>(FormFive.DisplayName, FormFive),
-            new KeyValuePair<string, DocumentType>(FormFourA.DisplayName, FormFourA),
-            new KeyValuePair<string, DocumentType>(FormThreeA.DisplayName, FormThreeA),
-            new KeyValuePair<string, DocumentType>(FormFiveA.DisplayName, FormFiveA),
-            new KeyValuePair<string, DocumentType>(Form144.DisplayName, Form144),
-            new KeyValuePair<string, DocumentType>(FormD.DisplayName, FormD),
-            new KeyValuePair<string, DocumentType>(FormDa.DisplayName, FormDa),
-            new KeyValuePair<string, DocumentType>(NCen.DisplayName, NCen),
-            new KeyValuePair<string, DocumentType>(NCenA.DisplayName, NCenA),
-            new KeyValuePair<string, DocumentType>(NportP.DisplayName, NportP),
-            new KeyValuePair<string, DocumentType>(NportPa.DisplayName, NportPa),
-            new KeyValuePair<string, DocumentType>(Def14A.DisplayName, Def14A),
-            new KeyValuePair<string, DocumentType>(EsefAnnualReport.DisplayName, EsefAnnualReport),
-            new KeyValuePair<string, DocumentType>(EsefReport.DisplayName, EsefReport),
-            new KeyValuePair<string, DocumentType>(Other.DisplayName, Other),
-        },
+        BuiltIn.Select(t => KeyValuePair.Create(t.DisplayName, t)),
         StringComparer.OrdinalIgnoreCase
     );
 

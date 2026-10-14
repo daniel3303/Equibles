@@ -136,43 +136,20 @@ public class ConfigurationTests
 
     // ── DocumentScraperOptions ───────────────────────────────────────
 
+    // A synced amendment never runs before its original, so a correction never lands ahead of the
+    // filing it corrects.
     [Fact]
-    public void DocumentScraperOptions_DocumentTypesToSync_DefaultsToExpectedTypes()
+    public void DocumentScraperOptions_DocumentTypesToSync_PutsEachOriginalBeforeItsAmendment()
     {
-        var options = new DocumentScraperOptions();
+        var synced = new DocumentScraperOptions().DocumentTypesToSync;
 
-        options
-            .DocumentTypesToSync.Should()
-            .NotBeNull()
-            .And.HaveCount(26)
-            .And.ContainInOrder(
-                DocumentType.TenK,
-                DocumentType.TenQ,
-                DocumentType.EightK,
-                DocumentType.TenKa,
-                DocumentType.TenQa,
-                DocumentType.EightKa,
-                DocumentType.TwentyF,
-                DocumentType.SixK,
-                DocumentType.FortyF,
-                DocumentType.TwentyFa,
-                DocumentType.SixKa,
-                DocumentType.FortyFa,
-                DocumentType.FormFour,
-                DocumentType.FormThree,
-                DocumentType.FormFive,
-                DocumentType.FormFourA,
-                DocumentType.FormThreeA,
-                DocumentType.FormFiveA,
-                DocumentType.Form144,
-                DocumentType.FormD,
-                DocumentType.FormDa,
-                DocumentType.NCen,
-                DocumentType.NCenA,
-                DocumentType.NportP,
-                DocumentType.NportPa,
-                DocumentType.Def14A
-            );
+        foreach (
+            var amendment in SecForms.All.Where(f => f.AmendmentOf != null && f.SyncedByDefault)
+        )
+            synced
+                .IndexOf(amendment.AmendmentOf)
+                .Should()
+                .BeLessThan(synced.IndexOf(amendment.Type), amendment.EdgarForm);
     }
 
     [Fact]

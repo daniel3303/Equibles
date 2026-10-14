@@ -1,11 +1,9 @@
 using System.Collections.Concurrent;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
-using Equibles.Integrations.Sec.Extensions;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
-using Equibles.Sec.HostedService.Extensions;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Options;
 
@@ -61,9 +59,21 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         _logger = logger;
     }
 
-    public async Task<List<EquityIssuer>> DiscoverCompaniesWithNewFilings(
+    public Task<List<EquityIssuer>> DiscoverCompaniesWithNewFilings(
         IReadOnlyList<EquityIssuer> trackedCompanies,
         CancellationToken cancellationToken = default
+    ) => Discover(trackedCompanies, includeDailyIndex: true, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<List<EquityIssuer>> DiscoverCompaniesFromRecentFeed(
+        IReadOnlyList<EquityIssuer> trackedCompanies,
+        CancellationToken cancellationToken = default
+    ) => Discover(trackedCompanies, includeDailyIndex: false, cancellationToken);
+
+    private async Task<List<EquityIssuer>> Discover(
+        IReadOnlyList<EquityIssuer> trackedCompanies,
+        bool includeDailyIndex,
+        CancellationToken cancellationToken
     )
     {
         var cikToCompany = BuildCikMap(trackedCompanies);
@@ -76,7 +86,8 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         var utcNow = DateTime.UtcNow;
 
         await CollectFromRecentFeed(cikToCompany, syncedForms, dirty, cancellationToken);
-        await CollectFromDailyIndex(cikToCompany, syncedForms, dirty, cancellationToken);
+        if (includeDailyIndex)
+            await CollectFromDailyIndex(cikToCompany, syncedForms, dirty, cancellationToken);
         ReflagPendingAccessions(cikToCompany, dirty, utcNow);
 
         return [.. dirty.Values];
@@ -460,9 +471,9 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         var forms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var documentType in _options.DocumentTypesToSync)
         {
-            var filter = documentType.ToSecEdgarFilter();
-            if (filter != null)
-                forms.Add(filter.Value.GetFormName());
+            var secForm = SecForms.Find(documentType);
+            if (secForm != null)
+                forms.Add(secForm.EdgarForm);
         }
 
         return forms;
