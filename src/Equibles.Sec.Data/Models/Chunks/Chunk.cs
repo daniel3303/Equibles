@@ -68,10 +68,9 @@ public class Chunk
     public string Ticker { get; set; }
 
     /// <summary>
-    /// Denormalized from <see cref="Document"/>.<see cref="Documents.Document.ReportingDate"/>.
-    /// Stored as DateTime (converted from DateOnly) for the search index. This is a cache, not the
-    /// filing-date source of truth: retrieval filters and renderers use the parent document date so
-    /// a corrected document cannot leave stale transcript search metadata (#7049).
+    /// The parent document's filing date at midnight UTC, indexed so a date window filters inside
+    /// BM25. Database triggers keep it equal to the parent for every writer, including filing-date
+    /// corrections; membership checks and renderers still read the parent document date.
     /// </summary>
     public DateTime ReportingDate { get; set; }
 

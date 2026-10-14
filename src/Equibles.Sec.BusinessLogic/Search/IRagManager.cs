@@ -1,5 +1,6 @@
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
+using Equibles.Sec.Repositories;
 
 namespace Equibles.Sec.BusinessLogic.Search;
 
@@ -13,7 +14,8 @@ public interface IRagManager
         DateOnly? endDate = null,
         IReadOnlyCollection<string> excludeTickers = null,
         int maxResultsPerCompany = 0,
-        bool broadenSparseResults = false
+        bool broadenSparseResults = false,
+        SearchMatch match = SearchMatch.Ranked
     );
     public Task<List<Chunk>> SearchRelevantChunksByCompany(
         string query,
@@ -22,7 +24,8 @@ public interface IRagManager
         IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
         DateOnly? endDate = null,
-        bool broadenSparseResults = false
+        bool broadenSparseResults = false,
+        SearchMatch match = SearchMatch.Ranked
     );
     public Task<List<Chunk>> SearchRelevantChunksByDocumentType(
         string query,

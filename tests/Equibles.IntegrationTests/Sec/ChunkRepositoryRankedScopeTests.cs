@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.Data.Models;
@@ -16,35 +17,17 @@ namespace Equibles.IntegrationTests.Sec;
 public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
 {
     [Fact]
-    public async Task Search_NarrowsForeignAndOutdatedMatchesBeforeRanking_UsingParentDatesAndTopK()
+    public async Task Search_NarrowsOutdatedMatchesInsideTheIndex_UsingTheFilingDateRangeAndTopK()
     {
-        var domestic = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
-        var foreign = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
-        foreign.Presentation.Listing.MarketCountryCode = "PT";
-        foreign.Presentation.Listing.MarketIdentifierCode = "XLIS";
-        var old = AddDocument(domestic, new DateOnly(2020, 1, 1));
-        var wrongOwner = AddDocument(foreign, new DateOnly(2026, 1, 1));
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
+        var old = AddDocument(issuer, new DateOnly(2020, 1, 1));
         for (var index = 0; index < 80; index++)
-        {
-            AddChunk(
-                old,
-                index,
-                "orbital revenue",
-                new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            );
-            AddChunk(
-                wrongOwner,
-                index,
-                "orbital revenue",
-                new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            );
-        }
-        var current = AddDocument(domestic, new DateOnly(2026, 1, 1));
+            AddChunk(old, index, "orbital revenue");
+        var current = AddDocument(issuer, new DateOnly(2026, 1, 1));
         var expected = AddChunk(
             current,
             0,
-            "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 200)),
-            new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 200))
         );
         await DbContext.SaveChangesAsync();
         var capture = new RankCapture();
@@ -62,23 +45,38 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         result.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
         capture
             .Scans.Should()
-            .ContainSingle("the parent scope must narrow the index before ranking");
+            .ContainSingle("the filing-date range must narrow the index before ranking");
         capture
             .Parameters.Should()
-            .Contain(parameter => parameter.Value.ToString().Contains("term_set"));
-        await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SET max_parallel_workers_per_gather=0";
-        await command.ExecuteNonQueryAsync();
-        command.CommandText = "EXPLAIN " + capture.Scans[0];
-        foreach (var parameter in capture.Parameters)
-            command.Parameters.Add(parameter);
-        await using var reader = await command.ExecuteReaderAsync();
-        var plan = new List<string>();
-        while (await reader.ReadAsync())
-            plan.Add(reader.GetString(0));
-        string.Join('\n', plan).Should().Contain("TopKScanExecState");
+            .Contain(parameter => parameter.Value.ToString().Contains("\"range\""));
+        (await ExplainFirstScan(capture)).Should().Contain("TopKScanExecState");
+    }
+
+    [Fact]
+    public async Task Search_ExcludesForeignFilingsSharingTheSymbol_ByParentOwnership()
+    {
+        var domestic = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
+        var foreign = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
+        foreign.Presentation.Listing.MarketCountryCode = "PT";
+        foreign.Presentation.Listing.MarketIdentifierCode = "XLIS";
+        var wrongOwner = AddDocument(foreign, new DateOnly(2026, 1, 1));
+        for (var index = 0; index < 80; index++)
+            AddChunk(wrongOwner, index, "orbital revenue");
+        var expected = AddChunk(
+            AddDocument(domestic, new DateOnly(2026, 1, 1)),
+            0,
+            "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 200))
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await new ChunkRepository(DbContext).HybridSearch(
+            "orbital revenue",
+            1,
+            ticker: "SAME",
+            startDate: new DateOnly(2025, 1, 1)
+        );
+
+        result.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
     }
 
     [Fact]
@@ -87,12 +85,7 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "EMPTY");
         var old = AddDocument(issuer, new DateOnly(2020, 1, 1));
         for (var index = 0; index < 80; index++)
-            AddChunk(
-                old,
-                index,
-                "orbital revenue",
-                new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            );
+            AddChunk(old, index, "orbital revenue");
         await DbContext.SaveChangesAsync();
         var capture = new RankCapture();
         await using var context = Fixture.CreateDbContext(builder =>
@@ -110,24 +103,18 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
     }
 
     [Fact]
-    public async Task Search_LargeDateWindowRefillsCandidates_WithoutTruncatingTheDocumentScope()
+    public async Task Search_LargeDateWindowRanksOnce_WithTheRangeInsideTheIndex()
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "LARGE");
         var old = AddDocument(issuer, new DateOnly(2020, 1, 1));
         for (var index = 0; index < 80; index++)
-            AddChunk(
-                old,
-                index,
-                "orbital revenue",
-                new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            );
-        for (var index = 0; index < 4096; index++)
+            AddChunk(old, index, "orbital revenue");
+        for (var index = 0; index < 4097; index++)
             AddDocument(issuer, new DateOnly(2026, 1, 1));
         var expected = AddChunk(
             AddDocument(issuer, new DateOnly(2026, 1, 1)),
             0,
-            "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 200)),
-            new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 200))
         );
         await DbContext.SaveChangesAsync();
         var capture = new RankCapture();
@@ -142,10 +129,103 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         );
 
         result.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
-        capture.Scans.Count.Should().BeGreaterThan(1);
+        capture.Scans.Should().ContainSingle("a wide window is a range, not a document list");
         capture
             .Parameters.Should()
-            .NotContain(parameter => parameter.Value.ToString().Contains("term_set"));
+            .Contain(parameter => parameter.Value.ToString().Contains("\"range\""))
+            .And.NotContain(parameter => parameter.Value.ToString().Contains("term_set"));
+        (await ExplainFirstScan(capture)).Should().Contain("TopKScanExecState");
+    }
+
+    [Fact]
+    public async Task Search_EndDateIncludesItsWholeDay_AndExcludesTheNextDay()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "EDGE");
+        var lastDay = AddChunk(AddDocument(issuer, new DateOnly(2026, 2, 1)), 0, "orbital revenue");
+        AddChunk(AddDocument(issuer, new DateOnly(2026, 2, 2)), 0, "orbital revenue");
+        var firstDay = AddChunk(
+            AddDocument(issuer, new DateOnly(2026, 1, 1)),
+            0,
+            "orbital revenue"
+        );
+        AddChunk(AddDocument(issuer, new DateOnly(2025, 12, 31)), 0, "orbital revenue");
+        await DbContext.SaveChangesAsync();
+
+        var result = await new ChunkRepository(DbContext).HybridSearch(
+            "orbital revenue",
+            10,
+            startDate: new DateOnly(2026, 1, 1),
+            endDate: new DateOnly(2026, 2, 1)
+        );
+
+        result.Select(chunk => chunk.Id).Should().BeEquivalentTo([lastDay.Id, firstDay.Id]);
+    }
+
+    // ParadeDB 0.24 (production) matches nothing for a bound outside its nanosecond timestamp
+    // span, while later versions clamp it, so the bound must leave the query open.
+    [Theory]
+    [InlineData("2026-01-01", "9999-12-31", "2026-01-01T00:00:00Z", "9999")]
+    [InlineData("0500-01-01", "2026-02-01", "2026-02-01T00:00:00Z", "0500")]
+    [InlineData("2026-01-01", "2262-04-12", "2026-01-01T00:00:00Z", "2262")]
+    public async Task Search_BoundOutsideTheIndexedSpan_StaysOpen(
+        string start,
+        string end,
+        string keptBound,
+        string droppedBound
+    )
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OPEN");
+        var hit = AddChunk(AddDocument(issuer, new DateOnly(2026, 2, 1)), 0, "orbital revenue");
+        await DbContext.SaveChangesAsync();
+        var capture = new RankCapture();
+        await using var context = Fixture.CreateDbContext(builder =>
+            builder.AddInterceptors(capture)
+        );
+
+        var result = await new ChunkRepository(context).HybridSearch(
+            "orbital revenue",
+            10,
+            startDate: DateOnly.Parse(start, CultureInfo.InvariantCulture),
+            endDate: DateOnly.Parse(end, CultureInfo.InvariantCulture)
+        );
+
+        result.Select(chunk => chunk.Id).Should().Equal(hit.Id);
+        capture
+            .Parameters.Select(parameter => parameter.Value.ToString())
+            .Where(value => value.Contains("\"range\""))
+            .Should()
+            .NotBeEmpty()
+            .And.OnlyContain(value => value.Contains(keptBound) && !value.Contains(droppedBound));
+    }
+
+    // The window reaches ParadeDB as text; a culture-formatted time ("00.00.00") is rejected and
+    // a Buddhist-calendar year matches nothing.
+    [Theory]
+    [InlineData("fi-FI")]
+    [InlineData("th-TH")]
+    public async Task Search_DateWindow_IsCultureInvariant(string culture)
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "LOCALE");
+        var hit = AddChunk(AddDocument(issuer, new DateOnly(2026, 2, 1)), 0, "orbital revenue");
+        AddChunk(AddDocument(issuer, new DateOnly(2025, 12, 31)), 0, "orbital revenue");
+        await DbContext.SaveChangesAsync();
+        var original = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo(culture);
+        try
+        {
+            var result = await new ChunkRepository(DbContext).HybridSearch(
+                "orbital revenue",
+                10,
+                startDate: new DateOnly(2026, 1, 1),
+                endDate: new DateOnly(2026, 2, 1)
+            );
+
+            result.Select(chunk => chunk.Id).Should().Equal(hit.Id);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     [Fact]
@@ -176,7 +256,7 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
     }
 
     [Fact]
-    public async Task Search_DateWindowRespectsEndDateAndDocumentType_WithStaleChunkDates()
+    public async Task Search_DateWindowFollowsTheParentDate_WhenAWriterPassesAStaleChunkDate()
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "DATES");
         var tooNew = AddDocument(issuer, new DateOnly(2026, 3, 1));
@@ -265,7 +345,14 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         return document;
     }
 
-    private Chunk AddChunk(Document document, int index, string content, DateTime cacheDate)
+    // writerDate stands in for a writer that passes a date other than the parent's; the chunk
+    // trigger replaces it, so every seeded chunk carries its document's filing date.
+    private Chunk AddChunk(
+        Document document,
+        int index,
+        string content,
+        DateTime? writerDate = null
+    )
     {
         var chunk = new Chunk
         {
@@ -274,10 +361,32 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
             Content = content,
             Ticker = "SAME",
             DocumentType = document.DocumentType,
-            ReportingDate = cacheDate,
+            ReportingDate =
+                writerDate
+                ?? DateTime.SpecifyKind(
+                    document.ReportingDate.ToDateTime(TimeOnly.MinValue),
+                    DateTimeKind.Utc
+                ),
         };
         DbContext.Add(chunk);
         return chunk;
+    }
+
+    private async Task<string> ExplainFirstScan(RankCapture capture)
+    {
+        await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SET max_parallel_workers_per_gather=0";
+        await command.ExecuteNonQueryAsync();
+        command.CommandText = "EXPLAIN " + capture.Scans[0];
+        foreach (var parameter in capture.Parameters)
+            command.Parameters.Add(parameter);
+        await using var reader = await command.ExecuteReaderAsync();
+        var plan = new List<string>();
+        while (await reader.ReadAsync())
+            plan.Add(reader.GetString(0));
+        return string.Join('\n', plan);
     }
 
     private sealed class RankCapture(bool delay = false) : DbCommandInterceptor

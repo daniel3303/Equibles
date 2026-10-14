@@ -1,4 +1,6 @@
+using System.Globalization;
 using Equibles.Data;
+using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Repositories.Extensions;
@@ -6,11 +8,38 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.Repositories;
 
+// A filing-date window reaches the BM25 index as a range on Chunk.ReportingDate, which the
+// Document trigger keeps equal to the parent date; the parent stays the membership authority.
 internal static class ChunkDateScope
 {
-    private const int MaximumDocuments = 4096;
+    // The index stores timestamps as signed 64-bit nanoseconds; ParadeDB 0.24 answers a bound
+    // outside that span with no rows instead of an error.
+    private static readonly DateOnly FirstIndexedDay = new(1677, 9, 22);
+    private static readonly DateOnly LastIndexedDay = new(2262, 4, 11);
 
-    internal static async Task<Guid[]> Read(
+    internal static ParadeDbJsonQuery IndexFilter(DateOnly? startDate, DateOnly? endDate)
+    {
+        if (startDate == null && endDate == null)
+            return null;
+        // Chunks carry their filing date at exactly midnight UTC, so a whole-day window is the
+        // closed span between the first and last days' midnights. A bound outside the index's
+        // timestamp span stays open: every chunk date lies inside it.
+        var lower = startDate is { } start && start > FirstIndexedDay ? MidnightUtc(start) : null;
+        var upper = endDate is { } end && end < LastIndexedDay ? MidnightUtc(end) : null;
+        if (lower == null && upper == null)
+            return null;
+        return ParadeDbJsonQuery.Range(
+            nameof(Chunk.ReportingDate),
+            lower,
+            upper,
+            lowerInclusive: true,
+            upperInclusive: true,
+            isDatetime: true
+        );
+    }
+
+    // One indexed probe so an empty window answers without touching the BM25 index.
+    internal static Task<bool> HasParents(
         EquiblesFinancialDbContext context,
         string ticker,
         Guid? documentId,
@@ -20,8 +49,6 @@ internal static class ChunkDateScope
         CancellationToken token
     )
     {
-        if (startDate == null && endDate == null)
-            return null;
         IQueryable<Document> documents = context.Set<Document>();
         if (ticker != null)
             documents = documents.ForUsTicker(ticker, context);
@@ -33,11 +60,11 @@ internal static class ChunkDateScope
             documents = documents.Where(document => document.ReportingDate >= start);
         if (endDate is { } end)
             documents = documents.Where(document => document.ReportingDate <= end);
-        var ids = await documents
-            .Select(document => document.Id)
-            .Take(MaximumDocuments + 1)
-            .ToArrayAsync(token);
-        // A partial list would silently lose matches; large windows retain ranked-prefix validation.
-        return ids.Length <= MaximumDocuments ? ids : null;
+        return documents.AnyAsync(token);
     }
+
+    // Formatted here: the query builder renders a DateTime in the host's culture, which some
+    // locales turn into a time ParadeDB rejects or a non-Gregorian year.
+    private static string MidnightUtc(DateOnly date) =>
+        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T00:00:00Z";
 }

@@ -90,9 +90,24 @@ public class HybridChunkSearcher
         DateOnly? startDate = null,
         DateOnly? endDate = null,
         bool disjunctiveFallback = false,
+        SearchMatch match = SearchMatch.Ranked,
         CancellationToken cancellationToken = default
     )
     {
+        if (match == SearchMatch.Phrase)
+            return await SearchPhrase(
+                query,
+                maxResults,
+                ticker,
+                excludeTickers,
+                documentId,
+                documentTypes,
+                maxResultsPerCompany,
+                startDate,
+                endDate,
+                cancellationToken
+            );
+
         // When the semantic arm is live, BM25 returns a deeper pool so RRF has more to reorder;
         // otherwise it returns exactly what the caller asked for. A per-company cap also deepens
         // the pool: capping discards surplus hits, and the pool must still fill maxResults.
@@ -358,6 +373,47 @@ public class HybridChunkSearcher
                 .Take(maxResults)
                 .ToList()
         );
+    }
+
+    // A phrase search is a filter: one BM25 pass over the exact phrase, ranked by relevance. The
+    // recall aids of a ranked search (any-word top-up, shortened query, vector fusion, full-text
+    // fallback) would admit excerpts without the phrase, so none run; a timeout reaches the caller.
+    private async Task<List<Chunk>> SearchPhrase(
+        string phrase,
+        int maxResults,
+        string ticker,
+        IReadOnlyCollection<string> excludeTickers,
+        Guid? documentId,
+        IReadOnlyCollection<DocumentType> documentTypes,
+        int maxResultsPerCompany,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var limit =
+            maxResultsPerCompany > 0
+                ? Math.Max(maxResults, maxResults * PerCompanyOverFetchFactor)
+                : maxResults;
+        var chunks = await _chunkRepository.PhraseSearch(
+            phrase,
+            limit,
+            ticker,
+            excludeTickers,
+            documentId,
+            documentTypes,
+            startDate,
+            endDate,
+            cancellationToken: cancellationToken
+        );
+        return ApplyPoolControls(
+                chunks.DistinctBy(chunk => chunk.Id),
+                excludeTickers,
+                documentTypes,
+                maxResultsPerCompany
+            )
+            .Take(maxResults)
+            .ToList();
     }
 
     // The pool controls, re-applied AFTER fusion: the BM25 arm already resolves
