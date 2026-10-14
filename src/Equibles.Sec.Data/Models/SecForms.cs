@@ -24,6 +24,10 @@ public sealed record SecForm(
 )
 {
     public string EdgarForm => Type.DisplayName;
+
+    /// <summary>Ownership, offering and fund forms are parsed into their own datasets, never stored as documents.</summary>
+    public bool IsDocument =>
+        Family is not (SecFormFamily.Ownership or SecFormFamily.Offering or SecFormFamily.Fund);
 }
 
 /// <summary>

@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.HostedService.Contracts;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -50,6 +52,24 @@ public class SecFormsTests
             .All.Where(f => f.AmendmentOf != null && synced.Contains(f.Type))
             .Should()
             .OnlyContain(f => synced.Contains(f.AmendmentOf));
+    }
+
+    // A form a filing processor consumes becomes dataset rows, so pickers must not offer it as a document.
+    [Fact]
+    public void IsDocument_IsExactlyTheFormsNoFilingProcessorConsumes()
+    {
+        var processors = typeof(IFilingProcessor)
+            .Assembly.GetTypes()
+            .Where(t =>
+                typeof(IFilingProcessor).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface
+            )
+            .Select(t => (IFilingProcessor)RuntimeHelpers.GetUninitializedObject(t))
+            .ToList();
+
+        processors.Should().NotBeEmpty();
+        SecForms
+            .All.Should()
+            .OnlyContain(f => f.IsDocument == !processors.Any(p => p.CanProcess(f.Type)));
     }
 
     [Theory]
