@@ -127,7 +127,7 @@ public static class FactSplitBasis
 
     /// <summary>
     /// Restates a value by splits the caller already scoped, for figures compared against one
-    /// price series rather than shown for a listing.
+    /// price series rather than shown for a listing, so it applies every factor that series did.
     /// </summary>
     public static decimal RestateScoped(
         decimal value,
@@ -141,7 +141,7 @@ public static class FactSplitBasis
             : Apply(
                 value,
                 kind,
-                SplitAdjustment.ShareCountFactor(
+                SplitAdjustment.PriceSeriesFactor(
                     BasisDate(kind, periodEnd, filedDate),
                     scopedSplits
                 )
