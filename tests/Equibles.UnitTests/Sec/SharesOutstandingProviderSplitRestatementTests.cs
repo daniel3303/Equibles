@@ -137,6 +137,24 @@ public class SharesOutstandingProviderSplitRestatementTests
     }
 
     [Fact]
+    public async Task ARatioTheIssuersCountsContradict_DoesNotRestateTheCount()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Stock();
+        var concept = CoverPageConcept();
+        db.AddRange(stock, concept);
+        db.Add(Fact(stock, concept, 634_887_208m, Today.AddDays(-12), Today.AddDays(-17)));
+        var spinOff = Split(stock, Today.AddDays(-4), 1061m, 1000m, "BYND");
+        spinOff.ShareCountEvidence = StockSplitShareCountEvidence.Contradicted;
+        db.Add(spinOff);
+        await db.SaveChangesAsync();
+
+        var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
+
+        shares.Should().Be(634_887_208);
+    }
+
+    [Fact]
     public async Task FactStatedOnTheEffectiveDate_IsAlreadyPostSplit_NotRestated()
     {
         await using var db = NewDb();

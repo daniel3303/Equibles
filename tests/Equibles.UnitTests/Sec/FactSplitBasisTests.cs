@@ -344,6 +344,53 @@ public class FactSplitBasisTests
     }
 
     [Fact]
+    public void Restate_HoneywellDilutedCounts_FollowTheConfirmedHalvingNotTheSpinOffFactors()
+    {
+        // The US series carries two spin-off price factors; the counts confirm only Milan's 1:2.
+        StockSplit Judged(
+            int month,
+            int day,
+            decimal numerator,
+            decimal denominator,
+            Guid listing,
+            StockSplitShareCountEvidence evidence
+        ) =>
+            new()
+            {
+                EffectiveDate = new DateOnly(month == 10 ? 2025 : 2026, month, day),
+                Numerator = numerator,
+                Denominator = denominator,
+                EquityListingId = listing,
+                PriceSeriesTicker = "HON",
+                ShareCountEvidence = evidence,
+            };
+        var splits = new[]
+        {
+            Judged(10, 30, 1061m, 1000m, ListingId, StockSplitShareCountEvidence.Contradicted),
+            Judged(6, 29, 1907m, 2000m, ListingId, StockSplitShareCountEvidence.Contradicted),
+            Judged(6, 29, 1m, 2m, Guid.NewGuid(), StockSplitShareCountEvidence.Confirmed),
+        };
+        var filed = new[]
+        {
+            Fact(642_500_000m, "shares", new DateOnly(2025, 9, 30), new DateOnly(2025, 10, 23)),
+            Fact(638_000_000m, "shares", new DateOnly(2026, 3, 31), new DateOnly(2026, 4, 23)),
+            Fact(318_600_000m, "shares", new DateOnly(2026, 6, 30), new DateOnly(2026, 7, 23)),
+        };
+
+        var restated = filed
+            .Select(fact =>
+                FactSplitBasis.Restate(fact, FactSplitKind.StatedShareCount, splits, ListingId)
+            )
+            .ToList();
+
+        restated
+            .Select(value => value.Value)
+            .Should()
+            .Equal(321_250_000m, 319_000_000m, 318_600_000m);
+        restated.Should().OnlyContain(value => !value.Unresolved);
+    }
+
+    [Fact]
     public void Restate_AnotherListingsSplit_DoesNotMoveThisListing()
     {
         var splits = new[] { Split(2024, 7, 15, 10m, Guid.NewGuid()) };

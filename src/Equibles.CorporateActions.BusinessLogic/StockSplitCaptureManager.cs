@@ -5,6 +5,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CommonStocks.Repositories.Models;
 using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -19,12 +20,6 @@ namespace Equibles.CorporateActions.BusinessLogic;
 [Service]
 public class StockSplitCaptureManager
 {
-    // The same ratio on the same listing within this many days is one event reported twice:
-    // Yahoo serves an announced and an executed date, the reference feed re-publishes a moved
-    // execution date, and the two disagree on the day. A real repeat of one ratio (a monthly
-    // stock dividend) sits a month apart. The collapse migration carries the same literal.
-    public const int SameEventWindowDays = 10;
-
     private readonly StockSplitRepository _splitRepository;
     private readonly EquityIssuerRepository _stockRepository;
 
@@ -211,7 +206,7 @@ public class StockSplitCaptureManager
                 match.Source = split.Source;
                 // Attaching exact source identity alone does not change an already-applied ratio.
                 if (definitionChanged)
-                    match.PriceAdjustmentAppliedTime = null;
+                    match.InvalidateRevisedDefinition();
                 changes++;
             }
         }
@@ -240,7 +235,7 @@ public class StockSplitCaptureManager
                 && action.Numerator == split.Numerator
                 && action.Denominator == split.Denominator
                 && Math.Abs(action.EffectiveDate.DayNumber - split.EffectiveDate.DayNumber)
-                    <= SameEventWindowDays
+                    <= SplitEvents.SameEventWindowDays
             )
             .OrderByDescending(action => action.Source)
             .ThenByDescending(action => action.EffectiveDate)
@@ -275,8 +270,7 @@ public class StockSplitCaptureManager
         {
             survivor.EffectiveDate = split.EffectiveDate;
             survivor.Source = split.Source;
-            // Mirrors the database trigger: a revised definition needs another reconciliation.
-            survivor.PriceAdjustmentAppliedTime = null;
+            survivor.InvalidateRevisedDefinition();
             changes++;
         }
 

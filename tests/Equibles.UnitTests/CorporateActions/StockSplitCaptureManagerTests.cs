@@ -40,6 +40,9 @@ public class StockSplitCaptureManagerTests
             Denominator = 2m,
             Source = storedSource,
             PriceAdjustmentAppliedTime = applied,
+            ShareCountEvidence = StockSplitShareCountEvidence.Contradicted,
+            ShareCountEvidenceAsOf = new DateOnly(2025, 3, 31),
+            ShareCountEvidenceTime = applied,
         };
         context.AddRange(stock, existing);
         await context.SaveChangesAsync();
@@ -60,6 +63,12 @@ public class StockSplitCaptureManagerTests
         actual.Denominator.Should().Be(replaces ? 60000m : 2m);
         actual.Source.Should().Be(replaces ? incomingSource : storedSource);
         actual.PriceAdjustmentAppliedTime.Should().Be(replaces ? null : applied);
+        // The evidence judged the stored ratio, so a replaced ratio waits for a new verdict.
+        actual
+            .ShareCountEvidence.Should()
+            .Be(replaces ? null : StockSplitShareCountEvidence.Contradicted);
+        actual.ShareCountEvidenceAsOf.Should().Be(replaces ? null : new DateOnly(2025, 3, 31));
+        actual.ShareCountEvidenceTime.Should().Be(replaces ? null : applied);
     }
 
     [Fact]
@@ -370,7 +379,7 @@ public class StockSplitCaptureManagerTests
             .Capture(
                 stock.Id,
                 "DUPE",
-                [At(Day), At(Day.AddDays(StockSplitCaptureManager.SameEventWindowDays + 1))]
+                [At(Day), At(Day.AddDays(SplitEvents.SameEventWindowDays + 1))]
             );
 
         (await context.Set<StockSplit>().CountAsync()).Should().Be(2);

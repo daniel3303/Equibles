@@ -1,3 +1,5 @@
+using Equibles.CorporateActions.Data;
+
 namespace Equibles.Yahoo.Data.Prices;
 
 // The write guards every daily-bar writer applies to the shared price store, so a second source
@@ -6,10 +8,6 @@ public static class DailyBarGuards
 {
     // numeric(18,4) ceiling of the stored price columns.
     public const decimal MaxPriceValue = 99_999_999_999_999.9999m;
-
-    // Relative half-width of the same-basis close comparison, wide enough for a revised close and
-    // far below any split ratio.
-    public const decimal SameBasisCloseTolerance = 0.01m;
 
     // One last-digit tick of absolute headroom on top of the relative tolerance. Both closes are
     // rounded to 4 decimals at ingest, so a genuine minor revision of a sub-cent close moves it by
@@ -58,7 +56,7 @@ public static class DailyBarGuards
             return false;
 
         return Math.Abs(fetchedClose - storedClose)
-            <= storedClose * SameBasisCloseTolerance + SameBasisCloseTickHeadroom;
+            <= storedClose * SplitEvents.SameBasisTolerance + SameBasisCloseTickHeadroom;
     }
 
     // Settled volume only ever accrues, so a fetched figure below the stored one is a degraded

@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -165,7 +166,8 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // after-AsOf comparison makes the first post-split cover page a natural no-op — no flag to
     // clear, no double application. Scoped to the primary price series (exact primary ticker plus
     // legacy null attribution): the entity total moves with the issuer's common stock, and a
-    // split attributed only to a sibling listing must not rescale it.
+    // split attributed only to a sibling listing must not rescale it. A ratio the issuer's own
+    // counts contradict is a price factor, never a count change.
     private async Task<long> RestateToCurrentSplitBasis(
         EquityIssuer stock,
         SharesFact fact,
@@ -178,6 +180,10 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             .Where(split =>
                 split.PriceSeriesTicker == null
                 || split.PriceSeriesTicker == stock.Presentation.Listing.Ticker
+            )
+            .Where(split =>
+                split.ShareCountEvidence == null
+                || split.ShareCountEvidence != StockSplitShareCountEvidence.Contradicted
             )
             .ToListAsync(cancellationToken);
 

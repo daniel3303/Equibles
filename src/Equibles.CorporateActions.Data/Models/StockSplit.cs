@@ -46,6 +46,26 @@ public class StockSplit
 
     public DateTime? PriceAdjustmentAppliedTime { get; set; }
 
+    /// <summary>What the issuer's own share counts say about this ratio; null when they cannot tell.</summary>
+    public StockSplitShareCountEvidence? ShareCountEvidence { get; set; }
+
+    /// <summary>The as-of date of the post-event cover-page count that decided the evidence.</summary>
+    public DateOnly? ShareCountEvidenceAsOf { get; set; }
+
+    public DateTime? ShareCountEvidenceTime { get; set; }
+
+    /// <summary>
+    /// Mirrors the revision trigger: a changed event definition needs another price reconciliation
+    /// and another share-count verdict.
+    /// </summary>
+    public void InvalidateRevisedDefinition()
+    {
+        PriceAdjustmentAppliedTime = null;
+        ShareCountEvidence = null;
+        ShareCountEvidenceAsOf = null;
+        ShareCountEvidenceTime = null;
+    }
+
     /// <summary>
     /// True only when reconciliation ran on a UTC date after the effective date. Older workers
     /// could stamp announced future splits before the provider history incorporated them.

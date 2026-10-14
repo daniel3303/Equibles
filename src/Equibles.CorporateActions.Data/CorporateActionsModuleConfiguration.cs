@@ -46,6 +46,7 @@ public class CorporateActionsModuleConfiguration : Equibles.Data.IFinancialModul
             .IsUnique()
             .HasFilter("\"EquityListingId\" IS NULL");
         stockSplit.Property(s => s.Source).HasConversion<string>();
+        stockSplit.Property(s => s.ShareCountEvidence).HasConversion<string>().HasMaxLength(32);
         stockSplit
             .HasIndex(s => new
             {

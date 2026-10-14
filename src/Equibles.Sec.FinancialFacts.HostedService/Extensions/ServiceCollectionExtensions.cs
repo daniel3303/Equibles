@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<XbrlFactsExtractionWorker>();
         services.AddHostedService<ReportedStatementsCaptureWorker>();
         services.AddHostedService<ReportedStatementsParseWorker>();
+        services.AddHostedService<SplitShareCountEvidenceWorker>();
         return services;
     }
 }
