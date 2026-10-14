@@ -153,7 +153,13 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             Denominator = 1m,
             Source = StockSplitSource.Yahoo,
             PriceAdjustmentAppliedTime = applied,
+            ShareCountEvidence = StockSplitShareCountEvidence.Confirmed,
+            ShareCountEvidenceAsOf = new DateOnly(2019, 9, 30),
+            ShareCountEvidenceTime = applied,
         };
+        var retiredRow = await DbContext.Set<EquityIssuer>().SingleAsync(row => row.Id == retired);
+        retiredRow.LegalEntityIdentifier = "5493001NTNQJDH60PM02";
+        retiredRow.Website = "https://www.example.org/";
         DbContext.Add(concept);
         DbContext.AddRange(
             dividend,
@@ -190,6 +196,10 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         var movedSplit = await DbContext.Set<StockSplit>().SingleAsync(row => row.Id == split.Id);
         movedSplit.EquityIssuerId.Should().Be(survivor.Id);
         movedSplit.PriceAdjustmentAppliedTime.Should().Be(applied);
+        // The share-count verdict was judged against the retired issuer's counts, so it is judged again.
+        movedSplit.ShareCountEvidence.Should().BeNull();
+        movedSplit.ShareCountEvidenceAsOf.Should().BeNull();
+        movedSplit.ShareCountEvidenceTime.Should().BeNull();
         (await DbContext.Set<CompanyFilingSyncState>().SingleAsync())
             .EquityIssuerId.Should()
             .Be(survivor.Id);
@@ -209,12 +219,18 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .SingleAsync(row => row.Id == survivor.Id);
         merged.Name.Should().Be("Alibaba Group Holding Ltd");
         merged.NameAliases.Should().Contain("BABA-W");
+        merged.LegalEntityIdentifier.Should().Be("5493001NTNQJDH60PM02");
+        merged.Website.Should().Be("https://www.example.org/");
         merged.Presentation.EquityListingId.Should().Be(survivor.Presentation.EquityListingId);
         var audit = await DbContext.Set<EquityIssuerMerge>().SingleAsync();
         audit.RetiredIssuerId.Should().Be(retired);
         audit.SurvivingIssuerId.Should().Be(survivor.Id);
         audit.EvidenceSourceRecordIds.Should().Equal(evidence.Id);
         audit.CustomerReferencesRepointedAt.Should().BeNull();
+        System
+            .Text.Json.JsonSerializer.Deserialize<EquityIssuerMergeReport>(audit.ReportJson)
+            .Executed.Should()
+            .BeTrue();
 
         // The next directory cycle resolves the same row to the survivor and leaves its SEC name alone.
         (
@@ -264,6 +280,10 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
     [InlineData("duplicate-registration")]
     [InlineData("no-evidence")]
     [InlineData("different-lei")]
+    [InlineData("secondary-cik")]
+    [InlineData("self-merge")]
+    [InlineData("blank-prefix")]
+    [InlineData("issuer-level-dividend")]
     public async Task AnUnsafeMergeIsRefusedAndRolledBack(string defect)
     {
         await using var services = Services();
@@ -275,7 +295,9 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             Fact(
                 retired,
                 concept,
-                defect == "governing-fact" ? "FILING-2026-0001" : "VENUE-2026-0001"
+                defect is "governing-fact" or "blank-prefix"
+                    ? "FILING-2026-0001"
+                    : "VENUE-2026-0001"
             )
         );
         if (defect == "duplicate-registration")
@@ -291,14 +313,27 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
                     }
                 );
         }
+        if (defect == "issuer-level-dividend")
+            DbContext.Add(
+                new CashDividend
+                {
+                    EquityIssuerId = retired,
+                    Currency = "HKD",
+                    ExDate = new DateOnly(2026, 6, 12),
+                    AmountPerShare = 0.25m,
+                    Source = CashDividendSource.Yahoo,
+                }
+            );
         await DbContext.SaveChangesAsync();
-        if (defect is "sec-filer" or "different-lei")
+        if (defect is "sec-filer" or "different-lei" or "secondary-cik")
         {
             var row = await DbContext
                 .Set<EquityIssuer>()
                 .SingleAsync(issuer => issuer.Id == retired);
             if (defect == "sec-filer")
                 row.Cik = "0000000001";
+            else if (defect == "secondary-cik")
+                row.SecondaryCiks = ["0000000002"];
             else
             {
                 row.LegalEntityIdentifier = "5493001NTNQJDH60PM02";
@@ -311,7 +346,18 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             await DbContext.SaveChangesAsync();
         }
         var evidence = await Evidence();
-        var request = Request(retired, survivor.Id, evidence.Id);
+        var request = Request(retired, defect == "self-merge" ? retired : survivor.Id, evidence.Id);
+        if (defect == "blank-prefix")
+            request = new EquityIssuerMergeRequest
+            {
+                RetiredIssuerId = retired,
+                SurvivingIssuerId = survivor.Id,
+                EvidenceKind = request.EvidenceKind,
+                EvidenceSourceRecordIds = request.EvidenceSourceRecordIds,
+                MergedBy = request.MergedBy,
+                WithdrawnFactPrefixes = [""],
+                Execute = true,
+            };
         if (defect == "no-evidence")
             request = new EquityIssuerMergeRequest
             {
@@ -343,6 +389,19 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .Should()
             .Be(retired);
         (await DbContext.Set<EquityIssuerMerge>().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AMergeNeverDiscardsTheCallersPendingChanges()
+    {
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "PEND", Name: "Pending")
+        );
+
+        var merge = () => Manager().Merge(Request(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()));
+
+        await merge.Should().ThrowAsync<InvalidOperationException>();
+        DbContext.ChangeTracker.HasChanges().Should().BeTrue();
     }
 
     [Fact]
@@ -486,6 +545,75 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
                 DROP TABLE "MergeProbeChild"; DROP TABLE "MergeProbeParent";
                 """
             );
+        }
+    }
+
+    [Theory]
+    [InlineData("partial")]
+    [InlineData("nulls-not-distinct")]
+    [InlineData("expression")]
+    public async Task UniqueIndexPredicatesAndExpressionsDecideWhatCollides(string variant)
+    {
+        var retired = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OLD", Name: "Old");
+        var survivor = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "NEW", Name: "New");
+        DbContext.AddRange(retired, survivor);
+        await DbContext.SaveChangesAsync();
+        var evidence = await Evidence();
+        var index = variant switch
+        {
+            "partial" =>
+                "CREATE UNIQUE INDEX \"IX_MergeProbeScoped\" ON \"MergeProbeScoped\" (\"EquityIssuerId\", \"Code\") WHERE \"Active\"",
+            "nulls-not-distinct" =>
+                "CREATE UNIQUE INDEX \"IX_MergeProbeScoped\" ON \"MergeProbeScoped\" (\"EquityIssuerId\", \"Code\") NULLS NOT DISTINCT",
+            _ =>
+                "CREATE UNIQUE INDEX \"IX_MergeProbeScoped\" ON \"MergeProbeScoped\" (\"EquityIssuerId\", lower(\"Code\"))",
+        };
+        await DbContext.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE "MergeProbeScoped" ("Id" uuid PRIMARY KEY,
+                "EquityIssuerId" uuid NOT NULL REFERENCES "EquityIssuer" ("Id"), "Code" text, "Active" boolean NOT NULL);
+            """ + index
+        );
+        try
+        {
+            // Partial: only the survivor's row is inside the predicate, so the retired row is no duplicate.
+            var code = variant == "nulls-not-distinct" ? null : "a";
+            await DbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO "MergeProbeScoped" VALUES ({Guid.NewGuid()}, {retired.Id}, {code}, false),
+                    ({Guid.NewGuid()}, {survivor.Id}, {code}, true);
+                """
+            );
+
+            var report = await Manager().Merge(Request(retired.Id, survivor.Id, evidence.Id));
+
+            var owners = await DbContext
+                .Database.SqlQueryRaw<Guid>(
+                    "SELECT \"EquityIssuerId\" AS \"Value\" FROM \"MergeProbeScoped\""
+                )
+                .ToListAsync();
+            if (variant == "partial")
+            {
+                report.Refusals.Should().BeEmpty();
+                owners.Should().Equal(survivor.Id, survivor.Id);
+            }
+            else
+            {
+                report
+                    .Refusals.Should()
+                    .ContainSingle()
+                    .Which.Should()
+                    .Contain(
+                        variant == "expression"
+                            ? "uses an expression"
+                            : "duplicate the survivor's on a unique key"
+                    );
+                owners.Should().BeEquivalentTo([retired.Id, survivor.Id]);
+            }
+        }
+        finally
+        {
+            await DbContext.Database.ExecuteSqlRawAsync("DROP TABLE \"MergeProbeScoped\"");
         }
     }
 }

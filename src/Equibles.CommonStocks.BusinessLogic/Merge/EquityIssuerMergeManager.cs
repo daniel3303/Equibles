@@ -47,6 +47,10 @@ public class EquityIssuerMergeManager
     {
         if (_context.Database.CurrentTransaction != null)
             throw new InvalidOperationException("An issuer merge owns its transaction.");
+        if (_context.ChangeTracker.HasChanges())
+            throw new InvalidOperationException(
+                "An issuer merge needs a context without pending changes."
+            );
         return _context
             .Database.CreateExecutionStrategy()
             .ExecuteAsync(async () =>
@@ -77,6 +81,7 @@ public class EquityIssuerMergeManager
                 else
                 {
                     await transaction.RollbackAsync(cancellationToken);
+                    report.Executed = false;
                 }
                 _context.ChangeTracker.Clear();
                 return report;
@@ -98,12 +103,18 @@ public class EquityIssuerMergeManager
         // Directory identity first, then CUSIP identity: the order every other writer that takes both follows.
         await _issuers.BeginDirectoryIdentityWrite(cancellationToken);
         await _issuers.BeginCusipIdentityWrite(cancellationToken);
-        // The retired row is locked against new references; the survivor only against concurrent rewrites.
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT 1 FROM \"EquityIssuer\" WHERE \"Id\" = {retiredId} FOR UPDATE",
-            cancellationToken
-        );
-        await _issuers.LockIssuersForNoKeyUpdate([survivorId], cancellationToken);
+        // The retired row is locked against new references, the survivor only against concurrent rewrites,
+        // both in id order like every other writer that locks several issuers.
+        foreach (var id in new[] { retiredId, survivorId }.Distinct().Order())
+        {
+            if (id == retiredId)
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT 1 FROM \"EquityIssuer\" WHERE \"Id\" = {retiredId} FOR UPDATE",
+                    cancellationToken
+                );
+            else
+                await _issuers.LockIssuersForNoKeyUpdate([survivorId], cancellationToken);
+        }
 
         var issuers = await _context
             .Set<EquityIssuer>()
@@ -149,6 +160,8 @@ public class EquityIssuerMergeManager
             return;
         await rekeyer.Reattach(survivorId, cancellationToken);
 
+        // The audit row commits only with the merge, so it records the merge as executed.
+        report.Executed = request.Execute;
         _context.Add(
             new EquityIssuerMerge
             {
@@ -191,6 +204,10 @@ public class EquityIssuerMergeManager
             || string.IsNullOrWhiteSpace(request.MergedBy)
         )
             refusals.Add("A merge records its evidence kind and operator.");
+        if (request.WithdrawnFactPrefixes.Any(string.IsNullOrWhiteSpace))
+            refusals.Add(
+                "A withdrawn fact prefix must name a source; a blank one matches every fact."
+            );
         if (retired.Cik != null || retired.SecondaryCiks.Count > 0)
             refusals.Add("An SEC filer is never the retired issuer.");
         if (

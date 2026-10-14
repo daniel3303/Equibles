@@ -82,7 +82,11 @@ public sealed class EquityReferenceRekeyer
     {
         foreach (var (table, column, stage) in _staged)
         {
-            var columns = _catalog.InsertableColumns(table);
+            var resets = _policy.Rule(table)?.ReinsertResets ?? [];
+            var columns = _catalog
+                .InsertableColumns(table)
+                .Where(name => !resets.Contains(name, StringComparer.Ordinal))
+                .ToList();
             var values = string.Join(
                 ", ",
                 columns.Select(name => name == column ? "@to" : Quote(name))
@@ -141,6 +145,21 @@ public sealed class EquityReferenceRekeyer
         {
             Refuse($"{table}.{column} holds {count} rows that never follow a merge.");
             return;
+        }
+        if (rule?.RefuseRowsWithout != null)
+        {
+            var scoped = await Scalar(
+                $"SELECT count(*) FROM {Quote(table)} WHERE {Quote(column)} = @key AND {Quote(rule.RefuseRowsWithout)} IS NULL",
+                cancellationToken,
+                ("key", from)
+            );
+            if (scoped > 0)
+            {
+                Refuse(
+                    $"{table}.{column} holds {scoped} rows without {rule.RefuseRowsWithout} that never follow a merge."
+                );
+                return;
+            }
         }
         if (depth > MaxDepth)
         {
@@ -308,9 +327,11 @@ public sealed class EquityReferenceRekeyer
         var survivorKey = Guid.Parse(survivor);
         foreach (var child in children)
         {
-            if (child.ColumnCount != 1)
+            if (child.ColumnCount != 1 || child.ReferencedColumn != key)
             {
-                Refuse($"{table}: {child.Table} references it through a composite key.");
+                Refuse(
+                    $"{table}: {child.Table} references it through a composite or alternate key."
+                );
                 return false;
             }
             // Cascade and set-null children follow the database's own delete rule.

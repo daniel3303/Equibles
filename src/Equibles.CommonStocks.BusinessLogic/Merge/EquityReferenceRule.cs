@@ -29,6 +29,12 @@ public sealed record EquityReferenceRule(string Table)
 
     // Rows guarded by insert-time identity triggers are lifted out and re-inserted after the securities move.
     public bool Reinsert { get; init; }
+
+    // Columns a re-inserted row leaves at their default, as an owner change through an update would reset them.
+    public IReadOnlyList<string> ReinsertResets { get; init; } = [];
+
+    // Rows with this column null are scoped to the issuer itself and never follow a merge.
+    public string RefuseRowsWithout { get; init; }
 }
 
 /// <summary>Supplies merge rules for tables a module owns.</summary>
