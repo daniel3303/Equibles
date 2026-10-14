@@ -97,6 +97,8 @@ public class FactSplitBasisTests
     [InlineData("WeightedAverageNumberOfShareOutstandingBasicAndDiluted")]
     [InlineData("CommonStockSharesIssued")]
     [InlineData("TreasuryStockShares")]
+    [InlineData("commonstocksharesoutstanding")]
+    [InlineData("Common_Stock_Shares_Outstanding")]
     public void Classify_StatementCommonShareCount_IsStatedOnTheFilingBasis(string tag)
     {
         Kind(FactTaxonomy.UsGaap, tag).Should().Be(FactSplitKind.StatedShareCount);

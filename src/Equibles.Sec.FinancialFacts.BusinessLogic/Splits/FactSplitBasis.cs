@@ -43,6 +43,7 @@ public static class FactSplitBasis
             )
             .Select(concept => (concept.Taxonomy, concept.Tag))
             .Concat(UnaliasedCommonShareCounts)
+            .Select(concept => (concept.Taxonomy, Fold(concept.Tag)))
             .ToHashSet();
 
     /// <summary>
@@ -79,7 +80,7 @@ public static class FactSplitBasis
     {
         if (IsPerShareUnit(unit))
             return FactSplitKind.PerShare;
-        if (!IsShareUnit(unit) || !CommonShareCountConcepts.Contains((taxonomy, tag)))
+        if (!IsShareUnit(unit) || !CommonShareCountConcepts.Contains((taxonomy, Fold(tag))))
             return FactSplitKind.None;
         return taxonomy == FactTaxonomy.Dei
             ? FactSplitKind.ObservedShareCount
@@ -154,6 +155,9 @@ public static class FactSplitBasis
         var restated = kind == FactSplitKind.PerShare ? value / factor : value * factor;
         return new FactSplitRestatement(restated, kind, Adjusted: true, Unresolved: false);
     }
+
+    // Filers spell one tag with stray underscores or case; the fold makes them one concept.
+    private static string Fold(string tag) => tag?.Replace("_", "").ToLowerInvariant();
 
     // Only a share-denominated ratio is per-share: USD/bbl, USD/EUR or shares/USD stay as filed.
     private static bool IsPerShareUnit(string unit)
