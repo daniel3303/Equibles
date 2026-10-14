@@ -161,22 +161,41 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         result.Select(chunk => chunk.Id).Should().BeEquivalentTo([lastDay.Id, firstDay.Id]);
     }
 
-    [Fact]
-    public async Task Search_MaxEndDate_IsAnOpenUpperBound()
+    // ParadeDB 0.24 (production) matches nothing for a bound outside its nanosecond timestamp
+    // span, while later versions clamp it, so the bound must leave the query open.
+    [Theory]
+    [InlineData("2026-01-01", "9999-12-31", "2026-01-01T00:00:00Z", "9999")]
+    [InlineData("0500-01-01", "2026-02-01", "2026-02-01T00:00:00Z", "0500")]
+    [InlineData("2026-01-01", "2262-04-12", "2026-01-01T00:00:00Z", "2262")]
+    public async Task Search_BoundOutsideTheIndexedSpan_StaysOpen(
+        string start,
+        string end,
+        string keptBound,
+        string droppedBound
+    )
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OPEN");
         var hit = AddChunk(AddDocument(issuer, new DateOnly(2026, 2, 1)), 0, "orbital revenue");
-        AddChunk(AddDocument(issuer, new DateOnly(2025, 12, 31)), 0, "orbital revenue");
         await DbContext.SaveChangesAsync();
+        var capture = new RankCapture();
+        await using var context = Fixture.CreateDbContext(builder =>
+            builder.AddInterceptors(capture)
+        );
 
-        var result = await new ChunkRepository(DbContext).HybridSearch(
+        var result = await new ChunkRepository(context).HybridSearch(
             "orbital revenue",
             10,
-            startDate: new DateOnly(2026, 1, 1),
-            endDate: DateOnly.MaxValue
+            startDate: DateOnly.Parse(start, CultureInfo.InvariantCulture),
+            endDate: DateOnly.Parse(end, CultureInfo.InvariantCulture)
         );
 
         result.Select(chunk => chunk.Id).Should().Equal(hit.Id);
+        capture
+            .Parameters.Select(parameter => parameter.Value.ToString())
+            .Where(value => value.Contains("\"range\""))
+            .Should()
+            .NotBeEmpty()
+            .And.OnlyContain(value => value.Contains(keptBound) && !value.Contains(droppedBound));
     }
 
     // The window reaches ParadeDB as text; a culture-formatted time ("00.00.00") is rejected and

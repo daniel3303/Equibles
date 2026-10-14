@@ -12,16 +12,26 @@ namespace Equibles.Sec.Repositories;
 // Document trigger keeps equal to the parent date; the parent stays the membership authority.
 internal static class ChunkDateScope
 {
+    // The index stores timestamps as signed 64-bit nanoseconds; ParadeDB 0.24 answers a bound
+    // outside that span with no rows instead of an error.
+    private static readonly DateOnly FirstIndexedDay = new(1677, 9, 22);
+    private static readonly DateOnly LastIndexedDay = new(2262, 4, 11);
+
     internal static ParadeDbJsonQuery IndexFilter(DateOnly? startDate, DateOnly? endDate)
     {
         if (startDate == null && endDate == null)
             return null;
         // Chunks carry their filing date at exactly midnight UTC, so a whole-day window is the
-        // closed span between the first and last days' midnights (no day after DateOnly.MaxValue).
+        // closed span between the first and last days' midnights. A bound outside the index's
+        // timestamp span stays open: every chunk date lies inside it.
+        var lower = startDate is { } start && start > FirstIndexedDay ? MidnightUtc(start) : null;
+        var upper = endDate is { } end && end < LastIndexedDay ? MidnightUtc(end) : null;
+        if (lower == null && upper == null)
+            return null;
         return ParadeDbJsonQuery.Range(
             nameof(Chunk.ReportingDate),
-            startDate is { } start ? MidnightUtc(start) : null,
-            endDate is { } end ? MidnightUtc(end) : null,
+            lower,
+            upper,
             lowerInclusive: true,
             upperInclusive: true,
             isDatetime: true
