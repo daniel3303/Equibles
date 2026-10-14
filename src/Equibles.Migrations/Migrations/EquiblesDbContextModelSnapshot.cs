@@ -390,6 +390,52 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("EquityIssuerCusipAlias");
                 });
 
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityIssuerMerge", b =>
+                {
+                    b.Property<Guid>("RetiredIssuerId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CustomerReferencesRepointedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EvidenceKind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.PrimitiveCollection<List<Guid>>("EvidenceSourceRecordIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<DateTime>("MergedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MergedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ReportJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("RetiredIssuerJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SurvivingIssuerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RetiredIssuerId");
+
+                    b.HasIndex("CustomerReferencesRepointedAt");
+
+                    b.HasIndex("SurvivingIssuerId");
+
+                    b.ToTable("EquityIssuerMerge");
+                });
+
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityIssuerPresentation", b =>
                 {
                     b.Property<Guid>("EquityIssuerId")
@@ -825,6 +871,47 @@ namespace Equibles.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("EquitySecuritySourceIdentifier");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IsinLegalEntityLookup", b =>
+                {
+                    b.Property<string>("Isin")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<DateTime?>("CheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("LegalEntityIdentifier")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RelatedIsinCount")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("RelatedIsins")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<Guid?>("SourceRecordId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Isin");
+
+                    b.HasIndex("LegalEntityIdentifier");
+
+                    b.HasIndex("NextAttemptAt");
+
+                    b.HasIndex("SourceRecordId");
+
+                    b.ToTable("IsinLegalEntityLookup");
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
@@ -5137,6 +5224,17 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Issuer");
                 });
 
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityIssuerMerge", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", "SurvivingIssuer")
+                        .WithMany()
+                        .HasForeignKey("SurvivingIssuerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SurvivingIssuer");
+                });
+
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityIssuerPresentation", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", "Issuer")
@@ -5286,6 +5384,16 @@ namespace Equibles.Migrations.Migrations
                         .IsRequired();
 
                     b.Navigation("Security");
+
+                    b.Navigation("SourceRecord");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IsinLegalEntityLookup", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityDirectorySourceRecord", "SourceRecord")
+                        .WithMany()
+                        .HasForeignKey("SourceRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("SourceRecord");
                 });

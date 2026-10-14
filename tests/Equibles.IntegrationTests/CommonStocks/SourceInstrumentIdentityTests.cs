@@ -270,4 +270,37 @@ public class SourceInstrumentIdentityTests(ParadeDbFixture fixture) : ParadeDbMc
         (await DbContext.Set<EquitySecuritySourceIdentifier>().CountAsync()).Should().Be(1);
         (await DbContext.Set<EquityListingSourceIdentifier>().CountAsync()).Should().Be(1);
     }
+
+    [Theory]
+    [InlineData("replaced", "Industrial and Commercial Bank of China Limited")]
+    [InlineData("unrelated", "Operator name")]
+    [InlineData("sec", "中国工商银行股份有限公司")]
+    public async Task OnlyTheSourceThatSuppliedTheNameReplacesIt(string variant, string expected)
+    {
+        await using var services = Services();
+        var importer = Importer(services);
+        var input = Input();
+        input.IssuerName = "中国工商银行股份有限公司";
+        var listingId = await importer.ImportListing(input);
+        var issuer = await DbContext
+            .Set<EquityListing>()
+            .Where(row => row.Id == listingId)
+            .Select(row => row.Security.Issuer)
+            .SingleAsync();
+        if (variant == "unrelated")
+            issuer.Name = "Operator name";
+        if (variant == "sec")
+            issuer.Cik = "0000000001";
+        await DbContext.SaveChangesAsync();
+        input.IssuerName = "Industrial and Commercial Bank of China Limited";
+        input.IssuerNameAliases = ["中国工商银行股份有限公司"];
+        input.ReplacedIssuerNames = ["中国工商银行股份有限公司"];
+
+        (await importer.ImportListing(input)).Should().Be(listingId);
+
+        DbContext.ChangeTracker.Clear();
+        var renamed = await DbContext.Set<EquityIssuer>().SingleAsync(row => row.Id == issuer.Id);
+        renamed.Name.Should().Be(expected);
+        renamed.NameAliases.Should().Contain("中国工商银行股份有限公司");
+    }
 }
