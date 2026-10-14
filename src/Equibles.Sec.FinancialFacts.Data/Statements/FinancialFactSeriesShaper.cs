@@ -81,8 +81,8 @@ public static class FinancialFactSeriesShaper
 
     /// <summary>
     /// One fact per as-of date, for a series of balances or share counts. The value is the most
-    /// authoritative filing of that date; the fiscal stamp is the date's own filing (the smallest
-    /// stamp), since later filings re-report the date under their own identity.
+    /// authoritative filing of that date. The fiscal stamp is the smallest one the date carries, its
+    /// own period, should a filing re-report the date under its own identity.
     /// </summary>
     public static List<FinancialFact> PickPerDate(
         IEnumerable<FinancialFact> facts,
