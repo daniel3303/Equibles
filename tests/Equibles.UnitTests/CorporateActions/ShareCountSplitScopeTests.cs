@@ -69,6 +69,17 @@ public class ShareCountSplitScopeTests
     }
 
     [Fact]
+    public void ForListing_AContradictedRowLinkingTheEvent_StillMakesItOneEvent()
+    {
+        // The dropped factor at D+8 chains the own 2:1 and the sibling 2:1 at D+15 into one event.
+        var own = Split(Listing, StockSplitShareCountEvidence.Confirmed, 2m, 1m);
+        var factor = Split(Listing, StockSplitShareCountEvidence.Contradicted, 1061m, 1000m, 8);
+        var sibling = Split(Sibling, StockSplitShareCountEvidence.Confirmed, 2m, 1m, 15);
+
+        ShareCountSplitScope.ForListing([own, factor, sibling], Listing).Should().Equal(own);
+    }
+
+    [Fact]
     public void ForListing_AnUnjudgedSiblingRow_StaysOnItsListing()
     {
         ShareCountSplitScope.ForListing([Split(Sibling, null)], Listing).Should().BeEmpty();

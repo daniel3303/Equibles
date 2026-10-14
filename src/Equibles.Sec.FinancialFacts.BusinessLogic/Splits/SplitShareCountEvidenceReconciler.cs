@@ -9,9 +9,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 
 /// <summary>
-/// Recurring reconciliation of every captured split against the issuer's cover-page share counts
-/// (<see cref="SplitShareCountEvidence"/>). Each pass judges every issuer again, so a late
-/// filing, a new capture or a corrected ratio converges on the next pass.
+/// Recurring reconciliation: judges every captured split against the issuer's cover-page share
+/// counts (<see cref="SplitShareCountEvidence"/>), so a late filing or a revised ratio converges on the next pass.
 /// </summary>
 [Service]
 public class SplitShareCountEvidenceReconciler
@@ -34,7 +33,7 @@ public class SplitShareCountEvidenceReconciler
         _conceptRepository = conceptRepository;
     }
 
-    /// <summary>Returns the number of rows whose evidence changed.</summary>
+    /// <summary>Returns the number of rows whose evidence changed; failed issuers throw together at the end.</summary>
     public async Task<int> Reconcile(CancellationToken cancellationToken)
     {
         var conceptIds = await CoverPageConceptIds(cancellationToken);
@@ -45,6 +44,7 @@ public class SplitShareCountEvidenceReconciler
             .OrderBy(id => id)
             .ToListAsync(cancellationToken);
         var changed = 0;
+        var failures = new List<Exception>();
         foreach (var batch in issuerIds.Chunk(IssuerBatchSize))
         {
             var splits = await _splitRepository
@@ -73,26 +73,55 @@ public class SplitShareCountEvidenceReconciler
             var now = DateTime.UtcNow;
             foreach (var issuerSplits in splits.GroupBy(split => split.EquityIssuerId))
             {
-                var verdicts = SplitShareCountEvidence.Evaluate(
-                    issuerSplits.ToList(),
-                    counts[issuerSplits.Key].ToList()
-                );
-                foreach (var verdict in verdicts)
+                try
                 {
-                    if (
-                        verdict.Evidence == verdict.Split.ShareCountEvidence
-                        && verdict.AsOf == verdict.Split.ShareCountEvidenceAsOf
-                    )
-                        continue;
-                    changed += await _splitRepository.SetShareCountEvidence(
-                        verdict.Split,
-                        verdict.Evidence,
-                        verdict.AsOf,
+                    changed += await Record(
+                        SplitShareCountEvidence.Evaluate(
+                            issuerSplits.ToList(),
+                            counts[issuerSplits.Key].ToList()
+                        ),
                         now,
                         cancellationToken
                     );
                 }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    // One row a database guard refuses must not leave every later issuer unjudged.
+                    failures.Add(
+                        new InvalidOperationException(
+                            $"Split share-count evidence failed for issuer {issuerSplits.Key}.",
+                            exception
+                        )
+                    );
+                }
             }
+        }
+        if (failures.Count > 0)
+            throw new AggregateException(failures);
+        return changed;
+    }
+
+    private async Task<int> Record(
+        IEnumerable<SplitShareCountVerdict> verdicts,
+        DateTime now,
+        CancellationToken cancellationToken
+    )
+    {
+        var changed = 0;
+        foreach (var verdict in verdicts)
+        {
+            if (
+                verdict.Evidence == verdict.Split.ShareCountEvidence
+                && verdict.AsOf == verdict.Split.ShareCountEvidenceAsOf
+            )
+                continue;
+            changed += await _splitRepository.SetShareCountEvidence(
+                verdict.Split,
+                verdict.Evidence,
+                verdict.AsOf,
+                now,
+                cancellationToken
+            );
         }
         return changed;
     }

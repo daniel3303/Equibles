@@ -8,10 +8,8 @@ namespace Equibles.CorporateActions.Data;
 /// </summary>
 public static class SplitEvents
 {
-    // Rows within this many days are one event reported twice: Yahoo serves an announced and an
-    // executed date, the reference feed re-publishes a moved execution date, and the two disagree
-    // on the day. A real repeat of one ratio (a monthly stock dividend) sits a month apart. The
-    // collapse migration carries the same literal.
+    // Rows this close are one event reported on different days (announced vs executed, a moved
+    // execution date); a real repeat of one ratio sits a month apart. The collapse migration carries the literal.
     public const int SameEventWindowDays = 10;
 
     // Relative half-width within which two figures sit on one share basis: wide enough for a

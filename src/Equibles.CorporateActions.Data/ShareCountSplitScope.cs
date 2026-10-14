@@ -9,28 +9,26 @@ namespace Equibles.CorporateActions.Data;
 /// </summary>
 public static class ShareCountSplitScope
 {
-    public static List<StockSplit> ForListing(IEnumerable<StockSplit> splits, Guid listingId)
-    {
-        var candidates =
-            splits
-                ?.Where(split =>
-                    split.ShareCountEvidence != StockSplitShareCountEvidence.Contradicted
-                    && (
-                        split.EquityListingId == listingId
-                        || split.ShareCountEvidence == StockSplitShareCountEvidence.Confirmed
-                    )
-                )
-                .ToList()
-            ?? [];
-        return SplitEvents
-            .Group(candidates)
+    public static List<StockSplit> ForListing(IEnumerable<StockSplit> splits, Guid listingId) =>
+        SplitEvents
+            .Group(splits ?? [])
             .SelectMany(rows =>
-                rows.Any(split => split.EquityListingId == listingId)
-                    ? rows.Where(split => split.EquityListingId == listingId)
-                    : rows.Take(1)
-            )
+            {
+                // Group before filtering: a dropped row can be the link that makes rows one event.
+                var standing = rows.Where(split =>
+                        split.ShareCountEvidence != StockSplitShareCountEvidence.Contradicted
+                    )
+                    .ToList();
+                var own = standing.Where(split => split.EquityListingId == listingId).ToList();
+                return own.Count > 0
+                    ? own
+                    : standing
+                        .Where(split =>
+                            split.ShareCountEvidence == StockSplitShareCountEvidence.Confirmed
+                        )
+                        .Take(1);
+            })
             .ToList();
-    }
 
     /// <summary>
     /// True when a split after <paramref name="asOf"/> cannot be attributed: an unjudged row with

@@ -114,6 +114,81 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
         (await Reconciler().Reconcile(CancellationToken.None)).Should().Be(0);
     }
 
+    [Theory]
+    [InlineData("ratio")]
+    [InlineData("date")]
+    [InlineData("source")]
+    public async Task ARevisedDefinition_ClearsTheVerdictForEveryWriter(string revision)
+    {
+        var (_, _, _, milan) = await SeedHoneywell();
+        await Reconciler().Reconcile(CancellationToken.None);
+
+        await DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE "StockSplit" SET
+                "Denominator" = CASE WHEN {revision} = 'ratio' THEN 3 ELSE "Denominator" END,
+                "EffectiveDate" = CASE WHEN {revision} = 'date' THEN "EffectiveDate" + 1 ELSE "EffectiveDate" END,
+                "Source" = CASE WHEN {revision} = 'source' THEN 'External' ELSE "Source" END
+            WHERE "Id" = {milan.Id}
+            """
+        );
+
+        var revised = await Stored(milan);
+        revised.ShareCountEvidence.Should().BeNull();
+        revised.ShareCountEvidenceAsOf.Should().BeNull();
+        revised.ShareCountEvidenceTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Reconcile_AnIssuerTheDatabaseRefuses_DoesNotStopTheOthers()
+    {
+        var (refused, _, _, _) = await SeedHoneywell();
+        var other = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OTHR");
+        DbContext.Add(other);
+        await DbContext.SaveChangesAsync();
+        var otherSplit = new StockSplit
+        {
+            EquityIssuerId = other.Id,
+            EquityListingId = other.Presentation.EquityListingId,
+            PriceSeriesTicker = "OTHR",
+            EffectiveDate = new DateOnly(2024, 6, 3),
+            Numerator = 3m,
+            Denominator = 1m,
+            Source = StockSplitSource.Manual,
+        };
+        DbContext.Add(otherSplit);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var refuse = $"""
+            CREATE FUNCTION refuse_issuer() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW."EquityIssuerId" = '{refused.Id}' THEN RAISE EXCEPTION 'refused'; END IF;
+                RETURN NEW;
+            END $$;
+            CREATE TRIGGER "TR_Test_RefuseIssuer" BEFORE UPDATE ON "StockSplit"
+                FOR EACH ROW EXECUTE FUNCTION refuse_issuer();
+            """;
+        await DbContext.Database.ExecuteSqlRawAsync(refuse);
+        try
+        {
+            var reconcile = () => Reconciler().Reconcile(CancellationToken.None);
+
+            await reconcile.Should().ThrowAsync<AggregateException>();
+            (await Stored(otherSplit))
+                .ShareCountEvidence.Should()
+                .Be(StockSplitShareCountEvidence.Confirmed);
+        }
+        finally
+        {
+            await DbContext.Database.ExecuteSqlRawAsync(
+                """
+                DROP TRIGGER "TR_Test_RefuseIssuer" ON "StockSplit";
+                DROP FUNCTION refuse_issuer();
+                """
+            );
+        }
+    }
+
     [Fact]
     public async Task SetShareCountEvidence_ARowWhoseRatioChangedSinceItWasJudged_IsLeftAlone()
     {

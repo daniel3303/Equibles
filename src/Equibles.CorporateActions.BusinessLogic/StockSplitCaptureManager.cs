@@ -206,13 +206,7 @@ public class StockSplitCaptureManager
                 match.Source = split.Source;
                 // Attaching exact source identity alone does not change an already-applied ratio.
                 if (definitionChanged)
-                {
-                    match.PriceAdjustmentAppliedTime = null;
-                    // The evidence judged the old ratio; the reconciler judges the new one.
-                    match.ShareCountEvidence = null;
-                    match.ShareCountEvidenceAsOf = null;
-                    match.ShareCountEvidenceTime = null;
-                }
+                    match.InvalidateRevisedDefinition();
                 changes++;
             }
         }
@@ -276,8 +270,7 @@ public class StockSplitCaptureManager
         {
             survivor.EffectiveDate = split.EffectiveDate;
             survivor.Source = split.Source;
-            // Mirrors the database trigger: a revised definition needs another reconciliation.
-            survivor.PriceAdjustmentAppliedTime = null;
+            survivor.InvalidateRevisedDefinition();
             changes++;
         }
 

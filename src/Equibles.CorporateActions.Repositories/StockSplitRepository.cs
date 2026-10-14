@@ -46,8 +46,7 @@ public class StockSplitRepository : BaseRepository<StockSplit>
 
     /// <summary>
     /// Records share-count evidence only while the row still carries the event that was judged; a
-    /// capture that changed it meanwhile cleared the evidence for the next pass. A set-based write,
-    /// so the listing include is not needed.
+    /// revision in between leaves the row for the next pass.
     /// </summary>
     public Task<int> SetShareCountEvidence(
         StockSplit judged,

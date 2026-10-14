@@ -29,11 +29,90 @@ namespace Equibles.Migrations.Migrations
                 table: "StockSplit",
                 type: "timestamp with time zone",
                 nullable: true);
+
+            // A revised event definition invalidates the share-count verdict as well as the price
+            // marker, for every writer; the reconciler judges the new definition on its next pass.
+            migrationBuilder.Sql(
+                """
+                CREATE OR REPLACE FUNCTION public."InvalidateRevisedStockSplitAdjustment"()
+                 RETURNS trigger
+                 LANGUAGE plpgsql
+                AS $function$
+                BEGIN
+                    IF ROW(
+                        OLD."EquityIssuerId",
+                        OLD."PriceSeriesTicker",
+                        OLD."EffectiveDate",
+                        OLD."Numerator",
+                        OLD."Denominator",
+                        OLD."Source"
+                    ) IS DISTINCT FROM ROW(
+                        NEW."EquityIssuerId",
+                        NEW."PriceSeriesTicker",
+                        NEW."EffectiveDate",
+                        NEW."Numerator",
+                        NEW."Denominator",
+                        NEW."Source"
+                    ) THEN
+                        NEW."PriceAdjustmentAppliedTime" := NULL;
+                    END IF;
+                    IF ROW(
+                        OLD."EquityIssuerId",
+                        OLD."EffectiveDate",
+                        OLD."Numerator",
+                        OLD."Denominator",
+                        OLD."Source"
+                    ) IS DISTINCT FROM ROW(
+                        NEW."EquityIssuerId",
+                        NEW."EffectiveDate",
+                        NEW."Numerator",
+                        NEW."Denominator",
+                        NEW."Source"
+                    ) THEN
+                        NEW."ShareCountEvidence" := NULL;
+                        NEW."ShareCountEvidenceAsOf" := NULL;
+                        NEW."ShareCountEvidenceTime" := NULL;
+                    END IF;
+                    RETURN NEW;
+                END;
+                $function$;
+                """
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql(
+                """
+                CREATE OR REPLACE FUNCTION public."InvalidateRevisedStockSplitAdjustment"()
+                 RETURNS trigger
+                 LANGUAGE plpgsql
+                AS $function$
+                BEGIN
+                    IF ROW(
+                        OLD."EquityIssuerId",
+                        OLD."PriceSeriesTicker",
+                        OLD."EffectiveDate",
+                        OLD."Numerator",
+                        OLD."Denominator",
+                        OLD."Source"
+                    ) IS DISTINCT FROM ROW(
+                        NEW."EquityIssuerId",
+                        NEW."PriceSeriesTicker",
+                        NEW."EffectiveDate",
+                        NEW."Numerator",
+                        NEW."Denominator",
+                        NEW."Source"
+                    ) THEN
+                        NEW."PriceAdjustmentAppliedTime" := NULL;
+                    END IF;
+                    RETURN NEW;
+                END;
+                $function$;
+                """
+            );
+
             migrationBuilder.DropColumn(
                 name: "ShareCountEvidence",
                 table: "StockSplit");

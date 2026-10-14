@@ -3,9 +3,8 @@ using Equibles.CorporateActions.Data.Models;
 namespace Equibles.CorporateActions.Data;
 
 /// <summary>
-/// Judges captured split ratios against the issuer's own share counts. A split changes the share
-/// count; a price factor (a spin-off, a depositary ratio change) does not. The witnesses are the
-/// last count filed before an event and the first count dated on or after it.
+/// Judges captured split ratios against the issuer's own share counts: a split changes the count, a
+/// price factor (a spin-off, a depositary ratio change) does not.
 /// </summary>
 public static class SplitShareCountEvidence
 {
@@ -70,9 +69,8 @@ public static class SplitShareCountEvidence
         );
     }
 
-    // The count ratio across the event, or null when no count brackets it alone. The earlier
-    // count must be filed before the event too: a filer may state its cover count on the
-    // post-split basis although the as-of date precedes the split.
+    // The count ratio across the event, or null when no pair brackets it alone. The earlier count must
+    // also be filed before the event, since a cover page dated before a split can state the post-split count.
     private static (decimal Ratio, DateOnly AsOf)? ObservedRatio(
         List<StockSplit> rows,
         List<List<StockSplit>> events,
