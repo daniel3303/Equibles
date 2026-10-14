@@ -411,4 +411,28 @@ public class FactSplitBasisTests
         restated.Value.Should().Be(413_900_000m);
         restated.Unresolved.Should().BeFalse();
     }
+
+    // A figure set against stored closes needs the series' own basis, price-only factors included.
+    [Fact]
+    public void RestateScoped_KeepsAPriceOnlyFactor_TheStoredClosesCarry()
+    {
+        var spinOff = new StockSplit
+        {
+            EffectiveDate = new DateOnly(2025, 10, 30),
+            Numerator = 1061m,
+            Denominator = 1000m,
+            ShareCountEvidence = StockSplitShareCountEvidence.Contradicted,
+        };
+
+        FactSplitBasis
+            .RestateScoped(
+                10.61m,
+                FactSplitKind.PerShare,
+                new DateOnly(2025, 9, 30),
+                new DateOnly(2025, 10, 23),
+                [spinOff]
+            )
+            .Should()
+            .Be(10m);
+    }
 }

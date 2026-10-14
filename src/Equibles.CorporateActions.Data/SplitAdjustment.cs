@@ -15,9 +15,26 @@ public static class SplitAdjustment
     /// <see cref="StockSplit.Numerator"/>/<see cref="StockSplit.Denominator"/>
     /// ratio. The comparison is strict (<c>&gt;</c>) because a report dated on the
     /// effective date already reflects the post-split count. Splits with a
-    /// non-positive ratio arm are skipped because they cannot describe a split.
+    /// non-positive ratio arm are skipped because they cannot describe a split, and a row the
+    /// issuer's share counts contradict is a price-only factor that never moved a count.
     /// </summary>
-    public static decimal ShareCountFactor(DateOnly asOf, IEnumerable<StockSplit> splits)
+    public static decimal ShareCountFactor(DateOnly asOf, IEnumerable<StockSplit> splits) =>
+        RatioAfter(
+            asOf,
+            splits.Where(split =>
+                split.ShareCountEvidence != StockSplitShareCountEvidence.Contradicted
+            )
+        );
+
+    /// <summary>
+    /// The ratio a split-adjusted price series applied to bars before <paramref name="asOf"/>:
+    /// every split row, including price-only factors the issuer's share counts contradict. Use
+    /// it to put a share count or per-share figure on the basis of stored closes.
+    /// </summary>
+    public static decimal PriceSeriesFactor(DateOnly asOf, IEnumerable<StockSplit> splits) =>
+        RatioAfter(asOf, splits);
+
+    private static decimal RatioAfter(DateOnly asOf, IEnumerable<StockSplit> splits)
     {
         var factor = 1m;
         foreach (var split in splits)
@@ -64,13 +81,13 @@ public static class SplitAdjustment
 
     /// <summary>
     /// Factor that converts a PRICE observed as-of <paramref name="asOf"/> onto
-    /// today's basis — the inverse of <see cref="ShareCountFactor"/>, since a
-    /// split moves price opposite to share count. Returns 1 when the share-count
-    /// factor is zero to avoid a divide-by-zero.
+    /// today's basis — the inverse of <see cref="PriceSeriesFactor"/>, since a
+    /// split moves price opposite to share count. Returns 1 when that factor is
+    /// zero to avoid a divide-by-zero.
     /// </summary>
     public static decimal PriceFactor(DateOnly asOf, IEnumerable<StockSplit> splits)
     {
-        var f = ShareCountFactor(asOf, splits);
+        var f = PriceSeriesFactor(asOf, splits);
         return f == 0m ? 1m : 1m / f;
     }
 

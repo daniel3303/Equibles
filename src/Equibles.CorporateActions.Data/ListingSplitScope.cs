@@ -5,7 +5,7 @@ namespace Equibles.CorporateActions.Data;
 /// <summary>
 /// One listing's captured splits, prepared for restating raw closes onto the current post-split
 /// basis. The price factor is Denominator/Numerator — the inverse of
-/// <see cref="SplitAdjustment.ShareCountFactor"/> — applied for every restatable split strictly
+/// <see cref="SplitAdjustment.PriceSeriesFactor"/> — applied for every restatable split strictly
 /// after the close's date (a close ON the effective date already trades post-split, matching the
 /// share-side convention). A split whose ratio cannot be trusted (non-positive numerator or
 /// denominator) cannot restate anything across it, so it stays an exclusion boundary: closes
