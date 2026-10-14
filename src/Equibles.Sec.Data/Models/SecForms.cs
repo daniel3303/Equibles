@@ -68,6 +68,8 @@ public static class SecForms
             DocumentType.SThree,
             SyncedByDefault: false
         ),
+        // A well-known seasoned issuer's automatic shelf, effective on filing; its amendments are POSASR.
+        new(DocumentType.SThreeAsr, SecFormFamily.Registration),
         new(DocumentType.SFour, SecFormFamily.Registration),
         new(
             DocumentType.SFourA,
@@ -89,6 +91,7 @@ public static class SecForms
             DocumentType.FThree,
             SyncedByDefault: false
         ),
+        new(DocumentType.FThreeAsr, SecFormFamily.Registration),
         new(DocumentType.FFour, SecFormFamily.Registration),
         new(
             DocumentType.FFourA,
@@ -118,7 +121,12 @@ public static class SecForms
         new(DocumentType.LateTenK, SecFormFamily.LateFilingNotice),
         new(DocumentType.LateTenQ, SecFormFamily.LateFilingNotice),
         new(DocumentType.LateTwentyF, SecFormFamily.LateFilingNotice),
-        new(DocumentType.AnnualReportToHolders, SecFormFamily.AnnualReportToHolders),
+        // An ARS is a PDF, and readers only ever see an original; synced once a PDF original is stored.
+        new(
+            DocumentType.AnnualReportToHolders,
+            SecFormFamily.AnnualReportToHolders,
+            SyncedByDefault: false
+        ),
         new(DocumentType.FormThree, SecFormFamily.Ownership),
         new(DocumentType.FormThreeA, SecFormFamily.Ownership, DocumentType.FormThree),
         new(DocumentType.FormFour, SecFormFamily.Ownership),

@@ -24,6 +24,7 @@ public static class SecDocumentEnvelopeParser
     public const long MaxInlineDocumentSetBytes = 50 * 1024 * 1024;
 
     private static readonly string[] InlineDocumentExtensions = [".htm", ".html", ".xhtml"];
+    private const string FilingFeeExhibitType = "EX-FILING FEES";
 
     /// <summary>
     /// Some SEC filings (typically &lt;PAPER&gt; 6-K submissions and other digitized filings) are
@@ -85,6 +86,13 @@ public static class SecDocumentEnvelopeParser
         {
             TryExtractSgmlTagValue(block, "FILENAME", out var blockFileName);
             TryExtractSgmlTagValue(block, "TYPE", out var blockType);
+
+            // The filing-fee exhibit is fee metadata tagged in its own taxonomy, never the filing.
+            if (
+                SecSgmlEnvelope.TryGetTagLine(block, "TYPE", out var typeLine)
+                && typeLine.Equals(FilingFeeExhibitType, StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
 
             // Every HTML block carrying inline markers belongs to the filing's one inline document
             // set; a uuencoded image can spell "<ix:" by chance. The cheap pre-check on the raw
@@ -415,11 +423,11 @@ public static class SecDocumentEnvelopeParser
         if (primary == null)
             return false;
 
-        // Periodic reports need their referenced images even when no HTML exhibit is attached.
-        var periodicPrimary = AsFiledHtmlDocumentTypes.Periodic.Contains(
+        // A standalone form needs its page even when no HTML exhibit is attached.
+        var standalonePrimary = AsFiledHtmlDocumentTypes.Standalone.Contains(
             RegisteredTypeOf(primary.Type)
         );
-        if (!periodicPrimary && (docs.Count < 2 || !docs.Exists(d => d.IsExhibit)))
+        if (!standalonePrimary && (docs.Count < 2 || !docs.Exists(d => d.IsExhibit)))
             return false;
 
         // A backfill may know only the accession; EDGAR puts the primary form before exhibits.

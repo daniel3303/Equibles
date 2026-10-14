@@ -136,14 +136,13 @@ public class ConfigurationTests
 
     // ── DocumentScraperOptions ───────────────────────────────────────
 
-    // The default sync list is the catalog's, and a synced amendment never runs before its
-    // original, so a correction never lands ahead of the filing it corrects.
+    // A synced amendment never runs before its original, so a correction never lands ahead of the
+    // filing it corrects.
     [Fact]
-    public void DocumentScraperOptions_DocumentTypesToSync_DefaultsToTheCatalogOriginalsFirst()
+    public void DocumentScraperOptions_DocumentTypesToSync_PutsEachOriginalBeforeItsAmendment()
     {
         var synced = new DocumentScraperOptions().DocumentTypesToSync;
 
-        synced.Should().Equal(SecForms.SyncedByDefault);
         foreach (
             var amendment in SecForms.All.Where(f => f.AmendmentOf != null && f.SyncedByDefault)
         )

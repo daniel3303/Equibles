@@ -61,12 +61,14 @@ public sealed class DocumentType
     public static readonly DocumentType SOneA = new("SOneA", "S-1/A");
     public static readonly DocumentType SThree = new("SThree", "S-3");
     public static readonly DocumentType SThreeA = new("SThreeA", "S-3/A");
+    public static readonly DocumentType SThreeAsr = new("SThreeAsr", "S-3ASR");
     public static readonly DocumentType SFour = new("SFour", "S-4");
     public static readonly DocumentType SFourA = new("SFourA", "S-4/A");
     public static readonly DocumentType FOne = new("FOne", "F-1");
     public static readonly DocumentType FOneA = new("FOneA", "F-1/A");
     public static readonly DocumentType FThree = new("FThree", "F-3");
     public static readonly DocumentType FThreeA = new("FThreeA", "F-3/A");
+    public static readonly DocumentType FThreeAsr = new("FThreeAsr", "F-3ASR");
     public static readonly DocumentType FFour = new("FFour", "F-4");
     public static readonly DocumentType FFourA = new("FFourA", "F-4/A");
     public static readonly DocumentType TenderOfferThirdParty = new(
@@ -150,12 +152,14 @@ public sealed class DocumentType
         SOneA,
         SThree,
         SThreeA,
+        SThreeAsr,
         SFour,
         SFourA,
         FOne,
         FOneA,
         FThree,
         FThreeA,
+        FThreeAsr,
         FFour,
         FFourA,
         TenderOfferThirdParty,

@@ -4,9 +4,8 @@ namespace Equibles.Sec.HostedService.Configuration;
 
 public class DocumentScraperOptions
 {
-    // Every form SecForms syncs by default. Amendments are first-class: periodic-report
-    // amendments store as their own document types, and Forms 3/A, 4/A and 5/A supersede their
-    // originals' transactions in the insider pipeline. Each original precedes its amendment.
+    // Every form SecForms syncs by default, each original ahead of its amendment. Forms 3/A, 4/A
+    // and 5/A supersede their originals' transactions in the insider pipeline.
     public List<DocumentType> DocumentTypesToSync { get; set; } = [.. SecForms.SyncedByDefault];
 
     // Event-driven discovery replaces the legacy sweep that re-fetched every

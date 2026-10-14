@@ -63,6 +63,27 @@ public class SecDocumentEnvelopeParserAsFiledHtmlTests
         content.Should().Contain("Acme reported revenue of $300M for the quarter.");
     }
 
+    // A proxy supplement or registration statement carries no inline XBRL original of its own, so its
+    // primary alone earns a page; an 8-K's inline primary already serves its readers without one.
+    [Theory]
+    [InlineData("DEFA14A", true)]
+    [InlineData("S-3ASR", true)]
+    [InlineData("NT 10-K", true)]
+    [InlineData("8-K", false)]
+    public void TryBuildAsFiledHtml_PrimaryWithoutExhibits_BuildsOnlyForStandaloneForms(
+        string form,
+        bool builds
+    )
+    {
+        var envelope = Submission("acme_8k.htm", withExhibit: false)
+            .Replace("<TYPE>8-K", "<TYPE>" + form);
+
+        SecDocumentEnvelopeParser
+            .TryBuildAsFiledHtml(envelope, "acme_8k.htm", out _)
+            .Should()
+            .Be(builds);
+    }
+
     [Fact]
     public void TryBuildAsFiledHtml_PrimaryWithExhibit_StitchesBothInAnchoredSections()
     {
