@@ -11,6 +11,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -237,7 +238,18 @@ public class FinancialStatementTools
                     facts,
                     selectedPeriod
                 );
-                var splits = latestByConcept.Values.Any(FinancialFactSplitAdjustment.IsPerShare)
+                var splitSensitive = statementLines.Any(line =>
+                {
+                    var (reportedConcept, fact) = StatementLineFacts.PickConceptFact(
+                        line,
+                        conceptIdByKey,
+                        latestByConcept
+                    );
+                    return fact != null
+                        && FactSplitBasis.Classify(reportedConcept, fact.Unit)
+                            != FactSplitKind.None;
+                });
+                var splits = splitSensitive
                     ? await _stockSplitRepository
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
@@ -287,7 +299,11 @@ public class FinancialStatementTools
         DateOnly? latestFiled = null;
         foreach (var line in statementLines)
         {
-            var fact = StatementLineFacts.PickFact(line, conceptIdByKey, latestByConcept);
+            var (reportedConcept, fact) = StatementLineFacts.PickConceptFact(
+                line,
+                conceptIdByKey,
+                latestByConcept
+            );
             if (fact == null)
             {
                 // The template carries industry-specific lines (bank/insurer/
@@ -297,15 +313,16 @@ public class FinancialStatementTools
                 continue;
             }
 
-            var value = FinancialFactSplitAdjustment.Restate(
+            var restated = FactSplitBasis.Restate(
                 fact,
+                FactSplitBasis.Classify(reportedConcept, fact.Unit),
                 splits,
-                stock.Presentation.EquityListingId,
-                out var adjusted,
-                out var unresolved
+                stock.Presentation.EquityListingId
             );
+            var value = restated.Value;
+            var unresolved = restated.Unresolved;
             unresolvedBasis |= unresolved;
-            splitAdjusted |= adjusted;
+            splitAdjusted |= restated.Adjusted;
             result.AppendLine(
                 $"| {FactMarkdown.Cell(line.Label)} | "
                     + $"{FactMarkdown.Value(value, fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
