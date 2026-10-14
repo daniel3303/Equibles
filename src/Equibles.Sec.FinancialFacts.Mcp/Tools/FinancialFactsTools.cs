@@ -814,7 +814,8 @@ public class FinancialFactsTools
     private static FactSplitKind SplitKind(
         FinancialFact fact,
         IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
-    ) => FactSplitBasis.Classify(conceptsById[fact.FinancialConceptId], fact.Unit);
+    ) =>
+        FactSplitBasis.Classify(conceptsById.GetValueOrDefault(fact.FinancialConceptId), fact.Unit);
 
     // Accepts an absent bound (null/blank → no bound) but rejects a non-empty
     // value that is not an ISO yyyy-MM-dd date, so a typo can't silently widen

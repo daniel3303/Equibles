@@ -33,8 +33,35 @@ public static class FactSplitBasis
             .Select(concept => (concept.Taxonomy, concept.Tag))
             .ToHashSet();
 
-    public static FactSplitKind Classify(FinancialConceptAliases.ConceptRef concept, string unit) =>
-        Classify(concept.Taxonomy, concept.Tag, unit);
+    /// <summary>
+    /// Classifies a fact by the concept it was reported under. A per-share unit needs no concept;
+    /// a share count without one is a caller bug, since only the concept says whether a split
+    /// moves it.
+    /// </summary>
+    public static FactSplitKind Classify(FinancialConceptAliases.ConceptRef concept, string unit)
+    {
+        if (concept != null)
+            return Classify(concept.Taxonomy, concept.Tag, unit);
+        if (IsShareUnit(unit))
+            throw new ArgumentException(
+                "A share-count fact needs its concept to decide whether a split moves it.",
+                nameof(concept)
+            );
+        return IsPerShareUnit(unit) ? FactSplitKind.PerShare : FactSplitKind.None;
+    }
+
+    /// <summary>
+    /// Classifies a statement figure known only by its alias, as read from a report without XBRL
+    /// concepts. Such figures carry no cover page, so a count is a stated count.
+    /// </summary>
+    public static FactSplitKind ClassifyStatementFigure(string alias, string unit)
+    {
+        if (IsPerShareUnit(unit))
+            return FactSplitKind.PerShare;
+        return IsShareUnit(unit) && CommonShareCountAliases.Contains(alias)
+            ? FactSplitKind.StatedShareCount
+            : FactSplitKind.None;
+    }
 
     public static FactSplitKind Classify(FactTaxonomy taxonomy, string tag, string unit)
     {

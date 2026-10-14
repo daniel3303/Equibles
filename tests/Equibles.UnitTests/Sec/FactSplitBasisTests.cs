@@ -118,6 +118,27 @@ public class FactSplitBasisTests
     }
 
     [Fact]
+    public void Classify_ShareCountWithoutItsConcept_Throws()
+    {
+        var classify = () => FactSplitBasis.Classify(null, "shares");
+
+        classify.Should().Throw<ArgumentException>();
+        FactSplitBasis.Classify(null, "USD/shares").Should().Be(FactSplitKind.PerShare);
+        FactSplitBasis.Classify(null, "USD").Should().Be(FactSplitKind.None);
+    }
+
+    [Theory]
+    [InlineData("shares-outstanding", "shares", FactSplitKind.StatedShareCount)]
+    [InlineData("weighted-average-shares-diluted", "shares", FactSplitKind.StatedShareCount)]
+    [InlineData("eps-diluted", "EUR/shares", FactSplitKind.PerShare)]
+    [InlineData("revenue", "EUR", FactSplitKind.None)]
+    [InlineData("treasury-stock", "shares", FactSplitKind.None)]
+    public void ClassifyStatementFigure_UsesTheAlias(string alias, string unit, FactSplitKind kind)
+    {
+        FactSplitBasis.ClassifyStatementFigure(alias, unit).Should().Be(kind);
+    }
+
+    [Fact]
     public void Restate_TslaFy2019FromTheFy2020TenK_AppliesOnlyTheLaterSplit()
     {
         // The FY2020 10-K (filed 2021-02-08) already states FY2019 after the 2020 5:1 split.
