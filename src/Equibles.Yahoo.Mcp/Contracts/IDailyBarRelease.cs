@@ -16,7 +16,8 @@ public interface IDailyBarRelease
 
 /// <summary>
 /// A session the current caller cannot read yet. Bars dated on or after <paramref name="Session"/>
-/// are left out of every price tool, and <paramref name="Note"/> is appended verbatim below a
-/// table whose range reaches that session, so the caller learns why its newest row is older.
+/// are left out of every price tool, and <paramref name="Note"/> is appended verbatim to an answer
+/// whose range reaches that session (a latest-price answer always does), so the caller learns why
+/// its newest row is older.
 /// </summary>
 public sealed record DailyBarHold(DateOnly Session, string Note);
