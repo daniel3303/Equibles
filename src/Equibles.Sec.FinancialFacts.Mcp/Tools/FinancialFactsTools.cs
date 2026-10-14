@@ -61,8 +61,9 @@ public class FinancialFactsTools
     [Description(
         "Get a single financial concept (e.g. revenue, net income, diluted EPS, total "
             + "assets, operating cash flow) over time for a company, sourced from SEC "
-            + "Company Facts (structured XBRL). Returns a time series, one row per fiscal "
-            + "period, using the latest restated value unless asOriginallyReported is set. "
+            + "Company Facts (structured XBRL). Returns a time series using the latest "
+            + "restated value unless asOriginallyReported is set: one row per fiscal period for "
+            + "flows, one row per as-of date for balances and share counts. "
             + "Each row carries its actual period start/end; fiscal years/quarters follow the "
             + "company's own fiscal calendar. Warns when the selected alias ends materially "
             + "before the company's other structured facts, which can indicate an XBRL tag "
