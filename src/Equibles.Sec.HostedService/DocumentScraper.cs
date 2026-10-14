@@ -11,7 +11,6 @@ using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
-using Equibles.Sec.HostedService.Extensions;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;

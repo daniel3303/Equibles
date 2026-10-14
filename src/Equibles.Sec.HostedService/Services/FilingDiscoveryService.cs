@@ -4,7 +4,6 @@ using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
-using Equibles.Sec.HostedService.Extensions;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Options;
 

@@ -52,18 +52,50 @@ public static class SecForms
         new(DocumentType.Defr14A, SecFormFamily.Proxy),
         new(DocumentType.Pre14A, SecFormFamily.Proxy),
         new(DocumentType.Prem14A, SecFormFamily.Proxy),
+        // A registration amendment re-files the whole prospectus, so syncing every one stores
+        // near-duplicate copies that crowd an issuer's search results; deployments can opt in.
         new(DocumentType.SOne, SecFormFamily.Registration),
-        new(DocumentType.SOneA, SecFormFamily.Registration, DocumentType.SOne),
+        new(
+            DocumentType.SOneA,
+            SecFormFamily.Registration,
+            DocumentType.SOne,
+            SyncedByDefault: false
+        ),
         new(DocumentType.SThree, SecFormFamily.Registration),
-        new(DocumentType.SThreeA, SecFormFamily.Registration, DocumentType.SThree),
+        new(
+            DocumentType.SThreeA,
+            SecFormFamily.Registration,
+            DocumentType.SThree,
+            SyncedByDefault: false
+        ),
         new(DocumentType.SFour, SecFormFamily.Registration),
-        new(DocumentType.SFourA, SecFormFamily.Registration, DocumentType.SFour),
+        new(
+            DocumentType.SFourA,
+            SecFormFamily.Registration,
+            DocumentType.SFour,
+            SyncedByDefault: false
+        ),
         new(DocumentType.FOne, SecFormFamily.Registration),
-        new(DocumentType.FOneA, SecFormFamily.Registration, DocumentType.FOne),
+        new(
+            DocumentType.FOneA,
+            SecFormFamily.Registration,
+            DocumentType.FOne,
+            SyncedByDefault: false
+        ),
         new(DocumentType.FThree, SecFormFamily.Registration),
-        new(DocumentType.FThreeA, SecFormFamily.Registration, DocumentType.FThree),
+        new(
+            DocumentType.FThreeA,
+            SecFormFamily.Registration,
+            DocumentType.FThree,
+            SyncedByDefault: false
+        ),
         new(DocumentType.FFour, SecFormFamily.Registration),
-        new(DocumentType.FFourA, SecFormFamily.Registration, DocumentType.FFour),
+        new(
+            DocumentType.FFourA,
+            SecFormFamily.Registration,
+            DocumentType.FFour,
+            SyncedByDefault: false
+        ),
         new(DocumentType.TenderOfferThirdParty, SecFormFamily.TenderOffer),
         new(
             DocumentType.TenderOfferThirdPartyA,
