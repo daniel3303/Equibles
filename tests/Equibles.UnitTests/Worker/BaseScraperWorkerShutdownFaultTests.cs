@@ -2,10 +2,13 @@
 
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Messaging.Contracts.Activity;
 using Equibles.Worker;
+using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.Core;
 
 namespace Equibles.UnitTests.Worker;
 
@@ -17,9 +20,16 @@ public class BaseScraperWorkerShutdownFaultTests
     [Fact]
     public async Task FaultEscapingAfterStopSignal_IsAWarningNotAReport()
     {
+        var bus = Substitute.For<IBus>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IBus)).Returns(bus);
+        var scope = Substitute.For<IServiceScope>();
+        scope.ServiceProvider.Returns(serviceProvider);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
         var logger = Substitute.For<ILogger>();
         var parked = new TaskCompletionSource();
-        using var worker = new ShutdownFaultTestWorker(logger, parked);
+        using var worker = new ShutdownFaultTestWorker(logger, scopeFactory, parked);
 
         await worker.StartAsync(CancellationToken.None);
         await parked.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -44,20 +54,28 @@ public class BaseScraperWorkerShutdownFaultTests
                 Arg.Is<Exception?>(e => e is InvalidOperationException),
                 Arg.Any<Func<object, Exception?, string>>()
             );
+        bus.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IBus.Publish))
+            .Select(call => (ScraperActivity)call.GetArguments()[0]!)
+            .Should()
+            .Contain(activity =>
+                activity.Severity == ScraperActivitySeverity.Warn && activity.Message == "cancelled"
+            );
     }
 
     private sealed class ShutdownFaultTestWorker : BaseScraperWorker
     {
         private readonly TaskCompletionSource _parked;
 
-        public ShutdownFaultTestWorker(ILogger logger, TaskCompletionSource parked)
+        public ShutdownFaultTestWorker(
+            ILogger logger,
+            IServiceScopeFactory scopeFactory,
+            TaskCompletionSource parked
+        )
             : base(
                 logger,
-                Substitute.For<IServiceScopeFactory>(),
-                new ErrorReporter(
-                    Substitute.For<IServiceScopeFactory>(),
-                    Substitute.For<ILogger<ErrorReporter>>()
-                )
+                scopeFactory,
+                new ErrorReporter(scopeFactory, Substitute.For<ILogger<ErrorReporter>>())
             )
         {
             _parked = parked;
