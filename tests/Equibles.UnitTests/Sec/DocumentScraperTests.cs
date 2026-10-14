@@ -674,9 +674,7 @@ public class DocumentScraperTests
         persisted.FiscalYearEndMonth.Should().Be(12);
         persisted.FiscalYearEndDay.Should().Be(31);
 
-        await harness
-            .SecEdgarClient.Received(1)
-            .GetMostRecentReportDate("0001193125", "20-F");
+        await harness.SecEdgarClient.Received(1).GetMostRecentReportDate("0001193125", "20-F");
     }
 
     // ── helpers ──

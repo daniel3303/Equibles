@@ -49,7 +49,8 @@ public class SecDocumentEnvelopeParserAsFiledHtmlTests
     [Fact]
     public void TryBuildAsFiledHtml_MultiWordFormPrimary_StitchesItsExhibit()
     {
-        var envelope = Submission("acme_8k.htm", withExhibit: true).Replace("<TYPE>8-K", "<TYPE>SC TO-T");
+        var envelope = Submission("acme_8k.htm", withExhibit: true)
+            .Replace("<TYPE>8-K", "<TYPE>SC TO-T");
 
         var built = SecDocumentEnvelopeParser.TryBuildAsFiledHtml(
             envelope,

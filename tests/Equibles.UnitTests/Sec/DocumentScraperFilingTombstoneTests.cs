@@ -80,11 +80,7 @@ public class DocumentScraperFilingTombstoneTests
     {
         var secEdgar = Substitute.For<ISecEdgarClient>();
         secEdgar
-            .GetCompanyFilings(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DateOnly?>()
-            )
+            .GetCompanyFilings(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateOnly?>())
             .Returns(
                 new List<FilingData>
                 {

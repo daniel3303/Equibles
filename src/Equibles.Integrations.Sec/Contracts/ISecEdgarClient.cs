@@ -24,6 +24,7 @@ public interface ISecEdgarClient
         string cik,
         CancellationToken cancellationToken = default
     );
+
     /// <summary>
     /// A company's filings, optionally only those whose EDGAR form string equals
     /// <paramref name="edgarForm"/> exactly (e.g. <c>"10-K"</c>, <c>"SC TO-T/A"</c>).

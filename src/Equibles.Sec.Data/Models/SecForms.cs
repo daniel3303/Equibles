@@ -102,8 +102,8 @@ public static class SecForms
         new(DocumentType.NportPa, SecFormFamily.Fund, DocumentType.NportP),
     ];
 
-    private static readonly Dictionary<DocumentType, SecForm> ByType = All.ToDictionary(
-        f => f.Type
+    private static readonly Dictionary<DocumentType, SecForm> ByType = All.ToDictionary(f =>
+        f.Type
     );
 
     /// <summary>The catalog entry for a document type, or null when the type is not an SEC form.</summary>

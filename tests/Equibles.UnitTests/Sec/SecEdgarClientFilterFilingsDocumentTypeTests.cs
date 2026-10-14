@@ -44,12 +44,7 @@ public class SecEdgarClientFilterFilingsDocumentTypeTests
         };
         var filings = new List<FilingData> { tenK, eightK, tenQ };
 
-        var result =
-            (List<FilingData>)
-                filter!.Invoke(
-                    null,
-                    [filings, "10-K", null, null]
-                );
+        var result = (List<FilingData>)filter!.Invoke(null, [filings, "10-K", null, null]);
 
         result.Should().ContainSingle();
         result[0].AccessionNumber.Should().Be("A-10K");

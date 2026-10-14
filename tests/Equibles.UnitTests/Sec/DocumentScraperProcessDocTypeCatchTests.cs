@@ -32,11 +32,7 @@ public class DocumentScraperProcessDocTypeCatchTests
     {
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient
-            .GetCompanyFilings(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DateOnly?>()
-            )
+            .GetCompanyFilings(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateOnly?>())
             .Returns<Task<List<FilingData>>>(_ => throw new InvalidOperationException("boom"));
 
         var scraper = new DocumentScraper(

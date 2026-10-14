@@ -12,7 +12,9 @@ public class SecFormsTests
         SecForms.All.Select(f => f.EdgarForm).Should().OnlyHaveUniqueItems();
         SecForms
             .All.Should()
-            .OnlyContain(f => SecForms.ForEdgarForm(f.EdgarForm) == f && SecForms.Find(f.Type) == f);
+            .OnlyContain(f =>
+                SecForms.ForEdgarForm(f.EdgarForm) == f && SecForms.Find(f.Type) == f
+            );
     }
 
     // An amendment stores as its own type; its original must be a catalog form of the same family,
@@ -67,7 +69,10 @@ public class SecFormsTests
     {
         SecForms.IsEdgar(DocumentType.EsefAnnualReport).Should().BeFalse();
         SecForms.IsEdgar(DocumentType.Other).Should().BeFalse();
-        SecForms.IsEdgar(new DocumentType("EarningsCallTranscript", "Earnings Call")).Should().BeFalse();
+        SecForms
+            .IsEdgar(new DocumentType("EarningsCallTranscript", "Earnings Call"))
+            .Should()
+            .BeFalse();
         SecForms.ForEdgarForm("424B4").Should().BeNull();
     }
 }

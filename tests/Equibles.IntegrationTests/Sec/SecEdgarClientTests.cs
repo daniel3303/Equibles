@@ -76,10 +76,7 @@ public class SecEdgarClientTests
             .Build();
         var sut = new SecEdgarClient(httpClient, Substitute.For<ILogger<SecEdgarClient>>(), config);
 
-        var filings = await sut.GetCompanyFilings(
-            "1234567",
-            edgarForm: "4"
-        );
+        var filings = await sut.GetCompanyFilings("1234567", edgarForm: "4");
 
         filings.Should().ContainSingle();
         filings[0].Form.Should().Be("4");

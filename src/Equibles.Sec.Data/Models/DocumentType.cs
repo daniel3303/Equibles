@@ -69,13 +69,25 @@ public sealed class DocumentType
     public static readonly DocumentType FThreeA = new("FThreeA", "F-3/A");
     public static readonly DocumentType FFour = new("FFour", "F-4");
     public static readonly DocumentType FFourA = new("FFourA", "F-4/A");
-    public static readonly DocumentType TenderOfferThirdParty = new("TenderOfferThirdParty", "SC TO-T");
-    public static readonly DocumentType TenderOfferThirdPartyA = new("TenderOfferThirdPartyA", "SC TO-T/A");
+    public static readonly DocumentType TenderOfferThirdParty = new(
+        "TenderOfferThirdParty",
+        "SC TO-T"
+    );
+    public static readonly DocumentType TenderOfferThirdPartyA = new(
+        "TenderOfferThirdPartyA",
+        "SC TO-T/A"
+    );
     public static readonly DocumentType TenderOfferIssuer = new("TenderOfferIssuer", "SC TO-I");
     public static readonly DocumentType TenderOfferIssuerA = new("TenderOfferIssuerA", "SC TO-I/A");
-    public static readonly DocumentType TenderOfferCommunication = new("TenderOfferCommunication", "SC TO-C");
+    public static readonly DocumentType TenderOfferCommunication = new(
+        "TenderOfferCommunication",
+        "SC TO-C"
+    );
     public static readonly DocumentType TenderOfferResponse = new("TenderOfferResponse", "SC 14D9");
-    public static readonly DocumentType TenderOfferResponseA = new("TenderOfferResponseA", "SC 14D9/A");
+    public static readonly DocumentType TenderOfferResponseA = new(
+        "TenderOfferResponseA",
+        "SC 14D9/A"
+    );
     public static readonly DocumentType LateTenK = new("LateTenK", "NT 10-K");
     public static readonly DocumentType LateTenQ = new("LateTenQ", "NT 10-Q");
     public static readonly DocumentType LateTwentyF = new("LateTwentyF", "NT 20-F");
