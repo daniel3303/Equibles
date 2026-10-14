@@ -52,7 +52,7 @@ public class ShortInterestRepository : BaseRepository<ShortInterest>
 
     public IQueryable<DateOnly> GetLatestSettlementDate()
     {
-        return GetAll().LatestValue(s => s.SettlementDate, distinct: true);
+        return GetAll().LatestValue(s => s.SettlementDate);
     }
 
     public IQueryable<ShortInterest> GetBySettlementDate(DateOnly settlementDate)

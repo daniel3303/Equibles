@@ -7,20 +7,14 @@ public static class QueryableLatestExtensions
     /// <summary>
     /// Projects the source to <paramref name="selector"/> and returns the single
     /// highest value as an <see cref="IQueryable{TKey}"/> (ORDER BY ... DESC LIMIT 1).
-    /// Set <paramref name="distinct"/> when the underlying rows can repeat the
-    /// projected value and the caller wants a unique-by-projection comparison.
+    /// Never add DISTINCT: it cannot change the maximum, and Postgres plans the
+    /// DISTINCT subquery as a full scan instead of one backward index probe.
     /// </summary>
     public static IQueryable<TKey> LatestValue<TSource, TKey>(
         this IQueryable<TSource> source,
-        Expression<Func<TSource, TKey>> selector,
-        bool distinct = false
+        Expression<Func<TSource, TKey>> selector
     )
     {
-        var projected = source.Select(selector);
-        if (distinct)
-        {
-            projected = projected.Distinct();
-        }
-        return projected.OrderByDescending(k => k).Take(1);
+        return source.Select(selector).OrderByDescending(k => k).Take(1);
     }
 }

@@ -194,6 +194,6 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
 
     public IQueryable<DateOnly> GetLatestDateAcrossAllStocks()
     {
-        return GetPrimarySeries().LatestValue(p => p.Date, distinct: true);
+        return GetPrimarySeries().LatestValue(p => p.Date);
     }
 }

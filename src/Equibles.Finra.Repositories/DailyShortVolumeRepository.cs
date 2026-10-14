@@ -51,7 +51,7 @@ public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
 
     public IQueryable<DateOnly> GetLatestDate()
     {
-        return GetAll().LatestValue(d => d.Date, distinct: true);
+        return GetAll().LatestValue(d => d.Date);
     }
 
     public IQueryable<DateOnly> GetEarliestDate()
