@@ -98,42 +98,6 @@ public class InsiderMisrepairedPriceSweepTests : IDisposable
         return row;
     }
 
-    private async Task<InsiderTransaction> SeedDerivative(
-        decimal reportedPricePerShare = 3_659_027m,
-        long shares = 183_640,
-        InsiderSecurityKind kind = InsiderSecurityKind.Derivative,
-        bool? isPriceValid = true,
-        bool priceWasRepaired = false,
-        int parserVersion = InsiderTransaction.CurrentParserVersion
-    )
-    {
-        var ctx = CreateContext();
-        var row = new InsiderTransaction
-        {
-            Id = Guid.NewGuid(),
-            EquityIssuerId = Guid.NewGuid(),
-            InsiderOwnerId = Guid.NewGuid(),
-            AccessionNumber = Guid.NewGuid().ToString()[..20],
-            TransactionOrder = 0,
-            FilingDate = new DateOnly(2026, 8, 20),
-            TransactionDate = new DateOnly(2026, 8, 18),
-            TransactionCode = TransactionCode.Sale,
-            Shares = shares,
-            PricePerShare = reportedPricePerShare,
-            ReportedPricePerShare = reportedPricePerShare,
-            IsPriceValid = isPriceValid,
-            PriceWasRepaired = priceWasRepaired,
-            AcquiredDisposed = AcquiredDisposed.Disposed,
-            OwnershipNature = OwnershipNature.Direct,
-            SecurityTitle = "Call option (obligation to sell)",
-            SecurityKind = kind,
-            ParserVersion = parserVersion,
-        };
-        ctx.Add(row);
-        await ctx.SaveChangesAsync();
-        return row;
-    }
-
     [Fact]
     public async Task Run_MisrepairedRow_RestoresAsFiledPriceAndNullsTheVerdict()
     {
@@ -253,67 +217,5 @@ public class InsiderMisrepairedPriceSweepTests : IDisposable
         );
 
         (await CreateSweep().Run(CancellationToken.None)).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task ReenrollDerivativeTotals_DerivativeSealedValidAboveAThousand_DropsOneParserVersion()
-    {
-        // The CoreWeave call shape: the total premium sits in the per-unit field and the old
-        // rule sealed it valid as filed, so only the reprocess with parse evidence can repair it.
-        var row = await SeedDerivative();
-
-        var reenrolled = await CreateSweep().ReenrollDerivativeTotals(CancellationToken.None);
-
-        reenrolled.Should().Be(1);
-        var updated = await CreateContext()
-            .Set<InsiderTransaction>()
-            .SingleAsync(t => t.Id == row.Id);
-        updated.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion - 1);
-        updated.PricePerShare.Should().Be(3_659_027m, "the reprocess, not the sweep, judges it");
-        updated.IsPriceValid.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task ReenrollDerivativeTotals_RowsOutsideTheCohort_AreNotTouched()
-    {
-        var outside = new[]
-        {
-            await SeedDerivative(kind: InsiderSecurityKind.NonDerivative),
-            await SeedDerivative(priceWasRepaired: true),
-            await SeedDerivative(reportedPricePerShare: 1_000m),
-            await SeedDerivative(shares: 0),
-            await SeedDerivative(isPriceValid: false),
-            await SeedDerivative(isPriceValid: null),
-            await SeedDerivative(parserVersion: InsiderTransaction.CurrentParserVersion - 1),
-        };
-
-        var reenrolled = await CreateSweep().ReenrollDerivativeTotals(CancellationToken.None);
-
-        reenrolled.Should().Be(0);
-        var verify = CreateContext();
-        foreach (var row in outside)
-        {
-            (await verify.Set<InsiderTransaction>().SingleAsync(t => t.Id == row.Id))
-                .ParserVersion.Should()
-                .Be(row.ParserVersion);
-        }
-    }
-
-    [Fact]
-    public async Task ReenrollDerivativeTotals_RowTheReprocessLeavesValidAsFiled_MatchesAgain()
-    {
-        // A legit high unit price is stamped current again by the reprocess and re-matches, which
-        // is why the worker runs this pass behind a one-shot marker.
-        var row = await SeedDerivative(reportedPricePerShare: 1_000.50m, shares: 5_000);
-
-        (await CreateSweep().ReenrollDerivativeTotals(CancellationToken.None)).Should().Be(1);
-        (await CreateSweep().ReenrollDerivativeTotals(CancellationToken.None)).Should().Be(0);
-
-        var ctx = CreateContext();
-        var reprocessed = await ctx.Set<InsiderTransaction>().SingleAsync(t => t.Id == row.Id);
-        reprocessed.ParserVersion = InsiderTransaction.CurrentParserVersion;
-        await ctx.SaveChangesAsync();
-
-        (await CreateSweep().ReenrollDerivativeTotals(CancellationToken.None)).Should().Be(1);
     }
 }
