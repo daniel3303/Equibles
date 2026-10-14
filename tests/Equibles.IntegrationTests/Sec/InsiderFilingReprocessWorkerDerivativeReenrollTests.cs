@@ -27,10 +27,8 @@ using FileContent = Equibles.Media.Data.Models.FileContent;
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
-/// Pins the worker side of the derivative-total re-enrollment: the one-shot pass runs before the
-/// reprocess so the CoreWeave call sealed valid by the old rule is repaired in the same cycle, and
-/// its marker keeps the non-self-terminating predicate from re-enrolling a legit high unit price
-/// (a convertible note counted by principal) on every later cycle.
+/// Pins the worker side of the derivative-total re-enrollment: the call sealed valid by the old rule
+/// is repaired in the same cycle, and the marker stops a legit high unit price re-enrolling later.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InsiderFilingReprocessWorkerDerivativeReenrollTests : ParadeDbMcpTestBase

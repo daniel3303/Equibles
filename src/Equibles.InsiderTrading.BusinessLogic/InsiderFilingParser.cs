@@ -575,17 +575,5 @@ public static class InsiderFilingParser
             : null;
     }
 
-    internal static decimal ParseDecimal(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return 0;
-        return decimal.TryParse(
-            value,
-            System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out var result
-        )
-            ? result
-            : 0;
-    }
+    internal static decimal ParseDecimal(string value) => ParseNullableDecimal(value) ?? 0;
 }

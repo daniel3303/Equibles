@@ -17,10 +17,8 @@ using FileContent = Equibles.Media.Data.Models.FileContent;
 namespace Equibles.IntegrationTests.InsiderTrading;
 
 /// <summary>
-/// Pins the reprocess half of the one-for-one derivative repair. Stored rows carry no
-/// underlying-share evidence, so a re-enrolled filing must take it from the replayed XML: the
-/// CoreWeave call (total premium in the per-unit field, 1:1 underlying) is repaired, while a
-/// convertible preferred at its $1,000 stated value (10 commons per preferred) stays as filed.
+/// Pins the reprocess half of the one-for-one derivative repair: stored rows lack the evidence, so a
+/// re-enrolled filing takes it from the replayed XML, repairing the 1:1 call and leaving a 10:1 preferred.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InsiderFilingReprocessManagerDerivativeTotalTests : ParadeDbMcpTestBase

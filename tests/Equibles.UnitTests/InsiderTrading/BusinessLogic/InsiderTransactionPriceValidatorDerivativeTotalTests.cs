@@ -5,11 +5,9 @@ using Equibles.InsiderTrading.Data.Models;
 namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
 
 /// <summary>
-/// Pins the one-for-one derivative repair. A unit that delivers one share is worth at most the
-/// share (call, warrant) or the strike (put), so a total premium typed into the per-unit field
-/// (CoreWeave calls, accession 0001104659-26-097430: $3,659,027 per option on 183,640 options)
-/// is divided back to the unit price. Without the filing's own 1:1 evidence, or without a
-/// settled close, a derivative price stands as filed exactly as before.
+/// Pins the one-for-one derivative repair: a total premium typed into the per-unit field (accession
+/// 0001104659-26-097430, $3,659,027 per option on 183,640 options) is divided back to the unit price.
+/// Without the filing's own 1:1 evidence, or without a settled close, a derivative stands as filed.
 /// </summary>
 public class InsiderTransactionPriceValidatorDerivativeTotalTests
 {
@@ -288,6 +286,24 @@ public class InsiderTransactionPriceValidatorDerivativeTotalTests
         result.IsPriceValid.Should().BeFalse();
         result.WasRepaired.Should().BeFalse();
         result.EffectivePrice.Should().Be(1_000_000m);
+    }
+
+    [Fact]
+    public void Evaluate_UnknownKindWithDerivativeTitleAndEvidence_TakesTheDerivativeRepair()
+    {
+        var result = _validator.Evaluate(
+            reportedPrice: 3_659_027m,
+            shares: 183_640,
+            kind: InsiderSecurityKind.Unknown,
+            securityTitle: "Call Option",
+            bar: new DailyBarContext { Close = 108m },
+            underlyingShares: 183_640,
+            exercisePrice: 130m
+        );
+
+        result.IsPriceValid.Should().BeTrue();
+        result.WasRepaired.Should().BeTrue();
+        result.EffectivePrice.Should().Be(3_659_027m / 183_640m);
     }
 
     [Fact]

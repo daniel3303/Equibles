@@ -128,6 +128,7 @@ public class InsiderFilingParserDerivativeEvidenceTests
     [Fact]
     public void ParseTransactions_NonDerivativeRow_LeavesEvidenceNull()
     {
+        // Even when a malformed non-derivative row carries the elements, only the derivative table yields evidence.
         var root = new XElement(
             "ownershipDocument",
             new XElement(
@@ -137,7 +138,12 @@ public class InsiderFilingParserDerivativeEvidenceTests
                     new XElement("securityTitle", new XElement("value", "Class A Common Stock")),
                     new XElement("transactionDate", new XElement("value", "2026-08-18")),
                     new XElement("transactionCoding", new XElement("transactionCode", "S")),
-                    Amounts("1000", "108")
+                    Amounts("1000", "108"),
+                    new XElement("conversionOrExercisePrice", new XElement("value", "130")),
+                    new XElement(
+                        "underlyingSecurity",
+                        new XElement("underlyingSecurityShares", new XElement("value", "1000"))
+                    )
                 )
             )
         );

@@ -22,10 +22,8 @@ using Xunit;
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
-/// Pins the ingest half of the one-for-one derivative repair: the parsed underlying-share and
-/// strike evidence must reach the validator, so the CoreWeave call (accession
-/// 0001104659-26-097430, total premium in the per-unit field) lands repaired instead of valid at
-/// $3,659,027 per option.
+/// Pins the ingest half of the one-for-one derivative repair: the parsed evidence reaches the
+/// validator, so the call filed at $3,659,027 per option lands repaired instead of valid as filed.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InsiderTradingFilingProcessorDerivativeTotalTests : ParadeDbMcpTestBase
