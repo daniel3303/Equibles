@@ -72,7 +72,9 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         string companyName = "Apple Inc",
         DocumentType documentType = null,
         DateOnly? reportingDate = null,
-        string items = null
+        string items = null,
+        string accessionNumber = null,
+        DateTime? acceptedAt = null
     )
     {
         documentType ??= DocumentType.TenK;
@@ -116,6 +118,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             ReportingDate = docReportingDate,
             ReportingForDate = docReportingDate.AddDays(-30),
             Items = items,
+            AccessionNumber = accessionNumber,
+            AcceptedAt = acceptedAt,
             LineCount = chunkContents.Length,
         };
         DbContext.Set<Document>().Add(document);
@@ -663,7 +667,37 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("page 1");
         result
             .Should()
-            .Contain("Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines");
+            .Contain(
+                "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC)"
+            );
+    }
+
+    // An ESEF report keeps its own key in the accession column; it must never pass for an EDGAR accession.
+    [Fact]
+    public async Task ListFilings_ShowsAccessionAndAcceptance_OnlyForEdgarFilings()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.TenQ,
+            reportingDate: new DateOnly(2026, 10, 8),
+            accessionNumber: "0001140361-26-039158",
+            acceptedAt: new DateTime(2026, 10, 8, 22, 30, 32, DateTimeKind.Utc),
+            chunkContents: new[] { "Quarterly content." }
+        );
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.EsefAnnualReport,
+            reportingDate: new DateOnly(2026, 3, 15),
+            accessionNumber: "549300ABCDEF-2025-12-31-en",
+            chunkContents: new[] { "Annual report." }
+        );
+
+        var result = await Sut().ListFilings("AAPL", documentType: null);
+        var esef = await Sut().ListFilings("AAPL", documentType: "EsefAnnualReport");
+
+        result.Should().Contain("| 0001140361-26-039158 | 2026-10-08 22:30:32");
+        esef.Should().NotContain("549300ABCDEF");
+        esef.Should().Contain("| — | —");
     }
 
     [Fact]

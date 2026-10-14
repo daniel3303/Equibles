@@ -69,8 +69,14 @@ public class SecDocumentService : ISecDocumentService
                     ReportingForDate = d.ReportingForDate,
                     LineCount = d.LineCount,
                     Items = d.Items,
+                    AccessionNumber = d.AccessionNumber,
+                    AcceptedAt = d.AcceptedAt,
+                    IngestedAt = d.CreationTime,
                 })
                 .ToListAsync();
+
+            foreach (var document in documents.Where(d => !SecForms.IsEdgar(d.DocumentType)))
+                document.AccessionNumber = null;
 
             _logger.LogInformation(
                 "Found {Count} recent documents for ticker filter {Ticker}",

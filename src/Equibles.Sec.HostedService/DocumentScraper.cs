@@ -1182,6 +1182,7 @@ public class DocumentScraper : IDocumentScraper
                     filing.Items,
                     xbrl,
                     asFiledHtml,
+                    acceptedAt: SecSubmissionHeader.AcceptedAt(content),
                     cancellationToken: cancellationToken
                 );
 

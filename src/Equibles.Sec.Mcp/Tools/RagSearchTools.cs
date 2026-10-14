@@ -262,7 +262,7 @@ public class RagSearchTools
 
     [McpServerTool(Name = "ListFilings", Title = "List Filings", ReadOnly = true)]
     [Description(
-        "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. Pass a returned ID to SearchDocument or ReadDocumentLines."
+        "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, EDGAR accession numbers and acceptance times (UTC; blank for filings stored before October 2026), and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. Pass a returned ID to SearchDocument or ReadDocumentLines."
     )]
     public Task<string> ListFilings(
         [Description("Optional company ticker symbol (e.g., AAPL, MSFT). Omit for all companies.")]
@@ -373,8 +373,8 @@ public class RagSearchTools
                     stock == null
                         ? $"Market-wide filings — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):"
                         : $"Financial documents for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Presentation.Listing.Ticker)}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
-                    "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines",
-                    "-------|---------|----|------|-------|---------------|-------|------"
+                    "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC)",
+                    "-------|---------|----|------|-------|---------------|-------|-------|-----------|---------------"
                 );
 
                 result.AppendRows(
@@ -382,7 +382,10 @@ public class RagSearchTools
                     doc =>
                     {
                         var items = string.Join(",", SecFilingItemNumber.ParseStored(doc.Items));
-                        return $"{MarkdownTable.EscapeCell(doc.Ticker)} | {MarkdownTable.EscapeCell(doc.CompanyName)} | {doc.Id} | {doc.DocumentType} | {McpFormat.Invariant(doc.ReportingDate, "yyyy-MM-dd")} | {McpFormat.Invariant(doc.ReportingForDate, "yyyy-MM-dd")} | {MarkdownTable.EscapeCell(items, "—")} | {McpFormat.WholeNumber(doc.LineCount)}";
+                        var accepted = doc.AcceptedAt is { } at
+                            ? McpFormat.Invariant(at, "yyyy-MM-dd HH:mm:ss")
+                            : "—";
+                        return $"{MarkdownTable.EscapeCell(doc.Ticker)} | {MarkdownTable.EscapeCell(doc.CompanyName)} | {doc.Id} | {doc.DocumentType} | {McpFormat.Invariant(doc.ReportingDate, "yyyy-MM-dd")} | {McpFormat.Invariant(doc.ReportingForDate, "yyyy-MM-dd")} | {MarkdownTable.EscapeCell(items, "—")} | {McpFormat.WholeNumber(doc.LineCount)} | {MarkdownTable.EscapeCell(doc.AccessionNumber, "—")} | {accepted}";
                     }
                 );
 

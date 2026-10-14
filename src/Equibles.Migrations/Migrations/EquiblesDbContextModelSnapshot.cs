@@ -3811,6 +3811,9 @@ namespace Equibles.Migrations.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("AccessionNumber")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");

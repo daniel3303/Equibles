@@ -87,6 +87,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         // A document whose statements SEC never rendered says so here, so the capture lane that fetches
         // those renderings never queues it. The default leaves an EDGAR filing for that lane to examine.
         XbrlCaptureStatus reportedStatements = XbrlCaptureStatus.NotChecked,
+        DateTime? acceptedAt = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -107,6 +108,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             ReportingForDate = reportingForDate,
             SourceUrl = sourceUrl,
             AccessionNumber = accessionNumber,
+            AcceptedAt = acceptedAt,
             Items = items,
             LineCount = lineCount,
             NormalizedContentVersion = Document.ContentBuilderVersion(documentType),
