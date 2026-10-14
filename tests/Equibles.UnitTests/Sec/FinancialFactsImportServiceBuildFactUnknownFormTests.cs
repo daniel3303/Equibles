@@ -9,7 +9,7 @@ namespace Equibles.UnitTests.Sec;
 public class FinancialFactsImportServiceBuildFactUnknownFormTests
 {
     // BuildFact's WHY-comment is explicit: "SEC emits many form strings outside
-    // the known DocumentTypes (NT 10-K, S-1, 485BPOS, …); fold them into Other
+    // the known DocumentTypes (485BPOS, 424B4, …); fold them into Other
     // rather than fabricating untracked DocumentType instances." The contract
     // is the `?? DocumentType.Other` fallback. A refactor that dropped the
     // null-coalesce (or that pre-validated the form against a known list and
@@ -30,7 +30,7 @@ public class FinancialFactsImportServiceBuildFactUnknownFormTests
         SetInit(parsedFact, "Value", 1_000_000m);
         SetInit(parsedFact, "FiscalYear", 2024);
         SetInit(parsedFact, "FiscalPeriod", SecFiscalPeriod.FullYear);
-        SetInit(parsedFact, "Form", "NT 10-K");
+        SetInit(parsedFact, "Form", "485BPOS");
         SetInit(parsedFact, "Filed", new DateOnly(2025, 2, 1));
         SetInit(parsedFact, "Accession", "0001234567-25-000001");
 

@@ -7,18 +7,18 @@ namespace Equibles.UnitTests.Sec;
 public class SecEdgarClientFilterFilingsDocumentTypeTests
 {
     [Fact]
-    public void FilterFilings_DocumentTypeFilterSet_DropsFilingsWithDifferentForm()
+    public void FilterFilings_EdgarFormSet_DropsFilingsWithDifferentForm()
     {
         // Sibling to FromDateBoundary / ToDateBoundary pins. Existing pins
-        // exercise the date arms of the AND chain — the documentType arm
+        // exercise the date arms of the AND chain — the form arm
         // is unpinned. A refactor that drops the
-        //   `!documentType.HasValue || f.Form == documentType.Value.GetFormName()`
+        //   `edgarForm == null || f.Form == edgarForm`
         // term (or flips the equality to `!=`) would silently let every
         // form through regardless of the caller's filter. The MCP tool
         // exposes documentType as the primary way a user/LLM scopes a
         // company's filings to e.g. 10-Ks only; without this guard, asking
         // for 10-K returns 8-Ks and S-1s mixed in. Pin: filings list of
-        // [10-K, 8-K, 10-Q]; filter=TenK; expect only the 10-K row.
+        // [10-K, 8-K, 10-Q]; filter "10-K"; expect only the 10-K row.
         var filter = typeof(SecEdgarClient).GetMethod(
             "FilterFilings",
             BindingFlags.NonPublic | BindingFlags.Static
@@ -48,7 +48,7 @@ public class SecEdgarClientFilterFilingsDocumentTypeTests
             (List<FilingData>)
                 filter!.Invoke(
                     null,
-                    [filings, (DocumentTypeFilter?)DocumentTypeFilter.TenK, null, null]
+                    [filings, "10-K", null, null]
                 );
 
         result.Should().ContainSingle();

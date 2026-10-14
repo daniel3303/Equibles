@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
-using Equibles.Integrations.Sec.Extensions;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
@@ -460,9 +459,9 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         var forms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var documentType in _options.DocumentTypesToSync)
         {
-            var filter = documentType.ToSecEdgarFilter();
-            if (filter != null)
-                forms.Add(filter.Value.GetFormName());
+            var secForm = SecForms.Find(documentType);
+            if (secForm != null)
+                forms.Add(secForm.EdgarForm);
         }
 
         return forms;

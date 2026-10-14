@@ -82,7 +82,7 @@ public class DocumentScraperFilingTombstoneTests
         secEdgar
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>()
             )
             .Returns(

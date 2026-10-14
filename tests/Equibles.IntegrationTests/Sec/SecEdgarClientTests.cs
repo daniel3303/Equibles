@@ -45,20 +45,10 @@ public class SecEdgarClientTests
     }
 
     [Fact]
-    public async Task GetCompanyFilings_DocumentTypeFilterFormFour_KeepsOnlyForm4FilingsFromRecentList()
+    public async Task GetCompanyFilings_EdgarFormFour_KeepsOnlyForm4FilingsFromRecentList()
     {
-        // The SEC `submissions/CIK{n}.json` payload returns filings as parallel column-arrays
-        // (`form`, `accessionNumber`, `filingDate`, …) mixing every form type the company has
-        // ever filed. Insider-trading ingestion only wants Form 4 filings out of that bag.
-        // GetCompanyFilings runs the SEC payload through MapToFilingData → FilterFilings,
-        // where the form filter compares against `DocumentTypeFilter.FormFour.GetFormName()` —
-        // which goes through `[Display(Name = "4")]` reflection on the enum value. A
-        // regression in any of those three layers (column zip, reflection-based form-name
-        // lookup, equality check) would either drop the Form 4 row or smuggle in the 10-K /
-        // 13F-HR neighbours. This `[Fact]` pins exactly that path: three mixed-type filings
-        // in `recent`, one of them Form 4, only the Form 4 survives the filter — and the
-        // returned `FilingData.Form` is the SEC string `"4"`, not `"FormFour"` (the C#
-        // enum name) — distinguishing the display-name leg from the value leg.
+        // The submissions payload mixes every form a company filed as parallel column-arrays.
+        // GetCompanyFilings zips them into filings and keeps only the exact EDGAR form asked for.
         var json = """
             {
               "cik": "1234567",
@@ -88,7 +78,7 @@ public class SecEdgarClientTests
 
         var filings = await sut.GetCompanyFilings(
             "1234567",
-            documentType: DocumentTypeFilter.FormFour
+            edgarForm: "4"
         );
 
         filings.Should().ContainSingle();

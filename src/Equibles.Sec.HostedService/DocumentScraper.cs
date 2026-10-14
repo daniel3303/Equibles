@@ -36,13 +36,10 @@ public class DocumentScraper : IDocumentScraper
 
     // Annual foreign-filer forms tried (in order) when SEC metadata and 10-Ks are both
     // absent. 20-F first, then 40-F — Canadian cross-listed companies file 40-F instead.
-    private static readonly (
-        DocumentTypeFilter Filter,
-        string FormName
-    )[] ForeignFilerAnnualForms =
+    private static readonly DocumentType[] ForeignFilerAnnualForms =
     [
-        (DocumentTypeFilter.TwentyF, "20-F"),
-        (DocumentTypeFilter.FortyF, "40-F"),
+        DocumentType.TwentyF,
+        DocumentType.FortyF,
     ];
 
     // When the company directory was last synced from SEC. Static because the
@@ -362,11 +359,11 @@ public class DocumentScraper : IDocumentScraper
 
             foreach (var documentType in _options.DocumentTypesToSync)
             {
-                var secFilter = documentType.ToSecEdgarFilter();
-                if (secFilter == null)
+                var secForm = SecForms.Find(documentType);
+                if (secForm == null)
                 {
                     _logger.LogWarning(
-                        "No SEC Edgar filter mapping found for document type: {DocumentType}",
+                        "Document type {DocumentType} is not an SEC form; skipping it",
                         documentType
                     );
                     continue;
@@ -375,7 +372,7 @@ public class DocumentScraper : IDocumentScraper
                 await ProcessDocumentTypeForCompany(
                     company,
                     documentType,
-                    secFilter.Value,
+                    secForm.EdgarForm,
                     result,
                     secEdgarClient,
                     persistenceService,
@@ -484,15 +481,18 @@ public class DocumentScraper : IDocumentScraper
 
             // No 10-K filings — try annual foreign-filer forms from the cached
             // submissions JSON (zero extra SEC requests), 20-F first then 40-F.
-            foreach (var (filter, formName) in ForeignFilerAnnualForms)
+            foreach (var form in ForeignFilerAnnualForms)
             {
-                var reportDate = await secEdgarClient.GetMostRecentReportDate(company.Cik, filter);
+                var reportDate = await secEdgarClient.GetMostRecentReportDate(
+                    company.Cik,
+                    form.DisplayName
+                );
                 if (reportDate is { } date)
                 {
                     _logger.LogInformation(
                         "SEC metadata has no fiscal year-end for {Ticker}; inferred from {Form} report date {Date}",
                         (company.Presentation?.Listing?.Ticker ?? company.Cik),
-                        formName,
+                        form.DisplayName,
                         date
                     );
                     await commonStockManager.SetFiscalYearEnd(company, date.Month, date.Day);
@@ -529,7 +529,7 @@ public class DocumentScraper : IDocumentScraper
     private async Task ProcessDocumentTypeForCompany(
         EquityIssuer company,
         DocumentType documentType,
-        DocumentTypeFilter secFilter,
+        string edgarForm,
         ScrapingResult result,
         ISecEdgarClient secEdgarClient,
         IDocumentPersistenceService persistenceService,
@@ -547,7 +547,7 @@ public class DocumentScraper : IDocumentScraper
             var filings = await CollectFilingsAcrossCiks(
                 company,
                 documentType,
-                secFilter,
+                edgarForm,
                 result,
                 secEdgarClient
             );
@@ -664,7 +664,7 @@ public class DocumentScraper : IDocumentScraper
     private async Task<List<FilingData>> CollectFilingsAcrossCiks(
         EquityIssuer company,
         DocumentType documentType,
-        DocumentTypeFilter secFilter,
+        string edgarForm,
         ScrapingResult result,
         ISecEdgarClient secEdgarClient
     )
@@ -685,7 +685,7 @@ public class DocumentScraper : IDocumentScraper
             List<FilingData> cikFilings;
             try
             {
-                cikFilings = await secEdgarClient.GetCompanyFilings(cik, secFilter, fromDate);
+                cikFilings = await secEdgarClient.GetCompanyFilings(cik, edgarForm, fromDate);
             }
             catch (HttpRequestException ex)
             {
@@ -742,7 +742,7 @@ public class DocumentScraper : IDocumentScraper
     {
         try
         {
-            var detectedType = DocumentTypeExtensions.FromFormName(filing.Form);
+            var detectedType = SecForms.ForEdgarForm(filing.Form)?.Type;
             if (detectedType == null)
             {
                 _logger.LogWarning(

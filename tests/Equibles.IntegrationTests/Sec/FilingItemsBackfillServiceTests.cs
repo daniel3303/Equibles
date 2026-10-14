@@ -89,7 +89,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         client
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             )
@@ -172,7 +172,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
             .Received(1)
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Is<DocumentTypeFilter?>(f => f == null),
+                Arg.Is<string>(f => f == null),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             );
@@ -225,7 +225,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
             .Received(1)
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             );
@@ -246,7 +246,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         failing
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             )
@@ -318,7 +318,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         client
             .GetCompanyFilings(
                 "0000200001",
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             )
@@ -326,7 +326,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         client
             .GetCompanyFilings(
                 "0000200002",
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             )
@@ -363,7 +363,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
             .DidNotReceive()
             .GetCompanyFilings(
                 Arg.Any<string>(),
-                Arg.Any<DocumentTypeFilter?>(),
+                Arg.Any<string>(),
                 Arg.Any<DateOnly?>(),
                 Arg.Any<DateOnly?>()
             );

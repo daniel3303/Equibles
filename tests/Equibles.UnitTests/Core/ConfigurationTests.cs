@@ -136,43 +136,19 @@ public class ConfigurationTests
 
     // ── DocumentScraperOptions ───────────────────────────────────────
 
+    // The default sync list is the catalog's, and an amendment never runs before its original:
+    // the insider pipeline's Form 4/A supersedes transactions its original must already hold.
     [Fact]
-    public void DocumentScraperOptions_DocumentTypesToSync_DefaultsToExpectedTypes()
+    public void DocumentScraperOptions_DocumentTypesToSync_DefaultsToTheCatalogOriginalsFirst()
     {
-        var options = new DocumentScraperOptions();
+        var synced = new DocumentScraperOptions().DocumentTypesToSync;
 
-        options
-            .DocumentTypesToSync.Should()
-            .NotBeNull()
-            .And.HaveCount(26)
-            .And.ContainInOrder(
-                DocumentType.TenK,
-                DocumentType.TenQ,
-                DocumentType.EightK,
-                DocumentType.TenKa,
-                DocumentType.TenQa,
-                DocumentType.EightKa,
-                DocumentType.TwentyF,
-                DocumentType.SixK,
-                DocumentType.FortyF,
-                DocumentType.TwentyFa,
-                DocumentType.SixKa,
-                DocumentType.FortyFa,
-                DocumentType.FormFour,
-                DocumentType.FormThree,
-                DocumentType.FormFive,
-                DocumentType.FormFourA,
-                DocumentType.FormThreeA,
-                DocumentType.FormFiveA,
-                DocumentType.Form144,
-                DocumentType.FormD,
-                DocumentType.FormDa,
-                DocumentType.NCen,
-                DocumentType.NCenA,
-                DocumentType.NportP,
-                DocumentType.NportPa,
-                DocumentType.Def14A
-            );
+        synced.Should().Equal(SecForms.SyncedByDefault);
+        foreach (var amendment in SecForms.All.Where(f => f.AmendmentOf != null))
+            synced
+                .IndexOf(amendment.AmendmentOf)
+                .Should()
+                .BeLessThan(synced.IndexOf(amendment.Type), amendment.EdgarForm);
     }
 
     [Fact]

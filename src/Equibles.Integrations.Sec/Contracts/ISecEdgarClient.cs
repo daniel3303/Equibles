@@ -24,9 +24,13 @@ public interface ISecEdgarClient
         string cik,
         CancellationToken cancellationToken = default
     );
+    /// <summary>
+    /// A company's filings, optionally only those whose EDGAR form string equals
+    /// <paramref name="edgarForm"/> exactly (e.g. <c>"10-K"</c>, <c>"SC TO-T/A"</c>).
+    /// </summary>
     Task<List<FilingData>> GetCompanyFilings(
         string cik,
-        DocumentTypeFilter? documentType = null,
+        string edgarForm = null,
         DateOnly? fromDate = null,
         DateOnly? toDate = null
     );
@@ -125,5 +129,5 @@ public interface ISecEdgarClient
     /// <see cref="GetCompanyMetadata"/>). Only examines recent filings — no
     /// archive fetching. Returns null when no filing of the given type exists.
     /// </summary>
-    Task<DateOnly?> GetMostRecentReportDate(string cik, DocumentTypeFilter formType);
+    Task<DateOnly?> GetMostRecentReportDate(string cik, string edgarForm);
 }
