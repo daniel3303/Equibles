@@ -130,6 +130,12 @@ public class Document
     public string AccessionNumber { get; set; }
 
     /// <summary>
+    /// When EDGAR accepted the filing (UTC), read from the submission's SEC-HEADER at ingestion.
+    /// Null for filings ingested before capture began and for documents that are not EDGAR filings.
+    /// </summary>
+    public DateTime? AcceptedAt { get; set; }
+
+    /// <summary>
     /// Comma-joined SEC item numbers reported by this filing, e.g. <c>"2.02,9.01"</c> on an
     /// 8-K. Lets a consumer pick out earnings-release 8-Ks (Item 2.02 "Results of Operations
     /// and Financial Condition") without re-parsing. Null for forms that carry no items and

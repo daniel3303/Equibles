@@ -47,4 +47,20 @@ public class SecDocumentInfo
     /// Comma-separated SEC item numbers reported by the filing, such as 2.02 and 9.01.
     /// </summary>
     public string Items { get; set; }
+
+    /// <summary>
+    /// EDGAR accession number; null for documents that are not EDGAR filings, whose key in that
+    /// column is not an accession.
+    /// </summary>
+    public string AccessionNumber { get; set; }
+
+    /// <summary>
+    /// When EDGAR accepted the filing (UTC); null for filings ingested before capture began.
+    /// </summary>
+    public DateTime? AcceptedAt { get; set; }
+
+    /// <summary>
+    /// When the document was stored here (UTC).
+    /// </summary>
+    public DateTime IngestedAt { get; set; }
 }

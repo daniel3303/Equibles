@@ -117,7 +117,9 @@ public class DocumentScraperTests
             ]);
         harness
             .SecEdgarClient.GetDocumentContent(Arg.Any<FilingData>())
-            .Returns("<html><body>raw 10-K</body></html>");
+            .Returns(
+                "<SEC-HEADER>0000123456-25-000001.hdr.sgml : 20250114\n<ACCEPTANCE-DATETIME>20250114163015\n</SEC-HEADER>\n<html><body>raw 10-K</body></html>"
+            );
         harness
             .Normalizer.Normalize(Arg.Any<string>())
             .Returns("<html><body>normalized 10-K</body></html>");
@@ -161,6 +163,8 @@ public class DocumentScraperTests
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<XbrlCaptureStatus>(),
+                // The header stamps 16:30:15 EST, stored as UTC.
+                new DateTime(2025, 1, 14, 21, 30, 15, DateTimeKind.Utc),
                 Arg.Any<CancellationToken>()
             );
         harness.PdfTextExtractor.DidNotReceiveWithAnyArgs().Extract(default);
@@ -377,6 +381,7 @@ public class DocumentScraperTests
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<XbrlCaptureStatus>(),
+                Arg.Any<DateTime?>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -394,6 +399,7 @@ public class DocumentScraperTests
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<XbrlCaptureStatus>(),
+                Arg.Any<DateTime?>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -411,6 +417,7 @@ public class DocumentScraperTests
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<XbrlCaptureStatus>(),
+                Arg.Any<DateTime?>(),
                 Arg.Any<CancellationToken>()
             );
     }
