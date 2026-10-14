@@ -64,16 +64,17 @@ public static class FactSplitBasis
     }
 
     /// <summary>
-    /// Classifies a statement figure known only by its alias, as read from a report without XBRL
-    /// concepts. Such figures carry no cover page, so a count is a stated count.
+    /// Classifies a figure read from a report without XBRL concepts, known only by its alias. Such
+    /// reports are IFRS: IAS 33 restates per-share values and weighted-average counts, but the
+    /// period-end share count stays the legal count on its date (a later split is non-adjusting).
     /// </summary>
-    public static FactSplitKind ClassifyStatementFigure(string alias, string unit)
+    public static FactSplitKind ClassifyStatementFigure(string alias, string unit, bool isPoint)
     {
         if (IsPerShareUnit(unit))
             return FactSplitKind.PerShare;
-        return IsShareUnit(unit) && CommonShareCountAliases.Contains(alias)
-            ? FactSplitKind.StatedShareCount
-            : FactSplitKind.None;
+        if (!IsShareUnit(unit) || !CommonShareCountAliases.Contains(alias))
+            return FactSplitKind.None;
+        return isPoint ? FactSplitKind.ObservedShareCount : FactSplitKind.StatedShareCount;
     }
 
     public static FactSplitKind Classify(FactTaxonomy taxonomy, string tag, string unit)

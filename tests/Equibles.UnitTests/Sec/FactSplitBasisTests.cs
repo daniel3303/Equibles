@@ -140,14 +140,34 @@ public class FactSplitBasisTests
     }
 
     [Theory]
-    [InlineData("shares-outstanding", "shares", FactSplitKind.StatedShareCount)]
-    [InlineData("weighted-average-shares-diluted", "shares", FactSplitKind.StatedShareCount)]
-    [InlineData("eps-diluted", "EUR/shares", FactSplitKind.PerShare)]
-    [InlineData("revenue", "EUR", FactSplitKind.None)]
-    [InlineData("treasury-stock", "shares", FactSplitKind.None)]
-    public void ClassifyStatementFigure_UsesTheAlias(string alias, string unit, FactSplitKind kind)
+    [InlineData("weighted-average-shares-diluted", "shares", false, FactSplitKind.StatedShareCount)]
+    [InlineData("eps-diluted", "EUR/shares", false, FactSplitKind.PerShare)]
+    [InlineData("revenue", "EUR", false, FactSplitKind.None)]
+    [InlineData("treasury-stock", "shares", true, FactSplitKind.None)]
+    public void ClassifyStatementFigure_UsesTheAlias(
+        string alias,
+        string unit,
+        bool isPoint,
+        FactSplitKind kind
+    )
     {
-        FactSplitBasis.ClassifyStatementFigure(alias, unit).Should().Be(kind);
+        FactSplitBasis.ClassifyStatementFigure(alias, unit, isPoint).Should().Be(kind);
+    }
+
+    // IAS 33 restates weighted counts for a post-period split; the period-end legal count is
+    // not restated (IAS 10 non-adjusting event), so it is read on its own date.
+    [Theory]
+    [InlineData(true, FactSplitKind.ObservedShareCount)]
+    [InlineData(false, FactSplitKind.StatedShareCount)]
+    public void ClassifyStatementFigure_ReportShareCount_PointIsObservedOnItsDate(
+        bool isPoint,
+        FactSplitKind kind
+    )
+    {
+        FactSplitBasis
+            .ClassifyStatementFigure("shares-outstanding", "shares", isPoint)
+            .Should()
+            .Be(kind);
     }
 
     [Fact]
