@@ -36,7 +36,7 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
 
     public IQueryable<DateOnly> GetLatestDate()
     {
-        return GetAll().LatestValue(f => f.SettlementDate, distinct: true);
+        return GetAll().LatestValue(f => f.SettlementDate);
     }
 
     /// <summary>
