@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Equibles.CommonStocks.Data;
 using Equibles.Data;
 using Equibles.Finra.Data;
@@ -57,13 +58,15 @@ public class LatestDateQueryTranslationTests
             "short-interest" => new ShortInterestRepository(ctx).GetLatestSettlementDate(),
             "off-exchange-volume" => new OffExchangeVolumeRepository(ctx).GetLatestWeek(),
             "fails-to-deliver" => new FailToDeliverRepository(ctx).GetLatestDate(),
-            _ => new EquityDailyStockPriceRepository(ctx).GetLatestDateAcrossAllStocks(),
+            "prices" => new EquityDailyStockPriceRepository(ctx).GetLatestDateAcrossAllStocks(),
+            _ => throw new ArgumentOutOfRangeException(nameof(lookup), lookup, null),
         };
 
-        var sql = query.ToQueryString().ToUpperInvariant();
+        var sql = Regex.Replace(query.ToQueryString(), @"\s+", " ");
 
-        sql.Should().NotContain("DISTINCT");
-        sql.Should().Contain("DESC");
-        sql.Should().Contain("LIMIT");
+        sql.Should().NotContainEquivalentOf("DISTINCT");
+        sql.Should().NotContainEquivalentOf("GROUP BY");
+        sql.Should()
+            .MatchRegex(@"ORDER BY \w+\.""(Date|SettlementDate|WeekStartDate)"" DESC LIMIT ");
     }
 }
