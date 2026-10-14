@@ -44,7 +44,8 @@ public class RagManager : IRagManager
         DateOnly? endDate = null,
         IReadOnlyCollection<string> excludeTickers = null,
         int maxResultsPerCompany = 0,
-        bool broadenSparseResults = false
+        bool broadenSparseResults = false,
+        SearchMatch match = SearchMatch.Ranked
     )
     {
         var chunks = await _hybridChunkSearcher.Search(
@@ -55,7 +56,8 @@ public class RagManager : IRagManager
             maxResultsPerCompany: maxResultsPerCompany,
             startDate: startDate,
             endDate: endDate,
-            disjunctiveFallback: broadenSparseResults
+            disjunctiveFallback: broadenSparseResults,
+            match: match
         );
 
         _logger.LogInformation("Found {Count} relevant chunks for query", chunks.Count);
@@ -69,7 +71,8 @@ public class RagManager : IRagManager
         IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
         DateOnly? endDate = null,
-        bool broadenSparseResults = false
+        bool broadenSparseResults = false,
+        SearchMatch match = SearchMatch.Ranked
     )
     {
         ticker = await ResolvePrimaryTicker(ticker);
@@ -80,7 +83,8 @@ public class RagManager : IRagManager
             documentTypes: documentTypes,
             startDate: startDate,
             endDate: endDate,
-            disjunctiveFallback: broadenSparseResults
+            disjunctiveFallback: broadenSparseResults,
+            match: match
         );
 
         _logger.LogInformation(

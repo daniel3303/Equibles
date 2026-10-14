@@ -25,7 +25,10 @@ public class ChunkRepository : BaseRepository<Chunk>
     // virtual: unit tests stub the search seam by subclassing (no BM25 index in a unit run).
     // commandTimeoutSeconds overrides the default statement budget for this one call — the
     // searcher tightens it on a degrade pass that follows an already timed-out pass.
-    public virtual async Task<List<Chunk>> HybridSearch(
+    // conjunctive: true ANDs every query token (the precise default); false ORs them — used as a
+    // recall fallback when the conjunctive pass starves (natural-language queries where one
+    // non-matching word excludes every on-point chunk).
+    public virtual Task<List<Chunk>> HybridSearch(
         string searchText,
         int maxResults,
         string ticker = null,
@@ -37,6 +40,75 @@ public class ChunkRepository : BaseRepository<Chunk>
         bool conjunctive = true,
         int? commandTimeoutSeconds = null,
         CancellationToken cancellationToken = default
+    ) =>
+        SearchIndex(
+            ParadeDbJsonQuery.Parse(searchText, lenient: true, conjunctionMode: conjunctive),
+            maxResults,
+            ticker,
+            excludeTickers,
+            documentId,
+            documentTypes,
+            startDate,
+            endDate,
+            commandTimeoutSeconds,
+            cancellationToken
+        );
+
+    // Only chunks containing the phrase's words consecutively and in order. The phrase goes through
+    // the query parser as one quoted Content phrase, so the field's own tokenizer splits it; quote
+    // and escape characters in the caller's text are separators, never syntax.
+    public virtual Task<List<Chunk>> PhraseSearch(
+        string phrase,
+        int maxResults,
+        string ticker = null,
+        IReadOnlyCollection<string> excludeTickers = null,
+        Guid? documentId = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        int? commandTimeoutSeconds = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        SearchIndex(
+            PhraseClause(phrase),
+            maxResults,
+            ticker,
+            excludeTickers,
+            documentId,
+            documentTypes,
+            startDate,
+            endDate,
+            commandTimeoutSeconds,
+            cancellationToken
+        );
+
+    internal static ParadeDbJsonQuery PhraseClause(string phrase)
+    {
+        var words = string.Join(
+            ' ',
+            (phrase ?? "")
+                .Split(['"', '\\'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => part.Trim())
+                .Where(part => part.Length > 0)
+        );
+        return ParadeDbJsonQuery.Parse(
+            $"{nameof(Chunk.Content)}:\"{words}\"",
+            lenient: true,
+            conjunctionMode: true
+        );
+    }
+
+    private async Task<List<Chunk>> SearchIndex(
+        ParadeDbJsonQuery textClause,
+        int maxResults,
+        string ticker,
+        IReadOnlyCollection<string> excludeTickers,
+        Guid? documentId,
+        IReadOnlyCollection<DocumentType> documentTypes,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        int? commandTimeoutSeconds,
+        CancellationToken cancellationToken
     )
     {
         // Compose the text match and the ticker/document/type filters into one BM25
@@ -44,14 +116,7 @@ public class ChunkRepository : BaseRepository<Chunk>
         // Layering them as SQL .Where(...) predicates instead made Postgres score every
         // text match first and post-filter the result on the heap (heap_filter) — for a
         // high-coverage ticker that scored set is enormous and blew the 5s budget (#2157).
-        //
-        // conjunctive: true ANDs every query token (the precise default); false ORs them —
-        // used as a recall fallback when the conjunctive pass starves (natural-language
-        // queries where one non-matching word excludes every on-point chunk).
-        var clauses = new List<ParadeDbJsonQuery>
-        {
-            ParadeDbJsonQuery.Parse(searchText, lenient: true, conjunctionMode: conjunctive),
-        };
+        var clauses = new List<ParadeDbJsonQuery> { textClause };
 
         // Ticker (raw tokenizer) and DocumentType (single-token enum values) are stored
         // lowercased; Term is an exact, untokenized match, so the filter value must be

@@ -52,7 +52,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `RagSearchTools` (BM25 lexical ranking is always available; embeddings add semantic ranking; exact mode does literal matching):
 
-- `SearchDocuments` — hybrid BM25 and semantic search across indexed SEC documents, optionally scoped by `ticker`; without embeddings it retains ranked BM25 results.
+- `SearchDocuments` — hybrid BM25 and semantic search across indexed SEC documents, optionally scoped by `ticker`; without embeddings it retains ranked BM25 results. `match: phrase` returns only excerpts containing the exact phrase.
 - `SearchDocument` — semantic or exact literal search inside a specific document.
 - `ListFilings` — list stored filings newest first, market-wide or for one company, with date, document-type, and exact 8-K item-number filters.
 

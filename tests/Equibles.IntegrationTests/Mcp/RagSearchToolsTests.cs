@@ -231,6 +231,40 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task SearchDocuments_PhraseMatch_ReturnsOnlyTheWordsInOrder()
+    {
+        await SeedDocumentWithChunks(
+            chunkContents: new[]
+            {
+                "Data center revenue grew 40% in the quarter.",
+                "Revenue from the data center segment was flat.",
+                "Data and center revenue lines were reclassified.",
+            }
+        );
+        await SeedDocumentWithChunks(
+            ticker: "MSFT",
+            companyName: "Microsoft Corp",
+            chunkContents: new[] { "Our Data-Center Revenue doubled." }
+        );
+
+        var result = await Sut()
+            .SearchDocuments("\"data center\" revenue", maxResults: 10, match: "phrase");
+
+        result.Should().Contain("Data center revenue grew 40%");
+        result.Should().Contain("Our Data-Center Revenue doubled.");
+        result.Should().NotContain("Revenue from the data center segment");
+        result.Should().NotContain("Data and center revenue lines");
+    }
+
+    [Fact]
+    public async Task SearchDocuments_UnknownMatch_ReturnsCorrectiveError()
+    {
+        var result = await Sut().SearchDocuments("data center revenue", match: "fuzzy");
+
+        result.Should().Be("Unknown match \"fuzzy\" — pass 'ranked' (default) or 'phrase'.");
+    }
+
+    [Fact]
     public async Task SearchDocuments_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await SeedDocumentWithChunks(

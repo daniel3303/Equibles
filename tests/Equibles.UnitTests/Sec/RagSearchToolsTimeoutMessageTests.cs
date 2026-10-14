@@ -1,4 +1,5 @@
 using Equibles.Mcp;
+using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
@@ -20,7 +21,7 @@ public class RagSearchToolsTimeoutMessageTests
             RagSearchTools.SearchOrTimeoutFault(TimesOut, scoped: false)
         );
 
-        Assert.Equal(RagSearchTools.UnscopedSearchTimedOutMessage, fault.Message);
+        Assert.Equal(SearchTimeoutAdvice.Unscoped, fault.Message);
         Assert.Contains("ticker", fault.Message);
         Assert.DoesNotContain("Retry the same call", fault.Message);
         Assert.IsType<ChunkSearchTimeoutException>(fault.InnerException);
@@ -33,7 +34,7 @@ public class RagSearchToolsTimeoutMessageTests
             RagSearchTools.SearchOrTimeoutFault(TimesOut, scoped: true)
         );
 
-        Assert.Equal(RagSearchTools.ScopedSearchTimedOutMessage, fault.Message);
+        Assert.Equal(SearchTimeoutAdvice.Scoped, fault.Message);
         Assert.Contains("Retry the same call", fault.Message);
     }
 
