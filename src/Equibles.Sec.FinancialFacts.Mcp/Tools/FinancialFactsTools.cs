@@ -159,44 +159,15 @@ public class FinancialFactsTools
                     companyLatestPeriodEnd
                 );
 
-                // Reported discrete fourth quarters hide under fp=FY — the same
-                // fiscal identity as the annual figure — so grouping by stamp
-                // alone never surfaces them as Q4 rows. Promote them first (see
-                // ReportedQuarterPromotion; a full-year total can never qualify).
-                var allFacts = ReportedQuarterPromotion.WithPromotedFourthQuarters(facts);
-
-                // Form / period-end / fiscal-period filtering in memory: a
-                // single concept's history is small, and DocumentType is a
-                // value-converted type so equality is kept off the SQL side
-                // for provider safety. The fiscal-period filter runs after
-                // promotion so a Q4 request sees the promoted rows.
-                var filtered = allFacts.Where(f =>
-                    (formFilter == null || f.Form == formFilter)
-                    && (fromBound == null || f.PeriodEnd >= fromBound.Value)
-                    && (toBound == null || f.PeriodEnd <= toBound.Value)
-                    && (periodFilter == null || f.FiscalPeriod == periodFilter.Value)
-                );
-
-                // One row per fiscal period. The alias may span several tags and
-                // a single period can carry facts under more than one of them
-                // (the ASC 606 transition year tags both Revenues and the new
-                // concept). Pick deterministically: a canonical periodic source
-                // wins, then the alias's primary tag, then the latest filing — or
-                // the earliest within that source priority, when the caller wants
-                // the figure as originally reported. The picked
-                // rows are then deduped by actual reporting span, because a
-                // date window can degenerate a fiscal group to a comparative
-                // re-report of an earlier period (see DedupeByReportingSpan).
-                var perPeriod = DedupeByReportingSpan(
-                        filtered
-                            .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
-                            // The full unfiltered history is the corroboration
-                            // context: a transition stub's neighbouring annual
-                            // windows can sit outside the caller's date window.
-                            .Select(g =>
-                                PickBestFact(g, conceptPriority, asOriginallyReported, facts)
-                            )
-                            .Where(f => f != null)
+                var perPeriod = (
+                    FinancialConceptAliases.IsInstant(concept)
+                        ? PickInstantRows(facts, conceptPriority, asOriginallyReported, formFilter)
+                        : PickFlowRows(facts, conceptPriority, asOriginallyReported, formFilter)
+                )
+                    .Where(f =>
+                        (fromBound == null || f.PeriodEnd >= fromBound.Value)
+                        && (toBound == null || f.PeriodEnd <= toBound.Value)
+                        && (periodFilter == null || f.FiscalPeriod == periodFilter.Value)
                     )
                     .OrderByDescending(f => f.PeriodEnd)
                     .ToList();
@@ -230,21 +201,44 @@ public class FinancialFactsTools
         );
     }
 
-    // A fromDate/toDate window can exclude a fiscal year's own period end while
-    // keeping a comparative re-report of an EARLIER period — a filing re-reports
-    // prior periods under its own fiscal identity, so that group degenerates to
-    // the comparative alone and its pick duplicates a period end another group
-    // already covers, under the wrong fiscal-year label (NVDA's FY2026 10-K
-    // re-reporting FY2025 EPS surfaced as a second "FY 2026" row when toDate
-    // excluded 2026-01-25). One row per actual reporting span: the smallest
-    // fiscal-year stamp is the period's own identity, because comparative
-    // re-filings always re-stamp the same span under the filing's LATER year
-    // (same rule as ReportedQuarterPromotion's anchor).
-    internal static List<FinancialFact> DedupeByReportingSpan(IEnumerable<FinancialFact> picked) =>
-        picked
-            .GroupBy(f => (f.PeriodStart, f.PeriodEnd, f.PeriodType))
-            .Select(g => g.OrderBy(f => f.FiscalYear).ThenBy(f => f.FiscalPeriod).First())
-            .ToList();
+    // A flow is one row per fiscal period. Reported discrete fourth quarters hide under fp=FY, so
+    // they are promoted first; the alias's full history is the transition-stub corroboration context.
+    // The picks are deduped by reporting span, since a bucket can hold only a comparative re-report.
+    private static List<FinancialFact> PickFlowRows(
+        List<FinancialFact> facts,
+        IReadOnlyDictionary<Guid, int> conceptPriority,
+        bool asOriginallyReported,
+        DocumentType formFilter
+    ) =>
+        FinancialFactSeriesShaper.DedupeByReportingSpan(
+            ReportedQuarterPromotion
+                .WithPromotedFourthQuarters(facts)
+                .Where(f => formFilter == null || f.Form == formFilter)
+                .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
+                .Select(g =>
+                    FinancialFactSeriesShaper.PickBestFact(
+                        g,
+                        conceptPriority,
+                        asOriginallyReported,
+                        facts
+                    )
+                )
+                .Where(f => f != null)
+        );
+
+    // A balance or share count is one row per as-of date, so a cover-page count and the quarter-end
+    // balance-sheet count both publish. The date and fiscal-period filters then apply to the rows.
+    private static List<FinancialFact> PickInstantRows(
+        List<FinancialFact> facts,
+        IReadOnlyDictionary<Guid, int> conceptPriority,
+        bool asOriginallyReported,
+        DocumentType formFilter
+    ) =>
+        FinancialFactSeriesShaper.PickPerDate(
+            facts.Where(f => formFilter == null || f.Form == formFilter),
+            conceptPriority,
+            asOriginallyReported
+        );
 
     [McpServerTool(
         Name = "CompareFinancialFact",
@@ -337,7 +331,12 @@ public class FinancialFactsTools
                 // implicit row order).
                 var bestByStock = facts
                     .GroupBy(f => f.EquityIssuerId)
-                    .Select(g => (StockId: g.Key, Fact: PickBestFact(g, conceptPriority)))
+                    .Select(g =>
+                        (
+                            StockId: g.Key,
+                            Fact: FinancialFactSeriesShaper.PickBestFact(g, conceptPriority)
+                        )
+                    )
                     .Where(item => item.Fact != null)
                     .ToDictionary(item => item.StockId, item => item.Fact);
 
@@ -684,97 +683,6 @@ public class FinancialFactsTools
             result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
 
         return result.ToString();
-    }
-
-    // AccessionNumber is the stable final tiebreak for same-day amendments
-    // (Postgres has no implicit row order). `asOriginallyReported` flips the
-    // filing-date / accession ordering to ascending so the earliest filing wins.
-    private static FinancialFact PickBestFact(
-        IEnumerable<FinancialFact> facts,
-        IReadOnlyDictionary<Guid, int> conceptPriority,
-        bool asOriginallyReported = false,
-        IReadOnlyCollection<FinancialFact> corroborationContext = null
-    )
-    {
-        var candidates = facts.ToList();
-
-        // Prefer the fact whose duration matches the fiscal period's granularity, so a
-        // quarter reads as the discrete three months and never the year-to-date total a
-        // 10-Q tags under the same fiscal Q2/Q3 (the financials tab handles this in
-        // FinancialStatementsHelper.PickCurrentlyReportedFact). Instants (balance sheet,
-        // zero span) always qualify. A corroborated fiscal-calendar transition stub
-        // remains a fallback; a duration above the annual ceiling is removed before it.
-        var fiscalPeriod = candidates[0].FiscalPeriod;
-        candidates = candidates
-            .Where(f =>
-                f.PeriodType != FactPeriodType.Duration
-                || f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber
-                    is >= 0
-                        and <= FiscalPeriodSpanDays.MaxAnnualSpanDays
-            )
-            .ToList();
-        if (candidates.Count == 0)
-            return null;
-        var preferredSpan = candidates
-            .Where(f =>
-            {
-                if (f.PeriodType != FactPeriodType.Duration)
-                    return true;
-                var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
-                return fiscalPeriod == SecFiscalPeriod.FullYear
-                    ? spanDays >= FiscalPeriodSpanDays.MinAnnualSpanDays
-                        && spanDays <= FiscalPeriodSpanDays.MaxAnnualSpanDays
-                    : spanDays <= FiscalPeriodSpanDays.MaxDiscreteQuarterDays;
-            })
-            .ToList();
-        if (preferredSpan.Count > 0)
-        {
-            // A period a duration fact already measures is never read off an instant in
-            // the same bucket: the instant is a declaration/record-date disclosure, and
-            // because it falls after the period end it wins the ordering below (a filer
-            // tagging a 2023-01-12 dividend payment as FY2022 published it as the FY2022
-            // dividend). Instant-only buckets — every balance-sheet concept — are
-            // untouched.
-            var durations = preferredSpan
-                .Where(f => f.PeriodType == FactPeriodType.Duration)
-                .ToList();
-            candidates = durations.Count > 0 ? durations : preferredSpan;
-        }
-        else if (fiscalPeriod == SecFiscalPeriod.FullYear)
-        {
-            // A FullYear bucket with no annual-span fact holds either a genuine
-            // fiscal-calendar transition stub or a misclassified sub-annual span (a
-            // year-to-date, a lone discrete quarter — FullYear is the enum's zero
-            // value, so unclassified periods land here too). Only a stub the
-            // surrounding annual windows corroborate on both sides may publish as
-            // the year; a caller with no corroboration context (the cross-company
-            // comparison, which loads a single fiscal slice — where a short stub
-            // would not be comparable anyway) fails closed instead.
-            candidates = candidates
-                .Where(f => AnnualTransitionStubs.IsCorroborated(f, corroborationContext))
-                .ToList();
-            if (candidates.Count == 0)
-                return null;
-        }
-        else
-        {
-            return null;
-        }
-
-        // Latest period end first: a filing re-reports comparative prior periods (the
-        // prior-year quarter, prior fiscal years, the prior year-end balance instant)
-        // under its own fiscal identity, and those tie the current figure on span and
-        // filed date — ignoring the period end surfaces a comparative column (#1546).
-        var byPeriod = candidates
-            .OrderByDescending(f => f.PeriodEnd)
-            .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form))
-            .ThenBy(f => conceptPriority[f.FinancialConceptId]);
-        return asOriginallyReported
-            ? byPeriod.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber).First()
-            : byPeriod
-                .ThenByDescending(f => f.FiledDate)
-                .ThenByDescending(f => f.AccessionNumber)
-                .First();
     }
 
     // The alias's ingested concepts: their pick priority, and the variant each was reported

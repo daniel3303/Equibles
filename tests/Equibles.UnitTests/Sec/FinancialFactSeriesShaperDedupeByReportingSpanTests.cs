@@ -1,7 +1,7 @@
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -17,7 +17,7 @@ namespace Equibles.UnitTests.Sec;
 /// fiscal-year stamp — the original filing's identity, since comparative
 /// re-filings always re-stamp under the filing's later year.
 /// </summary>
-public class FinancialFactsToolsDedupeByReportingSpanTests
+public class FinancialFactSeriesShaperDedupeByReportingSpanTests
 {
     private static FinancialFact AnnualFact(
         int fiscalYearStamp,
@@ -67,7 +67,11 @@ public class FinancialFactsToolsDedupeByReportingSpanTests
             new DateOnly(2024, 2, 21)
         );
 
-        var result = FinancialFactsTools.DedupeByReportingSpan([comparative, original, earlier]);
+        var result = FinancialFactSeriesShaper.DedupeByReportingSpan([
+            comparative,
+            original,
+            earlier,
+        ]);
 
         result.Should().HaveCount(2, "the two picks covering one span collapse to one row");
         result
@@ -96,7 +100,7 @@ public class FinancialFactsToolsDedupeByReportingSpanTests
         );
         promotedQ4.FiscalPeriod = SecFiscalPeriod.Q4;
 
-        var result = FinancialFactsTools.DedupeByReportingSpan([annual, promotedQ4]);
+        var result = FinancialFactSeriesShaper.DedupeByReportingSpan([annual, promotedQ4]);
 
         result.Should().HaveCount(2);
     }

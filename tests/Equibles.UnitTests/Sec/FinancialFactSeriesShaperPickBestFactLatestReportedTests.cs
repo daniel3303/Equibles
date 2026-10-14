@@ -1,12 +1,11 @@
-using System.Reflection;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FinancialFactsToolsPickBestFactLatestReportedTests
+public class FinancialFactSeriesShaperPickBestFactLatestReportedTests
 {
     [Fact]
     public void PickBestFact_DefaultMode_PicksLatestFiledRestatedFact()
@@ -14,7 +13,7 @@ public class FinancialFactsToolsPickBestFactLatestReportedTests
         // Sibling to AsOriginallyReportedTests. With `asOriginallyReported`
         // omitted (default false), the ordering must be DESCENDING filed
         // date / accession — the LATEST restated value wins, per
-        // FinancialFactsTools.cs:352-355. A refactor that inverts the
+        // FinancialFactSeriesShaper. A refactor that inverts the
         // default sense (e.g. flipping the default param to true, or
         // swapping the two branch bodies) would silently surface original
         // pre-restatement values to every consumer that didn't pass the
@@ -55,13 +54,12 @@ public class FinancialFactsToolsPickBestFactLatestReportedTests
         };
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var result = FinancialFactSeriesShaper.PickBestFact(
+            new[] { original, restated },
+            conceptPriority,
+            false,
+            null
         );
-
-        var result = (FinancialFact)
-            method!.Invoke(null, [new[] { original, restated }, conceptPriority, false, null]);
 
         result.Value.Should().Be(1_200m);
         result.FiledDate.Should().Be(new DateOnly(2024, 9, 15));

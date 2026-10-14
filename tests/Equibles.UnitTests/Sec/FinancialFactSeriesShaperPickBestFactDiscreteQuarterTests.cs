@@ -1,12 +1,11 @@
-using System.Reflection;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
-public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
+public class FinancialFactSeriesShaperPickBestFactDiscreteQuarterTests
 {
     // A 10-Q tags each flow line twice under the same fiscal (year, period): the discrete
     // three-month quarter and the fiscal year-to-date (six months at Q2). For a quarterly
@@ -38,16 +37,12 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var result = FinancialFactSeriesShaper.PickBestFact(
+            new[] { yearToDate, discreteQuarter },
+            conceptPriority,
+            false,
+            null
         );
-
-        var result = (FinancialFact)
-            method!.Invoke(
-                null,
-                [new[] { yearToDate, discreteQuarter }, conceptPriority, false, null]
-            );
 
         result.Value.Should().Be(96_428m, "the discrete quarter wins over the year-to-date span");
     }
@@ -74,19 +69,17 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
             fiscalPeriod: SecFiscalPeriod.FullYear
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var picked = FinancialFactSeriesShaper.PickBestFact(
+            new[] { inceptionToDate, validAnnual },
+            conceptPriority,
+            false,
+            null
         );
-
-        var picked = (FinancialFact)
-            method!.Invoke(
-                null,
-                [new[] { inceptionToDate, validAnnual }, conceptPriority, false, null]
-            );
-        var rejected = method.Invoke(
-            null,
-            [new[] { inceptionToDate }, conceptPriority, false, null]
+        var rejected = FinancialFactSeriesShaper.PickBestFact(
+            new[] { inceptionToDate },
+            conceptPriority,
+            false,
+            null
         );
 
         picked.Should().BeSameAs(validAnnual);
@@ -115,19 +108,17 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
             fiscalPeriod: SecFiscalPeriod.Q2
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var picked = FinancialFactSeriesShaper.PickBestFact(
+            new[] { inceptionToDate, validQuarter },
+            conceptPriority,
+            false,
+            null
         );
-
-        var picked = (FinancialFact)
-            method!.Invoke(
-                null,
-                [new[] { inceptionToDate, validQuarter }, conceptPriority, false, null]
-            );
-        var rejected = method.Invoke(
-            null,
-            [new[] { inceptionToDate }, conceptPriority, false, null]
+        var rejected = FinancialFactSeriesShaper.PickBestFact(
+            new[] { inceptionToDate },
+            conceptPriority,
+            false,
+            null
         );
 
         picked.Should().BeSameAs(validQuarter);
@@ -148,12 +139,12 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
             fiscalPeriod: SecFiscalPeriod.Q2
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
-        var method = typeof(FinancialFactsTools).GetMethod(
-            "PickBestFact",
-            BindingFlags.NonPublic | BindingFlags.Static
+        var rejected = FinancialFactSeriesShaper.PickBestFact(
+            new[] { yearToDate },
+            conceptPriority,
+            false,
+            null
         );
-
-        var rejected = method!.Invoke(null, [new[] { yearToDate }, conceptPriority, false, null]);
 
         rejected.Should().BeNull("a six-month YTD span is not a discrete fiscal quarter");
     }

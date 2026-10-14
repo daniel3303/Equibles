@@ -1,7 +1,7 @@
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 
-namespace Equibles.Sec.FinancialFacts.Mcp.Helpers;
+namespace Equibles.Sec.FinancialFacts.Data.Statements;
 
 /// <summary>
 /// SEC Company Facts files a filer's REPORTED discrete fourth quarter under
@@ -20,7 +20,7 @@ namespace Equibles.Sec.FinancialFacts.Mcp.Helpers;
 /// "year" with no annual-span fact ending that day) has no anchor and keeps its
 /// annual identity.
 /// </summary>
-internal static class ReportedQuarterPromotion
+public static class ReportedQuarterPromotion
 {
     /// <summary>
     /// A full history load: returns the input plus one Q4-stamped copy of every
@@ -29,14 +29,16 @@ internal static class ReportedQuarterPromotion
     /// Originals are kept (the annual group's span gate already ignores them);
     /// the input is never mutated.
     /// </summary>
-    internal static List<FinancialFact> WithPromotedFourthQuarters(List<FinancialFact> facts)
+    public static IReadOnlyCollection<FinancialFact> WithPromotedFourthQuarters(
+        IReadOnlyCollection<FinancialFact> facts
+    )
     {
         var fiscalYearByYearEnd = facts
             .Where(f =>
                 f.FiscalPeriod == SecFiscalPeriod.FullYear
                 && f.PeriodType == FactPeriodType.Duration
-                && Span(f) >= FiscalPeriodSpanDays.MinAnnualSpanDays
-                && Span(f) <= FiscalPeriodSpanDays.MaxAnnualSpanDays
+                && Span(f) >= FiscalPeriodSpanDays.MinAnnual
+                && Span(f) <= FiscalPeriodSpanDays.MaxAnnual
             )
             .GroupBy(f => f.PeriodEnd)
             .ToDictionary(g => g.Key, g => g.Min(f => f.FiscalYear));
@@ -61,7 +63,7 @@ internal static class ReportedQuarterPromotion
     /// the slice end earlier and must not pose as the requested year's fourth
     /// quarter (their value belongs to the prior year).
     /// </summary>
-    internal static IEnumerable<FinancialFact> PromotedFourthQuartersForYearSlice(
+    public static IEnumerable<FinancialFact> PromotedFourthQuartersForYearSlice(
         IEnumerable<FinancialFact> companyFacts
     )
     {
@@ -77,8 +79,8 @@ internal static class ReportedQuarterPromotion
         var ownYearEnd = fullYearDurations.Max(f => f.PeriodEnd);
         var hasOwnYearAnchor = fullYearDurations.Any(f =>
             f.PeriodEnd == ownYearEnd
-            && Span(f) >= FiscalPeriodSpanDays.MinAnnualSpanDays
-            && Span(f) <= FiscalPeriodSpanDays.MaxAnnualSpanDays
+            && Span(f) >= FiscalPeriodSpanDays.MinAnnual
+            && Span(f) <= FiscalPeriodSpanDays.MaxAnnual
         );
         if (!hasOwnYearAnchor)
             return [];
@@ -97,30 +99,11 @@ internal static class ReportedQuarterPromotion
         )
             return false;
         var span = Span(fact);
-        return span >= FiscalPeriodSpanDays.MinDiscreteQuarterDays
-            && span <= FiscalPeriodSpanDays.MaxDiscreteQuarterDays;
+        return span >= FiscalPeriodSpanDays.MinQuarter && span <= FiscalPeriodSpanDays.MaxQuarter;
     }
 
-    // A copy, never a mutation — the source rows may be EF-tracked entities.
     private static FinancialFact Promote(FinancialFact fact, int fiscalYear) =>
-        new()
-        {
-            EquityIssuerId = fact.EquityIssuerId,
-            FinancialConceptId = fact.FinancialConceptId,
-            DocumentId = fact.DocumentId,
-            Unit = fact.Unit,
-            PeriodType = fact.PeriodType,
-            PeriodStart = fact.PeriodStart,
-            PeriodEnd = fact.PeriodEnd,
-            Value = fact.Value,
-            FiscalYear = fiscalYear,
-            FiscalPeriod = SecFiscalPeriod.Q4,
-            Form = fact.Form,
-            FiledDate = fact.FiledDate,
-            AccessionNumber = fact.AccessionNumber,
-            Frame = fact.Frame,
-            DimensionsKey = fact.DimensionsKey,
-        };
+        fact.Restamped(fiscalYear, SecFiscalPeriod.Q4);
 
     private static int Span(FinancialFact fact) =>
         fact.PeriodEnd.DayNumber - fact.PeriodStart.DayNumber;

@@ -127,10 +127,8 @@ public class RevenueBreakdownTools
                     .Where(f =>
                         conceptIds.Contains(f.FinancialConceptId)
                         && f.PeriodType == FactPeriodType.Duration
-                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays)
-                            <= f.PeriodEnd
-                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays)
-                            >= f.PeriodEnd
+                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnual) <= f.PeriodEnd
+                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnual) >= f.PeriodEnd
                     )
                     .Select(f => new
                     {
@@ -267,8 +265,8 @@ public class RevenueBreakdownTools
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnual) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnual) >= f.PeriodEnd
                 && f.DimensionsKey != ""
                 && f.Dimensions.Count(d => axes.Contains(d.Axis)) == 1
                 && f.Dimensions.All(d =>
@@ -304,8 +302,8 @@ public class RevenueBreakdownTools
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnual) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnual) >= f.PeriodEnd
                 && f.DimensionsKey != ""
                 && f.Dimensions.Count(d => RevenueBreakdownCore.AllAxes.Contains(d.Axis)) == 2
                 && f.Dimensions.All(d =>
@@ -380,8 +378,8 @@ public class RevenueBreakdownTools
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnual) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnual) >= f.PeriodEnd
             )
             .Select(f => new
             {

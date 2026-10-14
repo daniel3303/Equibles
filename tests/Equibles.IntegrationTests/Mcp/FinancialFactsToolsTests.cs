@@ -274,6 +274,125 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
             result.Should().NotContain("split-adjusted");
     }
 
+    // A share count is identified by its as-of date. The 10-K cover count dated in January falls
+    // in next year's Q1 beside the Q1 10-Q's own counts, and the balance-sheet count sits at each
+    // period end; one row per fiscal period kept only the latest date and hid the rest.
+    [Fact]
+    public async Task GetFinancialFact_SharesOutstanding_PublishesEveryAsOfDate()
+    {
+        var stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
+        var cover = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+            Label = "EntityCommonStockSharesOutstanding",
+        };
+        DbContext.Set<FinancialConcept>().Add(cover);
+        var sheet = AddConcept("CommonStockSharesOutstanding");
+        AddCount(
+            stock,
+            sheet,
+            new DateOnly(2023, 12, 30),
+            2023,
+            SecFiscalPeriod.FullYear,
+            15_550_061_000,
+            DocumentType.TenK,
+            "2024-02-02",
+            "fy23"
+        );
+        AddCount(
+            stock,
+            cover,
+            new DateOnly(2024, 1, 19),
+            2024,
+            SecFiscalPeriod.Q1,
+            15_441_881_000,
+            DocumentType.TenK,
+            "2024-02-02",
+            "fy23"
+        );
+        AddCount(
+            stock,
+            sheet,
+            new DateOnly(2024, 3, 30),
+            2024,
+            SecFiscalPeriod.Q1,
+            15_337_686_000,
+            DocumentType.TenQ,
+            "2024-05-03",
+            "q1"
+        );
+        AddCount(
+            stock,
+            sheet,
+            new DateOnly(2023, 12, 30),
+            2024,
+            SecFiscalPeriod.Q1,
+            15_550_061_000,
+            DocumentType.TenQ,
+            "2024-05-03",
+            "q1"
+        );
+        AddCount(
+            stock,
+            cover,
+            new DateOnly(2024, 4, 19),
+            2024,
+            SecFiscalPeriod.Q1,
+            15_284_155_000,
+            DocumentType.TenQ,
+            "2024-05-03",
+            "q1"
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialFact("AAPL", "shares-outstanding");
+
+        result.Should().Contain("| 2024-04-19 | 2024 | Q1 | 15,284,155,000 |");
+        result.Should().Contain("| 2024-03-30 | 2024 | Q1 | 15,337,686,000 |");
+        result.Should().Contain("| 2024-01-19 | 2024 | Q1 | 15,441,881,000 |");
+        result
+            .Should()
+            .Contain(
+                "| 2023-12-30 | 2023 | FY | 15,550,061,000 |",
+                "a date keeps its own filing's stamp"
+            );
+        result.Split("15,550,061,000").Should().HaveCount(2, "one row per as-of date");
+    }
+
+    private void AddCount(
+        EquityIssuer stock,
+        FinancialConcept concept,
+        DateOnly asOf,
+        int fy,
+        SecFiscalPeriod period,
+        decimal value,
+        DocumentType form,
+        string filed,
+        string accn
+    ) =>
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    EquityIssuerId = stock.Id,
+                    FinancialConceptId = concept.Id,
+                    Unit = "shares",
+                    PeriodType = FactPeriodType.Instant,
+                    PeriodStart = asOf,
+                    PeriodEnd = asOf,
+                    Value = value,
+                    FiscalYear = fy,
+                    FiscalPeriod = period,
+                    Form = form,
+                    FiledDate = DateOnly.Parse(filed),
+                    AccessionNumber = accn,
+                }
+            );
+
     [Fact]
     public async Task GetFinancialFact_RestatementAndTagSwitch_LatestRestatedAcrossAliasTags()
     {
