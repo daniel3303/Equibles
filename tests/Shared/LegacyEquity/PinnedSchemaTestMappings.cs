@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,5 +29,8 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         builder.Entity<StockSplit>().Ignore(split => split.ShareCountEvidence);
         builder.Entity<StockSplit>().Ignore(split => split.ShareCountEvidenceAsOf);
         builder.Entity<StockSplit>().Ignore(split => split.ShareCountEvidenceTime);
+
+        // Added by 20261014214216_DocumentAcceptedAt.
+        builder.Entity<Document>().Ignore(document => document.AcceptedAt);
     }
 }
