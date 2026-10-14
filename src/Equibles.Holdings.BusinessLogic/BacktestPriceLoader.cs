@@ -100,13 +100,14 @@ public class BacktestPriceLoader
                 && split.EffectiveDate <= to
             )
             .ToListAsync(cancellationToken);
+        var splitsByIssuer = new IssuerSplitIndex(splits);
 
         var splitDatesByListing = new Dictionary<ListingKey, DateOnly[]>();
         foreach (var key in listingKeys)
         {
             var primaryTicker = primaryTickers.GetValueOrDefault(key.CommonStockId);
             var scoped = PriceSeriesSplitScope.ForPriceComparison(
-                splits.Where(split => split.EquityIssuerId == key.CommonStockId),
+                splitsByIssuer.For(key.CommonStockId),
                 key.ListedTicker
             );
             splitDatesByListing[key] = scoped
@@ -144,7 +145,7 @@ public class BacktestPriceLoader
             stockByListing,
             priceWindowFrom,
             to,
-            splits,
+            splitsByIssuer,
             cancellationToken
         );
         var pricesByListing = rows.Select(row => new
@@ -331,7 +332,7 @@ public class BacktestPriceLoader
         IReadOnlyDictionary<Guid, Guid> stockByListing,
         DateOnly priceWindowFrom,
         DateOnly to,
-        IReadOnlyList<StockSplit> splits,
+        IssuerSplitIndex splitsByIssuer,
         CancellationToken cancellationToken
     )
     {
@@ -342,7 +343,7 @@ public class BacktestPriceLoader
         {
             if (
                 _seriesCache.TryGet(listingId, priceWindowFrom, out var cached)
-                && !RestatedSince(splits, stockId, cached.LoadedAt)
+                && !RestatedSince(splitsByIssuer.For(stockId), cached.LoadedAt)
             )
             {
                 hits.Add((listingId, cached));
@@ -446,14 +447,9 @@ public class BacktestPriceLoader
         return tail < priceWindowFrom ? priceWindowFrom : tail;
     }
 
-    private static bool RestatedSince(
-        IReadOnlyList<StockSplit> splits,
-        Guid stockId,
-        DateTime loadedAt
-    ) =>
-        splits.Any(split =>
-            split.EquityIssuerId == stockId
-            && (split.CreationTime > loadedAt || split.PriceAdjustmentAppliedTime > loadedAt)
+    private static bool RestatedSince(IEnumerable<StockSplit> issuerSplits, DateTime loadedAt) =>
+        issuerSplits.Any(split =>
+            split.CreationTime > loadedAt || split.PriceAdjustmentAppliedTime > loadedAt
         );
 
     private async Task<List<QueriedPriceRow>> QueryRows(
