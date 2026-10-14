@@ -105,15 +105,16 @@ public class SplitShareCountEvidenceTests
     [Fact]
     public void Evaluate_AnotherEventBetweenTheWitnesses_DecidesNeither()
     {
-        var first = Split(new DateOnly(2024, 3, 1), 2m, 1m);
-        var second = Split(new DateOnly(2024, 4, 1), 3m, 1m);
+        // A 2:1 then a 1:2 leave the count unchanged; neither is a price factor.
+        var forward = Split(new DateOnly(2024, 3, 1), 2m, 1m);
+        var reverse = Split(new DateOnly(2024, 4, 1), 1m, 2m);
         var counts = new[]
         {
             Count(new DateOnly(2024, 1, 31), new DateOnly(2024, 2, 5), 100m),
-            Count(new DateOnly(2024, 5, 1), new DateOnly(2024, 5, 6), 600m),
+            Count(new DateOnly(2024, 5, 1), new DateOnly(2024, 5, 6), 100m),
         };
 
-        var verdicts = SplitShareCountEvidence.Evaluate([first, second], counts);
+        var verdicts = SplitShareCountEvidence.Evaluate([forward, reverse], counts);
 
         verdicts.Should().OnlyContain(verdict => verdict.Evidence == null);
     }
