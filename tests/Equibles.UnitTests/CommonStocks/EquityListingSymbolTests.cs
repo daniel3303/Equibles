@@ -92,4 +92,14 @@ public class EquityListingSymbolTests
         mic.Should().BeNull();
         ticker.Should().BeNull();
     }
+
+    // XPAR:AIR is Airbus and AIR is AAR Corp, so the notice must not send a caller to the bare ticker.
+    [Fact]
+    public void UsOnlyNotice_NamesTheSymbol_AndNeverSuggestsItsBareTicker()
+    {
+        var notice = EquityListingSymbol.UsOnlyNotice(" XPAR:AIR ");
+
+        notice.Should().StartWith("'XPAR:AIR' names a listing outside the US");
+        notice.Should().Contain("different US company").And.NotContain("instead");
+    }
 }
