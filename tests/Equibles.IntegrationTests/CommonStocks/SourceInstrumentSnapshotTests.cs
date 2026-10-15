@@ -681,6 +681,35 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
             .BeTrue();
     }
 
+    // A reissue is an ordinary row, so a counter of the same security that left the directory is still withdrawn.
+    [Fact]
+    public async Task AReissuedSecurityStillLosesTheCounterTheDirectoryNoLongerStates()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var manager = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var first = Listing();
+        first.Isin = "KYG5924H1231";
+        var counter = Listing("counter", "80001", "CNY");
+        counter.Isin = first.Isin;
+        first.DirectorySnapshotId = counter.DirectorySnapshotId = await manager.Reconcile(
+            Snapshot(0, first, counter)
+        );
+        await importer.ImportListing(first);
+        var counterId = await importer.ImportListing(counter);
+
+        var reissued = Listing();
+        reissued.Isin = "KYG5924H1561";
+        reissued.DirectorySnapshotId = await manager.Reconcile(Snapshot(1, reissued));
+        await importer.ImportListing(reissued);
+
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<EquityListing>().SingleAsync(row => row.Id == counterId))
+            .IsDirectoryListed.Should()
+            .BeFalse();
+    }
+
     [Fact]
     public async Task SharedListingRemainsActiveUntilBothDirectoryClaimsAreWithdrawn()
     {
