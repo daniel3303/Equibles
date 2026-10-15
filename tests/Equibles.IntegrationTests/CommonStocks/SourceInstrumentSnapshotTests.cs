@@ -712,6 +712,89 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
             .BeFalse();
     }
 
+    private static EquityDirectoryListingInput Counter(string isin)
+    {
+        var counter = Listing("share-b", "02938");
+        counter.SourceIssuerIdentifier = "issuer-b";
+        counter.SourceSecurityIdentifier = "security-b";
+        counter.Isin = isin;
+        return counter;
+    }
+
+    // HKEX's temporary counter 02938 shares King International's CUSIP issuer number; a national number embeds none.
+    [Theory]
+    [InlineData("KYG5924H1561", "KYG5924H1728", true)]
+    [InlineData("KYG5924H1561", "KYG4052M1520", false)]
+    [InlineData("HK0000050093", "HK0000050176", false)]
+    public async Task ANewCodeSharingACusipIssuerNumberJoinsThatIssuer(
+        string companyIsin,
+        string counterIsin,
+        bool sameIssuer
+    )
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var manager = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var company = Listing();
+        company.Isin = companyIsin;
+        var counter = Counter(counterIsin);
+        company.DirectorySnapshotId = counter.DirectorySnapshotId = await manager.Reconcile(
+            Snapshot(0, company, counter)
+        );
+        var companyId = await importer.ImportListing(company);
+        var counterId = await importer.ImportListing(counter);
+
+        DbContext.ChangeTracker.Clear();
+        var listings = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+                .ThenInclude(row => row.Issuer)
+                    .ThenInclude(row => row.Presentation)
+            .ToDictionaryAsync(row => row.Id);
+        (listings[counterId].Security.EquityIssuerId == listings[companyId].Security.EquityIssuerId)
+            .Should()
+            .Be(sameIssuer);
+        listings[counterId].EquitySecurityId.Should().NotBe(listings[companyId].EquitySecurityId);
+        listings[companyId].Security.Issuer.Presentation.EquityListingId.Should().Be(companyId);
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(sameIssuer ? 1 : 2);
+    }
+
+    // Two issuers already split across one issuer number are left for the merge queue rather than chosen between.
+    [Fact]
+    public async Task AnIssuerNumberAlreadySplitAcrossTwoIssuersRefusesTheNextCode()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var manager = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var company = Listing();
+        company.Isin = "KYG5924H1561";
+        var rights = Listing("share-c", "02941");
+        rights.SourceIssuerIdentifier = "issuer-c";
+        rights.SourceSecurityIdentifier = "security-c";
+        rights.Isin = "KYG5924H1645";
+        company.DirectorySnapshotId = rights.DirectorySnapshotId = await manager.Reconcile(
+            Snapshot(0, company, rights)
+        );
+        await importer.ImportListing(company);
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "02938",
+                Name: "KING INTL INV",
+                Isin: "KYG5924H1728",
+                MarketCountryCode: "HK",
+                MarketIdentifierCode: "XHKG",
+                TradingCurrency: "HKD",
+                QuoteUnitMultiplier: 1m
+            )
+        );
+        await DbContext.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => importer.ImportListing(rights));
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(2);
+    }
+
     [Fact]
     public async Task SharedListingRemainsActiveUntilBothDirectoryClaimsAreWithdrawn()
     {
