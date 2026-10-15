@@ -19,6 +19,9 @@ public sealed class FirdsRecord
     public string Currency { get; set; }
     public string Lei { get; set; }
     public string Mic { get; set; }
+
+    // Whether the issuer requested or approved the admission on this venue; null when the record omits it.
+    public bool? IssuerRequested { get; set; }
     public DateTime? FirstTradeDate { get; set; }
     public DateTime? TerminationDate { get; set; }
     public string RelevantCompetentAuthority { get; set; }

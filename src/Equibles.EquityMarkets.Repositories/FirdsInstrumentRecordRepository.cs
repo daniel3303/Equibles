@@ -36,8 +36,9 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
             .ThenBy(row => row.Mic)
             .FirstOrDefaultAsync(cancellationToken);
 
-    // Live shares whose relevant venue is one of the market's home venues; Frankfurt's Freiverkehr is also the first
-    // EU admission of many foreign shares, so for Xetra this counts more than its directory names as home.
+    // Live shares whose relevant venue is a home venue and whose issuer sought a home admission. A German open
+    // market's own inclusion of a foreign share also gives it a German relevant venue, but the issuer never asked.
+    // A line read before FIRDS issuer requests were stored counts until the next full file restates it.
     public Task<int> CountHomeShares(
         EquityMarket market,
         DateTime asOf,
@@ -46,9 +47,14 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
     {
         var authority = market.FirdsAuthority;
         var homeVenues = market.HomeVenueCodes;
-        return GetLiveShares(asOf)
-            .Where(row =>
-                row.Authority == authority && homeVenues.Contains(row.RelevantTradingVenue)
+        var live = GetLiveShares(asOf).Where(row => row.Authority == authority);
+        return live.Where(row =>
+                homeVenues.Contains(row.RelevantTradingVenue)
+                && live.Any(line =>
+                    line.Isin == row.Isin
+                    && homeVenues.Contains(line.Mic)
+                    && line.IssuerRequested != false
+                )
             )
             .Select(row => row.Isin)
             .Distinct()
@@ -71,6 +77,7 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
                 (existing, fresh) =>
                     new FirdsInstrumentRecord
                     {
+                        IssuerRequested = fresh.IssuerRequested,
                         Lei = fresh.Lei,
                         Cfi = fresh.Cfi,
                         Currency = fresh.Currency,

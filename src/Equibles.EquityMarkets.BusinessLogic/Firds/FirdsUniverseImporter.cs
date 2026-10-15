@@ -223,6 +223,7 @@ public class FirdsUniverseImporter(
             Authority = authority,
             Isin = record.Isin,
             Mic = record.Mic,
+            IssuerRequested = record.IssuerRequested,
             Lei = record.Lei,
             Cfi = record.Cfi,
             Currency = Clip(record.Currency, 3),

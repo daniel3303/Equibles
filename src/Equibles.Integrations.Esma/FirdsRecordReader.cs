@@ -74,6 +74,7 @@ public static class FirdsRecordReader
             Currency = Text(general, "NtnlCcy"),
             Lei = lei,
             Mic = mic,
+            IssuerRequested = Flag(Text(venue, "IssrReq")),
             FirstTradeDate = Instant(Text(venue, "FrstTradDt")),
             TerminationDate = Instant(Text(venue, "TermntnDt")),
             RelevantCompetentAuthority = Text(technical, "RlvntCmptntAuthrty"),
@@ -89,6 +90,15 @@ public static class FirdsRecordReader
         var value = Child(element, localName)?.Value?.Trim();
         return string.IsNullOrEmpty(value) ? null : value;
     }
+
+    private static bool? Flag(string value) =>
+        value switch
+        {
+            "true" or "1" => true,
+            "false" or "0" => false,
+            null => null,
+            _ => throw new InvalidDataException("FIRDS record states an unreadable flag."),
+        };
 
     private static DateTime? Instant(string value)
     {

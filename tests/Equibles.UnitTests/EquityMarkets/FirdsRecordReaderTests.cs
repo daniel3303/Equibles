@@ -29,6 +29,7 @@ public class FirdsRecordReaderTests
         var lisbon = records.Single(record => record.Isin == "PTSLB0AM0010");
         lisbon.Cfi.Should().Be("ESRTFR");
         lisbon.Mic.Should().Be("XLIS");
+        lisbon.IssuerRequested.Should().BeTrue();
         lisbon.RelevantTradingVenue.Should().Be("XLIS");
         lisbon.RelevantCompetentAuthority.Should().Be("PT");
         lisbon.Lei.Should().MatchRegex("^[A-Z0-9]{20}$");
@@ -40,6 +41,7 @@ public class FirdsRecordReaderTests
         var secondary = records.Single(record => record.Isin == "FI0009800395");
         secondary.Mic.Should().Be("AQEA");
         secondary.RelevantTradingVenue.Should().Be("DHEL");
+        secondary.IssuerRequested.Should().BeFalse();
         var terminated = records.Single(record => record.Isin == "SE0030026894");
         terminated
             .TerminationDate.Should()
@@ -94,6 +96,7 @@ public class FirdsRecordReaderTests
     [InlineData("<Id>PTSLB0AM0011</Id>", "<Id>PTSLB0AM0010</Id>")]
     [InlineData("<Issr>BAD</Issr>", "<Issr>213800EDIKU4Z4I1R529</Issr>")]
     [InlineData("<TermntnDt>tomorrow</TermntnDt>", "<TermntnDt>2026-09-11T23:59:59Z</TermntnDt>")]
+    [InlineData("<IssrReq>yes</IssrReq>", "<IssrReq>true</IssrReq>")]
     public async Task InvalidIdentifiersOrDates_AreRefusedRatherThanStored(
         string broken,
         string valid
@@ -117,6 +120,30 @@ public class FirdsRecordReaderTests
             await foreach (var _ in FirdsRecordReader.Read(stream)) { }
         };
         await read.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Fact]
+    public async Task MissingIssuerRequest_IsUnknownRatherThanRefusedOrDenied()
+    {
+        var xml = await File.ReadAllTextAsync(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "EquityMarkets",
+                "Firds",
+                "FULINS_E_sample.xml"
+            )
+        );
+        const string stated = "<Id>XLIS</Id><IssrReq>true</IssrReq>";
+        xml.Should().Contain(stated);
+        await using var stream = new MemoryStream(
+            System.Text.Encoding.UTF8.GetBytes(xml.Replace(stated, "<Id>XLIS</Id>"))
+        );
+        var records = new List<FirdsRecord>();
+        await foreach (var record in FirdsRecordReader.Read(stream))
+            records.Add(record);
+        records.Single(record => record.Isin == "PTSLB0AM0010").IssuerRequested.Should().BeNull();
+        records.Single(record => record.Isin == "FR0005691656").IssuerRequested.Should().BeTrue();
     }
 
     [Theory]
