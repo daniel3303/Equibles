@@ -116,7 +116,7 @@ public class DocumentNormalizationBackfillService
 
             result.Processed++;
             // Rebuilt, non-empty text keeps its chunks when a replay leaves it identical; text never
-            // rebuilt was split by the chunker #4439 replaced.
+            // rebuilt was split by the previous chunking strategy.
             var replayingReadableText =
                 document.NormalizedContentVersion >= Document.FirstContentBuilderVersion
                 && document.Content?.Size > 0;
