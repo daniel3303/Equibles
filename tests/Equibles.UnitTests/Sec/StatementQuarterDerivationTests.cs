@@ -35,6 +35,65 @@ public class StatementQuarterDerivationTests
         derived.FiscalPeriod.Should().Be(SecFiscalPeriod.Q2);
     }
 
+    // Interim reporters outside the US (CNINFO, ESEF) state cumulative spans in their own currency.
+    [Theory]
+    [InlineData("CNY")]
+    [InlineData("EUR")]
+    [InlineData("HKD")]
+    [InlineData("NIS")]
+    public void AppendDerived_NonUsdCurrencyChain_ProvidesDiscreteQuarterInThatCurrency(string unit)
+    {
+        var facts = new[]
+        {
+            Fact("2026-01-01", "2026-03-31", 54_702_912_400m, SecFiscalPeriod.Q1, "q1", unit),
+            Fact("2026-01-01", "2026-06-30", 92_278_072_100m, SecFiscalPeriod.Q2, "h1", unit),
+        };
+
+        var derived = StatementQuarterDerivation
+            .AppendDerived(facts)
+            .Single(StatementQuarterDerivation.IsDerived);
+
+        derived.Value.Should().Be(37_575_159_700m);
+        derived.Unit.Should().Be(unit);
+        derived.PeriodStart.Should().Be(new DateOnly(2026, 4, 1));
+    }
+
+    // A count or a per-share figure does not subtract into a quarter, whatever its unit spells.
+    [Theory]
+    [InlineData("EUR/shares")]
+    [InlineData("shares")]
+    [InlineData("ADS")]
+    [InlineData("pure")]
+    [InlineData("LBS")]
+    public void AppendDerived_NonCurrencyUnit_RefusesSubtraction(string unit)
+    {
+        var facts = new[]
+        {
+            Fact("2026-01-01", "2026-03-31", 80m, SecFiscalPeriod.Q1, "q1", unit),
+            Fact("2026-01-01", "2026-06-30", 156m, SecFiscalPeriod.Q2, "h1", unit),
+        };
+
+        StatementQuarterDerivation
+            .AppendDerived(facts)
+            .Should()
+            .NotContain(fact => StatementQuarterDerivation.IsDerived(fact));
+    }
+
+    [Fact]
+    public void AppendDerived_CumulativeFactsInDifferentCurrencies_RefusesSubtraction()
+    {
+        var facts = new[]
+        {
+            Fact("2026-01-01", "2026-03-31", 80m, SecFiscalPeriod.Q1, "q1", "EUR"),
+            Fact("2026-01-01", "2026-06-30", 156m, SecFiscalPeriod.Q2, "h1", "USD"),
+        };
+
+        StatementQuarterDerivation
+            .AppendDerived(facts)
+            .Should()
+            .NotContain(fact => StatementQuarterDerivation.IsDerived(fact));
+    }
+
     [Fact]
     public void AppendDerived_Q3CumulativeChain_ProvidesDiscreteQuarter()
     {

@@ -56,7 +56,7 @@ public class FinancialStatementTools
             + "Returns the standard line items (e.g. revenue, net income, total assets, "
             + "operating cash flow) with the latest-restated value for one exact statement "
             + "period end. Quarterly flow rows are always discrete quarters: when the filer "
-            + "reports only cumulative year-to-date USD values, the quarter is derived by "
+            + "reports only cumulative year-to-date values in a currency, the quarter is derived by "
             + "exact subtraction from the preceding cumulative period and marked Derived. "
             + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
             + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
@@ -456,8 +456,8 @@ public class FinancialStatementTools
         )
             result.AppendLine(
                 "\n_All flow rows span one discrete quarter. A Derived quarter is exact "
-                    + "subtraction of consecutive cumulative USD facts with the same concept, "
-                    + "unit and fiscal-year start; an unprovable YTD-only line is omitted._"
+                    + "subtraction of consecutive cumulative facts with the same concept, "
+                    + "currency and fiscal-year start; an unprovable YTD-only line is omitted._"
             );
 
         // Each line independently takes its latest restatement, so one

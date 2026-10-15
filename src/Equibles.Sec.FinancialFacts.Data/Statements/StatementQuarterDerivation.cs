@@ -4,7 +4,7 @@ using Equibles.Sec.FinancialFacts.Data.Models;
 namespace Equibles.Sec.FinancialFacts.Data.Statements;
 
 /// <summary>
-/// Derives missing discrete USD quarters from consecutive cumulative facts.
+/// Derives missing discrete quarters from consecutive cumulative facts in one currency.
 /// The source facts remain unchanged; derived rows exist only in the read path.
 /// </summary>
 public static class StatementQuarterDerivation
@@ -84,7 +84,7 @@ public static class StatementQuarterDerivation
         facts
             .Where(f =>
                 f.PeriodType == FactPeriodType.Duration
-                && f.Unit == "USD"
+                && CurrencyUnits.IsCurrency(f.Unit)
                 && f.PeriodEnd >= f.PeriodStart
                 && Span(f) <= StatementLineFacts.MaxSupportedDurationDays
             )
