@@ -54,7 +54,10 @@ public class SecDocumentService : ISecDocumentService
                     documentType,
                     itemNumber
                 )
+                // Within a filing date, the latest EDGAR acceptance first; a row without one
+                // (a transcript, or a filing stored before acceptance capture) takes its ingestion time.
                 .OrderByDescending(d => d.ReportingDate)
+                .ThenByDescending(d => d.AcceptedAt ?? d.CreationTime)
                 .ThenByDescending(d => d.Id)
                 .Skip((int)offset)
                 .Take(maxItems)
