@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Data;
@@ -41,10 +42,13 @@ public class NportTools
 
     [McpServerTool(Name = "GetFundsHoldingStock", Title = "Funds Holding a Stock", ReadOnly = true)]
     [Description(
-        "Get the registered investment companies (mutual funds and ETFs) holding an exact stock or ETF listing, from SEC Form NPORT-P portfolio reports. The listed security's authoritative CUSIP is matched against the holding rows on each fund series' most recent report (series that stopped filing more than 18 months ago are excluded), so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Report dates differ per fund series (each files on its own fiscal quarter), so values are as of each row's report date and cross-row totals mix as-of dates."
+        "Get the registered investment companies (mutual funds and ETFs) holding an exact stock or ETF listing, from SEC Form NPORT-P portfolio reports. The listed security's authoritative CUSIP (or, for a listing on another exchange written MIC:TICKER, its ISIN) is matched against the holding rows on each fund series' most recent report (series that stopped filing more than 18 months ago are excluded), so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Report dates differ per fund series (each files on its own fiscal quarter), so values are as of each row's report date and cross-row totals mix as-of dates."
     )]
     public Task<string> GetFundsHoldingStock(
-        [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
+        [Description(
+            "Listed security ticker (e.g., AAPL, VOO); a listing on another exchange is MIC:TICKER (XPAR:AIR)."
+        )]
+            string ticker,
         [Description(
             "Maximum number of fund positions to return, largest first (default: 20, clamped to 1-500)"
         )]
@@ -62,39 +66,71 @@ public class NportTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
-                if (stockError != null)
-                    return MarkdownText(stockError);
+                IQueryable<NportHolding> holdings = null;
+                string safeTicker = null;
+                EquityListing venue = null;
+                if (EquityListingSymbol.TryParse(ticker, out _, out _))
+                {
+                    (_, venue, var venueError) = await _commonStockRepository.ResolveListing(
+                        ticker
+                    );
+                    if (venue == null)
+                        return MarkdownText(venueError);
+                }
 
-                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
-                var safeTicker = MarkdownText(listedTicker);
+                if (venue == null)
+                {
+                    var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                    if (stockError != null)
+                    {
+                        (_, venue, _) = await _commonStockRepository.ResolveSuffixAfterUsMiss(
+                            ticker,
+                            stockError
+                        );
+                        if (venue == null)
+                            return MarkdownText(stockError);
+                    }
+                    else
+                    {
+                        var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                        safeTicker = MarkdownText(listedTicker);
 
-                if (!await _nportRepository.HasCusipIdentity(stock, listedTicker))
-                    return $"No CUSIP is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+                        if (!await _nportRepository.HasCusipIdentity(stock, listedTicker))
+                            return $"No CUSIP is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+                        holdings = _nportRepository.GetHoldingsByListingCusip(stock, listedTicker);
+                    }
+                }
+
+                // Funds report a venue's share by its ISIN; a US listing keeps its CUSIP identity.
+                if (venue != null)
+                {
+                    safeTicker = MarkdownText(EquityListingSymbol.Display(venue));
+                    if (string.IsNullOrWhiteSpace(venue.Security.Isin))
+                        return $"No ISIN is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+                    holdings = _nportRepository.GetHoldingsByIsin(venue.Security.Isin);
+                }
 
                 var recencyFloor = DateOnly.FromDateTime(
                     DateTime.UtcNow - CurrentHolderRecencyFloor
                 );
-                var currentPositions = _nportRepository
-                    .GetHoldingsByListingCusip(stock, listedTicker)
-                    .Join(
-                        _nportRepository.GetLatestPerSeries(recencyFloor),
-                        h => h.NportFilingId,
-                        f => f.Id,
-                        (h, f) =>
-                            new
-                            {
-                                h.Id,
-                                f.RegistrantName,
-                                f.SeriesName,
-                                f.ReportPeriodDate,
-                                h.Balance,
-                                h.Units,
-                                h.ValueUsd,
-                                h.PercentValue,
-                                h.PayoffProfile,
-                            }
-                    );
+                var currentPositions = holdings.Join(
+                    _nportRepository.GetLatestPerSeries(recencyFloor),
+                    h => h.NportFilingId,
+                    f => f.Id,
+                    (h, f) =>
+                        new
+                        {
+                            h.Id,
+                            f.RegistrantName,
+                            f.SeriesName,
+                            f.ReportPeriodDate,
+                            h.Balance,
+                            h.Units,
+                            h.ValueUsd,
+                            h.PercentValue,
+                            h.PayoffProfile,
+                        }
+                );
 
                 if (!string.IsNullOrWhiteSpace(registrantOrSeries))
                 {

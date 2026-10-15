@@ -61,4 +61,35 @@ public class EquityListingSymbolTests
         // in a venue-qualified symbol is proof it is not a ticker.
         TickerNormalizer.NormalizeListed("XPAR:AIR").Should().BeNull();
     }
+
+    [Theory]
+    [InlineData("XPAR:AIR", "XPAR", "AIR")]
+    [InlineData(" xlon:bt-a ", "XLON", "BT-A")]
+    [InlineData("XHKG:00005", "XHKG", "00005")]
+    public void TryParse_ReadsTheDisplaySpellingBack(string symbol, string mic, string ticker)
+    {
+        EquityListingSymbol
+            .TryParse(symbol, out var parsedMic, out var parsedTicker)
+            .Should()
+            .BeTrue();
+        parsedMic.Should().Be(mic);
+        parsedTicker.Should().Be(ticker);
+    }
+
+    [Theory]
+    [InlineData("AIR")]
+    [InlineData("BRK.B")]
+    [InlineData("XPA:AIR")]
+    [InlineData("XPARI:AIR")]
+    [InlineData("XPAR:")]
+    [InlineData("XP-R:AIR")]
+    [InlineData("XPAR:AI R")]
+    [InlineData(":AIR")]
+    [InlineData(null)]
+    public void TryParse_RejectsAnythingButMicColonTicker(string symbol)
+    {
+        EquityListingSymbol.TryParse(symbol, out var mic, out var ticker).Should().BeFalse();
+        mic.Should().BeNull();
+        ticker.Should().BeNull();
+    }
 }

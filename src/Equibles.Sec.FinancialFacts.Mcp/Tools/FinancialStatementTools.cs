@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -51,7 +52,7 @@ public class FinancialStatementTools
     [McpServerTool(Name = "GetFinancialStatement", Title = "Financial Statements", ReadOnly = true)]
     [Description(
         "Get a company's income statement, balance sheet, or cash-flow statement for a "
-            + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL). "
+            + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL), or from the issuer's regulatory filings for a listing outside the US. "
             + "Returns the standard line items (e.g. revenue, net income, total assets, "
             + "operating cash flow) with the latest-restated value for one exact statement "
             + "period end. Quarterly flow rows are always discrete quarters: when the filer "
@@ -63,7 +64,10 @@ public class FinancialStatementTools
             + "or across companies."
     )]
     public Task<string> GetFinancialStatement(
-        [Description("Stock ticker symbol (e.g., AAPL, MSFT, GME)")] string ticker,
+        [Description(
+            "Stock ticker symbol (e.g., AAPL, MSFT, GME); a listing on another exchange is MIC:TICKER (XPAR:AIR)."
+        )]
+            string ticker,
         [Description(
             "Statement: 'income' (income statement), 'balance' (balance sheet), or "
                 + "'cashflow' (cash-flow statement); the aliases 'is'/'p&l', 'bs' and 'cf' "
@@ -88,7 +92,7 @@ public class FinancialStatementTools
                     return "A ticker symbol is required.";
 
                 var (stock, stockError) =
-                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
+                    await _commonStockRepository.ResolveIssuerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -206,7 +210,7 @@ public class FinancialStatementTools
 
                 if (facts.Count == 0)
                     return $"No {statementType.NameForHumans().ToLowerInvariant()} line items "
-                        + $"were reported by {stock.Presentation.Listing.Ticker} for FY{selectedYear} "
+                        + $"were reported by {EquityListingSymbol.Display(stock)} for FY{selectedYear} "
                         + $"{selectedPeriod.NameForHumans()}.";
 
                 // A filing re-reports comparative spans under its own fiscal stamp, and a stale
@@ -284,7 +288,7 @@ public class FinancialStatementTools
     )
     {
         var result = MarkdownTable.Start(
-            $"{statementType.NameForHumans()} for {stock.Presentation.Listing.Ticker} "
+            $"{statementType.NameForHumans()} for {EquityListingSymbol.Display(stock)} "
                 + $"({FactMarkdown.Cell(stock.Name)}) — "
                 + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:",
             "| Line Item | Value | Unit | Basis | Period Start | Period End | Form | Filed |",
@@ -342,7 +346,7 @@ public class FinancialStatementTools
 
         if (rendered == 0)
             return $"No {statementType.NameForHumans().ToLowerInvariant()} line items were "
-                + $"reported by {stock.Presentation.Listing.Ticker} for FY{selectedYear} "
+                + $"reported by {EquityListingSymbol.Display(stock)} for FY{selectedYear} "
                 + $"{selectedPeriod.NameForHumans()}.";
 
         if (omitted > 0)
@@ -444,8 +448,8 @@ public class FinancialStatementTools
                 default,
                 default,
                 hasAnyFacts
-                    ? $"No {statementName} line items have been ingested for {stock.Presentation.Listing.Ticker}."
-                    : $"No structured financial facts have been ingested for {stock.Presentation.Listing.Ticker}."
+                    ? $"No {statementName} line items have been ingested for {EquityListingSymbol.Display(stock)}."
+                    : $"No structured financial facts have been ingested for {EquityListingSymbol.Display(stock)}."
             );
         }
 
@@ -469,7 +473,7 @@ public class FinancialStatementTools
                 $"{(year?.ToString() ?? "the latest year")} "
                 + $"{(requestedPeriod?.NameForHumans() ?? "period")}";
             var message =
-                $"{stock.Presentation.Listing.Ticker} has no {statementName} data for {wanted}. Latest available: "
+                $"{EquityListingSymbol.Display(stock)} has no {statementName} data for {wanted}. Latest available: "
                 + $"FY{latest.FiscalYear} {latest.FiscalPeriod.NameForHumans()}.";
             // The Q4-under-FY trap: SEC Company Facts embeds the fourth
             // quarter's flow facts in the full-year duration, so a Q4

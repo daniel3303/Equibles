@@ -33,7 +33,11 @@ public static class McpToolExecutor
             ParseDateOr(endText, DateOnly.FromDateTime(DateTime.UtcNow))
         );
 
-    public static string StockNotFound(string ticker) => $"Stock '{ticker}' not found.";
+    // A venue symbol that reached a US-only reader is not missing; the reader covers US listings only.
+    public static string StockNotFound(string ticker) =>
+        EquityListingSymbol.TryParse(ticker, out _, out _)
+            ? EquityListingSymbol.UsOnlyNotice(ticker)
+            : $"Stock '{ticker}' not found.";
 
     public static string NormalizeTicker(string ticker) =>
         TickerNormalizer.NormalizeDashListed(ticker);

@@ -61,6 +61,171 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
 
     // ── GetStockPrices ───────────────────────────────────────────────────
 
+    // A bare ticker stays the US listing; MIC:TICKER reads the venue's own series, in the unit
+    // the exchange quotes (London trades in pence).
+    [Fact]
+    public async Task VenueSymbol_ReadsThatListingsOwnSeriesInItsQuoteUnit()
+    {
+        EquityIssuer adr = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BP",
+            Name: "BP ADR",
+            Cik: "0000313807"
+        );
+        EquityIssuer london = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BP",
+            Name: "BP p.l.c.",
+            MarketCountryCode: "GB",
+            MarketIdentifierCode: "XLON",
+            IdentityState: EquityIdentityState.Verified,
+            TradingCurrency: "GBP",
+            QuoteUnitMultiplier: 0.01m
+        );
+        london.Presentation.Listing.IdentitySourceUrl = "https://example.test/fca-register";
+        DbContext.AddRange(adr, london);
+        DbContext.Add(PriceFor(adr, new DateOnly(2026, 4, 1), close: 35.10m));
+        DbContext.Add(
+            new EquityDailyStockPrice
+            {
+                Listing = london.Presentation.Listing,
+                EquityListingId = london.Presentation.Listing.Id,
+                Date = new DateOnly(2026, 4, 1),
+                Open = 450m,
+                High = 455m,
+                Low = 449m,
+                Close = 452.35m,
+                AdjustedClose = 452.35m,
+                Volume = 1_000_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        var venue = await Sut().GetStockPrices("XLON:BP", "2026-03-01", "2026-04-30");
+        venue.Should().Contain("XLON:BP (BP p.l.c.), quoted in GBX (pence; 100 GBX = 1 GBP)");
+        venue.Should().Contain("452.35").And.NotContain("35.10");
+
+        var us = await Sut().GetStockPrices("BP", "2026-03-01", "2026-04-30");
+        us.Should().Contain("35.10").And.NotContain("452.35");
+
+        var latest = await Sut().GetLatestClosingPrices(["XLON:BP", "BP"]);
+        latest.Should().Contain("| XLON:BP | 2026-04-01 | 452.35 |");
+        latest.Should().Contain("| BP | 2026-04-01 | 35.10 |");
+        latest.Should().Contain("XLON:BP in GBX (pence; 100 GBX = 1 GBP)");
+
+        // A provider suffix keeps its dot for the lookup and the row shows the venue symbol.
+        (await Sut().GetLatestClosingPrices(["BP.L"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-04-01 | 452.35 |");
+    }
+
+    private async Task<EquityIssuer> SeedLondon(
+        params (DateOnly Date, decimal Close, long Volume)[] bars
+    )
+    {
+        EquityIssuer london = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BP",
+            Name: "BP p.l.c.",
+            MarketCountryCode: "GB",
+            MarketIdentifierCode: "XLON",
+            IdentityState: EquityIdentityState.Verified,
+            TradingCurrency: "GBP",
+            QuoteUnitMultiplier: 0.01m
+        );
+        london.Presentation.Listing.IdentitySourceUrl = "https://example.test/fca-register";
+        DbContext.Add(london);
+        foreach (var bar in bars)
+            DbContext.Add(
+                new EquityDailyStockPrice
+                {
+                    Listing = london.Presentation.Listing,
+                    EquityListingId = london.Presentation.Listing.Id,
+                    Date = bar.Date,
+                    Open = bar.Close,
+                    High = bar.Close,
+                    Low = bar.Close,
+                    Close = bar.Close,
+                    AdjustedClose = bar.Close,
+                    Volume = bar.Volume,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+        return london;
+    }
+
+    // A split whose listing is unknown is a boundary for the venue series too, so no change is stated across it.
+    [Fact]
+    public async Task VenueSymbol_UnattributedSplit_WithholdsTheChangeAcrossIt()
+    {
+        EquityIssuer london = await SeedLondon(
+            (new DateOnly(2026, 3, 2), 400m, 1_000),
+            (new DateOnly(2026, 3, 3), 452.35m, 1_000)
+        );
+        DbContext.Add(
+            new StockSplit
+            {
+                EquityIssuerId = london.Id,
+                PriceSeriesTicker = "BP",
+                EffectiveDate = new DateOnly(2026, 3, 3),
+                Numerator = 1m,
+                Denominator = 5m,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-03-03 | 452.35 | — | — |");
+    }
+
+    // A venue change spans one session only: an untraded session or a long gap leaves it blank.
+    [Fact]
+    public async Task VenueSymbol_ChangeNeverSpansAnUntradedSessionOrALongGap()
+    {
+        await SeedLondon(
+            (new DateOnly(2026, 3, 2), 400m, 1_000),
+            (new DateOnly(2026, 3, 3), 410m, 0),
+            (new DateOnly(2026, 3, 4), 452.35m, 1_000)
+        );
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-03-04 | 452.35 | — | — |");
+    }
+
+    [Fact]
+    public async Task VenueSymbol_ChangeNeverSpansMoreThanTwelveDays()
+    {
+        await SeedLondon(
+            (new DateOnly(2026, 3, 2), 400m, 1_000),
+            (new DateOnly(2026, 3, 15), 452.35m, 1_000)
+        );
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-03-15 | 452.35 | — | — |");
+    }
+
+    [Fact]
+    public async Task VenueSymbol_AdjacentTradedSessions_StateTheChange()
+    {
+        await SeedLondon(
+            (new DateOnly(2026, 4, 2), 440m, 1_000),
+            (new DateOnly(2026, 4, 7), 452.35m, 1_000)
+        );
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-04-07 | 452.35 | +12.35 |");
+    }
+
+    [Fact]
+    public async Task VenueSymbol_UnknownListing_ExplainsTheSymbolForm()
+    {
+        var result = await Sut().GetStockPrices("XPAR:ZZZZ");
+
+        result.Should().Contain("Listing 'XPAR:ZZZZ' not found").And.Contain("MIC:TICKER");
+    }
+
     [Fact]
     public async Task GetStockPrices_UnknownTicker_ReturnsNotFoundMessage()
     {

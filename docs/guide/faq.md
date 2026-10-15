@@ -98,7 +98,7 @@ A 13F is a quarterly report that large institutional investment managers (hedge 
 
 Yes, for European listings. Equibles imports verified share listings from the official directories of Euronext (Paris, Amsterdam, Brussels, Dublin, Oslo, Milan and Lisbon), Xetra, Nasdaq Stockholm, Helsinki and Copenhagen, BME, GPW and the London Stock Exchange. Each listing is keyed by ISIN and venue and carries daily prices in its own trading currency. See [Equity identity](../equity-identity.md) for how listings are verified.
 
-Foreign companies that file with the SEC (20-F, 40-F, 6-K) and their ADRs are covered by the SEC datasets. The other datasets cover the US only, among them 13F holdings, insider and congressional trades, FINRA short data, FRED indicators, CFTC and CBOE data, fund filings and government contracts. European listings have no MCP tools yet. [Equibles Cloud](https://equibles.com) adds Shanghai, Shenzhen, Beijing and Hong Kong listings.
+Foreign companies that file with the SEC (20-F, 40-F, 6-K) and their ADRs are covered by the SEC datasets. The other datasets cover the US only, among them 13F holdings, insider and congressional trades, FINRA short data, FRED indicators, CFTC and CBOE data, fund filings and government contracts. The MCP price, dividend, financial-statement and fund-holding tools accept a European listing as `MIC:TICKER` (for example `XPAR:AIR`), while a bare ticker always means the US listing. [Equibles Cloud](https://equibles.com) adds Shanghai, Shenzhen, Beijing and Hong Kong listings.
 
 ## Does Equibles provide real-time data?
 

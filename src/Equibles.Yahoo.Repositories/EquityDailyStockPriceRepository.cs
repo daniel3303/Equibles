@@ -135,6 +135,10 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
         return GetByStock(stock, ticker).Where(p => p.Volume > 0);
     }
 
+    /// <summary>One listing's traded rows, the venue counterpart of the ticker-keyed reads above.</summary>
+    public IQueryable<EquityDailyStockPrice> GetTradedByListing(Guid listingId) =>
+        GetByListing(listingId).Where(p => p.Volume > 0);
+
     public IQueryable<EquityDailyStockPrice> GetTradedByStock(EquityIssuer stock)
     {
         return GetByStock(stock).Where(p => p.Volume > 0);
