@@ -158,11 +158,17 @@ public class PriceSeriesSplitScopeTests
         var venue = NativeSplit("FR", "AIR");
         var sibling = NativeSplit("US", "AIR");
         var unattributed = new StockSplit { PriceSeriesTicker = "AIR", EffectiveDate = LegacyDate };
-        StockSplit[] events = [venue, sibling, unattributed];
+        var orphaned = new StockSplit
+        {
+            EquityListingId = Guid.NewGuid(),
+            PriceSeriesTicker = "AIR",
+            EffectiveDate = PrimaryDate,
+        };
+        StockSplit[] events = [venue, sibling, unattributed, orphaned];
 
         PriceSeriesSplitScope
             .ForPriceComparison(events, venue.EquityListingId.Value)
             .Should()
-            .BeEquivalentTo([venue, unattributed]);
+            .BeEquivalentTo([venue, unattributed, orphaned]);
     }
 }

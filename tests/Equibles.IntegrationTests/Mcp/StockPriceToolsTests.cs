@@ -117,6 +117,94 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
             .Contain("| XLON:BP | 2026-04-01 | 452.35 |");
     }
 
+    private async Task<EquityIssuer> SeedLondon(
+        params (DateOnly Date, decimal Close, long Volume)[] bars
+    )
+    {
+        EquityIssuer london = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BP",
+            Name: "BP p.l.c.",
+            MarketCountryCode: "GB",
+            MarketIdentifierCode: "XLON",
+            IdentityState: EquityIdentityState.Verified,
+            TradingCurrency: "GBP",
+            QuoteUnitMultiplier: 0.01m
+        );
+        london.Presentation.Listing.IdentitySourceUrl = "https://example.test/fca-register";
+        DbContext.Add(london);
+        foreach (var bar in bars)
+            DbContext.Add(
+                new EquityDailyStockPrice
+                {
+                    Listing = london.Presentation.Listing,
+                    EquityListingId = london.Presentation.Listing.Id,
+                    Date = bar.Date,
+                    Open = bar.Close,
+                    High = bar.Close,
+                    Low = bar.Close,
+                    Close = bar.Close,
+                    AdjustedClose = bar.Close,
+                    Volume = bar.Volume,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+        return london;
+    }
+
+    // A split whose listing is unknown is a boundary for the venue series too, so no change is stated across it.
+    [Fact]
+    public async Task VenueSymbol_UnattributedSplit_WithholdsTheChangeAcrossIt()
+    {
+        EquityIssuer london = await SeedLondon(
+            (new DateOnly(2026, 3, 2), 400m, 1_000),
+            (new DateOnly(2026, 3, 3), 452.35m, 1_000)
+        );
+        DbContext.Add(
+            new StockSplit
+            {
+                EquityIssuerId = london.Id,
+                PriceSeriesTicker = "BP",
+                EffectiveDate = new DateOnly(2026, 3, 3),
+                Numerator = 1m,
+                Denominator = 5m,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-03-03 | 452.35 | — | — |");
+    }
+
+    // A venue change spans one session only: an untraded session or a long gap leaves it blank.
+    [Fact]
+    public async Task VenueSymbol_ChangeNeverSpansAnUntradedSessionOrALongGap()
+    {
+        await SeedLondon(
+            (new DateOnly(2026, 3, 2), 400m, 1_000),
+            (new DateOnly(2026, 3, 3), 410m, 0),
+            (new DateOnly(2026, 3, 4), 452.35m, 1_000)
+        );
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-03-04 | 452.35 | — | — |");
+    }
+
+    [Fact]
+    public async Task VenueSymbol_AdjacentTradedSessions_StateTheChange()
+    {
+        await SeedLondon(
+            (new DateOnly(2026, 4, 2), 440m, 1_000),
+            (new DateOnly(2026, 4, 7), 452.35m, 1_000)
+        );
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-04-07 | 452.35 | +12.35 |");
+    }
+
     [Fact]
     public async Task VenueSymbol_UnknownListing_ExplainsTheSymbolForm()
     {

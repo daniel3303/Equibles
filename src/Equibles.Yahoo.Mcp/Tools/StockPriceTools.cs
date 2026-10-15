@@ -30,6 +30,9 @@ public class StockPriceTools
     // holidays and weekends, but a window starting weeks late is a young listing.
     private const int BaselineSlackDays = 14;
 
+    // The longest exchange closure a venue day change may span (Lunar New Year, Golden Week).
+    private const int VenueMaxSessionGapDays = 12;
+
     private readonly EquityDailyStockPriceRepository _priceRepository;
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
@@ -168,7 +171,7 @@ public class StockPriceTools
         ReadOnly = true
     )]
     [Description(
-        "Get each ticker's newest traded, settled daily close (USD for US listings; a MIC:TICKER listing on another exchange in its own trading currency, named in a note), with one-session change, volume, and trailing 52-week closing range. Rows can have different dates while a session settles; use the Date column. Change is omitted when the immediately prior trading session is absent. Split-limited or partial 52-week ranges are marked in the response. This is settled history, not an intraday quote."
+        "Get each ticker's newest traded, settled daily close (USD for US listings; a MIC:TICKER listing on another exchange in its own trading currency, named in a note), with one-session change, volume, and trailing 52-week closing range. Rows can have different dates while a session settles; use the Date column. Change is omitted when the immediately prior trading session is absent; for a MIC:TICKER row it compares with the previous traded close, omitted when that close is more than 12 days older or the listing has an untraded session in between. Split-limited or partial 52-week ranges are marked in the response. This is settled history, not an intraday quote."
     )]
     public Task<string> GetLatestClosingPrices(
         [Description(
@@ -332,12 +335,23 @@ public class StockPriceTools
                         price.Date,
                         applicableSplits
                     );
-                    var previousClose = DayChangeBasis(
-                        price,
-                        previous,
-                        comparableWindow.SplitBoundaryDate,
+                    var venueSessionSkipped =
                         listing.Venue != null
-                    );
+                        && previous != null
+                        && (
+                            price.Date.DayNumber - previous.Date.DayNumber > VenueMaxSessionGapDays
+                            || await _priceRepository
+                                .GetByListing(listing.Venue.Id)
+                                .AnyAsync(p => p.Date > previous.Date && p.Date < price.Date)
+                        );
+                    var previousClose = venueSessionSkipped
+                        ? null
+                        : DayChangeBasis(
+                            price,
+                            previous,
+                            comparableWindow.SplitBoundaryDate,
+                            listing.Venue != null
+                        );
                     var changeCell = "—";
                     var changePctCell = "—";
                     if (previousClose != null)
@@ -407,8 +421,9 @@ public class StockPriceTools
                                 "; ",
                                 venueUnits.Select(unit => $"{unit.Key} in {unit.Value}")
                             )
-                            + ". Their Change compares with the previous stored close, since each "
-                            + "exchange keeps its own holidays. Every other row is in USD."
+                            + ". Their Change compares with the previous traded close, since each "
+                            + "exchange keeps its own holidays, and is omitted when that close is more "
+                            + "than 12 days older or a session went untraded. Every other row is in USD."
                     );
                 }
 
@@ -852,7 +867,7 @@ public class StockPriceTools
 
             var suffixed = await _commonStockRepository.ResolveSuffixAfterUsMiss(
                 ticker,
-                resolved.Error
+                resolved.UsError
             );
             return suffixed.Venue == null
                 ? (null, resolved.Error)
@@ -865,20 +880,23 @@ public class StockPriceTools
             : (new PricedListing(stock, venue.Ticker, venue), null);
     }
 
+    // UsError is the issuer lookup's own error, null when a US issuer owns the spelling, so a suffix never
+    // answers for a ticker a US issuer holds.
     private async Task<(
         EquityIssuer Stock,
         string PriceTicker,
-        string Error
+        string Error,
+        string UsError
     )> ResolvePricedSpelling(string lookupTicker)
     {
         var (stock, error) = await _commonStockRepository.ResolveByTicker(lookupTicker);
         if (stock == null)
-            return (null, null, error);
+            return (null, null, error, error);
 
         var priceTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, lookupTicker);
         return priceTicker == null
-            ? (null, null, $"Stock '{lookupTicker}' not found.")
-            : (stock, priceTicker, null);
+            ? (null, null, $"Stock '{lookupTicker}' not found.", null)
+            : (stock, priceTicker, null, null);
     }
 
     // Strict argument parsing shared by the date-ranged price tools: a non-empty date must
