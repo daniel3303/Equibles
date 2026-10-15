@@ -83,7 +83,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         Encoding
             .UTF8.GetString(saved.Content.FileContent.Bytes)
             .Should()
-            .Contain("| Compute & Networking | 193,479 | 116,193 | 77,286 | 67 | % |");
+            .Contain("| Compute & Networking | 193,479 | 116,193 | 77,286 | 67% |");
         (await verify.Set<Equibles.Media.Data.Models.File>().AnyAsync(f => f.Id == oldContentId))
             .Should()
             .BeFalse();

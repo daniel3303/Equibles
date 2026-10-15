@@ -54,7 +54,10 @@ public class SecDocumentService : ISecDocumentService
                     documentType,
                     itemNumber
                 )
+                // Within a filing date, the latest EDGAR acceptance first; a row without one
+                // (a transcript, or a filing stored before acceptance capture) takes its ingestion time.
                 .OrderByDescending(d => d.ReportingDate)
+                .ThenByDescending(d => d.AcceptedAt ?? d.CreationTime)
                 .ThenByDescending(d => d.Id)
                 .Skip((int)offset)
                 .Take(maxItems)
@@ -75,8 +78,12 @@ public class SecDocumentService : ISecDocumentService
                 })
                 .ToListAsync();
 
-            foreach (var document in documents.Where(d => !SecForms.IsEdgar(d.DocumentType)))
-                document.AccessionNumber = null;
+            foreach (var document in documents)
+            {
+                document.ReportingForDate = Document.StatedPeriod(document.ReportingForDate.Value);
+                if (!SecForms.IsEdgar(document.DocumentType))
+                    document.AccessionNumber = null;
+            }
 
             _logger.LogInformation(
                 "Found {Count} recent documents for ticker filter {Ticker}",

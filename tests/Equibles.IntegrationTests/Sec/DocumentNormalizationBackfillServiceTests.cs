@@ -174,6 +174,35 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Backfill_RebuiltTextThatStaysIdentical_KeepsItsChunks()
+    {
+        // A normalizer change re-reads every 10-K; one it leaves byte-identical stays searchable.
+        var document = SeedDocument(normalizedContentVersion: Document.FirstContentBuilderVersion);
+        _secEdgarClient
+            .GetDocumentContent(
+                document.AccessionNumber,
+                _company.Cik,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(NvidiaSubmission);
+        var normalized = new SecDocumentHtmlToMarkdownConverter().Convert(
+            new SecDocumentHtmlNormalizer().Normalize(NvidiaSubmission)
+        );
+        _fileManager
+            .GetContent(Arg.Is<Equibles.Media.Data.Models.File>(f => f.Id == document.ContentId))
+            .Returns(Encoding.UTF8.GetBytes(normalized));
+
+        var result = await BuildSut().Backfill(batchSize: 1);
+
+        result.Unchanged.Should().Be(1);
+        await _persistenceService.DidNotReceiveWithAnyArgs().ResetChunks(default, default);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Set<Document>().SingleAsync(d => d.Id == document.Id))
+            .NormalizedContentVersion.Should()
+            .Be(Document.NormalizedContentBuilderVersion);
+    }
+
+    [Fact]
     public async Task Backfill_ShutdownCancellation_StopsTheSecRequestWithoutRecordingFailure()
     {
         var document = SeedDocument(normalizedContentVersion: 0);
@@ -458,6 +487,38 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(Document.NormalizedContentBuilderVersion - 1, true)]
+    [InlineData(Document.NormalizedContentBuilderVersion, false)]
+    public void Pending_EdgarText_FollowsTheEdgarBuilderVersion(int version, bool expected)
+    {
+        var edgar = SeedDocument(version);
+
+        new DocumentRepository(_dbContext)
+            .GetPendingNormalizedContent()
+            .Any(row => row.Id == edgar.Id)
+            .Should()
+            .Be(expected);
+    }
+
+    [Fact]
+    public void Pending_ReadableEsefBelowTheEdgarVersion_StaysSettled()
+    {
+        // The EDGAR builder version moves alone; ESEF text follows its own versions.
+        var esef = SeedEsef();
+        esef.XbrlType = XbrlType.JsonXbrl;
+        esef.NormalizedContentVersion = Document.NormalizedContentBuilderVersion - 1;
+        esef.Content.Size = 20;
+        _dbContext.SaveChanges();
+
+        new DocumentRepository(_dbContext)
+            .GetPendingNormalizedContent()
+            .Any(row => row.Id == esef.Id)
+            .Should()
+            .BeFalse();
     }
 
     [Theory]
@@ -753,11 +814,11 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
 
     private static bool CorrectedTable(string markdown) =>
         markdown.Contains(
-            "| Compute & Networking | 193,479 | 116,193 | 77,286 | 67 | % |",
+            "| Compute & Networking | 193,479 | 116,193 | 77,286 | 67% |",
             StringComparison.Ordinal
         )
         && markdown.Contains(
-            "116,193 | 77,286 | 67 | % |\n| Graphics | 22,459 | 14,304",
+            "116,193 | 77,286 | 67% |\n| Graphics | 22,459 | 14,304",
             StringComparison.Ordinal
         );
 

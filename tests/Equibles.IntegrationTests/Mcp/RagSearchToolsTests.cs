@@ -672,6 +672,26 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             );
     }
 
+    // EDGAR states no period for a registration statement; the row must not print the stored sentinel.
+    [Fact]
+    public async Task ListFilings_FilingWithoutAPeriod_ShowsADashNotTheSentinelDate()
+    {
+        var (_, document, _) = await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.SThree,
+            reportingDate: new DateOnly(2026, 10, 15),
+            accessionNumber: "0001140361-26-039665",
+            chunkContents: new[] { "Prospectus." }
+        );
+        document.ReportingForDate = DateOnly.MinValue;
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().ListFilings("AAPL");
+
+        result.Should().Contain("| S-3 | 2026-10-15 | — | — |");
+        result.Should().NotContain("0001-01-01");
+    }
+
     // An ESEF report keeps its own key in the accession column; it must never pass for an EDGAR accession.
     [Fact]
     public async Task ListFilings_ShowsAccessionAndAcceptance_OnlyForEdgarFilings()

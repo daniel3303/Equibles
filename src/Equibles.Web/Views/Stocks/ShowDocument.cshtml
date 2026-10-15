@@ -33,7 +33,9 @@
                     <div class="flex gap-2 flex-wrap">
                         <span class="badge badge-primary">@doc.DocumentType.DisplayName</span>
                         <span class="badge badge-info">@doc.ReportingDate.ToString("yyyy-MM-dd")</span>
-                        <span class="badge badge-neutral">For: @doc.ReportingForDate.ToString("yyyy-MM-dd")</span>
+                        @if (doc.StatedReportingForDate is { } period) {
+                            <span class="badge badge-neutral">For: @period.ToString("yyyy-MM-dd")</span>
+                        }
                     </div>
                 </div>
                 <div class="text-end">

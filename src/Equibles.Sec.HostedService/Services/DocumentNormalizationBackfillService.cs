@@ -115,10 +115,13 @@ public class DocumentNormalizationBackfillService
                 continue;
 
             result.Processed++;
-            var replayingReadableEsef =
-                document.DocumentType?.IsEsef() == true
-                && document.NormalizedContentVersion >= Document.NormalizedContentBuilderVersion
+            // Rebuilt, non-empty text keeps its chunks when a replay leaves it identical; text never
+            // rebuilt was split by the previous chunking strategy.
+            var replayingReadableText =
+                document.NormalizedContentVersion >= Document.FirstContentBuilderVersion
                 && document.Content?.Size > 0;
+            var replayingReadableEsef =
+                document.DocumentType?.IsEsef() == true && replayingReadableText;
             document.NormalizedContentAttempts++;
             var currentAttempt = document.NormalizedContentAttempts;
             if (
@@ -175,7 +178,7 @@ public class DocumentNormalizationBackfillService
 
                 if (await ContentMatches(document, normalizedContent))
                 {
-                    if (replayingReadableEsef)
+                    if (replayingReadableText)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         await _documentRepository.SaveChanges();

@@ -46,7 +46,8 @@ public class SecDocumentServiceTests
         DocumentType docType,
         DateOnly reportingDate,
         DateOnly reportingForDate,
-        string items = null
+        string items = null,
+        Guid? id = null
     )
     {
         var file = new Equibles.Media.Data.Models.File
@@ -60,6 +61,7 @@ public class SecDocumentServiceTests
 
         var doc = new Document
         {
+            Id = id ?? Guid.NewGuid(),
             EquityIssuerId = stock.Id,
             DocumentType = docType,
             ReportingDate = reportingDate,
@@ -96,6 +98,55 @@ public class SecDocumentServiceTests
 
         result.Select(document => document.Ticker).Should().Equal("MSFT", "AAPL");
     }
+
+    [Fact]
+    public async Task GetRecentDocuments_SameFilingDate_OrdersByAcceptanceThenIngestion()
+    {
+        // Ids ascend opposite to the expected order, and the morning filing was ingested last,
+        // so neither an id nor an ingestion-time order can pass for the acceptance order.
+        var stock = CreateStock();
+        var day = new DateOnly(2026, 10, 15);
+        var noon = CreateDocument(stock, DocumentType.EightK, day, day, id: Ordered(1));
+        noon.AcceptedAt = new DateTime(2026, 10, 15, 12, 5, 7, DateTimeKind.Utc);
+        noon.CreationTime = new DateTime(2026, 10, 15, 12, 14, 47, DateTimeKind.Utc);
+        var unaccepted = CreateDocument(stock, DocumentType.TenQ, day, day, id: Ordered(2));
+        unaccepted.CreationTime = new DateTime(2026, 10, 15, 11, 30, 0, DateTimeKind.Utc);
+        var morning = CreateDocument(stock, DocumentType.EightK, day, day, id: Ordered(3));
+        morning.AcceptedAt = new DateTime(2026, 10, 15, 11, 0, 33, DateTimeKind.Utc);
+        morning.CreationTime = new DateTime(2026, 10, 15, 12, 30, 0, DateTimeKind.Utc);
+        var earlierDay = CreateDocument(
+            stock,
+            DocumentType.EightK,
+            day.AddDays(-1),
+            day,
+            id: Ordered(4)
+        );
+        earlierDay.AcceptedAt = new DateTime(2026, 10, 14, 23, 0, 0, DateTimeKind.Utc);
+        await _context.SaveChangesAsync();
+
+        var result = await _sut.GetRecentDocuments("AAPL");
+
+        result.Select(d => d.Id).Should().Equal(noon.Id, unaccepted.Id, morning.Id, earlierDay.Id);
+    }
+
+    [Fact]
+    public async Task GetRecentDocuments_FilingWithoutAPeriod_ReturnsANullPeriod()
+    {
+        var stock = CreateStock();
+        var day = new DateOnly(2026, 10, 15);
+        var registration = CreateDocument(stock, DocumentType.SThree, day, DateOnly.MinValue);
+        var quarter = CreateDocument(stock, DocumentType.TenQ, day, new DateOnly(2026, 9, 30));
+
+        var result = await _sut.GetRecentDocuments("AAPL");
+
+        result.Single(d => d.Id == registration.Id).ReportingForDate.Should().BeNull();
+        result
+            .Single(d => d.Id == quarter.Id)
+            .ReportingForDate.Should()
+            .Be(new DateOnly(2026, 9, 30));
+    }
+
+    private static Guid Ordered(int value) => new($"00000000-0000-0000-0000-{value:D12}");
 
     [Fact]
     public async Task GetRecentDocuments_NoDocuments_ReturnsEmpty()
