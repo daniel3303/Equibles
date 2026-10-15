@@ -36,8 +36,8 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
             .ThenBy(row => row.Mic)
             .FirstOrDefaultAsync(cancellationToken);
 
-    // Live shares whose relevant venue is a home venue and whose issuer sought (or did not deny) a home admission; a
-    // German open market's own inclusion of a foreign share also gives it a German relevant venue.
+    // Live shares whose relevant venue is a home venue. Where the market requires it, the issuer must also have sought
+    // (or not denied) a home admission, since venues elsewhere misreport the flag on their own listings.
     public Task<int> CountHomeShares(
         EquityMarket market,
         DateTime asOf,
@@ -47,17 +47,16 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
         var authority = market.FirdsAuthority;
         var homeVenues = market.HomeVenueCodes;
         var live = GetLiveShares(asOf).Where(row => row.Authority == authority);
-        return live.Where(row =>
-                homeVenues.Contains(row.RelevantTradingVenue)
-                && live.Any(line =>
+        var home = live.Where(row => homeVenues.Contains(row.RelevantTradingVenue));
+        if (market.HomeRequiresIssuerRequest)
+            home = home.Where(row =>
+                live.Any(line =>
                     line.Isin == row.Isin
                     && homeVenues.Contains(line.Mic)
                     && line.IssuerRequested != false
                 )
-            )
-            .Select(row => row.Isin)
-            .Distinct()
-            .CountAsync(cancellationToken);
+            );
+        return home.Select(row => row.Isin).Distinct().CountAsync(cancellationToken);
     }
 
     public Task UpsertRange(

@@ -14,7 +14,7 @@ namespace Equibles.IntegrationTests.EquityMarkets;
 /// Contract: the newest complete full set replaces the authority's universe (rows it no longer states
 /// are retired, not deleted), later deltas are applied once each in publication order, an already
 /// recorded file is never downloaded again, and the primary-venue share gate answers from the result.
-/// A market's home shares are the live shares homed on its venues whose issuer sought a home admission.
+/// A market's home shares are the live shares homed on its venues; Xetra also needs the issuer to have sought one.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
@@ -151,8 +151,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-helsinki"), now))
             .Should()
             .Be(
-                0,
-                "Raisio's home is Helsinki's DHEL, but its only line in the fixture is on Aquis, which is no Helsinki venue"
+                1,
+                "Aquis-quoted Raisio has its home on Nasdaq Helsinki's Nordic@Mid segment DHEL, a catalogued home venue"
             );
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-stockholm"), now))
             .Should()
@@ -167,7 +167,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
     }
 
     [Fact]
-    public async Task HomeShares_CountOnlySharesWhoseIssuerSoughtAHomeAdmission()
+    public async Task HomeShares_NeedAnIssuerRequestOnlyWhereTheMarketRequiresIt()
     {
         var observedAt = DateTime.UtcNow;
         FirdsInstrumentRecord Line(
@@ -209,6 +209,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var otherRegister = Line("US0378331005", "XETA", "FRAB", true);
         otherRegister.Authority = FcaFirdsClient.AuthorityCode;
         DbContext.Set<FirdsInstrumentRecord>().AddRange(terminated, otherRegister);
+        // Oslo reports its own main-board listings as not issuer-requested; a market without the rule still counts them.
+        DbContext.Set<FirdsInstrumentRecord>().Add(Line("BMG9156K1018", "XOSL", "XOSL", false));
         await DbContext.SaveChangesAsync();
         var records = new FirdsInstrumentRecordRepository(DbContext);
         var xetra = EquityMarketCatalog.TryGet("xetra");
@@ -219,6 +221,9 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         (await records.CountHomeShares(xetra, observedAt))
             .Should()
             .Be(2, "a restated line that denies an issuer request stops counting");
+        (await records.CountHomeShares(EquityMarketCatalog.TryGet("euronext-oslo"), observedAt))
+            .Should()
+            .Be(1);
     }
 
     [Fact]
