@@ -4,6 +4,8 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Repositories;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Finra.Data;
 using Equibles.Finra.Repositories;
@@ -67,7 +69,8 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
             new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new EquityIssuerRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext),
+            stockSplitRepository: new StockSplitRepository(_dbContext)
         );
     }
 
@@ -114,5 +117,62 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
             .Should()
             .ContainInOrder(new DateOnly(2024, 12, 31), new DateOnly(2024, 9, 30));
         result.Holdings.Should().OnlyContain(h => h.InstitutionalHolderId == holder.Id);
+    }
+
+    [Fact]
+    public async Task LoadHolderDetail_ShareEventConfirmedOnlyOnAMirrorListing_RestatesThePosition()
+    {
+        // HON's shape: the US series carries the spin-off price factor, the Euronext mirror the
+        // 1:2 the issuer's counts confirm; the loader must bring the mirror's row to the scope.
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "HON",
+            Name: "Honeywell"
+        );
+        var holder = new InstitutionalHolder { Cik = "0000102909", Name = "Vanguard" };
+        var mirror = new EquityListing
+        {
+            Ticker = "1HON",
+            MarketCountryCode = "IT",
+            MarketIdentifierCode = "BGEM",
+            Security = new EquitySecurity { Issuer = stock },
+        };
+        _dbContext.AddRange(stock, holder, mirror);
+        var eventDate = new DateOnly(2026, 6, 29);
+        _dbContext.AddRange(
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                Listing = stock.Presentation.Listing,
+                PriceSeriesTicker = "HON",
+                EffectiveDate = eventDate,
+                Numerator = 1907m,
+                Denominator = 2000m,
+                ShareCountEvidence = StockSplitShareCountEvidence.Contradicted,
+            },
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                Listing = mirror,
+                PriceSeriesTicker = "1HON",
+                EffectiveDate = eventDate,
+                Numerator = 1m,
+                Denominator = 2m,
+                ShareCountEvidence = StockSplitShareCountEvidence.Confirmed,
+            },
+            new InstitutionalHolding
+            {
+                EquityIssuerId = stock.Id,
+                InstitutionalHolderId = holder.Id,
+                FilingDate = new DateOnly(2026, 5, 9),
+                ReportDate = new DateOnly(2026, 3, 31),
+                Value = 1_000,
+                Shares = 63_161_731,
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadHolderDetail(stock, holder);
+
+        result.Holdings.Single().Shares.Should().Be(31_580_866);
     }
 }
