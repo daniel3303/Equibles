@@ -65,10 +65,13 @@ public static class EquityListingSymbol
 
     private const int MarketIdentifierCodeLength = 4;
 
-    /// <summary>What a reader whose data covers US listings only answers an exchange-qualified symbol.</summary>
+    /// <summary>
+    /// What a reader whose data covers US listings only answers an exchange-qualified symbol. It never
+    /// suggests the bare ticker, which often names a different US company (XPAR:AIR is Airbus, AIR is AAR).
+    /// </summary>
     public static string UsOnlyNotice(string symbol) =>
-        $"'{symbol?.Trim()}' is an exchange-qualified symbol (MIC:TICKER); this data covers US listings only, "
-        + "so pass the bare US ticker instead.";
+        $"'{symbol?.Trim()}' names a listing outside the US (MIC:TICKER), and this data covers US listings only. "
+        + "Its bare ticker can belong to a different US company, so use a US ticker only when it is this company's own US listing.";
 
     private static string Compose(
         string ticker,
