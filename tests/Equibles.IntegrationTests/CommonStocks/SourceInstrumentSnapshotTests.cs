@@ -555,6 +555,7 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
     [InlineData("reissued-without-issuer-number")]
     [InlineData("another-issuer-number")]
     [InlineData("owned-elsewhere")]
+    [InlineData("same-issuer-number-owned-elsewhere")]
     public async Task AnIsinConflictRefusesOnlyItsRowAndTheSnapshotStillApplies(string conflict)
     {
         await using var services = Services();
@@ -562,13 +563,14 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
         var manager = new EquityDirectorySnapshotManager(factory);
         var importer = new EquityDirectoryIdentityImporter(factory);
         var recorded =
-            conflict == "reissued-without-issuer-number" ? "HK0000069689" : "KYG5924H1231";
+            conflict == "reissued-without-issuer-number" ? "HK0000050093" : "KYG5924H1231";
         var first = Listing();
         first.Isin = recorded;
         var other = Listing("share-b", "00002");
         other.SourceIssuerIdentifier = "issuer-b";
         other.SourceSecurityIdentifier = "security-b";
-        other.Isin = "KYG4052M1116";
+        other.Isin =
+            conflict == "same-issuer-number-owned-elsewhere" ? "KYG5924H1561" : "KYG4052M1116";
         first.DirectorySnapshotId = other.DirectorySnapshotId = await manager.Reconcile(
             Snapshot(0, first, other)
         );
@@ -578,9 +580,9 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
         var changed = Listing();
         changed.Isin = conflict switch
         {
-            "reissued-without-issuer-number" => "HK0000050325",
+            "reissued-without-issuer-number" => "HK0000050176",
             "another-issuer-number" => "KYG4052M1520",
-            _ => "KYG4052M1116",
+            _ => other.Isin,
         };
         var added = Listing("share-c", "00003");
         added.SourceIssuerIdentifier = "issuer-c";

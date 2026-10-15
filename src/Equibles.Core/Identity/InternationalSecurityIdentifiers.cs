@@ -35,7 +35,7 @@ public static class InternationalSecurityIdentifiers
         return sum % 10 == 0;
     }
 
-    // ANNA names CUSIP Global Services the substitute numbering agency for these jurisdictions, so their ISINs embed a
+    // ANNA's jurisdictions without a national agency whose substitute is CUSIP Global Services, so their ISINs embed a
     // CINS whose first six characters number the issuer. US and Canadian CUSIPs keep their own SEC identity paths.
     private static readonly HashSet<string> CusipNumberedJurisdictions =
     [

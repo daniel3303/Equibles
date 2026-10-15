@@ -14,7 +14,7 @@ public class CusipIssuerNumberTests
 
     // A national agency's sequential number embeds no issuer, and US CUSIPs keep their own SEC identity paths.
     [Theory]
-    [InlineData("HK0000069689")]
+    [InlineData("HK0000050093")]
     [InlineData("CNE1000003G1")]
     [InlineData("US02079K3059")]
     public void AnotherNumberingAgencyYieldsNone(string isin) =>
