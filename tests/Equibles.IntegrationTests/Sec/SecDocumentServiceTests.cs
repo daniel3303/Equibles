@@ -129,6 +129,23 @@ public class SecDocumentServiceTests
         result.Select(d => d.Id).Should().Equal(noon.Id, unaccepted.Id, morning.Id, earlierDay.Id);
     }
 
+    [Fact]
+    public async Task GetRecentDocuments_FilingWithoutAPeriod_ReturnsANullPeriod()
+    {
+        var stock = CreateStock();
+        var day = new DateOnly(2026, 10, 15);
+        var registration = CreateDocument(stock, DocumentType.SThree, day, DateOnly.MinValue);
+        var quarter = CreateDocument(stock, DocumentType.TenQ, day, new DateOnly(2026, 9, 30));
+
+        var result = await _sut.GetRecentDocuments("AAPL");
+
+        result.Single(d => d.Id == registration.Id).ReportingForDate.Should().BeNull();
+        result
+            .Single(d => d.Id == quarter.Id)
+            .ReportingForDate.Should()
+            .Be(new DateOnly(2026, 9, 30));
+    }
+
     private static Guid Ordered(int value) => new($"00000000-0000-0000-0000-{value:D12}");
 
     [Fact]

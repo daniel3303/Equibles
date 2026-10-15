@@ -20,7 +20,7 @@
                         <tr>
                             <td><span class="badge badge-primary badge-sm">@doc.DocumentType.DisplayName</span></td>
                             <td>@doc.ReportingDate.ToString("yyyy-MM-dd")</td>
-                            <td>@(doc.ReportingForDate != doc.ReportingDate ? doc.ReportingForDate.ToString("yyyy-MM-dd") : "")</td>
+                            <td>@(doc.StatedReportingForDate is { } period && period != doc.ReportingDate ? period.ToString("yyyy-MM-dd") : "")</td>
                             <td class="text-right">
                                 <a asp-controller="Stocks" asp-action="ShowDocument"
                                    asp-route-ticker="@Model.Ticker" asp-route-id="@doc.Id"

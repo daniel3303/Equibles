@@ -63,6 +63,15 @@ public class Document
 
     public DateOnly ReportingForDate { get; set; }
 
+    /// <summary>
+    /// The period the filing covers, or null when EDGAR states none (a registration statement,
+    /// a tender offer, some proxies); the column stores that absence as <see cref="DateOnly.MinValue"/>.
+    /// </summary>
+    public DateOnly? StatedReportingForDate => StatedPeriod(ReportingForDate);
+
+    public static DateOnly? StatedPeriod(DateOnly reportingForDate) =>
+        reportingForDate == DateOnly.MinValue ? null : reportingForDate;
+
     public int LineCount { get; set; }
 
     /// <summary>

@@ -385,7 +385,10 @@ public class RagSearchTools
                         var accepted = doc.AcceptedAt is { } at
                             ? McpFormat.Invariant(at, "yyyy-MM-dd HH:mm:ss")
                             : "—";
-                        return $"{MarkdownTable.EscapeCell(doc.Ticker)} | {MarkdownTable.EscapeCell(doc.CompanyName)} | {doc.Id} | {doc.DocumentType} | {McpFormat.Invariant(doc.ReportingDate, "yyyy-MM-dd")} | {McpFormat.Invariant(doc.ReportingForDate, "yyyy-MM-dd")} | {MarkdownTable.EscapeCell(items, "—")} | {McpFormat.WholeNumber(doc.LineCount)} | {MarkdownTable.EscapeCell(doc.AccessionNumber, "—")} | {accepted}";
+                        var period = doc.ReportingForDate is { } date
+                            ? McpFormat.Invariant(date, "yyyy-MM-dd")
+                            : "—";
+                        return $"{MarkdownTable.EscapeCell(doc.Ticker)} | {MarkdownTable.EscapeCell(doc.CompanyName)} | {doc.Id} | {doc.DocumentType} | {McpFormat.Invariant(doc.ReportingDate, "yyyy-MM-dd")} | {period} | {MarkdownTable.EscapeCell(items, "—")} | {McpFormat.WholeNumber(doc.LineCount)} | {MarkdownTable.EscapeCell(doc.AccessionNumber, "—")} | {accepted}";
                     }
                 );
 

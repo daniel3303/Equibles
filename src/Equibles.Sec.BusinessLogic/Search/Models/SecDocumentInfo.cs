@@ -34,9 +34,10 @@ public class SecDocumentInfo
     public DateOnly ReportingDate { get; set; }
 
     /// <summary>
-    /// The reporting period end date that the document covers (e.g., fiscal quarter or year end).
+    /// The reporting period end date that the document covers (e.g., fiscal quarter or year end),
+    /// or null when the filing states none.
     /// </summary>
-    public DateOnly ReportingForDate { get; set; }
+    public DateOnly? ReportingForDate { get; set; }
 
     /// <summary>
     /// Total number of lines in the document content.
