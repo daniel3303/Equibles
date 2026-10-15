@@ -35,6 +35,36 @@ public static class InternationalSecurityIdentifiers
         return sum % 10 == 0;
     }
 
+    // ANNA names CUSIP Global Services the substitute numbering agency for these jurisdictions, so their ISINs embed a
+    // CINS whose first six characters number the issuer. US and Canadian CUSIPs keep their own SEC identity paths.
+    private static readonly HashSet<string> CusipNumberedJurisdictions =
+    [
+        .. "AG AI AS AW BL BM BS BZ CW DM FM GD GS GY HT KN KY LC MF MH MP PR PW SR SX TT UM VC VG VI YT".Split(
+            ' '
+        ),
+    ];
+
+    // The country code and CUSIP issuer number of a CUSIP-numbered ISIN whose embedded CINS check digit holds; else null.
+    public static string CusipIssuerNumber(string isin)
+    {
+        if (
+            !IsValidIsin(isin)
+            || !CusipNumberedJurisdictions.Contains(isin[..2])
+            || !char.IsAsciiDigit(isin[10])
+        )
+            return null;
+        var sum = 0;
+        for (var index = 0; index < 8; index++)
+        {
+            var character = isin[2 + index];
+            var value = character <= '9' ? character - '0' : character - 'A' + 10;
+            if (index % 2 == 1)
+                value *= 2;
+            sum += value / 10 + value % 10;
+        }
+        return (10 - sum % 10) % 10 == isin[10] - '0' ? isin[..8] : null;
+    }
+
     // ISO 17442 uses the ISO 7064 MOD 97-10 check.
     public static bool IsValidLei(string value)
     {
