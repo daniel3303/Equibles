@@ -83,11 +83,13 @@ public class EmbeddingRepository : BaseRepository<Embedding>
             var normalizedTicker = ticker.ToUpperInvariant();
             var documents = DbContext
                 .Set<Document>()
-                .ForUsTicker(ticker, DbContext)
+                .ForListingSymbol(ticker, DbContext)
                 .Select(document => document.Id);
-            query = query.Where(e =>
-                e.Chunk.Ticker == normalizedTicker && documents.Contains(e.Chunk.DocumentId)
-            );
+            query = DocumentTickerQueryExtensions.IsVenueSymbol(ticker)
+                ? query.Where(e => documents.Contains(e.Chunk.DocumentId))
+                : query.Where(e =>
+                    e.Chunk.Ticker == normalizedTicker && documents.Contains(e.Chunk.DocumentId)
+                );
         }
 
         if (documentId.HasValue)

@@ -121,8 +121,9 @@ public class ChunkRepository : BaseRepository<Chunk>
         // Ticker (raw tokenizer) and DocumentType (single-token enum values) are stored
         // lowercased; Term is an exact, untokenized match, so the filter value must be
         // lowercased to line up with the indexed token. DocumentId is a UUID and matches
-        // as-is.
-        if (ticker != null)
+        // as-is. A venue symbol filters by its issuer's documents instead (a few hundred at
+        // most): their chunks carry whichever presentation ticker they were cut under.
+        if (ticker != null && !DocumentTickerQueryExtensions.IsVenueSymbol(ticker))
             clauses.Add(ParadeDbJsonQuery.TermSet(nameof(Chunk.Ticker), ticker.ToLowerInvariant()));
 
         if (documentId.HasValue)
@@ -149,6 +150,17 @@ public class ChunkRepository : BaseRepository<Chunk>
         deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
+            if (ticker != null && DocumentTickerQueryExtensions.IsVenueSymbol(ticker))
+            {
+                var venueDocuments = await DbContext
+                    .Set<Document>()
+                    .ForListingSymbol(ticker, DbContext)
+                    .Select(document => (object)document.Id)
+                    .ToArrayAsync(deadline.Token);
+                if (venueDocuments.Length == 0)
+                    return [];
+                clauses.Add(ParadeDbJsonQuery.TermSet(nameof(Chunk.DocumentId), venueDocuments));
+            }
             var dateFilter = ChunkDateScope.IndexFilter(startDate, endDate);
             if (dateFilter != null)
             {
@@ -337,11 +349,13 @@ public class ChunkRepository : BaseRepository<Chunk>
             var normalizedTicker = ticker.ToUpperInvariant();
             var documents = DbContext
                 .Set<Document>()
-                .ForUsTicker(ticker, DbContext)
+                .ForListingSymbol(ticker, DbContext)
                 .Select(document => document.Id);
-            query = query.Where(c =>
-                c.Ticker == normalizedTicker && documents.Contains(c.DocumentId)
-            );
+            query = DocumentTickerQueryExtensions.IsVenueSymbol(ticker)
+                ? query.Where(c => documents.Contains(c.DocumentId))
+                : query.Where(c =>
+                    c.Ticker == normalizedTicker && documents.Contains(c.DocumentId)
+                );
         }
 
         if (documentId.HasValue)

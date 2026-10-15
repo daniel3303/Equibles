@@ -59,7 +59,7 @@ public class DocumentRepository : BaseRepository<Document>
     }
 
     public IQueryable<Document> GetByTicker(string ticker) =>
-        GetAll().ForUsTicker(ticker, DbContext);
+        GetAll().ForListingSymbol(ticker, DbContext);
 
     public IQueryable<Document> GetByDocumentType(DocumentType documentType)
     {
