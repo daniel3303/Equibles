@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
@@ -80,7 +81,9 @@ public class RagSearchTools
             "Search query — plain keywords or a short natural-language phrase. In ranked mode, when too few excerpts match every word, the search automatically broadens to match any of the words; concise, filing-phrased terms (e.g. 'Data Center revenue') still rank best. In phrase mode, the exact phrase to find."
         )]
             string query,
-        [Description("Optional company ticker. Omit to search across all companies.")]
+        [Description(
+            "Optional company ticker; a listing outside the US is MIC:TICKER (e.g. XPAR:AIR). Omit to search across all companies."
+        )]
             string ticker = null,
         [Description("Maximum number of results to return (default: 5, max: 500)")]
             int maxResults = 5,
@@ -125,21 +128,15 @@ public class RagSearchTools
                     if (parsedTickers != null)
                         return "ticker and excludeTickers cannot be combined.";
 
-                    var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
-                    if (normalizedTicker == null)
-                        return McpToolExecutor.StockNotFound(ticker);
-
-                    EquityIssuer stock = await _commonStockRepository.GetUsByTicker(
-                        normalizedTicker
-                    );
-                    if (stock == null)
-                        return McpToolExecutor.StockNotFound(ticker);
+                    var (_, filer, filerError) = await ResolveFiler(ticker);
+                    if (filerError != null)
+                        return filerError;
 
                     chunks = await SearchOrTimeoutFault(
                         () =>
                             _ragManager.SearchRelevantChunksByCompany(
                                 query,
-                                stock.Presentation.Listing.Ticker,
+                                filer,
                                 maxResults,
                                 parsedTypes,
                                 ToDateOnly(startDate),
@@ -265,7 +262,9 @@ public class RagSearchTools
         "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, EDGAR accession numbers and acceptance times (UTC; blank for filings stored before October 2026), and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. Pass a returned ID to SearchDocument or ReadDocumentLines."
     )]
     public Task<string> ListFilings(
-        [Description("Optional company ticker symbol (e.g., AAPL, MSFT). Omit for all companies.")]
+        [Description(
+            "Optional company ticker symbol (e.g., AAPL, MSFT); a listing outside the US is MIC:TICKER (e.g. XPAR:AIR), whose list includes its ESEF reports. Omit for all companies."
+        )]
             string ticker = null,
         [Description("Page number for pagination (default: 1)")] int page = 1,
         [Description("Maximum number of documents per page (default: 10)")] int maxItems = 10,
@@ -299,15 +298,12 @@ public class RagSearchTools
                     return $"Invalid itemNumber '{itemNumber}'. Use an SEC item number such as 2.02, 5.02, or 1.01.";
 
                 EquityIssuer stock = null;
+                string filer = null;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
-                    var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
-                    if (normalizedTicker == null)
-                        return McpToolExecutor.StockNotFound(ticker);
-
-                    stock = await _commonStockRepository.GetUsByTicker(normalizedTicker);
-                    if (stock == null)
-                        return McpToolExecutor.StockNotFound(ticker);
+                    (stock, filer, var filerError) = await ResolveFiler(ticker);
+                    if (filerError != null)
+                        return filerError;
                 }
 
                 maxItems = McpLimit.Clamp(maxItems);
@@ -320,14 +316,14 @@ public class RagSearchTools
                 try
                 {
                     totalCount = await _secDocumentService.CountDocuments(
-                        stock?.Presentation?.Listing?.Ticker,
+                        filer,
                         startDate,
                         endDate,
                         parsedType,
                         normalizedItemNumber
                     );
                     documents = await _secDocumentService.GetRecentDocuments(
-                        stock?.Presentation?.Listing?.Ticker,
+                        filer,
                         startDate,
                         endDate,
                         maxItems,
@@ -353,15 +349,10 @@ public class RagSearchTools
                     if (!hasFilters)
                         return stock == null
                             ? "No filings are stored."
-                            : $"No documents found for ticker {stock.Presentation.Listing.Ticker}";
+                            : $"No documents found for ticker {filer}";
 
-                    var scope =
-                        stock == null
-                            ? "the market-wide corpus"
-                            : stock.Presentation.Listing.Ticker;
-                    var unfiltered = await _secDocumentService.CountDocuments(
-                        stock?.Presentation?.Listing?.Ticker
-                    );
+                    var scope = stock == null ? "the market-wide corpus" : filer;
+                    var unfiltered = await _secDocumentService.CountDocuments(filer);
                     return $"No documents match the given filters for {scope} — {McpFormat.WholeNumber(unfiltered)} document(s) exist without them. Relax documentType/itemNumber/startDate/endDate.";
                 }
 
@@ -372,7 +363,7 @@ public class RagSearchTools
                 var result = MarkdownTable.Start(
                     stock == null
                         ? $"Market-wide filings — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):"
-                        : $"Financial documents for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Presentation.Listing.Ticker)}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
+                        : $"Financial documents for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(filer)}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
                     "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC)",
                     "-------|---------|----|------|-------|---------------|-------|-------|-----------|---------------"
                 );
@@ -455,6 +446,37 @@ public class RagSearchTools
                     t.DisplayName == t.Value ? $"'{t.Value}'" : $"'{t.Value}' ({t.DisplayName})"
                 )
         );
+
+    // A bare ticker is the US filer, as before. MIC:TICKER, or a provider suffix after a US miss, names
+    // a listing outside the US, scoped to that issuer's documents under the listing's display symbol.
+    private async Task<(EquityIssuer Stock, string Filer, string Error)> ResolveFiler(string ticker)
+    {
+        if (EquityListingSymbol.TryParse(ticker, out _, out _))
+        {
+            var (venueStock, venue, venueError) = await _commonStockRepository.ResolveListing(
+                ticker
+            );
+            return venue == null
+                ? (null, null, venueError)
+                : (venueStock, EquityListingSymbol.Display(venue), null);
+        }
+
+        var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
+        if (normalizedTicker == null)
+            return (null, null, McpToolExecutor.StockNotFound(ticker));
+        EquityIssuer stock = await _commonStockRepository.GetUsByTicker(normalizedTicker);
+        if (stock != null)
+            return (stock, stock.Presentation.Listing.Ticker, null);
+
+        var notFound = McpToolExecutor.StockNotFound(ticker);
+        var (suffixStock, suffixVenue, _) = await _commonStockRepository.ResolveSuffixAfterUsMiss(
+            ticker,
+            notFound
+        );
+        return suffixVenue == null
+            ? (null, null, notFound)
+            : (suffixStock, EquityListingSymbol.Display(suffixVenue), null);
+    }
 
     private static bool TryParseTickers(
         IReadOnlyCollection<string> tickers,

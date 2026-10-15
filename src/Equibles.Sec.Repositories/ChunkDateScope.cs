@@ -51,7 +51,7 @@ internal static class ChunkDateScope
     {
         IQueryable<Document> documents = context.Set<Document>();
         if (ticker != null)
-            documents = documents.ForUsTicker(ticker, context);
+            documents = documents.ForListingSymbol(ticker, context);
         if (documentId is { } id)
             documents = documents.Where(document => document.Id == id);
         if (documentTypes is { Count: > 0 })

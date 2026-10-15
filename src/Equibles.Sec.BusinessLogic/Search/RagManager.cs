@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -148,7 +149,7 @@ public class RagManager : IRagManager
         var groupedChunks = chunks.GroupBy(c => new
         {
             c.Document.Id,
-            Ticker = c.Document.Issuer.Presentation?.Listing?.Ticker,
+            Ticker = EquityListingSymbol.Display(c.Document.Issuer),
             c.Document.DocumentType,
             c.Document.ReportingDate,
         });
@@ -247,8 +248,11 @@ public class RagManager : IRagManager
             + " […truncated — raise maxExcerptChars or use ReadDocumentLines for the full text]";
     }
 
+    // A venue symbol already names one listing; the repositories scope it by its issuer's documents.
     private async Task<string> ResolvePrimaryTicker(string ticker)
     {
+        if (EquityListingSymbol.TryParse(ticker, out _, out _))
+            return ticker.Trim();
         EquityIssuer stock = await _commonStockRepository.GetUsByTicker(ticker);
         return stock?.Presentation?.Listing?.Ticker ?? ticker;
     }
