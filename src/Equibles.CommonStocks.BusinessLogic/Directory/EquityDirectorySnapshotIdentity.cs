@@ -74,35 +74,46 @@ internal static class EquityDirectorySnapshotIdentity
             .ToDictionaryAsync(row => row.Isin, token);
         var retained = new HashSet<Guid>();
         var present = new HashSet<string>(StringComparer.Ordinal);
+        var conflicted = new HashSet<Guid>();
         foreach (var row in input.Listings)
         {
             present.Add(row.SourceListingIdentifier);
-            if (
+            var isinConflict =
                 securities.TryGetValue(row.SourceSecurityIdentifier, out var boundSecurity)
                 && row.Isin != null
                 && (
                     boundSecurity.Isin != null && row.Isin != boundSecurity.Isin
                     || isinIdentities.TryGetValue(row.Isin, out var byIsin)
                         && byIsin.Id != boundSecurity.EquitySecurityId
-                )
-            )
-                throw new InvalidDataException(
-                    "Directory snapshot conflicts with its security ISIN."
                 );
-            if (!bindings.TryGetValue(row.SourceListingIdentifier, out var binding))
-                continue;
-            var listing = binding.Listing;
+            bindings.TryGetValue(row.SourceListingIdentifier, out var binding);
+            var listing = binding?.Listing;
             if (
-                !securities.TryGetValue(row.SourceSecurityIdentifier, out var security)
-                || security.EquitySecurityId != listing.EquitySecurityId
+                listing != null
+                && (
+                    !securities.TryGetValue(row.SourceSecurityIdentifier, out var security)
+                    || security.EquitySecurityId != listing.EquitySecurityId
+                )
             )
                 throw new InvalidDataException(
                     "Directory snapshot conflicts with its instrument identifiers."
                 );
-            if (!MatchesInstrument(row, listing) || listing.DelistedOn != null)
+            if (
+                listing != null
+                && (!MatchesInstrument(row, listing, isinConflict) || listing.DelistedOn != null)
+            )
                 throw new InvalidDataException(
                     "Directory snapshot conflicts with its instrument quotation identity."
                 );
+            if (isinConflict)
+            {
+                // A venue reissues an ISIN under a stable code on routine corporate actions. That row's own import
+                // refuses it; the security it claims keeps its listings as they are, and the rest of the market applies.
+                conflicted.Add(boundSecurity.EquitySecurityId);
+                continue;
+            }
+            if (listing == null)
+                continue;
             // A rename is applied by the subsequent row import, preserving the listing's stable identity.
             if (row.Ticker == listing.Ticker)
                 retained.Add(listing.Id);
@@ -113,7 +124,12 @@ internal static class EquityDirectorySnapshotIdentity
                 && input.MarketIdentifierCodes.Contains(binding.Listing.MarketIdentifierCode)
             )
         )
-            binding.IsDirectoryListed = present.Contains(binding.Identifier);
+        {
+            if (conflicted.Contains(binding.Listing.EquitySecurityId))
+                retained.Add(binding.EquityListingId);
+            else
+                binding.IsDirectoryListed = present.Contains(binding.Identifier);
+        }
         var independentlyListed = await issuers
             .GetListingIdentifiers()
             .Where(row => row.Source != input.Source && row.IsDirectoryListed)
@@ -126,10 +142,20 @@ internal static class EquityDirectorySnapshotIdentity
         return retained;
     }
 
-    private static bool MatchesInstrument(EquityDirectoryListingKey row, EquityListing listing) =>
+    // A row whose ISIN conflicts is refused by its own import, so only its venue and currency must still match here.
+    private static bool MatchesInstrument(
+        EquityDirectoryListingKey row,
+        EquityListing listing,
+        bool isinConflict
+    ) =>
         row.MarketIdentifierCode == listing.MarketIdentifierCode
         && row.TradingCurrency == listing.TradingCurrency
-        && (row.Isin == null || listing.Security.Isin == null || row.Isin == listing.Security.Isin);
+        && (
+            isinConflict
+            || row.Isin == null
+            || listing.Security.Isin == null
+            || row.Isin == listing.Security.Isin
+        );
 
     private static bool ValidIdentifier(string value) =>
         !string.IsNullOrWhiteSpace(value) && value.Length <= 128 && value == value.Trim();
