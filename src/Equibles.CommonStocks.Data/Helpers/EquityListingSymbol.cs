@@ -38,6 +38,37 @@ public static class EquityListingSymbol
         string marketIdentifierCode
     ) => Compose(ticker, marketCountryCode, marketIdentifierCode, FileSafeSeparator);
 
+    /// <summary>
+    /// Reads the display spelling back: <c>XPAR:AIR</c> yields the venue code and ticker. A bare
+    /// ticker is not a venue symbol, because a US listing is always written without a code.
+    /// </summary>
+    public static bool TryParse(string symbol, out string marketIdentifierCode, out string ticker)
+    {
+        marketIdentifierCode = null;
+        ticker = null;
+        if (string.IsNullOrWhiteSpace(symbol))
+            return false;
+
+        var trimmed = symbol.Trim();
+        var separator = trimmed.IndexOf(DisplaySeparator);
+        if (separator != MarketIdentifierCodeLength)
+            return false;
+        var code = trimmed[..separator].ToUpperInvariant();
+        var listed = TickerNormalizer.NormalizeListed(trimmed[(separator + 1)..]);
+        if (!code.All(char.IsAsciiLetterOrDigit) || listed == null)
+            return false;
+
+        marketIdentifierCode = code;
+        ticker = listed;
+        return true;
+    }
+
+    private const int MarketIdentifierCodeLength = 4;
+
+    /// <summary>What a reader whose data covers US listings only answers a venue symbol.</summary>
+    public static string UsOnlyNotice(string symbol) =>
+        $"'{symbol?.Trim()}' is a listing outside the US; this data covers US listings only.";
+
     private static string Compose(
         string ticker,
         string marketCountryCode,

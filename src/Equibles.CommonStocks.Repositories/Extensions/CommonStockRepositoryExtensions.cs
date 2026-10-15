@@ -164,6 +164,8 @@ public static class CommonStockRepositoryExtensions
         string ticker
     )
     {
+        if (EquityListingSymbol.TryParse(ticker, out _, out _))
+            return (null, EquityListingSymbol.UsOnlyNotice(ticker));
         var (stock, ambiguous) = await repository.ResolveCurrentByTicker(ticker);
         return stock != null ? (stock, null)
             : ambiguous ? (null, Ambiguous(ticker))
@@ -180,6 +182,8 @@ public static class CommonStockRepositoryExtensions
         string ticker
     )
     {
+        if (EquityListingSymbol.TryParse(ticker, out _, out _))
+            return (null, EquityListingSymbol.UsOnlyNotice(ticker));
         var (stock, ambiguous) = await repository.ResolveCurrentByTicker(ticker);
         if (stock != null)
             return (stock, null);

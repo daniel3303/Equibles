@@ -72,7 +72,10 @@ public class FinancialFactsTools
             + "compare peers use CompareFinancialFact."
     )]
     public Task<string> GetFinancialFact(
-        [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description(
+            "Stock ticker symbol (e.g., AAPL, MSFT); a listing on another exchange is MIC:TICKER (XPAR:AIR)."
+        )]
+            string ticker,
         [Description(
             "Concept alias, e.g. 'revenue', 'net-income', 'eps-diluted', 'total-assets', "
                 + "'operating-cash-flow'. Call with an unknown value to list supported aliases."
@@ -106,7 +109,7 @@ public class FinancialFactsTools
                     return $"A concept is required. {SupportedAliasesNote()}";
 
                 var (stock, stockError) =
-                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
+                    await _commonStockRepository.ResolveIssuerIncludingDelisted(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -143,7 +146,7 @@ public class FinancialFactsTools
                 // under several of the alias's tags (the ASC 606 transition).
                 var (conceptPriority, conceptsById) = await ResolveConcepts(conceptRefs);
                 if (conceptPriority.Count == 0)
-                    return $"No '{concept}' data has been ingested for {stock.Presentation.Listing.Ticker}.";
+                    return $"No '{concept}' data has been ingested for {EquityListingSymbol.Display(stock)}.";
 
                 var facts = await _financialFactRepository
                     .GetConsolidatedByIssuerId(stock.Id)
@@ -155,7 +158,7 @@ public class FinancialFactsTools
                 var aliasLatestPeriodEnd =
                     facts.Count == 0 ? (DateOnly?)null : facts.Max(f => f.PeriodEnd);
                 var coverageNote = BuildCoverageNote(
-                    stock.Presentation.Listing.Ticker,
+                    EquityListingSymbol.Display(stock),
                     aliasLatestPeriodEnd,
                     companyLatestPeriodEnd
                 );
@@ -176,7 +179,7 @@ public class FinancialFactsTools
                 var shown = perPeriod.Take(Math.Clamp(maxResults, 1, MaxResultsCap)).ToList();
 
                 if (shown.Count == 0)
-                    return $"No '{concept}' data found for {stock.Presentation.Listing.Ticker} with the given filters.";
+                    return $"No '{concept}' data found for {EquityListingSymbol.Display(stock)} with the given filters.";
 
                 var splits = shown.Any(f => SplitKind(f, conceptsById) != FactSplitKind.None)
                     ? await _stockSplitRepository
@@ -255,7 +258,10 @@ public class FinancialFactsTools
             + "different calendar months — check the Period End column."
     )]
     public Task<string> CompareFinancialFact(
-        [Description("Ticker symbols to compare (max 25).")] string[] tickers,
+        [Description(
+            "Ticker symbols to compare (max 25); a listing on another exchange is MIC:TICKER (XPAR:AIR)."
+        )]
+            string[] tickers,
         [Description(
             "Concept alias, e.g. 'revenue', 'net-income', 'eps-diluted'. Call with an "
                 + "unknown value to list supported aliases."
@@ -289,6 +295,27 @@ public class FinancialFactsTools
                 // then all matching facts in one go keyed by company.
                 var stocks = await _commonStockRepository.GetUsByTickers(requested).ToListAsync();
                 var stockByTicker = BuildComparisonStockMap(requested, stocks);
+                // A venue symbol, or a provider suffix the US directory does not know, names a
+                // listing outside the US; its issuer's facts compare like any other.
+                foreach (
+                    var ticker in requested.Where(ticker =>
+                        !stockByTicker.ContainsKey(ticker)
+                        && (
+                            ticker.Contains(EquityListingSymbol.DisplaySeparator)
+                            || ticker.Contains('.')
+                        )
+                    )
+                )
+                {
+                    var (venueStock, venue, _) = await _commonStockRepository.ResolveListing(
+                        ticker
+                    );
+                    if (venue == null)
+                        continue;
+                    stockByTicker.Add(ticker, venueStock);
+                    if (stocks.All(stock => stock.Id != venueStock.Id))
+                        stocks.Add(venueStock);
+                }
 
                 var stockIds = stocks.Select(s => s.Id).ToList();
                 // A Q4 request must also load the year's fp=FY rows: filers whose
@@ -412,7 +439,7 @@ public class FinancialFactsTools
     {
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
         var result = MarkdownTable.Start(
-            $"{concept} for {stock.Presentation.Listing.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
+            $"{concept} for {EquityListingSymbol.Display(stock)} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
             "| Period Start | Period End | FY | Period | Value | Unit | Form | Filed | Accession |",
             "|--------------|------------|---:|--------|------:|------|------|-------|-----------|"
         );
@@ -526,9 +553,9 @@ public class FinancialFactsTools
             // The row stays traceable to the caller's input: a secondary-ticker
             // request shows that ticker, with the primary in parentheses.
             var label =
-                ticker == stock.Presentation.Listing.Ticker
-                    ? stock.Presentation.Listing.Ticker
-                    : $"{ticker} ({stock.Presentation.Listing.Ticker})";
+                ticker == EquityListingSymbol.Display(stock)
+                    ? EquityListingSymbol.Display(stock)
+                    : $"{ticker} ({EquityListingSymbol.Display(stock)})";
             rows.Add((label, stock.Name, best));
         }
         return (rows, skipped);
@@ -564,7 +591,13 @@ public class FinancialFactsTools
         var seenTickers = new HashSet<string>(StringComparer.Ordinal);
         foreach (var segment in segments)
         {
-            var normalizedTicker = TickerNormalizer.NormalizeListed(segment);
+            var normalizedTicker = EquityListingSymbol.TryParse(
+                segment,
+                out var venueCode,
+                out var venueTicker
+            )
+                ? EquityListingSymbol.Display(venueTicker, null, venueCode)
+                : TickerNormalizer.NormalizeListed(segment);
             if (normalizedTicker == null)
                 return (
                     [],
@@ -679,6 +712,17 @@ public class FinancialFactsTools
                         + "that company's own fiscal period, not the same calendar months._"
                 );
         }
+
+        // Listings outside the US report in their own currency, so mixed units are not comparable as written.
+        var units = rows.Select(r => r.Fact.Unit)
+            .Where(unit => !string.IsNullOrWhiteSpace(unit))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (units.Count > 1)
+            result.AppendLine(
+                $"\n_Note: these rows are in different units ({FactMarkdown.Cell(string.Join(", ", units))}); "
+                    + "convert them to one currency before comparing values._"
+            );
 
         if (skipped.Count > 0)
             result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");

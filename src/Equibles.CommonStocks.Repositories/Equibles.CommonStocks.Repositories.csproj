@@ -5,6 +5,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Equibles.CommonStocks.Data\Equibles.CommonStocks.Data.csproj" />
+    <ProjectReference Include="..\Equibles.EquityMarkets.Data\Equibles.EquityMarkets.Data.csproj" />
     <ProjectReference Include="..\Equibles.Search.Abstractions\Equibles.Search.Abstractions.csproj" />
   </ItemGroup>
 </Project>

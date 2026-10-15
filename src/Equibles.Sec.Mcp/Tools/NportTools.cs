@@ -41,10 +41,13 @@ public class NportTools
 
     [McpServerTool(Name = "GetFundsHoldingStock", Title = "Funds Holding a Stock", ReadOnly = true)]
     [Description(
-        "Get the registered investment companies (mutual funds and ETFs) holding an exact stock or ETF listing, from SEC Form NPORT-P portfolio reports. The listed security's authoritative CUSIP is matched against the holding rows on each fund series' most recent report (series that stopped filing more than 18 months ago are excluded), so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Report dates differ per fund series (each files on its own fiscal quarter), so values are as of each row's report date and cross-row totals mix as-of dates."
+        "Get the registered investment companies (mutual funds and ETFs) holding an exact stock or ETF listing, from SEC Form NPORT-P portfolio reports. The listed security's authoritative CUSIP (or, for a listing on another exchange written MIC:TICKER, its ISIN) is matched against the holding rows on each fund series' most recent report (series that stopped filing more than 18 months ago are excluded), so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Report dates differ per fund series (each files on its own fiscal quarter), so values are as of each row's report date and cross-row totals mix as-of dates."
     )]
     public Task<string> GetFundsHoldingStock(
-        [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
+        [Description(
+            "Listed security ticker (e.g., AAPL, VOO); a listing on another exchange is MIC:TICKER (XPAR:AIR)."
+        )]
+            string ticker,
         [Description(
             "Maximum number of fund positions to return, largest first (default: 20, clamped to 1-500)"
         )]
@@ -62,39 +65,56 @@ public class NportTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
-                if (stockError != null)
-                    return MarkdownText(stockError);
+                IQueryable<NportHolding> holdings;
+                string safeTicker;
+                if (EquityListingSymbol.TryParse(ticker, out _, out _))
+                {
+                    // Funds report a venue's share by its ISIN; a US listing keeps its CUSIP identity.
+                    var (_, venue, venueError) = await _commonStockRepository.ResolveListing(
+                        ticker
+                    );
+                    if (venue == null)
+                        return MarkdownText(venueError);
+                    safeTicker = MarkdownText(EquityListingSymbol.Display(venue));
+                    if (string.IsNullOrWhiteSpace(venue.Security.Isin))
+                        return $"No ISIN is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+                    holdings = _nportRepository.GetHoldingsByIsin(venue.Security.Isin);
+                }
+                else
+                {
+                    var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                    if (stockError != null)
+                        return MarkdownText(stockError);
 
-                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
-                var safeTicker = MarkdownText(listedTicker);
+                    var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                    safeTicker = MarkdownText(listedTicker);
 
-                if (!await _nportRepository.HasCusipIdentity(stock, listedTicker))
-                    return $"No CUSIP is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+                    if (!await _nportRepository.HasCusipIdentity(stock, listedTicker))
+                        return $"No CUSIP is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+                    holdings = _nportRepository.GetHoldingsByListingCusip(stock, listedTicker);
+                }
 
                 var recencyFloor = DateOnly.FromDateTime(
                     DateTime.UtcNow - CurrentHolderRecencyFloor
                 );
-                var currentPositions = _nportRepository
-                    .GetHoldingsByListingCusip(stock, listedTicker)
-                    .Join(
-                        _nportRepository.GetLatestPerSeries(recencyFloor),
-                        h => h.NportFilingId,
-                        f => f.Id,
-                        (h, f) =>
-                            new
-                            {
-                                h.Id,
-                                f.RegistrantName,
-                                f.SeriesName,
-                                f.ReportPeriodDate,
-                                h.Balance,
-                                h.Units,
-                                h.ValueUsd,
-                                h.PercentValue,
-                                h.PayoffProfile,
-                            }
-                    );
+                var currentPositions = holdings.Join(
+                    _nportRepository.GetLatestPerSeries(recencyFloor),
+                    h => h.NportFilingId,
+                    f => f.Id,
+                    (h, f) =>
+                        new
+                        {
+                            h.Id,
+                            f.RegistrantName,
+                            f.SeriesName,
+                            f.ReportPeriodDate,
+                            h.Balance,
+                            h.Units,
+                            h.ValueUsd,
+                            h.PercentValue,
+                            h.PayoffProfile,
+                        }
+                );
 
                 if (!string.IsNullOrWhiteSpace(registrantOrSeries))
                 {
