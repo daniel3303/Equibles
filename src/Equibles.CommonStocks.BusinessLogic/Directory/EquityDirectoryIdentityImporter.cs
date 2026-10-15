@@ -246,8 +246,8 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
                 .Distinct()
                 .ToListAsync(cancellationToken)
         );
-        // A new code whose ISIN shares a listed security's CUSIP issuer number is another line of that issuer, such as a
-        // temporary counter or rights line, never another company.
+        // A code whose ISIN shares an actively listed security's CUSIP issuer number is another line of that issuer, such
+        // as a temporary counter or rights line, never another company; a withdrawn sibling never decides.
         var issuerNumber = InternationalSecurityIdentifiers.CusipIssuerNumber(input.Isin);
         if (issuerNumber != null)
             candidates.UnionWith(

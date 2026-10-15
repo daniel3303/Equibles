@@ -53,7 +53,8 @@
 ## Source issuer identifiers and market directory import
 
 - `EquityIssuerSourceIdentifier` binds an exact provider issuer code to a native issuer and immutable capture evidence; it contains no route records.
-- Match existing issuers by exact source identifier, LEI, ISIN, or a current U.S. security CUSIP explicitly connected through GLEIF's complete ISIN-to-LEI relationship set; never match names or old CUSIP aliases.
+- Match existing issuers by exact source identifier, LEI, ISIN, a current U.S. security CUSIP explicitly connected through GLEIF's complete ISIN-to-LEI relationship set, or the CUSIP issuer number a security with an active listing shares (jurisdictions ANNA assigns to CUSIP Global Services, never US/CA); never match names or old CUSIP aliases.
+- The issuer number joins a venue's temporary counter or rights line to its company; an issuer number already split across two issuers refuses the row, so existing splits are merged before the rule ships.
 - Conflicting owners, legal identifiers, venue symbols, or quotation units reject the identity write atomically; a failed import discards its tracked graph.
 - Securities remain distinct by ISIN or an explicitly supplied source security identifier; a shared issuer never merges an ADR with its underlying share, and the source's broad `STOCK` type remains unclassified.
 - Sources without public ISINs must supply both `SourceSecurityIdentifier` and `SourceListingIdentifier`; missing ISINs never match other missing ISINs, and ticker/name similarity never joins issuers.

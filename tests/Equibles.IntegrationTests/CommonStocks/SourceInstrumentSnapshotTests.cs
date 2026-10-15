@@ -760,6 +760,49 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(sameIssuer ? 1 : 2);
     }
 
+    // A withdrawn temporary counter still split from its company neither joins nor blocks the company's next code.
+    [Fact]
+    public async Task AWithdrawnIssuerNumberSiblingNeverDecidesTheIssuer()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var manager = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var company = Listing();
+        company.Isin = "KYG5924H1561";
+        var rights = Listing("share-c", "02941");
+        rights.SourceIssuerIdentifier = "issuer-c";
+        rights.SourceSecurityIdentifier = "security-c";
+        rights.Isin = "KYG5924H1645";
+        company.DirectorySnapshotId = rights.DirectorySnapshotId = await manager.Reconcile(
+            Snapshot(0, company, rights)
+        );
+        var companyId = await importer.ImportListing(company);
+        var withdrawn = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "02938",
+            Name: "KING INTL INV",
+            Isin: "KYG5924H1728",
+            MarketCountryCode: "HK",
+            MarketIdentifierCode: "XHKG",
+            TradingCurrency: "HKD",
+            QuoteUnitMultiplier: 1m
+        );
+        withdrawn.Presentation.Listing.Active = false;
+        DbContext.Add(withdrawn);
+        await DbContext.SaveChangesAsync();
+
+        var rightsId = await importer.ImportListing(rights);
+
+        DbContext.ChangeTracker.Clear();
+        var issuers = await DbContext
+            .Set<EquityListing>()
+            .Where(row => row.Id == companyId || row.Id == rightsId)
+            .Select(row => row.Security.EquityIssuerId)
+            .Distinct()
+            .ToListAsync();
+        issuers.Should().ContainSingle().Which.Should().NotBe(withdrawn.Id);
+    }
+
     // Two issuers already split across one issuer number are left for the merge queue rather than chosen between.
     [Fact]
     public async Task AnIssuerNumberAlreadySplitAcrossTwoIssuersRefusesTheNextCode()
