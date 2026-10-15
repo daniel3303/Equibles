@@ -171,7 +171,7 @@ public class StockPriceTools
         ReadOnly = true
     )]
     [Description(
-        "Get each ticker's newest traded, settled daily close (USD for US listings; a MIC:TICKER listing on another exchange in its own trading currency, named in a note), with one-session change, volume, and trailing 52-week closing range. Rows can have different dates while a session settles; use the Date column. Change is omitted when the immediately prior trading session is absent; for a MIC:TICKER row it compares with the previous traded close, omitted when that close is more than 12 days older or the listing has an untraded session in between. Split-limited or partial 52-week ranges are marked in the response. This is settled history, not an intraday quote."
+        "Get each ticker's newest traded, settled daily close (USD for US listings; a MIC:TICKER listing on another exchange in its own trading currency, named in a note), with one-session change, volume, and trailing 52-week closing range. Rows can have different dates while a session settles; use the Date column. Change is omitted when the immediately prior trading session is absent; for a MIC:TICKER row it compares with the previous traded close, omitted when that close is more than 12 days older or a stored session in between shows no trades. Split-limited or partial 52-week ranges are marked in the response. This is settled history, not an intraday quote."
     )]
     public Task<string> GetLatestClosingPrices(
         [Description(
@@ -423,7 +423,8 @@ public class StockPriceTools
                             )
                             + ". Their Change compares with the previous traded close, since each "
                             + "exchange keeps its own holidays, and is omitted when that close is more "
-                            + "than 12 days older or a session went untraded. Every other row is in USD."
+                            + "than 12 days older or a stored session in between shows no trades. Every "
+                            + "other row is in USD."
                     );
                 }
 

@@ -193,6 +193,19 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task VenueSymbol_ChangeNeverSpansMoreThanTwelveDays()
+    {
+        await SeedLondon(
+            (new DateOnly(2026, 3, 2), 400m, 1_000),
+            (new DateOnly(2026, 3, 15), 452.35m, 1_000)
+        );
+
+        (await Sut().GetLatestClosingPrices(["XLON:BP"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-03-15 | 452.35 | — | — |");
+    }
+
+    [Fact]
     public async Task VenueSymbol_AdjacentTradedSessions_StateTheChange()
     {
         await SeedLondon(
