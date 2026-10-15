@@ -80,7 +80,23 @@ public class EquityMarketCatalogTests
         var xetra = EquityMarketCatalog.TryGet("xetra");
         xetra.FirdsVenueCodes.Should().Equal("XETA", "XETB", "XETS");
         xetra.HomeVenueCodes.Should().Contain(["XETR", "XFRA", "FRAA", "FRAB"]);
-        xetra.HomeVenueCodes.Should().NotContain(["MUNB", "STUB", "XGAT", "WBAH"]);
+        // Xetra's file states a regional primary market for some German issuers: Volkswagen Hannover, Mercedes-Benz
+        // Stuttgart, Henkel Düsseldorf.
+        xetra
+            .HomeVenueCodes.Should()
+            .Contain([
+                "XHAN",
+                "HANA",
+                "XSTU",
+                "STUB",
+                "XDUS",
+                "XMUN",
+                "MUNB",
+                "XHAM",
+                "XGAT",
+                "TGAT",
+            ]);
+        xetra.HomeVenueCodes.Should().NotContain(["WBAH", "XWBO", "TGSI"]);
         xetra
             .IsFirdsVenue("XETR")
             .Should()

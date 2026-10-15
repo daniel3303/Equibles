@@ -19,7 +19,7 @@ public class FirdsUniverseImporter(
     ILogger<FirdsUniverseImporter> logger
 ) : IImporter
 {
-    // Npgsql binds at most 65,535 parameters per statement and every row binds fourteen, so a batch stays well below.
+    // Npgsql binds at most 65,535 parameters per statement and every row binds fifteen, so a batch stays well below.
     private const int BatchSize = 1_000;
     private static readonly TimeSpan StaleDownloadAge = TimeSpan.FromDays(1);
     private static readonly TimeSpan IndexLookback = TimeSpan.FromDays(14);
@@ -223,6 +223,7 @@ public class FirdsUniverseImporter(
             Authority = authority,
             Isin = record.Isin,
             Mic = record.Mic,
+            IssuerRequested = record.IssuerRequested,
             Lei = record.Lei,
             Cfi = record.Cfi,
             Currency = Clip(record.Currency, 3),

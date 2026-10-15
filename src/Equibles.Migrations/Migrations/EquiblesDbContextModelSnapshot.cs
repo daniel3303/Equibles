@@ -1763,6 +1763,9 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(350)
                         .HasColumnType("character varying(350)");
 
+                    b.Property<bool?>("IssuerRequested")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Lei")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");

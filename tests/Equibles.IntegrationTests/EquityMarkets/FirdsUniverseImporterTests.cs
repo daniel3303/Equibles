@@ -14,6 +14,7 @@ namespace Equibles.IntegrationTests.EquityMarkets;
 /// Contract: the newest complete full set replaces the authority's universe (rows it no longer states
 /// are retired, not deleted), later deltas are applied once each in publication order, an already
 /// recorded file is never downloaded again, and the primary-venue share gate answers from the result.
+/// A market's home shares are the live shares homed on its venues whose issuer sought a home admission.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
@@ -74,6 +75,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
                 row.Cfi.Should().StartWith("E").And.NotMatch("EY*");
             });
         rows.Single(row => row.Isin == "DE0005558696").TerminationDate.Should().NotBeNull();
+        rows.Single(row => row.Isin == "PTSLB0AM0010").IssuerRequested.Should().BeTrue();
+        rows.Single(row => row.Isin == "FI0009800395").IssuerRequested.Should().BeFalse();
         var runs = await DbContext
             .Set<FirdsImportRun>()
             .AsNoTracking()
@@ -148,8 +151,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-helsinki"), now))
             .Should()
             .Be(
-                1,
-                "Aquis-quoted Raisio has its home on Nasdaq Helsinki's Nordic@Mid segment DHEL, a catalogued home venue"
+                0,
+                "Raisio's home is Helsinki's DHEL, but its only line in the fixture is on Aquis, which is no Helsinki venue"
             );
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-stockholm"), now))
             .Should()
@@ -161,6 +164,61 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         )
             .Should()
             .Be(FirstFull);
+    }
+
+    [Fact]
+    public async Task HomeShares_CountOnlySharesWhoseIssuerSoughtAHomeAdmission()
+    {
+        var observedAt = DateTime.UtcNow;
+        FirdsInstrumentRecord Line(
+            string isin,
+            string mic,
+            string relevantVenue,
+            bool? requested
+        ) =>
+            new()
+            {
+                Authority = EsmaFirdsClient.AuthorityCode,
+                Isin = isin,
+                Mic = mic,
+                IssuerRequested = requested,
+                Cfi = "ESVUFR",
+                RelevantCompetentAuthority = "DE",
+                RelevantTradingVenue = relevantVenue,
+                ObservedAt = observedAt,
+            };
+        DbContext
+            .Set<FirdsInstrumentRecord>()
+            .AddRange(
+                // A foreign share the German open markets included on their own; its one requested line is abroad.
+                Line("US0378331005", "FRAB", "FRAB", false),
+                Line("US0378331005", "MUNB", "FRAB", false),
+                Line("US0378331005", "XETB", "FRAB", false),
+                Line("US0378331005", "XGLO", "FRAB", true),
+                Line("DE0007664005", "FRAA", "FRAA", true),
+                Line("DE0007664005", "HANA", "FRAA", true),
+                // The issuer requested Düsseldorf, not its relevant venue Stuttgart.
+                Line("DE000A3ESL51", "STUA", "STUA", false),
+                Line("DE000A3ESL51", "DUSA", "STUA", true),
+                // Stored before issuer requests were read; counted until a full file restates it.
+                Line("DE000A13SUL5", "MUNB", "MUNB", null)
+            );
+        // A terminated requested line and another register's requested line do not make Apple German.
+        var terminated = Line("US0378331005", "FRAA", "FRAB", true);
+        terminated.TerminationDate = observedAt.AddDays(-1);
+        var otherRegister = Line("US0378331005", "XETA", "FRAB", true);
+        otherRegister.Authority = FcaFirdsClient.AuthorityCode;
+        DbContext.Set<FirdsInstrumentRecord>().AddRange(terminated, otherRegister);
+        await DbContext.SaveChangesAsync();
+        var records = new FirdsInstrumentRecordRepository(DbContext);
+        var xetra = EquityMarketCatalog.TryGet("xetra");
+
+        (await records.CountHomeShares(xetra, observedAt)).Should().Be(3);
+
+        await records.UpsertRange([Line("DE000A13SUL5", "MUNB", "MUNB", false)]);
+        (await records.CountHomeShares(xetra, observedAt))
+            .Should()
+            .Be(2, "a restated line that denies an issuer request stops counting");
     }
 
     [Fact]

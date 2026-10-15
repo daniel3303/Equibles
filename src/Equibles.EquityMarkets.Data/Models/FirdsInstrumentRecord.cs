@@ -19,6 +19,9 @@ public class FirdsInstrumentRecord
     [Required, MaxLength(4)]
     public string Mic { get; set; }
 
+    // FIRDS IssrReq: the issuer sought this admission, which a venue's own inclusion of a foreign share lacks.
+    public bool? IssuerRequested { get; set; }
+
     [MaxLength(20)]
     public string Lei { get; set; }
 
