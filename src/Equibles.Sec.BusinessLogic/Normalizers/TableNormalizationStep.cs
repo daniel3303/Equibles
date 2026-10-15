@@ -28,6 +28,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             FixRowspan(table, doc);
             RemoveEmptyRows(table);
             RemoveEmptyColumns(table);
+            MergeSuffixColumns(table);
         }
     }
 
@@ -225,6 +226,75 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
                 }
             }
         }
+    }
+
+    private static readonly HashSet<string> ClosingSuffixes = [")", "%", ")%", "%)"];
+
+    // Filers put a negative's closing parenthesis or a percent sign in a column of its own
+    // ("(8,036" | ")"); fold such a column into the figures on its left so each reads whole.
+    private static void MergeSuffixColumns(IElement table)
+    {
+        var rows = table.QuerySelectorAll("tr").ToList();
+        if (rows.Count == 0)
+            return;
+
+        var maxCols = rows.Max(row => HtmlElementExtensions.DirectChildCells(row).Count);
+        for (var colIndex = maxCols - 1; colIndex >= 1; colIndex--)
+        {
+            if (!IsSuffixColumn(rows, colIndex))
+                continue;
+
+            foreach (var row in rows)
+            {
+                var cells = HtmlElementExtensions.DirectChildCells(row);
+                if (colIndex >= cells.Count)
+                    continue;
+
+                var suffix = cells[colIndex].TextContent.Trim();
+                if (suffix.Length > 0)
+                    AppendToFigure(cells[colIndex - 1], suffix);
+                cells[colIndex].Remove();
+            }
+        }
+    }
+
+    // The suffix joins the figure's own text node, so the converter cannot space them apart.
+    private static void AppendToFigure(IElement cell, string suffix)
+    {
+        var figure = cell.Descendants<IText>().Last(text => !string.IsNullOrWhiteSpace(text.Data));
+        figure.Data = figure.Data.TrimEnd() + suffix;
+    }
+
+    // Every filled cell of the column is a suffix and follows a figure, so nothing else is merged.
+    private static bool IsSuffixColumn(List<IElement> rows, int colIndex)
+    {
+        var hasSuffix = false;
+        foreach (var row in rows)
+        {
+            var cells = HtmlElementExtensions.DirectChildCells(row);
+            if (colIndex >= cells.Count)
+                continue;
+
+            var text = cells[colIndex].TextContent.Trim();
+            if (text.Length == 0)
+                continue;
+
+            if (!ClosingSuffixes.Contains(text) || !EndsWithFigure(cells[colIndex - 1], text))
+                return false;
+            hasSuffix = true;
+        }
+
+        return hasSuffix;
+    }
+
+    // A figure ends in a digit; a percent may also follow a negative already closed, as in "(7)".
+    private static bool EndsWithFigure(IElement cell, string suffix)
+    {
+        var figure = cell.TextContent.TrimEnd();
+        if (figure.Length == 0)
+            return false;
+
+        return char.IsDigit(figure[^1]) || (figure[^1] == ')' && suffix == "%");
     }
 
     private static bool IsMeaningfulText(string text) =>

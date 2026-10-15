@@ -107,7 +107,13 @@ public class Document
     /// Current stored-text pipeline version. Bump after a normalization or conversion change
     /// that must be applied to already-ingested EDGAR documents.
     /// </summary>
-    public const int NormalizedContentBuilderVersion = 1;
+    public const int NormalizedContentBuilderVersion = 2;
+
+    /// <summary>
+    /// The first version any content builder stamps; a document below it never had its text
+    /// rebuilt. ESEF text counts as readable from here, independent of the EDGAR version above.
+    /// </summary>
+    public const int FirstContentBuilderVersion = 1;
 
     // JSON recovery remains limited to empty text; inline reports also replay prose-layout fixes.
     public const int EsefEmptyContentRecoveryVersion = 5;

@@ -117,7 +117,7 @@ public class DocumentNormalizationBackfillService
             result.Processed++;
             var replayingReadableEsef =
                 document.DocumentType?.IsEsef() == true
-                && document.NormalizedContentVersion >= Document.NormalizedContentBuilderVersion
+                && document.NormalizedContentVersion >= Document.FirstContentBuilderVersion
                 && document.Content?.Size > 0;
             document.NormalizedContentAttempts++;
             var currentAttempt = document.NormalizedContentAttempts;

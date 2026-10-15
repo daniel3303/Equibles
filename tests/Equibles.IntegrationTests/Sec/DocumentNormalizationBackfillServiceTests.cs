@@ -461,6 +461,38 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     }
 
     [Theory]
+    [InlineData(0, true)]
+    [InlineData(Document.NormalizedContentBuilderVersion - 1, true)]
+    [InlineData(Document.NormalizedContentBuilderVersion, false)]
+    public void Pending_EdgarText_FollowsTheEdgarBuilderVersion(int version, bool expected)
+    {
+        var edgar = SeedDocument(version);
+
+        new DocumentRepository(_dbContext)
+            .GetPendingNormalizedContent()
+            .Any(row => row.Id == edgar.Id)
+            .Should()
+            .Be(expected);
+    }
+
+    [Fact]
+    public void Pending_ReadableEsefBelowTheEdgarVersion_StaysSettled()
+    {
+        // The EDGAR builder version moves alone; ESEF text follows its own versions.
+        var esef = SeedEsef();
+        esef.XbrlType = XbrlType.JsonXbrl;
+        esef.NormalizedContentVersion = Document.NormalizedContentBuilderVersion - 1;
+        esef.Content.Size = 20;
+        _dbContext.SaveChanges();
+
+        new DocumentRepository(_dbContext)
+            .GetPendingNormalizedContent()
+            .Any(row => row.Id == esef.Id)
+            .Should()
+            .BeFalse();
+    }
+
+    [Theory]
     [InlineData(1, 20, false)]
     [InlineData(4, 20, false)]
     [InlineData(4, 0, true)]
@@ -753,11 +785,11 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
 
     private static bool CorrectedTable(string markdown) =>
         markdown.Contains(
-            "| Compute & Networking | 193,479 | 116,193 | 77,286 | 67 | % |",
+            "| Compute & Networking | 193,479 | 116,193 | 77,286 | 67% |",
             StringComparison.Ordinal
         )
         && markdown.Contains(
-            "116,193 | 77,286 | 67 | % |\n| Graphics | 22,459 | 14,304",
+            "116,193 | 77,286 | 67% |\n| Graphics | 22,459 | 14,304",
             StringComparison.Ordinal
         );
 
