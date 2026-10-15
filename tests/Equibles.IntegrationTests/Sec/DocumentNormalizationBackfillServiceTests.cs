@@ -84,6 +84,46 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             );
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Backfill_StampsTheHeaderAcceptanceTimeOnlyWhereNoneIsStored(
+        bool alreadyStamped
+    )
+    {
+        var document = SeedDocument(normalizedContentVersion: 0);
+        var stored = new DateTime(2026, 2, 25, 21, 0, 0, DateTimeKind.Utc);
+        if (alreadyStamped)
+        {
+            document.AcceptedAt = stored;
+            _dbContext.SaveChanges();
+        }
+        _secEdgarClient
+            .GetDocumentContent(
+                document.AccessionNumber,
+                _company.Cik,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                "<SEC-HEADER>0001045810-26-000021.hdr.sgml : 20260225\n<ACCEPTANCE-DATETIME>20260225161234\n</SEC-HEADER>\n"
+                    + NvidiaSubmission
+            );
+
+        await BuildSut().Backfill(batchSize: 1);
+
+        // 16:12:34 Eastern standard time is 21:12:34 UTC.
+        var expected = alreadyStamped
+            ? stored
+            : new DateTime(2026, 2, 25, 21, 12, 34, DateTimeKind.Utc);
+        await _persistenceService
+            .Received(1)
+            .ReplaceContent(
+                Arg.Is<Document>(d => d.Id == document.Id && d.AcceptedAt == expected),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
     [Fact]
     public async Task Backfill_CurrentDocument_DoesNotRefetchOrReplace()
     {
