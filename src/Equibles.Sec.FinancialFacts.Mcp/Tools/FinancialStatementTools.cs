@@ -74,11 +74,13 @@ public class FinancialStatementTools
                 + "also work. Defaults to income."
         )]
             string statement = "income",
-        [Description("Fiscal year, e.g. 2023. Defaults to the latest reported year.")]
+        [Description(
+            "Fiscal year, e.g. 2023. Defaults to the year of the latest period with line items to show."
+        )]
             int? year = null,
         [Description(
-            "Fiscal period: 'FY' (annual) or 'Q1'..'Q4'. Defaults to the latest reported "
-                + "period. Most filers report no discrete Q4 income/cash-flow facts in XBRL "
+            "Fiscal period: 'FY' (annual) or 'Q1'..'Q4'. Defaults to the latest period with "
+                + "line items to show. Most filers report no discrete Q4 income/cash-flow facts in XBRL "
                 + "(the fourth quarter is embedded in the full-year figure) — use 'FY' for "
                 + "annual figures."
         )]
@@ -133,7 +135,7 @@ public class FinancialStatementTools
                 // newest period's instants can sit one bucket away (HD's May 2026
                 // sheet is stamped fiscal 2026 while its flows are stamped 2027), so
                 // a period with flows must be offered even when it holds no instant.
-                var (selectedYear, selectedPeriod, periodError) = await ResolveStatementPeriod(
+                var (candidates, periodError) = await ResolveStatementPeriods(
                     stock,
                     statementType,
                     year,
@@ -146,135 +148,226 @@ public class FinancialStatementTools
                 if (periodError != null)
                     return periodError;
 
-                // A balance sheet is dated where its period's own flows end and loaded at
-                // that date from whichever bucket holds it: the bucket's own latest instant
-                // is a subsequent-event stray for GE (2020-01-01 over 2019-12-31) and the
-                // NEXT year's sheet for every January-year-end retailer. With no flow to date
-                // it by, the bucket-and-anchor path below still applies.
-                var balanceSheetDate =
-                    statementType == FinancialStatementType.BalanceSheet
-                        ? await BalanceSheetDateResolver.Resolve(
-                            _financialFactRepository,
-                            _financialConceptRepository,
-                            stock,
-                            selectedYear,
-                            selectedPeriod
-                        )
-                        : null;
-
-                var allEvidence = balanceSheetDate is { } statedAt
-                    ? await _financialFactRepository
-                        .GetByIssuerId(stock.Id)
-                        .Where(f =>
-                            conceptIds.Contains(f.FinancialConceptId)
-                            && f.PeriodEnd == statedAt
-                            && f.PeriodStart == statedAt
-                        )
-                        .ToListAsync()
-                    : await _financialFactRepository
-                        .GetByIssuerId(stock.Id)
-                        .Where(f =>
-                            f.FiscalYear == selectedYear
-                            && conceptIds.Contains(f.FinancialConceptId)
-                            && (
-                                f.PeriodType != FactPeriodType.Duration
-                                || f.PeriodEnd >= f.PeriodStart
-                                    && f.PeriodEnd
-                                        <= f.PeriodStart.AddDays(
-                                            StatementLineFacts.MaxSupportedDurationDays
-                                        )
-                            )
-                        )
-                        .ToListAsync();
-
-                var facts = allEvidence.Where(f => f.DimensionsKey == "").ToList();
-                facts = StatementLineFacts.RejectAmbiguousInterimAnnualFacts(
-                    facts,
-                    allEvidence,
-                    selectedPeriod
-                );
-
-                if (statementType != FinancialStatementType.BalanceSheet)
+                // An exact year and period render as asked. Otherwise the newest period that renders
+                // wins: a half-year filer's Q2 bucket holds only six-month spans, which a quarterly
+                // statement cannot present, and offering it would hide the filer's latest year.
+                var pinned = year != null && requestedPeriod != null;
+                string firstEmpty = null;
+                (int FiscalYear, SecFiscalPeriod FiscalPeriod)? skipped = null;
+                foreach (var candidate in candidates.Take(pinned ? 1 : MaxDefaultPeriodAttempts))
                 {
-                    var rejectNegativeConceptIds =
-                        StatementQuarterDerivation.GetNonNegativeConceptIds(
-                            statementLines,
-                            conceptIdByKey
-                        );
-                    facts = StatementQuarterDerivation
-                        .AppendDerived(facts, rejectNegativeConceptIds)
-                        .ToList();
-                }
-                if (balanceSheetDate == null)
-                    facts = facts.Where(f => f.FiscalPeriod == selectedPeriod).ToList();
-
-                if (facts.Count == 0)
-                    return $"No {statementType.NameForHumans().ToLowerInvariant()} line items "
-                        + $"were reported by {EquityListingSymbol.Display(stock)} for FY{selectedYear} "
-                        + $"{selectedPeriod.NameForHumans()}.";
-
-                // A filing re-reports comparative spans under its own fiscal stamp, and a stale
-                // concept can retain an earlier end under the same (year, period). Anchor the
-                // statement to one actual period end before selecting line values so it cannot
-                // silently combine different balance dates or flow endpoints. A balance sheet
-                // loaded by its date already shares one; the anchor is a no-op there.
-                // No balance-sheet dates are loaded, and none are needed: this tool reads
-                // GetConsolidatedByStock, so the latest conforming span IS the entity's own
-                // measured endpoint and the rule provably cannot move a consolidated-only
-                // fact set (StatementLineFactsAnchorTests). A surface that also loads
-                // DIMENSIONAL facts must pass them — see FinancialStatementsHelper.
-                facts = StatementLineFacts.AnchorToLatestPeriodEnd(
-                    facts,
-                    selectedPeriod,
-                    reportedPeriodEnds: []
-                );
-
-                // A 10-Q tags each line under one fiscal (year, period) for both the
-                // discrete quarter and the fiscal year-to-date span, and re-reports prior
-                // comparative instants (the prior fiscal-year-end balance) under that same
-                // identity. Picking by filed date alone surfaces the year-to-date as the
-                // quarter and mixes the comparative balance-sheet columns, so the statement
-                // stops balancing (#1546). Prefer the span matching the period's granularity,
-                // then the instant ending latest, then the latest restatement — the same
-                // selection the web surfaces apply in
-                // FinancialStatementsHelper.PickCurrentlyReportedFact.
-                var latestByConcept = StatementLineFacts.PickCurrentlyReportedByConcept(
-                    facts,
-                    selectedPeriod
-                );
-                var splitSensitive = statementLines.Any(line =>
-                {
-                    var (reportedConcept, fact) = StatementLineFacts.PickConceptFact(
-                        line,
+                    var (table, empty) = await RenderPeriod(
+                        stock,
+                        statementType,
+                        statementLines,
                         conceptIdByKey,
-                        latestByConcept
+                        conceptIds,
+                        candidate.FiscalYear,
+                        candidate.FiscalPeriod
                     );
-                    return fact != null
-                        && FactSplitBasis.Classify(reportedConcept, fact.Unit)
-                            != FactSplitKind.None;
-                });
-                var splits = splitSensitive
-                    ? await _stockSplitRepository
-                        .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
-                        .ToListAsync()
-                    : [];
-
-                return RenderStatementTable(
-                    stock,
-                    statementType,
-                    selectedYear,
-                    selectedPeriod,
-                    statementLines,
-                    conceptIdByKey,
-                    latestByConcept,
-                    splits
-                );
+                    if (table != null)
+                        return skipped is { } newer
+                            ? table
+                                + SkippedPeriodNote(
+                                    statementType,
+                                    newer.FiscalYear,
+                                    newer.FiscalPeriod
+                                )
+                            : table;
+                    firstEmpty ??= empty;
+                    skipped ??= candidate;
+                }
+                return firstEmpty;
             },
             "GetFinancialStatement",
             $"ticker: {FactMarkdown.Clean(ticker)}, statement: {FactMarkdown.Clean(statement)}, "
                 + $"year: {year}, period: {FactMarkdown.Clean(period)}"
         );
     }
+
+    // Renders one fiscal (year, period): the table, or null with the message that explains its absence.
+    private async Task<(string Table, string Empty)> RenderPeriod(
+        EquityIssuer stock,
+        FinancialStatementType statementType,
+        IReadOnlyList<StatementLine> statementLines,
+        Dictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        HashSet<Guid> conceptIds,
+        int selectedYear,
+        SecFiscalPeriod selectedPeriod
+    )
+    {
+        // A balance sheet is dated where its period's own flows end and loaded at
+        // that date from whichever bucket holds it: the bucket's own latest instant
+        // is a subsequent-event stray for GE (2020-01-01 over 2019-12-31) and the
+        // NEXT year's sheet for every January-year-end retailer. With no flow to date
+        // it by, the bucket-and-anchor path below still applies.
+        var balanceSheetDate =
+            statementType == FinancialStatementType.BalanceSheet
+                ? await BalanceSheetDateResolver.Resolve(
+                    _financialFactRepository,
+                    _financialConceptRepository,
+                    stock,
+                    selectedYear,
+                    selectedPeriod
+                )
+                : null;
+
+        var allEvidence = balanceSheetDate is { } statedAt
+            ? await _financialFactRepository
+                .GetByIssuerId(stock.Id)
+                .Where(f =>
+                    conceptIds.Contains(f.FinancialConceptId)
+                    && f.PeriodEnd == statedAt
+                    && f.PeriodStart == statedAt
+                )
+                .ToListAsync()
+            : await _financialFactRepository
+                .GetByIssuerId(stock.Id)
+                .Where(f =>
+                    f.FiscalYear == selectedYear
+                    && conceptIds.Contains(f.FinancialConceptId)
+                    && (
+                        f.PeriodType != FactPeriodType.Duration
+                        || f.PeriodEnd >= f.PeriodStart
+                            && f.PeriodEnd
+                                <= f.PeriodStart.AddDays(
+                                    StatementLineFacts.MaxSupportedDurationDays
+                                )
+                    )
+                )
+                .ToListAsync();
+
+        var facts = allEvidence.Where(f => f.DimensionsKey == "").ToList();
+        facts = StatementLineFacts.RejectAmbiguousInterimAnnualFacts(
+            facts,
+            allEvidence,
+            selectedPeriod
+        );
+
+        if (statementType != FinancialStatementType.BalanceSheet)
+        {
+            var rejectNegativeConceptIds = StatementQuarterDerivation.GetNonNegativeConceptIds(
+                statementLines,
+                conceptIdByKey
+            );
+            facts = StatementQuarterDerivation
+                .AppendDerived(facts, rejectNegativeConceptIds)
+                .ToList();
+        }
+        if (balanceSheetDate == null)
+            facts = facts.Where(f => f.FiscalPeriod == selectedPeriod).ToList();
+
+        if (facts.Count == 0)
+            return (
+                null,
+                EmptyPeriodMessage(stock, statementType, selectedYear, selectedPeriod, allEvidence)
+            );
+
+        // A filing re-reports comparative spans under its own fiscal stamp, and a stale
+        // concept can retain an earlier end under the same (year, period). Anchor the
+        // statement to one actual period end before selecting line values so it cannot
+        // silently combine different balance dates or flow endpoints. A balance sheet
+        // loaded by its date already shares one; the anchor is a no-op there.
+        // No balance-sheet dates are loaded, and none are needed: this tool reads
+        // GetConsolidatedByStock, so the latest conforming span IS the entity's own
+        // measured endpoint and the rule provably cannot move a consolidated-only
+        // fact set (StatementLineFactsAnchorTests). A surface that also loads
+        // DIMENSIONAL facts must pass them — see FinancialStatementsHelper.
+        facts = StatementLineFacts.AnchorToLatestPeriodEnd(
+            facts,
+            selectedPeriod,
+            reportedPeriodEnds: []
+        );
+
+        // A 10-Q tags each line under one fiscal (year, period) for both the
+        // discrete quarter and the fiscal year-to-date span, and re-reports prior
+        // comparative instants (the prior fiscal-year-end balance) under that same
+        // identity. Picking by filed date alone surfaces the year-to-date as the
+        // quarter and mixes the comparative balance-sheet columns, so the statement
+        // stops balancing (#1546). Prefer the span matching the period's granularity,
+        // then the instant ending latest, then the latest restatement — the same
+        // selection the web surfaces apply in
+        // FinancialStatementsHelper.PickCurrentlyReportedFact.
+        var latestByConcept = StatementLineFacts.PickCurrentlyReportedByConcept(
+            facts,
+            selectedPeriod
+        );
+        var splitSensitive = statementLines.Any(line =>
+        {
+            var (reportedConcept, fact) = StatementLineFacts.PickConceptFact(
+                line,
+                conceptIdByKey,
+                latestByConcept
+            );
+            return fact != null
+                && FactSplitBasis.Classify(reportedConcept, fact.Unit) != FactSplitKind.None;
+        });
+        var splits = splitSensitive
+            ? await _stockSplitRepository
+                .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                .ToListAsync()
+            : [];
+
+        var table = RenderStatementTable(
+            stock,
+            statementType,
+            selectedYear,
+            selectedPeriod,
+            statementLines,
+            conceptIdByKey,
+            latestByConcept,
+            splits
+        );
+        return (
+            table,
+            table == null
+                ? EmptyPeriodMessage(
+                    stock,
+                    statementType,
+                    selectedYear,
+                    selectedPeriod,
+                    allEvidence
+                )
+                : null
+        );
+    }
+
+    // A quarter whose flows are all cumulative spans has figures, just none a discrete-quarter
+    // statement can show, so it must not read as a period the filer left unreported.
+    private static string EmptyPeriodMessage(
+        EquityIssuer stock,
+        FinancialStatementType statementType,
+        int fiscalYear,
+        SecFiscalPeriod fiscalPeriod,
+        IEnumerable<FinancialFact> evidence
+    )
+    {
+        var statementName = statementType.NameForHumans().ToLowerInvariant();
+        var label = $"FY{fiscalYear} {fiscalPeriod.NameForHumans()}";
+        var yearToDateOnly =
+            fiscalPeriod != SecFiscalPeriod.FullYear
+            && statementType != FinancialStatementType.BalanceSheet
+            && evidence.Any(fact =>
+                fact.FiscalPeriod == fiscalPeriod
+                && fact.PeriodEnd.DayNumber - fact.PeriodStart.DayNumber
+                    > FiscalPeriodSpanDays.MaxQuarter
+            );
+        return yearToDateOnly
+            ? $"{EquityListingSymbol.Display(stock)} has no discrete-quarter {statementName} line items "
+                + $"for {label}: its flows are cumulative spans from which no discrete quarter can be "
+                + "formed. Use period 'FY' for annual figures, or GetFinancialFact for one cumulative line."
+            : $"No {statementName} line items were reported by {EquityListingSymbol.Display(stock)} "
+                + $"for {label}.";
+    }
+
+    private static string SkippedPeriodNote(
+        FinancialStatementType statementType,
+        int fiscalYear,
+        SecFiscalPeriod fiscalPeriod
+    ) =>
+        $"\n_FY{fiscalYear} {fiscalPeriod.NameForHumans()} is newer but has no "
+        + $"{statementType.NameForHumans().ToLowerInvariant()} line items this tool can show, so "
+        + "the newest period that has them is shown._\n";
 
     private static string RenderStatementTable(
         EquityIssuer stock,
@@ -345,9 +438,7 @@ public class FinancialStatementTools
         }
 
         if (rendered == 0)
-            return $"No {statementType.NameForHumans().ToLowerInvariant()} line items were "
-                + $"reported by {EquityListingSymbol.Display(stock)} for FY{selectedYear} "
-                + $"{selectedPeriod.NameForHumans()}.";
+            return null;
 
         if (omitted > 0)
             result.AppendLine(
@@ -399,12 +490,12 @@ public class FinancialStatementTools
 
     // availabilityConceptIds decides which periods may be selected; statementConceptIds is the
     // requested statement's own set, which alone says whether that statement was ingested at all;
-    // when the two sets are equal the availability query has already proved it.
+    // when the two sets are equal the availability query has already proved it. Returns the
+    // periods that match the request, newest first.
     private async Task<(
-        int FiscalYear,
-        SecFiscalPeriod FiscalPeriod,
+        List<(int FiscalYear, SecFiscalPeriod FiscalPeriod)> Candidates,
         string Error
-    )> ResolveStatementPeriod(
+    )> ResolveStatementPeriods(
         EquityIssuer stock,
         FinancialStatementType statementType,
         int? year,
@@ -445,8 +536,7 @@ public class FinancialStatementTools
                 .GetConsolidatedByIssuerId(stock.Id)
                 .AnyAsync();
             return (
-                default,
-                default,
+                null,
                 hasAnyFacts
                     ? $"No {statementName} line items have been ingested for {EquityListingSymbol.Display(stock)}."
                     : $"No structured financial facts have been ingested for {EquityListingSymbol.Display(stock)}."
@@ -460,13 +550,15 @@ public class FinancialStatementTools
 
         // An explicit year/period must match exactly — never silently
         // substitute a different period's figures for financial data.
-        // When neither is given, the first (chronologically latest) wins.
-        var selected = ordered.FirstOrDefault(p =>
-            (year == null || p.FiscalYear == year)
-            && (requestedPeriod == null || p.FiscalPeriod == requestedPeriod.Value)
-        );
+        var candidates = ordered
+            .Where(p =>
+                (year == null || p.FiscalYear == year)
+                && (requestedPeriod == null || p.FiscalPeriod == requestedPeriod.Value)
+            )
+            .Select(p => (p.FiscalYear, p.FiscalPeriod))
+            .ToList();
 
-        if (selected == null)
+        if (candidates.Count == 0)
         {
             var latest = ordered[0];
             var wanted =
@@ -488,10 +580,10 @@ public class FinancialStatementTools
                     + "the fourth quarter is embedded in the full-year figure. Use period "
                     + "'FY' for annual figures, or GetFinancialFact for a single concept "
                     + "(it surfaces reported discrete Q4 rows where they exist).";
-            return (default, default, message);
+            return (null, message);
         }
 
-        return (selected.FiscalYear, selected.FiscalPeriod, null);
+        return (candidates, null);
     }
 
     private static bool TryParseStatement(string value, out FinancialStatementType type)
@@ -523,6 +615,9 @@ public class FinancialStatementTools
                 return false;
         }
     }
+
+    // A defaulted request tries at most a year of periods before reporting the newest one's absence.
+    private const int MaxDefaultPeriodAttempts = 5;
 
     // The longest span a discrete fiscal quarter can cover — 13 weeks on a 4-4-5
     // calendar plus the occasional 14-week quarter, with headroom.
