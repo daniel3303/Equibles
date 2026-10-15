@@ -600,6 +600,40 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
             .BeTrue();
     }
 
+    // A row whose ISIN conflicts and whose listing is bound to another security is still an identifier conflict.
+    [Fact]
+    public async Task AnIsinConflictNeverMasksAnIdentifierConflict()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var manager = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var first = Listing();
+        first.Isin = "KYG5924H1231";
+        var other = Listing("share-b", "00002");
+        other.SourceIssuerIdentifier = "issuer-b";
+        other.SourceSecurityIdentifier = "security-b";
+        other.Isin = "KYG4052M1116";
+        first.DirectorySnapshotId = other.DirectorySnapshotId = await manager.Reconcile(
+            Snapshot(0, first, other)
+        );
+        var firstId = await importer.ImportListing(first);
+        await importer.ImportListing(other);
+        var changed = Listing();
+        changed.SourceSecurityIdentifier = "security-b";
+        changed.Isin = "KYG5924H1561";
+        var evidence = await DbContext.Set<EquityDirectorySourceRecord>().CountAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            manager.Reconcile(Snapshot(1, changed, other))
+        );
+
+        (await DbContext.Set<EquityDirectorySourceRecord>().CountAsync()).Should().Be(evidence);
+        (await DbContext.Set<EquityListing>().SingleAsync(row => row.Id == firstId))
+            .Active.Should()
+            .BeTrue();
+    }
+
     [Fact]
     public async Task SharedListingRemainsActiveUntilBothDirectoryClaimsAreWithdrawn()
     {
