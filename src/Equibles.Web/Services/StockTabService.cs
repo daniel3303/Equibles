@@ -111,9 +111,9 @@ public class StockTabService
         _stockSplitRepository = stockSplitRepository;
     }
 
-    // The stock's splits effective as of today, for restating share balances onto today's
-    // post-split basis at read time (stored rows stay as filed). Empty when the optional
-    // repository is absent (test constructors), which keeps every consumer as-filed.
+    // Every listing's splits effective as of today, for restating share balances onto today's
+    // post-split basis at read time (stored rows stay as filed); consumers narrow them with
+    // ShareCountSplitScope. Empty when the optional repository is absent (test constructors).
     private async Task<IReadOnlyList<StockSplit>> LoadEffectiveSplits(EquityIssuer stock)
     {
         if (_stockSplitRepository == null)
@@ -121,10 +121,6 @@ public class StockTabService
         return await _stockSplitRepository
             .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
             .AsNoTracking()
-            .Where(split =>
-                split.PriceSeriesTicker == null
-                || split.PriceSeriesTicker == stock.Presentation.Listing.Ticker
-            )
             .ToListAsync();
     }
 
@@ -383,7 +379,7 @@ public class StockTabService
     // uses only splits attributed to that exact series (a sibling share class's split must
     // never rescale them).
     private async Task<List<StockSplit>> LoadPrimarySeriesSplits(EquityIssuer stock) =>
-        PriceSeriesSplitScope.ForListing(
+        ShareCountSplitScope.ForListedSeries(
             await LoadEffectiveSplits(stock),
             stock.Presentation.Listing.Ticker,
             stock.Presentation.Listing.Ticker

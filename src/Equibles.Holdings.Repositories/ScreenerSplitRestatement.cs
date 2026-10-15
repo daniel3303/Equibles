@@ -53,7 +53,7 @@ public static class ScreenerSplitRestatement
         }
         foreach (var slice in currentListingShares)
         {
-            var scoped = PriceSeriesSplitScope.ForListing(
+            var scoped = ShareCountSplitScope.ForListedSeries(
                 splitsSinceCurrent,
                 row.Ticker,
                 slice.ListedTicker ?? row.Ticker

@@ -9,7 +9,7 @@ namespace Equibles.Web.Services;
 /// <see cref="InstitutionalHolding.ReportDate"/> (a combined-quarter view mixes report dates,
 /// so a page-wide date would miss carried rows). Restatement is per exact listed series:
 /// a split attributed to one share class must never multiply a sibling listing's count
-/// (see <see cref="PriceSeriesSplitScope.ForListing"/>). Dollar values stay as filed —
+/// (see <see cref="ShareCountSplitScope.ForListedSeries(IEnumerable{StockSplit}, string, string)"/>). Dollar values stay as filed —
 /// they are split-invariant.
 /// </summary>
 public static class HoldingShareRestatement
@@ -27,7 +27,7 @@ public static class HoldingShareRestatement
     {
         if (effectiveSplits == null || effectiveSplits.Count == 0)
             return holding.Shares;
-        var scoped = PriceSeriesSplitScope.ForListing(
+        var scoped = ShareCountSplitScope.ForListedSeries(
             effectiveSplits,
             primaryTicker,
             holding.ListedTicker ?? primaryTicker

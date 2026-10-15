@@ -139,7 +139,7 @@ public class ShortDataTools
                 );
                 splits = unresolvedBasis
                     ? []
-                    : PriceSeriesSplitScope.ForListing(
+                    : ShareCountSplitScope.ForListedSeries(
                         splits,
                         stock.Presentation.Listing.Ticker,
                         listedTicker
@@ -248,7 +248,7 @@ public class ShortDataTools
                     )
                 )
                     return $"Split-adjusted short interest for {listedTicker} is unavailable for this range because historical split attribution is unresolved. Original FINRA observations are retained.";
-                splits = PriceSeriesSplitScope.ForListing(
+                splits = ShareCountSplitScope.ForListedSeries(
                     splits,
                     stock.Presentation.Listing.Ticker,
                     listedTicker
@@ -413,7 +413,7 @@ public class ShortDataTools
                     .Select(row =>
                     {
                         var listedTicker = row.ListedTicker;
-                        var scoped = PriceSeriesSplitScope.ForListing(
+                        var scoped = ShareCountSplitScope.ForListedSeries(
                             splitsByIssuer.For(row.Listing.Security.EquityIssuerId),
                             row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
@@ -582,7 +582,7 @@ public class ShortDataTools
                     .Select(row =>
                     {
                         var listedTicker = row.ListedTicker;
-                        var scoped = PriceSeriesSplitScope.ForListing(
+                        var scoped = ShareCountSplitScope.ForListedSeries(
                             splitsByIssuer.For(row.Listing.Security.EquityIssuerId),
                             row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker

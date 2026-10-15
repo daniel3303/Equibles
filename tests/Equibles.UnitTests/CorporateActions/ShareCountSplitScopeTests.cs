@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 
@@ -98,5 +99,154 @@ public class ShareCountSplitScopeTests
             .HasUnresolvedBasis([Split(null, evidence)], Listing, Day.AddDays(-1))
             .Should()
             .Be(unresolved);
+    }
+
+    private static EquityListing Venue(string country, string ticker) =>
+        new() { Ticker = ticker, MarketCountryCode = country };
+
+    private static StockSplit Listed(
+        EquityListing listing,
+        StockSplitShareCountEvidence? evidence,
+        decimal numerator,
+        decimal denominator,
+        int dayOffset = 0
+    ) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            Listing = listing,
+            EquityListingId = listing.Id,
+            PriceSeriesTicker = listing.Ticker,
+            EffectiveDate = Day.AddDays(dayOffset),
+            Numerator = numerator,
+            Denominator = denominator,
+            ShareCountEvidence = evidence,
+        };
+
+    [Fact]
+    public void ForListedSeries_PrimaryWithOnlyAContradictedRow_AdoptsTheConfirmedSiblingEvent()
+    {
+        // HON 2026-06-29: the US series carries the spin-off price factor, the Euronext mirror the 1:2.
+        var spinOff = Listed(
+            Venue("US", "HON"),
+            StockSplitShareCountEvidence.Contradicted,
+            1907m,
+            2000m
+        );
+        var reverse = Listed(Venue("IT", "1HON"), StockSplitShareCountEvidence.Confirmed, 1m, 2m);
+
+        var scoped = ShareCountSplitScope.ForListedSeries([spinOff, reverse], "HON", "HON");
+
+        scoped.Should().Equal(reverse);
+        SplitAdjustment.ShareCountFactor(Day.AddDays(-1), scoped).Should().Be(0.5m);
+    }
+
+    [Fact]
+    public void ForListedSeries_PrimaryWithNoRowOfTheEvent_AdoptsNothing()
+    {
+        // A receipt-ratio change: the ordinaries consolidate while the US receipt count stays put.
+        var ordinary = Listed(Venue("JP", "8411"), StockSplitShareCountEvidence.Confirmed, 1m, 10m);
+        var earlier = Listed(Venue("US", "MFG"), null, 2m, 1m, dayOffset: -400);
+
+        ShareCountSplitScope
+            .ForListedSeries([earlier, ordinary], "MFG", "MFG")
+            .Should()
+            .Equal(earlier);
+    }
+
+    [Fact]
+    public void ForListedSeries_SiblingClass_NeverAdoptsAnotherListingsEvent()
+    {
+        var preferredFactor = Listed(
+            Venue("US", "PW-PA"),
+            StockSplitShareCountEvidence.Contradicted,
+            1061m,
+            1000m
+        );
+        var common = Listed(Venue("US", "PW"), StockSplitShareCountEvidence.Confirmed, 1m, 10m);
+
+        ShareCountSplitScope
+            .ForListedSeries([preferredFactor, common], "PW", "PW-PA")
+            .Should()
+            .Equal(preferredFactor);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(StockSplitShareCountEvidence.Confirmed)]
+    public void ForListedSeries_PrimaryWithAStandingRowOfTheEvent_KeepsItsOwnRows(
+        StockSplitShareCountEvidence? evidence
+    )
+    {
+        var us = Venue("US", "HON");
+        var own = Listed(us, evidence, 2m, 1m);
+        var factor = Listed(us, StockSplitShareCountEvidence.Contradicted, 1061m, 1000m, 3);
+        var sibling = Listed(
+            Venue("IT", "1HON"),
+            StockSplitShareCountEvidence.Confirmed,
+            2m,
+            1m,
+            1
+        );
+
+        ShareCountSplitScope
+            .ForListedSeries([own, factor, sibling], "HON", "HON")
+            .Should()
+            .Equal(own, factor);
+    }
+
+    [Fact]
+    public void ForListedSeries_AnEarlierPriceOnlyEvent_StaysAContradictedRowThatMovesNothing()
+    {
+        var us = Venue("US", "HON");
+        var solstice = Listed(us, StockSplitShareCountEvidence.Contradicted, 1061m, 1000m, -242);
+        var spinOff = Listed(us, StockSplitShareCountEvidence.Contradicted, 1907m, 2000m);
+        var reverse = Listed(Venue("IT", "1HON"), StockSplitShareCountEvidence.Confirmed, 1m, 2m);
+
+        var scoped = ShareCountSplitScope.ForListedSeries(
+            [solstice, spinOff, reverse],
+            "HON",
+            "HON"
+        );
+
+        scoped.Should().Equal(solstice, reverse);
+        SplitAdjustment.ShareCountFactor(Day.AddDays(-300), scoped).Should().Be(0.5m);
+    }
+
+    [Fact]
+    public void ForListedSeries_AnotherIssuersConfirmedEvent_IsNeverAdopted()
+    {
+        var spinOff = Listed(
+            Venue("US", "HON"),
+            StockSplitShareCountEvidence.Contradicted,
+            1907m,
+            2000m
+        );
+        var otherIssuer = Listed(
+            Venue("US", "XYZ"),
+            StockSplitShareCountEvidence.Confirmed,
+            1m,
+            2m
+        );
+        otherIssuer.EquityIssuerId = Guid.NewGuid();
+
+        ShareCountSplitScope
+            .ForListedSeries([spinOff, otherIssuer], "HON", "HON")
+            .Should()
+            .Equal(spinOff);
+    }
+
+    [Theory]
+    [InlineData(true, 0.5)]
+    [InlineData(false, 1)]
+    public void ForListedSeries_ByListingId_AdoptsOnlyForThePrimary(bool primary, double factor)
+    {
+        var us = Venue("US", "HON");
+        var spinOff = Listed(us, StockSplitShareCountEvidence.Contradicted, 1907m, 2000m);
+        var reverse = Listed(Venue("IT", "1HON"), StockSplitShareCountEvidence.Confirmed, 1m, 2m);
+
+        var scoped = ShareCountSplitScope.ForListedSeries([spinOff, reverse], us.Id, primary);
+
+        SplitAdjustment.ShareCountFactor(Day.AddDays(-1), scoped).Should().Be((decimal)factor);
     }
 }

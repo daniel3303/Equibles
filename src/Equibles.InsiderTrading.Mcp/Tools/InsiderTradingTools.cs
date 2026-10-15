@@ -209,7 +209,7 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(
+                splits = ShareCountSplitScope.ForListedSeries(
                     splits,
                     stock.Presentation.Listing.Ticker,
                     stock.Presentation.Listing.Ticker
@@ -361,7 +361,7 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(
+                splits = ShareCountSplitScope.ForListedSeries(
                     splits,
                     stock.Presentation.Listing.Ticker,
                     stock.Presentation.Listing.Ticker
@@ -565,7 +565,7 @@ public class InsiderTradingTools
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
                 var allSplits = splits;
-                splits = PriceSeriesSplitScope.ForListing(
+                splits = ShareCountSplitScope.ForListedSeries(
                     allSplits,
                     stock.Presentation.Listing.Ticker,
                     stock.Presentation.Listing.Ticker

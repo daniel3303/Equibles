@@ -137,7 +137,11 @@ public class MarketActivityShareRestater
             SplitAdjustment.AdjustShareCount(
                 shares(listing),
                 reportDate,
-                PriceSeriesSplitScope.ForListing(splits, primaryTicker, listing.PriceSeriesTicker)
+                ShareCountSplitScope.ForListedSeries(
+                    splits,
+                    primaryTicker,
+                    listing.PriceSeriesTicker
+                )
             )
         );
 }
