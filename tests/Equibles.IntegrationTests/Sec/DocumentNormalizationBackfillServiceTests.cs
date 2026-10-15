@@ -174,6 +174,35 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Backfill_RebuiltTextThatStaysIdentical_KeepsItsChunks()
+    {
+        // A normalizer change re-reads every 10-K; one it leaves byte-identical stays searchable.
+        var document = SeedDocument(normalizedContentVersion: Document.FirstContentBuilderVersion);
+        _secEdgarClient
+            .GetDocumentContent(
+                document.AccessionNumber,
+                _company.Cik,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(NvidiaSubmission);
+        var normalized = new SecDocumentHtmlToMarkdownConverter().Convert(
+            new SecDocumentHtmlNormalizer().Normalize(NvidiaSubmission)
+        );
+        _fileManager
+            .GetContent(Arg.Is<Equibles.Media.Data.Models.File>(f => f.Id == document.ContentId))
+            .Returns(Encoding.UTF8.GetBytes(normalized));
+
+        var result = await BuildSut().Backfill(batchSize: 1);
+
+        result.Unchanged.Should().Be(1);
+        await _persistenceService.DidNotReceiveWithAnyArgs().ResetChunks(default, default);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Set<Document>().SingleAsync(d => d.Id == document.Id))
+            .NormalizedContentVersion.Should()
+            .Be(Document.NormalizedContentBuilderVersion);
+    }
+
+    [Fact]
     public async Task Backfill_ShutdownCancellation_StopsTheSecRequestWithoutRecordingFailure()
     {
         var document = SeedDocument(normalizedContentVersion: 0);
