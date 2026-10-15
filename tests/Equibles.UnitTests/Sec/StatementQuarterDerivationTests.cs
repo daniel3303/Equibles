@@ -40,6 +40,7 @@ public class StatementQuarterDerivationTests
     [InlineData("CNY")]
     [InlineData("EUR")]
     [InlineData("HKD")]
+    [InlineData("NIS")]
     public void AppendDerived_NonUsdCurrencyChain_ProvidesDiscreteQuarterInThatCurrency(string unit)
     {
         var facts = new[]

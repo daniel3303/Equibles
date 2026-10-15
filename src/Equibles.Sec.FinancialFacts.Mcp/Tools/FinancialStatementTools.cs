@@ -56,7 +56,7 @@ public class FinancialStatementTools
             + "Returns the standard line items (e.g. revenue, net income, total assets, "
             + "operating cash flow) with the latest-restated value for one exact statement "
             + "period end. Quarterly flow rows are always discrete quarters: when the filer "
-            + "reports only cumulative year-to-date USD values, the quarter is derived by "
+            + "reports only cumulative year-to-date values in a currency, the quarter is derived by "
             + "exact subtraction from the preceding cumulative period and marked Derived. "
             + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
             + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
