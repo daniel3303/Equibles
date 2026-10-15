@@ -93,12 +93,8 @@ public static class SecForms
         new(DocumentType.LateTenK, SecFormFamily.LateFilingNotice),
         new(DocumentType.LateTenQ, SecFormFamily.LateFilingNotice),
         new(DocumentType.LateTwentyF, SecFormFamily.LateFilingNotice),
-        // An ARS is a PDF, and readers only ever see an original; synced once a PDF original is stored.
-        new(
-            DocumentType.AnnualReportToHolders,
-            SecFormFamily.AnnualReportToHolders,
-            SyncedByDefault: false
-        ),
+        // An ARS is a PDF; the scraper stores it as the reader's original beside its extracted text.
+        new(DocumentType.AnnualReportToHolders, SecFormFamily.AnnualReportToHolders),
         new(DocumentType.FormThree, SecFormFamily.Ownership),
         new(DocumentType.FormThreeA, SecFormFamily.Ownership, DocumentType.FormThree),
         new(DocumentType.FormFour, SecFormFamily.Ownership),

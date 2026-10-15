@@ -17,7 +17,8 @@ public static class AsFiledHtmlDocumentTypes
         ]);
 
     // Forms whose primary alone earns an as-filed page: periodic reports, and forms whose primary
-    // carries no inline XBRL original of its own. An 8-K's inline primary already serves its readers;
+    // carries no inline XBRL original of its own (an ARS filed as HTML rather than PDF among them).
+    // An 8-K's inline primary already serves its readers;
     // DEF 14A keeps its inline original, since adding it would re-capture every stored proxy.
     public static IReadOnlyList<DocumentType> Standalone { get; } =
         Array.AsReadOnly<DocumentType>([
@@ -29,6 +30,7 @@ public static class AsFiledHtmlDocumentTypes
                             or SecFormFamily.Registration
                             or SecFormFamily.TenderOffer
                             or SecFormFamily.LateFilingNotice
+                            or SecFormFamily.AnnualReportToHolders
                 )
                 .Select(form => form.Type)
                 .Where(type => type != DocumentType.Def14A),

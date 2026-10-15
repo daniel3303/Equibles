@@ -32,5 +32,9 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
 
         // Added by 20261014214216_DocumentAcceptedAt.
         builder.Entity<Document>().Ignore(document => document.AcceptedAt);
+
+        // Added by 20261015133022_DocumentAsFiledPdf.
+        builder.Entity<Document>().Ignore(document => document.AsFiledPdfContent);
+        builder.Entity<Document>().Ignore(document => document.AsFiledPdfContentId);
     }
 }

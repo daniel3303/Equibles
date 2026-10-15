@@ -1154,10 +1154,11 @@ public class DocumentScraper : IDocumentScraper
 
                 var normalizedHtml = normalizer.Normalize(content);
                 var markdownDocument = converter.Convert(normalizedHtml);
+                byte[] asFiledPdf = null;
 
                 if (string.IsNullOrWhiteSpace(markdownDocument))
                 {
-                    markdownDocument = await TryExtractPdfFallback(
+                    (markdownDocument, asFiledPdf) = await TryExtractPdfFallback(
                         secEdgarClient,
                         pdfTextExtractor,
                         content,
@@ -1183,6 +1184,7 @@ public class DocumentScraper : IDocumentScraper
                     xbrl,
                     asFiledHtml,
                     acceptedAt: SecSubmissionHeader.AcceptedAt(content),
+                    asFiledPdf: asFiledPdf,
                     cancellationToken: cancellationToken
                 );
 
@@ -1197,11 +1199,10 @@ public class DocumentScraper : IDocumentScraper
         );
     }
 
-    // Paper-filed submissions (typically older 6-K/20-F) wrap a uuencoded PDF
-    // and have no HTML for the normalizer to consume. Fetch the standalone PDF
-    // artifact and extract its text instead. Returns null to signal "skip this
-    // filing" — the caller short-circuits without persisting.
-    private async Task<string> TryExtractPdfFallback(
+    // A PDF primary (an annual report to holders, an older paper 6-K/20-F) has no HTML for the
+    // normalizer: fetch the standalone PDF, extract its text, and return the PDF as the original.
+    // A null markdown means "skip this filing" and the caller persists nothing.
+    private async Task<(string Markdown, byte[] Pdf)> TryExtractPdfFallback(
         ISecEdgarClient secEdgarClient,
         IPdfTextExtractor pdfTextExtractor,
         string content,
@@ -1220,7 +1221,7 @@ public class DocumentScraper : IDocumentScraper
                 filing.FilingDate,
                 filing.DocumentUrl
             );
-            return null;
+            return (null, null);
         }
 
         var pdfBytes = await secEdgarClient.GetDocumentFileBytes(
@@ -1243,7 +1244,7 @@ public class DocumentScraper : IDocumentScraper
                 pdfFilename,
                 filing.DocumentUrl
             );
-            return null;
+            return (null, null);
         }
 
         _logger.LogInformation(
@@ -1254,7 +1255,7 @@ public class DocumentScraper : IDocumentScraper
             pdfFilename
         );
 
-        return markdown;
+        return (markdown, pdfBytes);
     }
 
     private static void RecordError(ScrapingResult result, string label, Exception ex)

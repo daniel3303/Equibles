@@ -137,4 +137,73 @@ public class DocumentPersistenceServiceTests : IDisposable
         persisted.SourceUrl.Should().Be("https://sec.gov/example");
         persisted.AccessionNumber.Should().Be("0001193125-25-000042");
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Save_PdfPrimary_StoresThePdfAsTheOriginal(bool hasPdf)
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "IREN",
+            Name: "IREN Ltd",
+            SecondaryTickers: []
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var fileManager = Substitute.For<IFileManager>();
+        fileManager
+            .SaveInternalFile(
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            )
+            .Returns(call => new File
+            {
+                Id = Guid.NewGuid(),
+                Name = call.ArgAt<string>(1),
+                Extension = call.ArgAt<string>(2),
+                ContentType = call.ArgAt<string>(3),
+                FileContent = new FileContent { Bytes = call.ArgAt<byte[]>(0) },
+            });
+        var sut = new DocumentPersistenceService(
+            new DocumentRepository(_dbContext),
+            new ChunkRepository(_dbContext),
+            fileManager,
+            new DocumentImageService(
+                new DocumentImageRepository(_dbContext),
+                new Equibles.Media.Repositories.FileRepository(_dbContext),
+                fileManager
+            ),
+            Substitute.For<IBus>()
+        );
+        var pdf = "%PDF-1.7 annual report"u8.ToArray();
+
+        await sut.Save(
+            company: stock,
+            content: Encoding.UTF8.GetBytes("Annual Report 2026"),
+            fileName: "IREN_ARS_2026-09-12.txt",
+            documentType: DocumentType.AnnualReportToHolders,
+            reportingDate: new DateOnly(2026, 9, 12),
+            reportingForDate: new DateOnly(2026, 6, 30),
+            sourceUrl: "https://www.sec.gov/Archives/edgar/data/1878848/x.pdf",
+            accessionNumber: "0001140361-26-039453",
+            asFiledPdf: hasPdf ? pdf : null
+        );
+
+        var persisted = await _dbContext.Set<Document>().SingleAsync();
+        if (!hasPdf)
+        {
+            persisted.AsFiledPdfContent.Should().BeNull();
+            return;
+        }
+        persisted.AsFiledPdfContent.Should().NotBeNull();
+        persisted.AsFiledPdfContent.ContentType.Should().Be("application/pdf");
+        persisted.AsFiledPdfContent.Extension.Should().Be("pdf");
+        persisted.AsFiledPdfContent.FileContent.Bytes.Should().Equal(pdf);
+        persisted.AsFiledPdfContent.Should().NotBeSameAs(persisted.Content);
+    }
 }

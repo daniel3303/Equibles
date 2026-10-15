@@ -248,6 +248,13 @@ public class Document
     public long? AsFiledHtmlUncompressedSize { get; set; }
 
     /// <summary>
+    /// The filing's own PDF when its primary document is one (an annual report to security holders,
+    /// a paper filing); readers show it as the original. Null for every other filing.
+    /// </summary>
+    public Guid? AsFiledPdfContentId { get; set; }
+    public virtual File AsFiledPdfContent { get; set; }
+
+    /// <summary>
     /// Version of the as-filed HTML stitcher that last processed this document. 0 = never built.
     /// The backfill selects supported SEC documents whose version is below the builder's current one, so
     /// bumping the builder version re-stitches the corpus (same version-stamp redrain as the
