@@ -152,7 +152,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .Should()
             .Be(
                 0,
-                "Raisio's home is Helsinki's DHEL, but the fixture's only line is an Aquis quotation the issuer never requested"
+                "Raisio's home is Helsinki's DHEL, but its only line in the fixture is on Aquis, which is no Helsinki venue"
             );
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-stockholm"), now))
             .Should()
@@ -203,6 +203,12 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
                 // Stored before issuer requests were read; counted until a full file restates it.
                 Line("DE000A13SUL5", "MUNB", "MUNB", null)
             );
+        // A terminated requested line and another register's requested line do not make Apple German.
+        var terminated = Line("US0378331005", "FRAA", "FRAB", true);
+        terminated.TerminationDate = observedAt.AddDays(-1);
+        var otherRegister = Line("US0378331005", "XETA", "FRAB", true);
+        otherRegister.Authority = FcaFirdsClient.AuthorityCode;
+        DbContext.Set<FirdsInstrumentRecord>().AddRange(terminated, otherRegister);
         await DbContext.SaveChangesAsync();
         var records = new FirdsInstrumentRecordRepository(DbContext);
         var xetra = EquityMarketCatalog.TryGet("xetra");

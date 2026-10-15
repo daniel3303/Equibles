@@ -88,8 +88,8 @@ public static class EquityMarketCatalog
             close: new(16, 30),
             auction: new(16, 35)
         ),
-        // FIRDS files Xetra by segment. Xetra's own file and FIRDS place a German share's home on any German exchange
-        // (Volkswagen's is Hannover), so home spans every German exchange's operating MIC and its equity segments.
+        // Xetra's file and FIRDS place a German share's home on any German exchange (Volkswagen's is Hannover), so home is
+        // each exchange's operating MIC plus its regulated and MTF segments, never SI, DLT or non-financial codes.
         new(
             "xetra",
             "Xetra",

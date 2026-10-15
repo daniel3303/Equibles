@@ -36,9 +36,8 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
             .ThenBy(row => row.Mic)
             .FirstOrDefaultAsync(cancellationToken);
 
-    // Live shares whose relevant venue is a home venue and whose issuer sought a home admission. A German open
-    // market's own inclusion of a foreign share also gives it a German relevant venue, but the issuer never asked.
-    // A line read before FIRDS issuer requests were stored counts until the next full file restates it.
+    // Live shares whose relevant venue is a home venue and whose issuer sought (or did not deny) a home admission; a
+    // German open market's own inclusion of a foreign share also gives it a German relevant venue.
     public Task<int> CountHomeShares(
         EquityMarket market,
         DateTime asOf,
