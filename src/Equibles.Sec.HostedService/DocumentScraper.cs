@@ -1230,10 +1230,30 @@ public class DocumentScraper : IDocumentScraper
             pdfFilename,
             cancellationToken
         );
+        // Only the submission's own primary document is its original; a PDF exhibit is text evidence only.
+        var original =
+            pdfBytes is { Length: > 0 }
+            && SecDocumentEnvelopeParser.IsPrimaryDocument(content, pdfFilename)
+                ? pdfBytes
+                : null;
         var markdown = pdfTextExtractor.Extract(pdfBytes);
 
         if (string.IsNullOrWhiteSpace(markdown))
         {
+            if (original != null)
+            {
+                // An image-only PDF primary is still a reader's original; storing it without text also
+                // keeps the reconciliation sweep from downloading it again every day.
+                _logger.LogInformation(
+                    "Storing the PDF original of {Ticker} - {DocumentType} - {FilingDate} without text: {Filename} has none to extract.",
+                    (companyOutContext.Presentation?.Listing?.Ticker ?? companyOutContext.Cik),
+                    documentType,
+                    filing.FilingDate,
+                    pdfFilename
+                );
+                return (string.Empty, original);
+            }
+
             // PDF was located but yielded no extractable text — either the artifact was
             // missing (404, logged by the client), or it's an image-only scan needing OCR.
             _logger.LogWarning(
@@ -1255,7 +1275,7 @@ public class DocumentScraper : IDocumentScraper
             pdfFilename
         );
 
-        return (markdown, pdfBytes);
+        return (markdown, original);
     }
 
     private static void RecordError(ScrapingResult result, string label, Exception ex)
