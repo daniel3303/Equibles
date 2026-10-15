@@ -45,6 +45,8 @@ public interface IDocumentPersistenceService
         XbrlCaptureStatus reportedStatements = XbrlCaptureStatus.NotChecked,
         // EDGAR's acceptance time from the submission header (UTC); null when the source carries none.
         DateTime? acceptedAt = null,
+        // The filing's own PDF when its primary document is one; stored as the reader's original.
+        byte[] asFiledPdf = null,
         CancellationToken cancellationToken = default
     );
 

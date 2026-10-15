@@ -54,6 +54,17 @@ public class SecFormsTests
             .OnlyContain(f => synced.Contains(f.AmendmentOf));
     }
 
+    // A synced filing's amendments are synced too, so a filing list carries the whole correction chain.
+    [Fact]
+    public void SyncedByDefault_IncludesTheAmendmentsOfEverySyncedDocumentForm()
+    {
+        var synced = SecForms.SyncedByDefault.ToHashSet();
+        SecForms
+            .All.Where(f => f.AmendmentOf != null && f.IsDocument && synced.Contains(f.AmendmentOf))
+            .Should()
+            .OnlyContain(f => synced.Contains(f.Type));
+    }
+
     // A form a filing processor consumes becomes dataset rows, so pickers must not offer it as a document.
     [Fact]
     public void IsDocument_IsExactlyTheFormsNoFilingProcessorConsumes()

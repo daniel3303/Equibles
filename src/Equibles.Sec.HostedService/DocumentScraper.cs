@@ -1154,10 +1154,11 @@ public class DocumentScraper : IDocumentScraper
 
                 var normalizedHtml = normalizer.Normalize(content);
                 var markdownDocument = converter.Convert(normalizedHtml);
+                byte[] asFiledPdf = null;
 
                 if (string.IsNullOrWhiteSpace(markdownDocument))
                 {
-                    markdownDocument = await TryExtractPdfFallback(
+                    (markdownDocument, asFiledPdf) = await TryExtractPdfFallback(
                         secEdgarClient,
                         pdfTextExtractor,
                         content,
@@ -1183,6 +1184,7 @@ public class DocumentScraper : IDocumentScraper
                     xbrl,
                     asFiledHtml,
                     acceptedAt: SecSubmissionHeader.AcceptedAt(content),
+                    asFiledPdf: asFiledPdf,
                     cancellationToken: cancellationToken
                 );
 
@@ -1197,11 +1199,10 @@ public class DocumentScraper : IDocumentScraper
         );
     }
 
-    // Paper-filed submissions (typically older 6-K/20-F) wrap a uuencoded PDF
-    // and have no HTML for the normalizer to consume. Fetch the standalone PDF
-    // artifact and extract its text instead. Returns null to signal "skip this
-    // filing" — the caller short-circuits without persisting.
-    private async Task<string> TryExtractPdfFallback(
+    // A PDF primary (an annual report to holders, an older paper 6-K/20-F) has no HTML for the
+    // normalizer: fetch the standalone PDF, extract its text, and return the PDF as the original.
+    // A null markdown means "skip this filing" and the caller persists nothing.
+    private async Task<(string Markdown, byte[] Pdf)> TryExtractPdfFallback(
         ISecEdgarClient secEdgarClient,
         IPdfTextExtractor pdfTextExtractor,
         string content,
@@ -1220,7 +1221,7 @@ public class DocumentScraper : IDocumentScraper
                 filing.FilingDate,
                 filing.DocumentUrl
             );
-            return null;
+            return (null, null);
         }
 
         var pdfBytes = await secEdgarClient.GetDocumentFileBytes(
@@ -1229,10 +1230,30 @@ public class DocumentScraper : IDocumentScraper
             pdfFilename,
             cancellationToken
         );
+        // Only the submission's own primary document is its original; a PDF exhibit is text evidence only.
+        var original =
+            pdfBytes is { Length: > 0 }
+            && SecDocumentEnvelopeParser.IsPrimaryDocument(content, pdfFilename)
+                ? pdfBytes
+                : null;
         var markdown = pdfTextExtractor.Extract(pdfBytes);
 
         if (string.IsNullOrWhiteSpace(markdown))
         {
+            if (original != null)
+            {
+                // An image-only PDF primary is still a reader's original; storing it without text also
+                // keeps the reconciliation sweep from downloading it again every day.
+                _logger.LogInformation(
+                    "Storing the PDF original of {Ticker} - {DocumentType} - {FilingDate} without text: {Filename} has none to extract.",
+                    (companyOutContext.Presentation?.Listing?.Ticker ?? companyOutContext.Cik),
+                    documentType,
+                    filing.FilingDate,
+                    pdfFilename
+                );
+                return (string.Empty, original);
+            }
+
             // PDF was located but yielded no extractable text — either the artifact was
             // missing (404, logged by the client), or it's an image-only scan needing OCR.
             _logger.LogWarning(
@@ -1243,7 +1264,7 @@ public class DocumentScraper : IDocumentScraper
                 pdfFilename,
                 filing.DocumentUrl
             );
-            return null;
+            return (null, null);
         }
 
         _logger.LogInformation(
@@ -1254,7 +1275,7 @@ public class DocumentScraper : IDocumentScraper
             pdfFilename
         );
 
-        return markdown;
+        return (markdown, original);
     }
 
     private static void RecordError(ScrapingResult result, string label, Exception ex)

@@ -54,6 +54,15 @@ public static class SecDocumentEnvelopeParser
         return false;
     }
 
+    /// <summary>Whether <paramref name="filename"/> names the submission's primary document, its first block.</summary>
+    public static bool IsPrimaryDocument(string envelope, string filename)
+    {
+        var primary = EnumerateDocumentBlocks(envelope).FirstOrDefault();
+        return primary != null
+            && TryExtractSgmlTagValue(primary, "FILENAME", out var primaryName)
+            && string.Equals(primaryName, filename, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Extracts the raw XBRL envelope from a full SEC submission (the <c>{accession}.txt</c>
     /// file). Prefers the inline iXBRL document set, every document carrying inline markers

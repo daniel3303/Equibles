@@ -165,9 +165,177 @@ public class DocumentScraperTests
                 Arg.Any<XbrlCaptureStatus>(),
                 // The header stamps 16:30:15 EST, stored as UTC.
                 new DateTime(2025, 1, 14, 21, 30, 15, DateTimeKind.Utc),
+                // An HTML primary has no PDF original.
+                null,
                 Arg.Any<CancellationToken>()
             );
         harness.PdfTextExtractor.DidNotReceiveWithAnyArgs().Extract(default);
+    }
+
+    [Fact]
+    public async Task ScrapeDocuments_PdfPrimary_StoresThePdfAsTheOriginal()
+    {
+        // An annual report to holders is one uuencoded PDF: the HTML path yields no text, so the
+        // scraper fetches the standalone PDF, extracts its text, and keeps the PDF for readers.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        EquityIssuer company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000123456", "ARS", null)
+            .Returns([
+                new FilingData
+                {
+                    Cik = "0000123456",
+                    AccessionNumber = "0000123456-26-000007",
+                    FilingDate = new DateOnly(2026, 4, 2),
+                    Form = "ARS",
+                    PrimaryDocument = "acme_ars.pdf",
+                    DocumentUrl = "https://sec.gov/acme_ars.pdf",
+                },
+            ]);
+        harness
+            .SecEdgarClient.GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(
+                "<DOCUMENT>\n<TYPE>ARS\n<SEQUENCE>1\n<FILENAME>acme_ars.pdf\n<TEXT>\n<PDF>\nbegin 644 acme_ars.pdf\n</PDF>\n</TEXT>\n</DOCUMENT>"
+            );
+        harness.Normalizer.Normalize(Arg.Any<string>()).Returns("");
+        harness.Converter.Convert(Arg.Any<string>()).Returns("");
+        var pdf = "%PDF-1.7 ACME annual report"u8.ToArray();
+        harness
+            .SecEdgarClient.GetDocumentFileBytes(
+                "0000123456",
+                "0000123456-26-000007",
+                "acme_ars.pdf",
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(pdf);
+        harness.PdfTextExtractor.Extract(pdf).Returns("ACME Annual Report 2025");
+        harness
+            .Persistence.Exists(
+                Arg.Any<EquityIssuer>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
+            )
+            .Returns(false);
+
+        var options = new DocumentScraperOptions
+        {
+            UseEventDrivenDiscovery = false,
+            DocumentTypesToSync = [DocumentType.AnnualReportToHolders],
+        };
+        var result = await harness.BuildScraper(dbContext, options: options).ScrapeDocuments();
+
+        result.DocumentsAdded.Should().Be(1);
+        await harness
+            .Persistence.Received(1)
+            .Save(
+                Arg.Is<EquityIssuer>(c => c.Id == company.Id),
+                Arg.Is<byte[]>(b => Encoding.UTF8.GetString(b) == "ACME Annual Report 2025"),
+                Arg.Any<string>(),
+                DocumentType.AnnualReportToHolders,
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>(),
+                "0000123456-26-000007",
+                Arg.Any<string>(),
+                Arg.Any<XbrlCaptureResult>(),
+                Arg.Any<AsFiledHtmlCaptureResult>(),
+                Arg.Any<XbrlCaptureStatus>(),
+                Arg.Any<DateTime?>(),
+                pdf,
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
+    // An image-only PDF primary keeps its original with no text, so the sweep never fetches it again.
+    [InlineData(true, "")]
+    // A PDF exhibit behind an HTML primary that yields no text gives text, never an original.
+    [InlineData(false, "ACME exhibit text")]
+    public async Task ScrapeDocuments_PdfFallback_KeepsOnlyAPrimaryPdfAsTheOriginal(
+        bool pdfIsPrimary,
+        string extractedText
+    )
+    {
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000123456", "ARS", null)
+            .Returns([
+                new FilingData
+                {
+                    Cik = "0000123456",
+                    AccessionNumber = "0000123456-26-000008",
+                    FilingDate = new DateOnly(2026, 4, 2),
+                    Form = "ARS",
+                    PrimaryDocument = pdfIsPrimary ? "acme_ars.pdf" : "acme_ars.htm",
+                    DocumentUrl = "https://sec.gov/acme_ars",
+                },
+            ]);
+        var pdfBlock =
+            "<DOCUMENT>\n<TYPE>ARS\n<FILENAME>acme_ars.pdf\n<TEXT>\n<PDF>\nbegin 644 acme_ars.pdf\n</PDF>\n</TEXT>\n</DOCUMENT>";
+        var htmlBlock =
+            "<DOCUMENT>\n<TYPE>ARS\n<FILENAME>acme_ars.htm\n<TEXT>\n<html><body><img src='cover.jpg'></body></html>\n</TEXT>\n</DOCUMENT>\n";
+        harness
+            .SecEdgarClient.GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(pdfIsPrimary ? pdfBlock : htmlBlock + pdfBlock);
+        harness.Normalizer.Normalize(Arg.Any<string>()).Returns("");
+        harness.Converter.Convert(Arg.Any<string>()).Returns("");
+        var pdf = "%PDF-1.7 ACME"u8.ToArray();
+        harness
+            .SecEdgarClient.GetDocumentFileBytes(
+                "0000123456",
+                "0000123456-26-000008",
+                "acme_ars.pdf",
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(pdf);
+        harness.PdfTextExtractor.Extract(pdf).Returns(extractedText);
+        harness
+            .Persistence.Exists(
+                Arg.Any<EquityIssuer>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
+            )
+            .Returns(false);
+
+        var result = await harness
+            .BuildScraper(
+                dbContext,
+                options: new DocumentScraperOptions
+                {
+                    UseEventDrivenDiscovery = false,
+                    DocumentTypesToSync = [DocumentType.AnnualReportToHolders],
+                }
+            )
+            .ScrapeDocuments();
+
+        result.DocumentsAdded.Should().Be(1);
+        await harness
+            .Persistence.Received(1)
+            .Save(
+                Arg.Any<EquityIssuer>(),
+                Arg.Is<byte[]>(b => Encoding.UTF8.GetString(b) == extractedText),
+                Arg.Any<string>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<XbrlCaptureResult>(),
+                Arg.Any<AsFiledHtmlCaptureResult>(),
+                Arg.Any<XbrlCaptureStatus>(),
+                Arg.Any<DateTime?>(),
+                Arg.Is<byte[]>(b => pdfIsPrimary ? b == pdf : b == null),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
@@ -382,6 +550,7 @@ public class DocumentScraperTests
                 Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<XbrlCaptureStatus>(),
                 Arg.Any<DateTime?>(),
+                Arg.Any<byte[]>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -400,6 +569,7 @@ public class DocumentScraperTests
                 Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<XbrlCaptureStatus>(),
                 Arg.Any<DateTime?>(),
+                Arg.Any<byte[]>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -418,6 +588,7 @@ public class DocumentScraperTests
                 Arg.Any<AsFiledHtmlCaptureResult>(),
                 Arg.Any<XbrlCaptureStatus>(),
                 Arg.Any<DateTime?>(),
+                Arg.Any<byte[]>(),
                 Arg.Any<CancellationToken>()
             );
     }

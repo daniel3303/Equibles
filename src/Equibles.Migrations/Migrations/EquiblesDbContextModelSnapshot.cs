@@ -3833,6 +3833,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("AsFiledHtmlVersion")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("AsFiledPdfContentId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("ChunkAttempts")
                         .HasColumnType("integer");
 
@@ -3925,6 +3928,8 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("AccessionNumber");
 
                     b.HasIndex("AsFiledHtmlContentId");
+
+                    b.HasIndex("AsFiledPdfContentId");
 
                     b.HasIndex("ContentId");
 
@@ -5816,6 +5821,10 @@ namespace Equibles.Migrations.Migrations
                         .WithMany()
                         .HasForeignKey("AsFiledHtmlContentId");
 
+                    b.HasOne("Equibles.Media.Data.Models.File", "AsFiledPdfContent")
+                        .WithMany()
+                        .HasForeignKey("AsFiledPdfContentId");
+
                     b.HasOne("Equibles.Media.Data.Models.File", "Content")
                         .WithMany()
                         .HasForeignKey("ContentId")
@@ -5837,6 +5846,8 @@ namespace Equibles.Migrations.Migrations
                         .HasForeignKey("XbrlContentId");
 
                     b.Navigation("AsFiledHtmlContent");
+
+                    b.Navigation("AsFiledPdfContent");
 
                     b.Navigation("Content");
 
