@@ -82,7 +82,9 @@ internal static class EquityDirectorySnapshotIdentity
                 securities.TryGetValue(row.SourceSecurityIdentifier, out var boundSecurity)
                 && row.Isin != null
                 && (
-                    boundSecurity.Isin != null && row.Isin != boundSecurity.Isin
+                    boundSecurity.Isin != null
+                        && row.Isin != boundSecurity.Isin
+                        && !EquityDirectoryIsinReissue.Proves(boundSecurity.Isin, row.Isin)
                     || isinIdentities.TryGetValue(row.Isin, out var byIsin)
                         && byIsin.Id != boundSecurity.EquitySecurityId
                 );
@@ -155,6 +157,7 @@ internal static class EquityDirectorySnapshotIdentity
             || row.Isin == null
             || listing.Security.Isin == null
             || row.Isin == listing.Security.Isin
+            || EquityDirectoryIsinReissue.Proves(listing.Security.Isin, row.Isin)
         );
 
     private static bool ValidIdentifier(string value) =>

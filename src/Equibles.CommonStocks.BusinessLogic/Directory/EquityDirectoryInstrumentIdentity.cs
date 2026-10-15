@@ -76,7 +76,10 @@ internal sealed class EquityDirectoryInstrumentIdentity(
                 );
             security.SecurityType = input.SecurityType.Value;
         }
-        security.Isin ??= input.Isin;
+        if (Reissued(security))
+            security.Isin = input.Isin;
+        else
+            security.Isin ??= input.Isin;
         return security;
     }
 
@@ -119,8 +122,16 @@ internal sealed class EquityDirectoryInstrumentIdentity(
             return true;
         if (byIsin != null && byIsin.Id != security.Id)
             return true;
-        return security.Isin != null && input.Isin != null && security.Isin != input.Isin;
+        return security.Isin != null
+            && input.Isin != null
+            && security.Isin != input.Isin
+            && !Reissued(security);
     }
+
+    // Only a security bound to this venue code may take the code's reissued ISIN.
+    private bool Reissued(EquitySecurity security) =>
+        securityIdentifier?.Security == security
+        && EquityDirectoryIsinReissue.Proves(security.Isin, input.Isin);
 
     public void Bind(EquityIssuerRepository repository, EquityListing listing, Guid recordId)
     {
