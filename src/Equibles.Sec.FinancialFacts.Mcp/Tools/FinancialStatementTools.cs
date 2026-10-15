@@ -74,7 +74,9 @@ public class FinancialStatementTools
                 + "also work. Defaults to income."
         )]
             string statement = "income",
-        [Description("Fiscal year, e.g. 2023. Defaults to the latest reported year.")]
+        [Description(
+            "Fiscal year, e.g. 2023. Defaults to the year of the latest period with line items to show."
+        )]
             int? year = null,
         [Description(
             "Fiscal period: 'FY' (annual) or 'Q1'..'Q4'. Defaults to the latest period with "
@@ -330,7 +332,7 @@ public class FinancialStatementTools
         );
     }
 
-    // A quarter whose flows are all year-to-date spans has figures, just none a discrete-quarter
+    // A quarter whose flows are all cumulative spans has figures, just none a discrete-quarter
     // statement can show, so it must not read as a period the filer left unreported.
     private static string EmptyPeriodMessage(
         EquityIssuer stock,
@@ -352,8 +354,8 @@ public class FinancialStatementTools
             );
         return yearToDateOnly
             ? $"{EquityListingSymbol.Display(stock)} has no discrete-quarter {statementName} line items "
-                + $"for {label}: its flows are year-to-date spans with no preceding quarter to subtract. "
-                + "Use period 'FY' for annual figures, or GetFinancialFact for one cumulative line."
+                + $"for {label}: its flows are cumulative spans from which no discrete quarter can be "
+                + "formed. Use period 'FY' for annual figures, or GetFinancialFact for one cumulative line."
             : $"No {statementName} line items were reported by {EquityListingSymbol.Display(stock)} "
                 + $"for {label}.";
     }
@@ -364,8 +366,8 @@ public class FinancialStatementTools
         SecFiscalPeriod fiscalPeriod
     ) =>
         $"\n_FY{fiscalYear} {fiscalPeriod.NameForHumans()} is newer but has no "
-        + $"{statementType.NameForHumans().ToLowerInvariant()} line items that form a discrete "
-        + "period, so the newest period that does is shown._\n";
+        + $"{statementType.NameForHumans().ToLowerInvariant()} this tool can show, so the newest "
+        + "period that has one is shown._\n";
 
     private static string RenderStatementTable(
         EquityIssuer stock,
@@ -614,6 +616,9 @@ public class FinancialStatementTools
         }
     }
 
+    // A defaulted request tries at most a year of periods before reporting the newest one's absence.
+    private const int MaxDefaultPeriodAttempts = 5;
+
     // The longest span a discrete fiscal quarter can cover — 13 weeks on a 4-4-5
     // calendar plus the occasional 14-week quarter, with headroom.
     private const int MaxDiscreteQuarterDays = 100;
@@ -637,9 +642,6 @@ public class FinancialStatementTools
     ) => StatementLineFacts.PickCurrentlyReported(facts, fiscalPeriod);
 
     // Chronological order within a fiscal year: Q1 < Q2 < Q3 < Q4 < FullYear.
-    // A defaulted request tries at most a year of periods before reporting the newest one's absence.
-    private const int MaxDefaultPeriodAttempts = 5;
-
     private static int ChronologicalRank(SecFiscalPeriod period) =>
         period switch
         {

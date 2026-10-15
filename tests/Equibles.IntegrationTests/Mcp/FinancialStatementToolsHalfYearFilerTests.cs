@@ -7,6 +7,7 @@ using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -44,8 +45,8 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
         result
             .Should()
             .Contain(
-                "_FY2026 Q2 is newer but has no income statement line items that form a discrete "
-                    + "period, so the newest period that does is shown._"
+                "_FY2026 Q2 is newer but has no income statement this tool can show, so the newest "
+                    + "period that has one is shown._"
             );
         result
             .Should()
@@ -64,7 +65,7 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
             .Should()
             .Be(
                 "HSBC has no discrete-quarter income statement line items for FY2026 Q2: its flows are "
-                    + "year-to-date spans with no preceding quarter to subtract. Use period 'FY' for "
+                    + "cumulative spans from which no discrete quarter can be formed. Use period 'FY' for "
                     + "annual figures, or GetFinancialFact for one cumulative line."
             );
     }
@@ -80,6 +81,113 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
         result.Should().Contain("Balance Sheet for HSBC (Hsbc Holdings PLC) — FY2026 Q2:");
         result.Should().Contain("| Total Assets | $3,438,161,000,000 |");
         result.Should().NotContain("is newer but has no");
+    }
+
+    // A quarterly filer's newest Q2 renders by subtracting Q1 from the six-month cash flow, so the
+    // default stays on it with no note.
+    [Fact]
+    public async Task DefaultCashFlow_NewestQuarterDerivedFromYearToDate_StaysOnItWithoutANote()
+    {
+        var filer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "QTRF",
+            Name: "Quarterly Filer Inc",
+            Cik: "0000000777"
+        );
+        var operating = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "NetCashProvidedByUsedInOperatingActivities",
+            Label = "Operating cash flow",
+        };
+        var tenQ = (DocumentType.TenQ, new DateOnly(2026, 8, 1), "0000000777-26-000002");
+        DbContext.Set<EquityIssuer>().Add(filer);
+        DbContext.Set<FinancialConcept>().Add(operating);
+        DbContext
+            .Set<FinancialFact>()
+            .AddRange(
+                Fact(
+                    filer,
+                    operating,
+                    2026,
+                    SecFiscalPeriod.Q1,
+                    new(2026, 1, 1),
+                    new(2026, 3, 31),
+                    400m,
+                    tenQ,
+                    "USD"
+                ),
+                Fact(
+                    filer,
+                    operating,
+                    2026,
+                    SecFiscalPeriod.Q2,
+                    new(2026, 1, 1),
+                    new(2026, 6, 30),
+                    1_000m,
+                    tenQ,
+                    "USD"
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialStatement("QTRF", statement: "cashflow");
+
+        result.Should().Contain("— FY2026 Q2:");
+        result
+            .Should()
+            .Contain(
+                "| Operating Cash Flow | $600 | USD | Derived quarter | 2026-04-01 | 2026-06-30 |"
+            );
+        result.Should().NotContain("is newer but");
+    }
+
+    // A period-only request may take an older year's quarter, and says which newer one it passed over.
+    [Fact]
+    public async Task PeriodOnlyRequest_FallsBackToTheNewestYearWhoseQuarterRenders()
+    {
+        await SeedHsbc();
+        var profit = await DbContext
+            .Set<FinancialConcept>()
+            .SingleAsync(c => c.Tag == "ProfitLoss");
+        var hsbc = await DbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(i => i.Name == "Hsbc Holdings PLC");
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                Fact(
+                    hsbc,
+                    profit,
+                    2025,
+                    SecFiscalPeriod.Q2,
+                    new(2025, 4, 1),
+                    new(2025, 6, 30),
+                    6_000_000_000m,
+                    HalfYear
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialStatement("HSBC", statement: "income", period: "Q2");
+
+        result.Should().Contain("— FY2025 Q2:").And.Contain("| Net Income | $6,000,000,000 |");
+        result
+            .Should()
+            .Contain("_FY2026 Q2 is newer but has no income statement this tool can show");
+    }
+
+    [Fact]
+    public async Task PeriodOnlyRequest_EveryCandidateEmpty_ReturnsTheNewestPeriodsReason()
+    {
+        await SeedHsbc();
+
+        var result = await Sut().GetFinancialStatement("HSBC", statement: "income", period: "Q2");
+
+        result
+            .Should()
+            .StartWith("HSBC has no discrete-quarter income statement line items for FY2026 Q2:");
     }
 
     private async Task SeedHsbc()
@@ -191,14 +299,15 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
         DateOnly start,
         DateOnly end,
         decimal value,
-        (DocumentType Form, DateOnly Filed, string Accession) filing
+        (DocumentType Form, DateOnly Filed, string Accession) filing,
+        string unit = "USD"
     ) =>
         new()
         {
             Id = Guid.NewGuid(),
             EquityIssuerId = issuer.Id,
             FinancialConceptId = concept.Id,
-            Unit = "USD",
+            Unit = unit,
             PeriodType = start == end ? FactPeriodType.Instant : FactPeriodType.Duration,
             PeriodStart = start,
             PeriodEnd = end,
