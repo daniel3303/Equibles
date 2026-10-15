@@ -105,7 +105,7 @@ public class OffExchangeVolumeTools
                 );
                 splits = unresolvedBasis
                     ? []
-                    : PriceSeriesSplitScope.ForListing(
+                    : ShareCountSplitScope.ForListedSeries(
                         splits,
                         stock.Presentation.Listing.Ticker,
                         listedTicker

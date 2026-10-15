@@ -268,13 +268,7 @@ public class ShortSqueezeScoreManager
         var splitsByStock = (
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                .Where(s =>
-                    stockIds.Contains(s.EquityIssuerId)
-                    && (
-                        s.PriceSeriesTicker == null
-                        || s.PriceSeriesTicker == s.Issuer.Presentation.Listing.Ticker
-                    )
-                )
+                .Where(s => stockIds.Contains(s.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.EquityIssuerId)
@@ -322,7 +316,7 @@ public class ShortSqueezeScoreManager
             }
 
             var stockSplits = splitsByStock.TryGetValue(stock.Id, out var splitList)
-                ? splitList
+                ? ShareCountSplitScope.ForListedSeries(splitList, stock.Ticker, stock.Ticker)
                 : [];
             var shortInterestPercentOfShares = ShortInterestPercentOfShares(
                 shortInterest.CurrentShortPosition,

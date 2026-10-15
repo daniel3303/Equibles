@@ -205,7 +205,7 @@ public class InstitutionalHoldingsTools
                     holding.Shares = SplitAdjustment.AdjustShareCount(
                         holding.Shares,
                         holding.ReportDate,
-                        PriceSeriesSplitScope.ForListing(
+                        ShareCountSplitScope.ForListedSeries(
                             splits,
                             stock.Presentation.Listing.Ticker,
                             listing
@@ -774,7 +774,7 @@ public class InstitutionalHoldingsTools
                         : SplitAdjustment.AdjustShareCount(
                             h.Shares,
                             targetDate,
-                            PriceSeriesSplitScope.ForListing(
+                            ShareCountSplitScope.ForListedSeries(
                                 SplitsFor(splitsByStock, h.EquityIssuerId),
                                 h.Issuer?.Presentation?.Listing?.Ticker,
                                 listedTicker
@@ -990,7 +990,7 @@ public class InstitutionalHoldingsTools
                 long AdjustShares(long shares, DateOnly asOf, string listedTicker)
                 {
                     var exactTicker = listedTicker ?? stock.Presentation.Listing.Ticker;
-                    var scoped = PriceSeriesSplitScope.ForListing(
+                    var scoped = ShareCountSplitScope.ForListedSeries(
                         splits,
                         stock.Presentation.Listing.Ticker,
                         exactTicker
@@ -2596,7 +2596,7 @@ public class InstitutionalHoldingsTools
                 var loadedSplits = SplitsFor(splitsByStock, r.CommonStockId);
                 var splits = string.IsNullOrWhiteSpace(r.PrimaryTicker)
                     ? loadedSplits
-                    : PriceSeriesSplitScope.ForListing(
+                    : ShareCountSplitScope.ForListedSeries(
                         loadedSplits,
                         r.PrimaryTicker,
                         r.ListedTicker ?? r.PrimaryTicker

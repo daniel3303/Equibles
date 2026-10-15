@@ -489,6 +489,55 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task Compute_ShareEventConfirmedOnlyOnASiblingListing_RestatesThePrimaryShortPosition()
+    {
+        // HON 2026-06-29: the US series carries the spin-off price factor, the Euronext mirror
+        // carries the 1:2 the issuer's own share counts confirm.
+        EquityIssuer stock = SeedStock("HON", sharesOutstanding: 1_000_000);
+        SeedShortInterest(stock, shortPosition: 600_000, daysToCover: 2m);
+        var mirror = new EquityListing
+        {
+            Ticker = "1HON",
+            MarketCountryCode = "IT",
+            MarketIdentifierCode = "BGEM",
+            Security = new EquitySecurity { Issuer = stock },
+        };
+        _dbContext.Add(mirror);
+        var eventDate = new DateOnly(2026, 6, 29);
+        _dbContext
+            .Set<StockSplit>()
+            .AddRange(
+                new StockSplit
+                {
+                    EquityIssuerId = stock.Id,
+                    Listing = NativeListingSeed.ForStock(_dbContext, stock, "HON"),
+                    PriceSeriesTicker = "HON",
+                    EffectiveDate = eventDate,
+                    Numerator = 1907m,
+                    Denominator = 2000m,
+                    Source = StockSplitSource.Yahoo,
+                    ShareCountEvidence = StockSplitShareCountEvidence.Contradicted,
+                },
+                new StockSplit
+                {
+                    EquityIssuerId = stock.Id,
+                    Listing = mirror,
+                    PriceSeriesTicker = "1HON",
+                    EffectiveDate = eventDate,
+                    Numerator = 1m,
+                    Denominator = 2m,
+                    Source = StockSplitSource.Yahoo,
+                    ShareCountEvidence = StockSplitShareCountEvidence.Confirmed,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var score = (await _manager.Compute()).Single();
+
+        score.ShortInterestPercentOfShares.Should().Be(0.3m);
+    }
+
+    [Fact]
     public async Task Compute_FuturePrimarySplit_DoesNotClipCurrentPriceFactors()
     {
         EquityIssuer stock = SeedStock("FUTURE", sharesOutstanding: 1_000_000);

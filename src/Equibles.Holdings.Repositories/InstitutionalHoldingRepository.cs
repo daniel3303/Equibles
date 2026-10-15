@@ -1684,7 +1684,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         if (sourceReportDate >= targetReportDate || splits.Count == 0)
             return shares;
 
-        var scoped = PriceSeriesSplitScope.ForListing(splits, primaryTicker, priceSeriesTicker);
+        var scoped = ShareCountSplitScope.ForListedSeries(splits, primaryTicker, priceSeriesTicker);
         var sourceFactor = SplitAdjustment.ShareCountFactor(sourceReportDate, scoped);
         var targetFactor = SplitAdjustment.ShareCountFactor(targetReportDate, scoped);
         return targetFactor == 0m
