@@ -203,6 +203,52 @@ public class NativeDocumentTickerScopeTests(ParadeDbFixture fixture) : ParadeDbM
             .Equal(usChunk.DocumentId);
     }
 
+    // Only an active, verified listing outside the US is a venue scope; the rest select nothing.
+    [Fact]
+    public async Task VenueSymbol_InactiveUnverifiedOrUsListing_SelectsNoDocuments()
+    {
+        var inactive = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Inactive issuer",
+            Active: false,
+            MarketCountryCode: "FR",
+            MarketIdentifierCode: "XPAR",
+            IdentityState: EquityIdentityState.Verified,
+            TradingCurrency: "EUR",
+            QuoteUnitMultiplier: 1m
+        );
+        inactive.Presentation.Listing.IdentitySourceUrl = "https://example.test/exchange/gone";
+        var unverified = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OLDV",
+            Name: "Unverified issuer",
+            MarketCountryCode: "FR",
+            MarketIdentifierCode: "XPAR",
+            TradingCurrency: "EUR",
+            QuoteUnitMultiplier: 1m
+        );
+        var us = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "HOME", Name: "U.S. issuer");
+        us.Presentation.Listing.MarketIdentifierCode = "XNYS";
+        us.Presentation.Listing.IdentityState = EquityIdentityState.Verified;
+        us.Presentation.Listing.IdentitySourceUrl = "https://example.test/exchange/home";
+        us.Presentation.Listing.TradingCurrency = "USD";
+        us.Presentation.Listing.QuoteUnitMultiplier = 1m;
+        AddDocument(inactive, "GONE");
+        AddDocument(unverified, "OLDV");
+        AddDocument(us, "HOME");
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var documents = new DocumentRepository(DbContext);
+        var chunks = new ChunkRepository(DbContext);
+        foreach (var symbol in new[] { "XPAR:GONE", "XPAR:OLDV", "XNYS:HOME" })
+        {
+            (await documents.GetByTicker(symbol).ToListAsync()).Should().BeEmpty(symbol);
+            (await chunks.HybridSearch("orbital revenue", 10, ticker: symbol))
+                .Should()
+                .BeEmpty(symbol);
+        }
+    }
+
     private Chunk AddDocument(EquityIssuer issuer, string chunkTicker = "SAME")
     {
         var file = new File

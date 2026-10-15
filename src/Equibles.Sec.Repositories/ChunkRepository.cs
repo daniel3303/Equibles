@@ -121,8 +121,9 @@ public class ChunkRepository : BaseRepository<Chunk>
         // Ticker (raw tokenizer) and DocumentType (single-token enum values) are stored
         // lowercased; Term is an exact, untokenized match, so the filter value must be
         // lowercased to line up with the indexed token. DocumentId is a UUID and matches
-        // as-is. A venue symbol filters by its issuer's documents instead (a few hundred at
-        // most): their chunks carry whichever presentation ticker they were cut under.
+        // as-is. A venue symbol filters by its issuer's documents instead, as many as a US
+        // filer's when the issuer also presents a US line, because their chunks carry
+        // whichever presentation ticker they were cut under.
         if (ticker != null && !DocumentTickerQueryExtensions.IsVenueSymbol(ticker))
             clauses.Add(ParadeDbJsonQuery.TermSet(nameof(Chunk.Ticker), ticker.ToLowerInvariant()));
 

@@ -10,6 +10,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - Read listings outside the US in the MCP price, dividend, financial-statement, financial-fact, revenue-breakdown and fund-holding tools. A bare ticker keeps its US meaning; `MIC:TICKER` (`XPAR:AIR`, `XLON:BP`, `XHKG:00005`) names one active, verified venue listing through the new `ResolveListing`, and a provider suffix (`MC.PA`, `0005.HK`) is read only after a plain US miss. Price tools read that listing's own series and name its quote unit (London quotes in pence), dividends keep the listing's trading currency, and funds holding a venue share are matched by ISIN. Tools whose data comes from US regulators answer a `MIC:TICKER` symbol with `EquityListingSymbol.UsOnlyNotice` instead of "not found".
+- Search and list a venue listing's documents. `SearchDocuments` and `ListFilings` accept `MIC:TICKER` (`XPAR:AIR`, `XHKG:00005`) and read that listing's issuer's documents in every search arm (`DocumentTickerQueryExtensions.ForListingSymbol`), because chunks keep the presentation ticker they were cut under: Airbus's chunks share AAR's `AIR`, and HSBC's Hong Kong line finds chunks stored under `HSBC`. A bare ticker keeps its US meaning. A venue-scoped `ListFilings` includes ESEF reports. `SecDocumentInfo.Ticker`, which `ListFilings` and REST filing lists print, is now the presentation listing's display symbol, so a venue-presented filer reads `XPAR:AIR` instead of a bare ticker that names a US company.
 
 ### Fixed
 
