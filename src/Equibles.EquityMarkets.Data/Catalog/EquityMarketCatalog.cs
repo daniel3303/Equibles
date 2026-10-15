@@ -169,7 +169,8 @@ public static class EquityMarketCatalog
                 "TGAT",
                 "XGAT",
                 "XGRM",
-            ]
+            ],
+            HomeRequiresIssuerRequest: true
         ),
         // FIRDS files a Nasdaq main-market share under the lit book and its Nordic@Mid and Auction on Demand
         // segments, and a First North share under those two segments and the SME growth-market code; the home is any.
