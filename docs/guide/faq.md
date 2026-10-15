@@ -96,7 +96,9 @@ A 13F is a quarterly report that large institutional investment managers (hedge 
 
 ## Does Equibles support non-US stocks?
 
-Not currently. All data sources are U.S.-focused: SEC EDGAR for filings and holdings, Yahoo Finance for U.S.-listed stock prices, FINRA for short data, FRED for U.S. economic indicators, and the U.S. Congress for congressional trades. The stock universe is built from companies that file with the SEC, which means U.S.-listed equities and foreign companies that cross-list in the U.S. via ADRs (American Depositary Receipts). International exchanges, non-U.S. regulators, and non-dollar-denominated instruments are not covered.
+Yes, for European listings. Equibles imports verified share listings from the official directories of Euronext (Paris, Amsterdam, Brussels, Dublin, Oslo, Milan and Lisbon), Xetra, Nasdaq Stockholm, Helsinki and Copenhagen, BME, GPW and the London Stock Exchange. Each listing is keyed by ISIN and venue and carries daily prices in its own trading currency. See [Equity identity](../equity-identity.md) for how listings are verified.
+
+Foreign companies that file with the SEC (20-F, 40-F, 6-K) and their ADRs are covered by the SEC datasets. The other datasets cover the US only, among them 13F holdings, insider and congressional trades, FINRA short data, FRED indicators, CFTC and CBOE data, fund filings and government contracts. European listings have no MCP tools yet. [Equibles Cloud](https://equibles.com) adds Shanghai, Shenzhen, Beijing and Hong Kong listings.
 
 ## Does Equibles provide real-time data?
 

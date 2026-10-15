@@ -1,8 +1,8 @@
 @{
-    var title = ViewData["Title"]?.ToString() ?? "US Stock Market Financial Data";
+    var title = ViewData["Title"]?.ToString() ?? "Stock Market Financial Data";
     var fullTitle = $"{title} - Equibles";
     var description = ViewData["Description"]?.ToString()
-        ?? "Equibles - US Stock Market Financial Data. Institutional holdings, short volume, short interest, and fails-to-deliver data.";
+        ?? "Equibles - open-source stock market data for US and European listings: SEC filings, institutional holdings, insider and congressional trades, and daily prices.";
     var canonicalUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.Path}";
     var baseUrl = $"{Context.Request.Scheme}://{Context.Request.Host}";
 }
