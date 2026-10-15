@@ -45,8 +45,8 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
         result
             .Should()
             .Contain(
-                "_FY2026 Q2 is newer but has no income statement this tool can show, so the newest "
-                    + "period that has one is shown._"
+                "_FY2026 Q2 is newer but has no income statement line items this tool can show, so "
+                    + "the newest period that has them is shown._"
             );
         result
             .Should()
@@ -175,13 +175,37 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
         result.Should().Contain("— FY2025 Q2:").And.Contain("| Net Income | $6,000,000,000 |");
         result
             .Should()
-            .Contain("_FY2026 Q2 is newer but has no income statement this tool can show");
+            .Contain(
+                "_FY2026 Q2 is newer but has no income statement line items this tool can show"
+            );
     }
 
+    // Two six-month Q2 buckets, so the newest period's reason must win over the last one tried.
     [Fact]
     public async Task PeriodOnlyRequest_EveryCandidateEmpty_ReturnsTheNewestPeriodsReason()
     {
         await SeedHsbc();
+        var profit = await DbContext
+            .Set<FinancialConcept>()
+            .SingleAsync(c => c.Tag == "ProfitLoss");
+        var hsbc = await DbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(i => i.Name == "Hsbc Holdings PLC");
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                Fact(
+                    hsbc,
+                    profit,
+                    2025,
+                    SecFiscalPeriod.Q2,
+                    new(2025, 1, 1),
+                    new(2025, 6, 30),
+                    15_000_000_000m,
+                    HalfYear
+                )
+            );
+        await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialStatement("HSBC", statement: "income", period: "Q2");
 

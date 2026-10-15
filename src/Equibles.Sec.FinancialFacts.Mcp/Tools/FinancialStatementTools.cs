@@ -366,8 +366,8 @@ public class FinancialStatementTools
         SecFiscalPeriod fiscalPeriod
     ) =>
         $"\n_FY{fiscalYear} {fiscalPeriod.NameForHumans()} is newer but has no "
-        + $"{statementType.NameForHumans().ToLowerInvariant()} this tool can show, so the newest "
-        + "period that has one is shown._\n";
+        + $"{statementType.NameForHumans().ToLowerInvariant()} line items this tool can show, so "
+        + "the newest period that has them is shown._\n";
 
     private static string RenderStatementTable(
         EquityIssuer stock,
