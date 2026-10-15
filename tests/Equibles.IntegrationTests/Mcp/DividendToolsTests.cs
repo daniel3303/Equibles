@@ -187,4 +187,40 @@ public class DividendToolsTests : ParadeDbMcpTestBase
         result.Should().Contain(@"Pipe \| Corp\\Line Two (AAPL)");
         result.Should().NotContain("Corp\\Line\nTwo");
     }
+
+    // A listing outside the US keeps its trading currency, and its bare ticker still means the US listing.
+    [Fact]
+    public async Task GetDividendHistory_VenueSymbol_ReadsThatListingInItsCurrency()
+    {
+        await SeedStock("MC", "US Namesake Corp");
+        EquityIssuer lvmh = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MC",
+            Name: "LVMH",
+            MarketCountryCode: "FR",
+            MarketIdentifierCode: "XPAR",
+            IdentityState: EquityIdentityState.Verified,
+            TradingCurrency: "EUR",
+            QuoteUnitMultiplier: 1m
+        );
+        lvmh.Presentation.Listing.IdentitySourceUrl = "https://example.test/amf-register";
+        DbContext.Add(lvmh);
+        DbContext.Add(
+            new CashDividend
+            {
+                EquityIssuerId = lvmh.Id,
+                EquityListingId = lvmh.Presentation.Listing.Id,
+                Currency = "EUR",
+                ExDate = new DateOnly(2025, 4, 24),
+                AmountPerShare = 7.5m,
+                Source = CashDividendSource.Yahoo,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        var venue = await Sut().GetDividendHistory("XPAR:MC");
+        venue.Should().Contain("LVMH (XPAR:MC)").And.Contain("7.50 EUR");
+
+        (await Sut().GetDividendHistory("MC.PA")).Should().Contain("LVMH (XPAR:MC)");
+        (await Sut().GetDividendHistory("MC")).Should().NotContain("LVMH");
+    }
 }

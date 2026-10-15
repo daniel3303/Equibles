@@ -191,6 +191,8 @@ public class StockPriceTools
 
                 var tickerList = new List<string>();
                 var seenTickers = new HashSet<string>(StringComparer.Ordinal);
+                // A dotted segment is looked up as typed, so a provider suffix (MC.PA) is not folded to MC-PA.
+                var dottedSpelling = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var segment in segments)
                 {
                     var normalizedTicker = EquityListingSymbol.TryParse(
@@ -203,7 +205,13 @@ public class StockPriceTools
                     if (normalizedTicker == null)
                         return $"Invalid ticker '{segment}'. Use 1-32 ASCII letters, digits, dots, or dashes.";
                     if (seenTickers.Add(normalizedTicker))
+                    {
                         tickerList.Add(normalizedTicker);
+                        if (segment.Contains('.') && venueCode == null)
+                            dottedSpelling[normalizedTicker] = TickerNormalizer.NormalizeListed(
+                                segment
+                            );
+                    }
                 }
 
                 var result = StartTable(
@@ -237,7 +245,9 @@ public class StockPriceTools
 
                 foreach (var ticker in tickerList)
                 {
-                    var (listing, _) = await ResolveTicker(ticker);
+                    var (listing, _) = await ResolveTicker(
+                        dottedSpelling.GetValueOrDefault(ticker) ?? ticker
+                    );
                     if (listing == null)
                     {
                         placeholderByTicker[ticker] = "Not found";
@@ -304,19 +314,19 @@ public class StockPriceTools
                     // provider refresh cannot certify the basis of raw rows, so a captured split
                     // inside the requested year moves the comparison start to that split date.
                     var cutoff = price.Date.AddDays(-365);
-                    // A venue series answers only to splits recorded against that exact listing.
                     var applicableSplits =
                         listing.Venue == null
                             ? PriceSeriesSplitScope.ForPriceComparison(
                                 splitsByIssuer.For(listing.Stock.Id),
                                 listing.PriceTicker
                             )
-                            : PriceSeriesSplitScope.ForListing(
+                            : PriceSeriesSplitScope.ForPriceComparison(
                                 splitsByIssuer.For(listing.Stock.Id),
                                 listing.Venue.Id
                             );
+                    var rowSymbol = listing.Venue == null ? ticker : listing.Symbol;
                     if (listing.Venue != null)
-                        venueUnits[ticker] = QuoteUnit(listing.Venue);
+                        venueUnits[rowSymbol] = QuoteUnit(listing.Venue);
                     var comparableWindow = ComparablePriceWindow.Resolve(
                         cutoff,
                         price.Date,
@@ -325,7 +335,8 @@ public class StockPriceTools
                     var previousClose = DayChangeBasis(
                         price,
                         previous,
-                        comparableWindow.SplitBoundaryDate
+                        comparableWindow.SplitBoundaryDate,
+                        listing.Venue != null
                     );
                     var changeCell = "—";
                     var changePctCell = "—";
@@ -339,7 +350,11 @@ public class StockPriceTools
                                 "+0.00;-0.00;0.00"
                             ) + "%";
                     }
-                    else if (previous != null && !IsPriorSession(price, previous))
+                    else if (
+                        previous != null
+                        && listing.Venue == null
+                        && !IsPriorSession(price, previous)
+                    )
                     {
                         // Only a skipped session earns the footnote. A prior row with a
                         // non-positive close or one before a split boundary is blanked too, and
@@ -378,7 +393,7 @@ public class StockPriceTools
 
                     rowDates.Add(price.Date);
                     result.AppendLine(
-                        $"| {ticker} | {price.Date:yyyy-MM-dd} | {McpFormat.Price(price.Close)} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} | {cells.High} | {cells.Low} | {cells.OffHigh} | {cells.AboveLow} |"
+                        $"| {rowSymbol} | {price.Date:yyyy-MM-dd} | {McpFormat.Price(price.Close)} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} | {cells.High} | {cells.Low} | {cells.OffHigh} | {cells.AboveLow} |"
                     );
                 }
 
@@ -392,7 +407,8 @@ public class StockPriceTools
                                 "; ",
                                 venueUnits.Select(unit => $"{unit.Key} in {unit.Value}")
                             )
-                            + ". Every other row is in USD."
+                            + ". Their Change compares with the previous stored close, since each "
+                            + "exchange keeps its own holidays. Every other row is in USD."
                     );
                 }
 
@@ -415,7 +431,8 @@ public class StockPriceTools
                     // would tell the caller a years-old close is a fresh artifact.
                     var newest = rowDates.Max();
                     var oneSessionSpread =
-                        rowDates.Min() >= UsMarketCalendar.PreviousTradingDay(newest);
+                        venueUnits.Count == 0
+                        && rowDates.Min() >= UsMarketCalendar.PreviousTradingDay(newest);
                     result.AppendLine();
                     result.AppendLine(
                         oneSessionSpread
@@ -815,13 +832,8 @@ public class StockPriceTools
         DateOnly end
     ) => Traded(listing).Where(p => p.Date >= start && p.Date <= end);
 
-    // Resolves a ticker to its filer and exact stored listing symbol, additionally accepting
-    // the dot class-share notation (BRK.B) for the dash form the price data stores (BRK-B).
-    // This is a mechanical format conversion between two spellings of the same symbol, not a
-    // heuristic. The returned PriceTicker is load-bearing: price queries use it so a secondary
-    // listing can never fall through to the filer's primary bars.
-    // A MIC:TICKER symbol, or a provider suffix (MC.PA) once the US lookup misses, reads one
-    // venue listing's own series instead.
+    // Resolves a ticker to its exact listing, folding BRK.B to the stored BRK-B, so a secondary listing
+    // never falls through to the filer's primary bars; MIC:TICKER, or MC.PA after a US miss, names a venue.
     private async Task<(PricedListing Listing, string Error)> ResolveTicker(string ticker)
     {
         if (!EquityListingSymbol.TryParse(ticker, out _, out _))
@@ -838,7 +850,10 @@ public class StockPriceTools
                     ? (null, resolved.Error)
                     : (new PricedListing(resolved.Stock, resolved.PriceTicker, null), null);
 
-            var suffixed = await _commonStockRepository.ResolveListing(ticker);
+            var suffixed = await _commonStockRepository.ResolveSuffixAfterUsMiss(
+                ticker,
+                resolved.Error
+            );
             return suffixed.Venue == null
                 ? (null, resolved.Error)
                 : (new PricedListing(suffixed.Stock, suffixed.Venue.Ticker, suffixed.Venue), null);
@@ -1080,12 +1095,14 @@ public class StockPriceTools
     // So the basis is chosen by DATE, never by position: only the row dated the trading day
     // immediately before the latest one qualifies. Otherwise there is no day change to state,
     // and an absent percentage is honest where a wrong one is not.
+    // A venue keeps its own holiday calendar, which the US one cannot judge, so its basis is the previous stored close.
     private static decimal? DayChangeBasis(
         EquityDailyStockPrice latest,
         EquityDailyStockPrice previous,
-        DateOnly? splitBoundaryDate
+        DateOnly? splitBoundaryDate,
+        bool venue
     ) =>
-        IsPriorSession(latest, previous)
+        (venue ? previous != null && previous.Date < latest.Date : IsPriorSession(latest, previous))
         && previous.Close > 0
         && (splitBoundaryDate == null || previous.Date >= splitBoundaryDate)
             ? previous.Close

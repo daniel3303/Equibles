@@ -223,7 +223,7 @@ public static class CommonStockRepositoryExtensions
         return (null, NotFound(ticker));
     }
 
-    private static string NotFound(string ticker) => $"Stock '{ticker}' not found.";
+    internal static string NotFound(string ticker) => $"Stock '{ticker}' not found.";
 
     private static string Ambiguous(string ticker) => $"Listed security '{ticker}' is ambiguous.";
 

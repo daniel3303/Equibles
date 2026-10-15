@@ -48,6 +48,23 @@ public static class PriceSeriesSplitScope
     public static List<StockSplit> ForListing(IEnumerable<StockSplit> splits, Guid listingId) =>
         splits?.Where(split => split.EquityListingId == listingId).ToList() ?? [];
 
+    /// <summary>
+    /// Dates one listing's raw series cannot safely cross: its own splits plus every split whose
+    /// listing is unknown, which never supply a restatement ratio.
+    /// </summary>
+    public static List<StockSplit> ForPriceComparison(
+        IEnumerable<StockSplit> splits,
+        Guid listingId
+    ) =>
+        splits
+            ?.Where(split =>
+                split.EquityListingId == null
+                || split.EquityListingId == listingId
+                || split.Listing == null
+            )
+            .ToList()
+        ?? [];
+
     public static bool HasUnresolvedBasis(
         IEnumerable<StockSplit> splits,
         Guid listingId,

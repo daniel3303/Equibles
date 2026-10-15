@@ -29,7 +29,8 @@ public class StockPriceToolsDayChangeBasisTests
         DateOnly latestDate,
         DateOnly? previousDate,
         decimal previousClose = 100m,
-        DateOnly? splitBoundaryDate = null
+        DateOnly? splitBoundaryDate = null,
+        bool venue = false
     )
     {
         EquityDailyStockPrice latest = new EquityDailyStockPrice
@@ -41,7 +42,7 @@ public class StockPriceToolsDayChangeBasisTests
             previousDate == null
                 ? null
                 : new EquityDailyStockPrice { Date = previousDate.Value, Close = previousClose };
-        return (decimal?)Method().Invoke(null, [latest, previous, splitBoundaryDate]);
+        return (decimal?)Method().Invoke(null, [latest, previous, splitBoundaryDate, venue]);
     }
 
     [Fact]
@@ -168,5 +169,17 @@ public class StockPriceToolsDayChangeBasisTests
         // one. Both this and the case above must pass: the rule is "no NYSE session was skipped",
         // not "the prior row is exactly the NYSE previous session".
         Basis(new DateOnly(2026, 7, 6), new DateOnly(2026, 7, 2)).Should().Be(100m);
+    }
+
+    // London is shut on Good Friday and Easter Monday, which the US calendar cannot see, so a venue
+    // row compares with its previous stored close where a US row would withhold the change.
+    [Fact]
+    public void VenueRow_UsesThePreviousStoredCloseAcrossItsOwnHolidays()
+    {
+        var latest = new DateOnly(2026, 4, 7);
+        var previous = new DateOnly(2026, 4, 2);
+
+        Basis(latest, previous, venue: true).Should().Be(100m);
+        Basis(latest, previous).Should().BeNull();
     }
 }

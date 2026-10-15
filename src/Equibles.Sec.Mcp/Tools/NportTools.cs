@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Data;
@@ -65,33 +66,48 @@ public class NportTools
         return _runner.Execute(
             async () =>
             {
-                IQueryable<NportHolding> holdings;
-                string safeTicker;
+                IQueryable<NportHolding> holdings = null;
+                string safeTicker = null;
+                EquityListing venue = null;
                 if (EquityListingSymbol.TryParse(ticker, out _, out _))
                 {
-                    // Funds report a venue's share by its ISIN; a US listing keeps its CUSIP identity.
-                    var (_, venue, venueError) = await _commonStockRepository.ResolveListing(
+                    (_, venue, var venueError) = await _commonStockRepository.ResolveListing(
                         ticker
                     );
                     if (venue == null)
                         return MarkdownText(venueError);
+                }
+
+                if (venue == null)
+                {
+                    var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                    if (stockError != null)
+                    {
+                        (_, venue, _) = await _commonStockRepository.ResolveSuffixAfterUsMiss(
+                            ticker,
+                            stockError
+                        );
+                        if (venue == null)
+                            return MarkdownText(stockError);
+                    }
+                    else
+                    {
+                        var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                        safeTicker = MarkdownText(listedTicker);
+
+                        if (!await _nportRepository.HasCusipIdentity(stock, listedTicker))
+                            return $"No CUSIP is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
+                        holdings = _nportRepository.GetHoldingsByListingCusip(stock, listedTicker);
+                    }
+                }
+
+                // Funds report a venue's share by its ISIN; a US listing keeps its CUSIP identity.
+                if (venue != null)
+                {
                     safeTicker = MarkdownText(EquityListingSymbol.Display(venue));
                     if (string.IsNullOrWhiteSpace(venue.Security.Isin))
                         return $"No ISIN is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
                     holdings = _nportRepository.GetHoldingsByIsin(venue.Security.Isin);
-                }
-                else
-                {
-                    var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
-                    if (stockError != null)
-                        return MarkdownText(stockError);
-
-                    var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
-                    safeTicker = MarkdownText(listedTicker);
-
-                    if (!await _nportRepository.HasCusipIdentity(stock, listedTicker))
-                        return $"No CUSIP is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
-                    holdings = _nportRepository.GetHoldingsByListingCusip(stock, listedTicker);
                 }
 
                 var recencyFloor = DateOnly.FromDateTime(

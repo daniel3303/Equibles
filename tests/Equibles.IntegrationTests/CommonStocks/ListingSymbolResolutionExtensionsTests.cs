@@ -146,4 +146,39 @@ public class ListingSymbolResolutionExtensionsTests : IDisposable
             .Be("SAP SE");
         (await _repository.ResolveIssuerIncludingDelisted("SAP")).Stock.Should().BeNull();
     }
+
+    [Fact]
+    public async Task VerifiedAlias_ResolvesButAnInactiveListingDoesNot()
+    {
+        var renamed = Venue("NEWT", "XAMS", "NL", "Renamed NV");
+        renamed.Presentation.Listing.TickerAliases.Add(
+            new EquityListingTickerAlias
+            {
+                Ticker = "OLDT",
+                Listing = renamed.Presentation.Listing,
+                EvidenceSource = "test",
+            }
+        );
+        var retired = Venue("GONE", "XAMS", "NL", "Retired NV");
+        retired.Presentation.Listing.Active = false;
+        await _dbContext.SaveChangesAsync();
+
+        (await _repository.ResolveListing("XAMS:OLDT")).Stock.Name.Should().Be("Renamed NV");
+        (await _repository.ResolveListing("XAMS:GONE")).Stock.Should().BeNull();
+    }
+
+    // A US claim that fails closed stays an error; the provider suffix is read only on a plain miss.
+    [Fact]
+    public async Task AmbiguousUsTicker_NeverFallsThroughToTheSuffix()
+    {
+        Us("MC-PA", "First US Claimant");
+        Us("MC-PA", "Second US Claimant");
+        Venue("MC", "XPAR", "FR", "LVMH");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.ResolveListing("MC.PA");
+
+        result.Stock.Should().BeNull();
+        result.Error.Should().Contain("ambiguous");
+    }
 }

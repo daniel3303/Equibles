@@ -65,9 +65,10 @@ public static class EquityListingSymbol
 
     private const int MarketIdentifierCodeLength = 4;
 
-    /// <summary>What a reader whose data covers US listings only answers a venue symbol.</summary>
+    /// <summary>What a reader whose data covers US listings only answers an exchange-qualified symbol.</summary>
     public static string UsOnlyNotice(string symbol) =>
-        $"'{symbol?.Trim()}' is a listing outside the US; this data covers US listings only.";
+        $"'{symbol?.Trim()}' is an exchange-qualified symbol (MIC:TICKER); this data covers US listings only, "
+        + "so pass the bare US ticker instead.";
 
     private static string Compose(
         string ticker,

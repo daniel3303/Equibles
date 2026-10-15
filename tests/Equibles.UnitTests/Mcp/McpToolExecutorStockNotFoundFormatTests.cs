@@ -65,4 +65,14 @@ public class McpToolExecutorStockNotFoundFormatTests
 
         result.Should().Be("Stock 'AAPL' not found.");
     }
+
+    // An exchange-qualified symbol is not a missing stock: US-only readers say what they cover instead.
+    [Fact]
+    public void StockNotFound_ExchangeQualifiedSymbol_ReturnsTheUsOnlyNotice()
+    {
+        McpToolExecutor
+            .StockNotFound("XPAR:AIR")
+            .Should()
+            .Be(Equibles.CommonStocks.Data.Helpers.EquityListingSymbol.UsOnlyNotice("XPAR:AIR"));
+    }
 }

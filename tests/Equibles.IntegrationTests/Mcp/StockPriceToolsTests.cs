@@ -110,6 +110,11 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         latest.Should().Contain("| XLON:BP | 2026-04-01 | 452.35 |");
         latest.Should().Contain("| BP | 2026-04-01 | 35.10 |");
         latest.Should().Contain("XLON:BP in GBX (pence; 100 GBX = 1 GBP)");
+
+        // A provider suffix keeps its dot for the lookup and the row shows the venue symbol.
+        (await Sut().GetLatestClosingPrices(["BP.L"]))
+            .Should()
+            .Contain("| XLON:BP | 2026-04-01 | 452.35 |");
     }
 
     [Fact]

@@ -52,7 +52,7 @@ public class FinancialStatementTools
     [McpServerTool(Name = "GetFinancialStatement", Title = "Financial Statements", ReadOnly = true)]
     [Description(
         "Get a company's income statement, balance sheet, or cash-flow statement for a "
-            + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL). "
+            + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL), or from the issuer's regulatory filings for a listing outside the US. "
             + "Returns the standard line items (e.g. revenue, net income, total assets, "
             + "operating cash flow) with the latest-restated value for one exact statement "
             + "period end. Quarterly flow rows are always discrete quarters: when the filer "

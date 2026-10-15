@@ -150,4 +150,19 @@ public class PriceSeriesSplitScopeTests
             .Should()
             .BeTrue();
     }
+
+    // A venue series must not cross its own split or one whose listing is unknown; a sibling listing's split is not its boundary.
+    [Fact]
+    public void ForPriceComparison_Venue_KeepsItsOwnAndUnattributedSplits()
+    {
+        var venue = NativeSplit("FR", "AIR");
+        var sibling = NativeSplit("US", "AIR");
+        var unattributed = new StockSplit { PriceSeriesTicker = "AIR", EffectiveDate = LegacyDate };
+        StockSplit[] events = [venue, sibling, unattributed];
+
+        PriceSeriesSplitScope
+            .ForPriceComparison(events, venue.EquityListingId.Value)
+            .Should()
+            .BeEquivalentTo([venue, unattributed]);
+    }
 }

@@ -13,10 +13,8 @@ namespace Equibles.CommonStocks.Repositories.Extensions;
 public static class ListingSymbolResolutionExtensions
 {
     /// <summary>
-    /// A bare ticker resolves exactly as <see cref="CommonStockRepositoryExtensions.ResolveByTicker"/>
-    /// and returns no venue listing. <c>MIC:TICKER</c> names one active, verified venue listing. A
-    /// provider suffix (<c>MC.PA</c>) is read only after the US lookup misses, so a US ticker that
-    /// carries a dot always wins.
+    /// A bare ticker resolves as <see cref="CommonStockRepositoryExtensions.ResolveByTicker"/> with no
+    /// venue, and <c>MIC:TICKER</c> names one active, verified venue listing.
     /// </summary>
     public static async Task<(
         EquityIssuer Stock,
@@ -28,16 +26,32 @@ public static class ListingSymbolResolutionExtensions
             return await repository.ResolveVenueListing(symbol.Trim(), [code], ticker);
 
         var (stock, error) = await repository.ResolveByTicker(symbol);
-        if (stock != null)
-            return (stock, null, null);
+        return stock != null
+            ? (stock, null, null)
+            : await repository.ResolveSuffixAfterUsMiss(symbol, error);
+    }
 
-        if (TrySplitSuffix(symbol, out var codes, out var suffixed))
-        {
-            var venue = await repository.ResolveVenueListing(symbol.Trim(), codes, suffixed);
-            if (venue.Stock != null)
-                return venue;
-        }
-        return (null, null, error);
+    /// <summary>
+    /// Reads a provider suffix (<c>MC.PA</c>) for a caller whose own US lookup of <paramref name="symbol"/>
+    /// returned <paramref name="usError"/>; only a plain miss tries it, so an ambiguous US claim stays an error.
+    /// </summary>
+    public static async Task<(
+        EquityIssuer Stock,
+        EquityListing Venue,
+        string Error
+    )> ResolveSuffixAfterUsMiss(
+        this EquityIssuerRepository repository,
+        string symbol,
+        string usError
+    )
+    {
+        if (
+            usError != CommonStockRepositoryExtensions.NotFound(symbol)
+            || !TrySplitSuffix(symbol, out var codes, out var suffixed)
+        )
+            return (null, null, usError);
+        var venue = await repository.ResolveVenueListing(symbol.Trim(), codes, suffixed);
+        return venue.Stock != null ? venue : (null, null, usError);
     }
 
     /// <summary>
@@ -56,10 +70,10 @@ public static class ListingSymbolResolutionExtensions
         }
 
         var (stock, error) = await repository.ResolveByTickerIncludingDelisted(symbol);
-        if (stock != null || symbol == null || !symbol.Contains('.'))
-            return (stock, error);
-        var suffixed = await repository.ResolveListing(symbol);
-        return suffixed.Venue != null ? (suffixed.Stock, null) : (null, error);
+        if (stock != null)
+            return (stock, null);
+        var suffixed = await repository.ResolveSuffixAfterUsMiss(symbol, error);
+        return (suffixed.Stock, suffixed.Error);
     }
 
     private static async Task<(

@@ -36,7 +36,7 @@ public class DividendTools
 
     [McpServerTool(Name = "GetDividendHistory", Title = "Dividend History", ReadOnly = true)]
     [Description(
-        "Get the stored declared cash dividends of an exact stock or ETF listing, newest first. Each row gives the ex-dividend date and cash amount per share: in USD for a US listing, and in the currency the payment was declared in for a listing on another exchange (MIC:TICKER). Date filters apply to the ex-dividend date. Future ex-dates can appear after a dividend is declared. Each listing reports its own payments: a share class (BRK-A beside BRK-B) or a fund series sharing its trust's filer (SCHD beside FNDA) never inherits another listing's dividends."
+        "Get the stored declared cash dividends of an exact stock or ETF listing, newest first. Each row gives the ex-dividend date and cash amount per share: in USD for a US listing, and in the listing's trading currency for a listing on another exchange (MIC:TICKER). Date filters apply to the ex-dividend date. Future ex-dates can appear after a dividend is declared. Each listing reports its own payments: a share class (BRK-A beside BRK-B) or a fund series sharing its trust's filer (SCHD beside FNDA) never inherits another listing's dividends."
     )]
     public Task<string> GetDividendHistory(
         [Description(
@@ -98,7 +98,7 @@ public class DividendTools
                     dividends,
                     dividend =>
                         venue
-                            ? $"{McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd")} | {McpFormat.Price(dividend.AmountPerShare)} {CurrencyLabel(dividend.Currency)}"
+                            ? $"{McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd")} | {McpFormat.Price(dividend.AmountPerShare)} {dividend.Currency}"
                             : $"{McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd")} | ${McpFormat.Price(dividend.AmountPerShare)}"
                 );
 
@@ -166,8 +166,4 @@ public class DividendTools
             null
         );
     }
-
-    // The provider writes London pence as GBp; spell the unit out rather than leave a near-GBP token.
-    private static string CurrencyLabel(string currency) =>
-        currency is "GBp" or "GBX" ? "GBX (pence)" : currency;
 }

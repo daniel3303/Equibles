@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Read listings outside the US in the MCP price, dividend, financial-statement, financial-fact, revenue-breakdown and fund-holding tools. A bare ticker keeps its US meaning; `MIC:TICKER` (`XPAR:AIR`, `XLON:BP`, `XHKG:00005`) names one active, verified venue listing through the new `ResolveListing`, and a provider suffix (`MC.PA`, `0005.HK`) is read only after a plain US miss. Price tools read that listing's own series and name its quote unit (London quotes in pence), dividends keep the listing's trading currency, and funds holding a venue share are matched by ISIN. Tools whose data comes from US regulators answer a `MIC:TICKER` symbol with `EquityListingSymbol.UsOnlyNotice` instead of "not found".
+
 ### Fixed
 
 - Admit German shares whose Xetra row states a regional primary market. Xetra's file names Hannover for Volkswagen, Stuttgart for Mercedes-Benz and Porsche SE, and Düsseldorf for Henkel and DHL, but Xetra's home venues held only Deutsche Börse's MICs, so 123 German shares were skipped as cross-listings. Xetra's `HomeVenueCodes` now span every German exchange's operating MIC and its regulated and MTF equity segments. Xetra's FIRDS home-share count now requires a home-venue line whose issuer requested admission (`EquityMarket.HomeRequiresIssuerRequest`; `IssrReq` is stored in the new nullable `FirdsInstrumentRecord.IssuerRequested`, migration `AddFirdsInstrumentIssuerRequested`). Other markets keep the old count, because Oslo's main board, Nasdaq First North and Milan's after-hours book report their own listings as not issuer-requested. Before, Xetra's count included about 5,900 foreign shares that German open markets list without issuer consent. A line stored before the flag existed counts until the next full FIRDS file restates it.
