@@ -34,8 +34,8 @@ public static class ShareCountSplitScope
     /// Selects the splits that changed a count observed on one listed series (13F, insider, short),
     /// keyed by ticker like <see cref="PriceSeriesSplitScope.ForListing(IEnumerable{StockSplit}, string, string)"/>.
     /// A narrower rule than <see cref="ForListing(IEnumerable{StockSplit}, Guid)"/>: only the primary
-    /// series adopts another listing's confirmed row, and only for an event whose own rows are all
-    /// contradicted. A series with no row of the event adopts nothing, because a depositary receipt
+    /// series adopts the event's confirmed row from the issuer's other rows, and only when its own rows
+    /// of the event are all contradicted. A series with no row of the event adopts nothing, because a depositary receipt
     /// can absorb an ordinary-share event in its ratio.
     /// </summary>
     public static List<StockSplit> ForListedSeries(
