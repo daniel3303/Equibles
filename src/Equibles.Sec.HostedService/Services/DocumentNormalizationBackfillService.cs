@@ -233,6 +233,9 @@ public class DocumentNormalizationBackfillService
                 document.Issuer.Cik,
                 cancellationToken
             );
+            // The submission's own header is the acceptance authority, so a filing stored before
+            // acceptance times were captured gets one from this fetch at no extra request.
+            document.AcceptedAt ??= SecSubmissionHeader.AcceptedAt(source);
             return (
                 Encoding.UTF8.GetBytes(
                     _converter.Convert(_normalizer.Normalize(source)) ?? string.Empty

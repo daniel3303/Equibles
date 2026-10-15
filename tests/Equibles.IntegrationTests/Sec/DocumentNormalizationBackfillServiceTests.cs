@@ -84,6 +84,97 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             );
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Backfill_StampsTheHeaderAcceptanceTimeOnlyWhereNoneIsStored(
+        bool alreadyStamped
+    )
+    {
+        var document = SeedDocument(normalizedContentVersion: 0);
+        var stored = new DateTime(2026, 2, 25, 21, 0, 0, DateTimeKind.Utc);
+        if (alreadyStamped)
+        {
+            document.AcceptedAt = stored;
+            _dbContext.SaveChanges();
+        }
+        _secEdgarClient
+            .GetDocumentContent(
+                document.AccessionNumber,
+                _company.Cik,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(AcceptanceHeader + NvidiaSubmission);
+
+        await BuildSut().Backfill(batchSize: 1);
+
+        // 16:12:34 Eastern standard time is 21:12:34 UTC.
+        var expected = alreadyStamped
+            ? stored
+            : new DateTime(2026, 2, 25, 21, 12, 34, DateTimeKind.Utc);
+        await _persistenceService
+            .Received(1)
+            .ReplaceContent(
+                Arg.Is<Document>(d => d.Id == document.Id && d.AcceptedAt == expected),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    private const string AcceptanceHeader =
+        "<SEC-HEADER>0001045810-26-000021.hdr.sgml : 20260225\n<ACCEPTANCE-DATETIME>20260225161234\n</SEC-HEADER>\n";
+
+    // The unchanged path saves through the repository rather than the persistence service, so the stamp
+    // must reach the stored row there too.
+    [Fact]
+    public async Task Backfill_RebuiltTextThatStaysIdentical_StoresTheAcceptanceTime()
+    {
+        var document = SeedDocument(normalizedContentVersion: Document.FirstContentBuilderVersion);
+        var submission = AcceptanceHeader + NvidiaSubmission;
+        _secEdgarClient
+            .GetDocumentContent(
+                document.AccessionNumber,
+                _company.Cik,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(submission);
+        var normalized = new SecDocumentHtmlToMarkdownConverter().Convert(
+            new SecDocumentHtmlNormalizer().Normalize(submission)
+        );
+        _fileManager
+            .GetContent(Arg.Is<Equibles.Media.Data.Models.File>(f => f.Id == document.ContentId))
+            .Returns(Encoding.UTF8.GetBytes(normalized));
+
+        var result = await BuildSut().Backfill(batchSize: 1);
+
+        result.Unchanged.Should().Be(1);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Set<Document>().SingleAsync(d => d.Id == document.Id))
+            .AcceptedAt.Should()
+            .Be(new DateTime(2026, 2, 25, 21, 12, 34, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task Backfill_FailedRebuild_StoresNoAcceptanceTime()
+    {
+        var document = SeedDocument(normalizedContentVersion: 0);
+        _secEdgarClient
+            .GetDocumentContent(
+                document.AccessionNumber,
+                _company.Cik,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(AcceptanceHeader + "   ");
+
+        var result = await BuildSut().Backfill(batchSize: 1);
+
+        result.Failed.Should().Be(1);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Set<Document>().SingleAsync(d => d.Id == document.Id))
+            .AcceptedAt.Should()
+            .BeNull();
+    }
+
     [Fact]
     public async Task Backfill_CurrentDocument_DoesNotRefetchOrReplace()
     {
