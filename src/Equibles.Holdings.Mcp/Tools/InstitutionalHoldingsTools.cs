@@ -409,7 +409,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the historical trend of aggregate reported 13F exposure for an exact stock or ETF listing across multiple quarters. The legacy Total Shares field sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows, so it is not a pure share-ownership measure. Shows total reported quantity, published position value, and filer count. Changes are withheld when a relevant filer has no observed 13F in either compared quarter; missing filings and filer identity changes are not trades. Values normally use report-date closing prices, may fall back to filer values, and can include zero when unavailable. While the newest quarter's filing window is open, non-ETF primary stocks use a provisional combined view; ETF listings remain exact and as-filed because carry-forward is filer-wide."
+        "Get the historical trend of aggregate reported 13F exposure for an exact stock or ETF listing across multiple quarters. The legacy Total Shares field sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows, so it is not a pure share-ownership measure. Shows total reported quantity, published position value, and filer count. Share Chg (QoQ) is like-for-like: it compares only filers with an observed 13F in both quarters, and each quarter notes how many filers and shares it excluded (the largest named), so missing filings and filer identity changes are not trades. Values normally use report-date closing prices, may fall back to filer values, and can include zero when unavailable. While the newest quarter's filing window is open, non-ETF primary stocks use a provisional combined view; ETF listings remain exact and as-filed because carry-forward is filer-wide."
     )]
     public Task<string> GetInstitutionalOwnershipHistory(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -481,7 +481,9 @@ public class InstitutionalHoldingsTools
                     _holdingRepository,
                     stock,
                     selected.Select(row => row.ReportDate).ToList(),
-                    exactListingScope ? listedTicker : null
+                    await _marketActivityShareRestater.EffectiveSplits(stock),
+                    exactListingScope ? listedTicker : null,
+                    anchor is { IsCombined: true } ? anchor.ReportDate : null
                 );
                 return RenderOwnershipHistory(stock, ticker, selected, anchor, coverage);
             },
@@ -507,7 +509,6 @@ public class InstitutionalHoldingsTools
             "|------------|-------------|-------------|-----------------|--------|"
         );
 
-        long previousShares = 0;
         var combinedRowShown = false;
         foreach (var row in activity)
         {
@@ -515,18 +516,23 @@ public class InstitutionalHoldingsTools
                 anchor is { IsCombined: true } && row.ReportDate == anchor.ReportDate;
             combinedRowShown |= isCombinedRow;
             var comparison = coverage.GetValueOrDefault(row.ReportDate);
-            var change = comparison is { ComparisonAvailable: false }
-                ? "unavailable (coverage)"
-                : FormatShareChange(row.CurrentShares, previousShares);
+            var change = comparison switch
+            {
+                null => "—",
+                { ConsecutiveQuarters: false } => "unavailable (gap)",
+                _ => comparison.LikeForLike is (var current, var previous)
+                    ? FormatShareChange(current, previous)
+                    : "—",
+            };
 
             result.AppendLine(
                 $"| {FormatDate(row.ReportDate)}{(isCombinedRow ? " \\*" : "")} | {McpFormat.WholeNumber(row.CurrentFilerCount)} | {McpFormat.WholeNumber(row.CurrentShares)} | {FormatMillions(row.CurrentValue)} | {change} |"
             );
-
-            previousShares = row.CurrentShares;
         }
 
-        foreach (var comparison in coverage.Values.Where(c => !c.ComparisonAvailable))
+        foreach (
+            var comparison in coverage.Values.Where(c => c.Note != null).OrderBy(c => c.ReportDate)
+        )
             result.AppendLine($"{FormatDate(comparison.ReportDate)}: {comparison.Note}");
 
         if (combinedRowShown)
@@ -537,7 +543,7 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine();
         result.AppendLine(
-            "_Share Chg (QoQ) tracks the quarter-over-quarter change in total split-adjusted institutional shares._"
+            "_Share Chg (QoQ) is like-for-like: the change in split-adjusted shares across filers with an observed 13F in both quarters. Filers missing a 13F on one side (late or confidential filings, first filings, identity changes) are excluded as noted, because a missing filing is not a trade._"
         );
         result.AppendLine(
             "_The legacy Total Shares column sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows; it is aggregate reported 13F exposure rather than pure share ownership._"
@@ -899,7 +905,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position); entries and exits require observed 13F filings in both compared quarters, so missing filings or a CIK migration cannot become a full-position buy or sale. While the newest quarter's filing window is open, results cover only the funds that have already filed (noted in the output). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
+        "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position); entries and exits require observed 13F filings in both compared quarters, so missing filings or a CIK migration cannot become a full-position buy or sale; the output counts the filers and shares left out and names the largest. While the newest quarter's filing window is open, results cover only the funds that have already filed (noted in the output). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
     )]
     public Task<string> GetTopInstitutionalBuyersSellers(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -1034,12 +1040,45 @@ public class InstitutionalHoldingsTools
                     .Take(maxResults)
                     .ToList();
 
-                if (topBuyers.Count == 0 && topSellers.Count == 0)
-                    return $"No comparable quarter-over-quarter movement found for {StockListingLabel(stock, ticker)} as of {FormatDate(targetDate)}. {(comparison == null ? "No prior quarter is available." : comparison.Note)}";
+                // The note names the largest filers left out, so their shares use the same
+                // restatement as the ranked movers.
+                if (comparison != null)
+                    comparison = comparison with
+                    {
+                        ExcludedFilers = activity
+                            .GroupBy(row => row.InstitutionalHolderId)
+                            .Where(g =>
+                                comparison.MissingPreviousFilers.Contains(g.Key)
+                                || comparison.MissingCurrentFilers.Contains(g.Key)
+                            )
+                            .Select(g => new HoldingsExcludedFiler(
+                                g.Key,
+                                null,
+                                comparison.MissingPreviousFilers.Contains(g.Key)
+                                    ? g.Sum(row =>
+                                        AdjustShares(
+                                            row.CurrentShares,
+                                            targetDate,
+                                            row.ListedTicker
+                                        )
+                                    )
+                                    : g.Sum(row =>
+                                        AdjustShares(
+                                            row.PreviousShares,
+                                            previousDate ?? targetDate,
+                                            row.ListedTicker
+                                        )
+                                    )
+                            ))
+                            .ToList(),
+                    };
 
                 var topHolderIds = topBuyers
                     .Select(m => m.Id)
                     .Concat(topSellers.Select(m => m.Id))
+                    .Concat(
+                        comparison?.LargestExcludedFilers.Select(f => f.InstitutionalHolderId) ?? []
+                    )
                     .Distinct()
                     .ToList();
                 var holderNames = await _holderRepository
@@ -1049,6 +1088,21 @@ public class InstitutionalHoldingsTools
                     .ToDictionaryAsync(h => h.Id, h => h.Name);
                 string HolderName(Guid id) =>
                     holderNames.TryGetValue(id, out var name) ? name : "Unknown";
+                if (comparison != null)
+                    comparison = comparison with
+                    {
+                        ExcludedFilers = comparison
+                            .ExcludedFilers.Select(f =>
+                                f with
+                                {
+                                    Name = holderNames.GetValueOrDefault(f.InstitutionalHolderId),
+                                }
+                            )
+                            .ToList(),
+                    };
+
+                if (topBuyers.Count == 0 && topSellers.Count == 0)
+                    return $"No comparable quarter-over-quarter movement found for {StockListingLabel(stock, ticker)} as of {FormatDate(targetDate)}. {(comparison == null ? "No prior quarter is available." : comparison.Note)}";
 
                 // Flag first-time filers among whole-position buyers: a filer whose FIRST 13F
                 // is the target quarter shows its entire book as "new positions", which is
