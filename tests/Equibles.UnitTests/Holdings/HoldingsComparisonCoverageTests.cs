@@ -252,6 +252,49 @@ public class HoldingsComparisonCoverageTests
     }
 
     [Fact]
+    public async Task ZeroHoldingsRestatement_ProvesTheExit()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
+        var stable = new InstitutionalHolder { Name = "Stable", Cik = "100" };
+        var emptied = new InstitutionalHolder { Name = "Emptied", Cik = "200" };
+        db.AddRange(stock, stable, emptied);
+        db.AddRange(
+            Holding(stock, stable, Prior, 100),
+            Holding(stock, stable, Current, 110),
+            Holding(stock, emptied, Prior, 900)
+        );
+        db.Add(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "0000000200-26-000001",
+                InstitutionalHolderId = emptied.Id,
+                ReportDate = Current,
+                FilingDate = Current.AddDays(45),
+                FilingType = FilingType.Form13F,
+                IsAmendment = true,
+                PositionCount = 0,
+                DeclaredTotalValue = 0,
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var coverage = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [Prior, Current],
+            []
+        );
+
+        coverage[Current].MissingCurrentFilers.Should().BeEmpty();
+        coverage[Current].LikeForLike.Should().Be((110L, 1000L));
+    }
+
+    [Fact]
     public async Task Schedule13GDoesNotProvePrior13FFiling()
     {
         await using var db = NewDb();

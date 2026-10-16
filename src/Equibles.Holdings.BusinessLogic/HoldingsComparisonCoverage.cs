@@ -47,6 +47,13 @@ public static class HoldingsComparisonCoverage
             })
             .ToListAsync(cancellationToken);
         var primaryTicker = stock.Presentation.Listing.Ticker;
+        var scopes = positions
+            .Select(p => p.ListedTicker ?? primaryTicker)
+            .Distinct()
+            .ToDictionary(
+                series => series,
+                series => ShareCountSplitScope.ForListedSeries(splits, primaryTicker, series)
+            );
         var shares = positions
             .GroupBy(p => (p.ReportDate, p.InstitutionalHolderId))
             .ToDictionary(
@@ -56,11 +63,7 @@ public static class HoldingsComparisonCoverage
                         SplitAdjustment.AdjustShareCount(
                             p.Shares,
                             p.ReportDate,
-                            ShareCountSplitScope.ForListedSeries(
-                                splits,
-                                primaryTicker,
-                                p.ListedTicker ?? primaryTicker
-                            )
+                            scopes[p.ListedTicker ?? primaryTicker]
                         )
                     )
             );
@@ -93,7 +96,7 @@ public static class HoldingsComparisonCoverage
                     entry.Key == combinedReportDate
                 )
         );
-        return await WithNames(holdings, compared, cancellationToken);
+        return await WithNames(holdings, ordered, compared, cancellationToken);
     }
 
     // Sums each side over filers with an observed 13F in both quarters. The combined view
@@ -144,6 +147,7 @@ public static class HoldingsComparisonCoverage
     // Names only the filers a note prints.
     private static async Task<Dictionary<DateOnly, HoldingsComparisonStatus>> WithNames(
         IQueryable<InstitutionalHolding> holdings,
+        DateOnly[] dates,
         Dictionary<DateOnly, HoldingsComparisonStatus> statuses,
         CancellationToken cancellationToken
     )
@@ -157,7 +161,7 @@ public static class HoldingsComparisonCoverage
         if (named.Length == 0)
             return statuses;
         var names = await holdings
-            .Where(h => named.Contains(h.InstitutionalHolderId))
+            .Where(h => dates.Contains(h.ReportDate) && named.Contains(h.InstitutionalHolderId))
             .Select(h => new { h.InstitutionalHolderId, h.InstitutionalHolder.Name })
             .Distinct()
             .ToDictionaryAsync(h => h.InstitutionalHolderId, h => h.Name, cancellationToken);
@@ -276,19 +280,15 @@ public static class HoldingsComparisonCoverage
         {
             var date = group.Key;
             var holders = group.Select(p => p.InstitutionalHolderId).Distinct().ToArray();
+            // A source-verified zero-holdings restatement is a filed 13F too, as the combined view
+            // counts it, so its holder exited rather than went unobserved.
             var branch = repository
-                .GetAll()
-                .Where(h =>
-                    h.FilingType == FilingType.Form13F
-                    && h.ReportDate == date
-                    && holders.Contains(h.InstitutionalHolderId)
-                )
-                .Select(h => new HoldingsFilingPresence
+                .GetFiledHolderIdsAmong(date, holders)
+                .Select(id => new HoldingsFilingPresence
                 {
-                    ReportDate = h.ReportDate,
-                    InstitutionalHolderId = h.InstitutionalHolderId,
-                })
-                .Distinct();
+                    ReportDate = date,
+                    InstitutionalHolderId = id,
+                });
             query = query == null ? branch : query.Concat(branch);
         }
         return query;

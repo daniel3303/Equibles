@@ -11,8 +11,8 @@ public sealed record HoldingsComparisonStatus(
 {
     private const int NamedExclusions = 3;
 
-    // Every missing filer's shares on the side where it holds the stock. The like-for-like change
-    // subtracts them from both totals, so a partial list misstates it.
+    // Every missing filer's restated shares on the side where it holds the stock; the note
+    // reports their counts, sums and largest names.
     public IReadOnlyList<HoldingsExcludedFiler> ExcludedFilers { get; init; } = [];
 
     // Both share totals over filers with an observed 13F in both quarters, summed from the same
