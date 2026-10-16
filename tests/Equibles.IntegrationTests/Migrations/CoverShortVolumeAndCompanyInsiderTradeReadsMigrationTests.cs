@@ -45,6 +45,7 @@ public class CoverShortVolumeAndCompanyInsiderTradeReadsMigrationTests(ParadeDbF
 
         Assert.Contains("autovacuum_vacuum_insert_threshold=10000", options);
         Assert.Contains("autovacuum_vacuum_insert_scale_factor=0", options);
+        Assert.Contains("autovacuum_vacuum_scale_factor=0.02", options);
     }
 
     [Fact]
