@@ -1,4 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -13,7 +15,9 @@ public static class HoldingsComparisonCoverage
         InstitutionalHoldingRepository repository,
         EquityIssuer stock,
         IReadOnlyList<DateOnly> dates,
+        IReadOnlyList<StockSplit> splits,
         string listedTicker = null,
+        DateOnly? combinedReportDate = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -50,7 +54,112 @@ public static class HoldingsComparisonCoverage
                 )
             );
         }
-        return await Resolve(repository, pending, cancellationToken);
+        var resolved = await Resolve(repository, pending, cancellationToken);
+        // The combined view carries every holder yet to file at its prior position, so those
+        // positions sit in both totals and are compared, not excluded.
+        if (combinedReportDate is { } combined && resolved.TryGetValue(combined, out var carried))
+            resolved[combined] = carried with { MissingCurrentFilers = new HashSet<Guid>() };
+        return await WithExcludedFilers(holdings, stock, resolved, splits, cancellationToken);
+    }
+
+    // Loads each missing filer's shares on the side where it holds the stock, from the same rows
+    // and split basis as the totals, so the like-for-like change subtracts like from like.
+    private static async Task<Dictionary<DateOnly, HoldingsComparisonStatus>> WithExcludedFilers(
+        IQueryable<InstitutionalHolding> holdings,
+        EquityIssuer stock,
+        Dictionary<DateOnly, HoldingsComparisonStatus> statuses,
+        IReadOnlyList<StockSplit> splits,
+        CancellationToken cancellationToken
+    )
+    {
+        var requested = statuses
+            .Values.Where(status => status.ConsecutiveQuarters)
+            .SelectMany(status =>
+                status
+                    .MissingPreviousFilers.Select(id => (Date: status.ReportDate, Holder: id))
+                    .Concat(
+                        status.MissingCurrentFilers.Select(id =>
+                            (Date: status.PreviousReportDate, Holder: id)
+                        )
+                    )
+            )
+            .Distinct()
+            .ToList();
+        if (requested.Count == 0)
+            return statuses;
+
+        IQueryable<ExcludedPosition> query = null;
+        foreach (var group in requested.GroupBy(request => request.Date))
+        {
+            var date = group.Key;
+            var holders = group.Select(request => request.Holder).ToArray();
+            var branch = holdings
+                .Where(h => h.ReportDate == date && holders.Contains(h.InstitutionalHolderId))
+                .GroupBy(h => new
+                {
+                    h.ReportDate,
+                    h.InstitutionalHolderId,
+                    h.InstitutionalHolder.Name,
+                    h.ListedTicker,
+                })
+                .Select(g => new ExcludedPosition
+                {
+                    ReportDate = g.Key.ReportDate,
+                    InstitutionalHolderId = g.Key.InstitutionalHolderId,
+                    Name = g.Key.Name,
+                    ListedTicker = g.Key.ListedTicker,
+                    Shares = g.Sum(h => h.Shares),
+                });
+            query = query == null ? branch : query.Concat(branch);
+        }
+        var positions = await query.ToListAsync(cancellationToken);
+        var primaryTicker = stock.Presentation.Listing.Ticker;
+        var filers = positions
+            .GroupBy(position => (position.ReportDate, position.InstitutionalHolderId))
+            .ToDictionary(
+                group => group.Key,
+                group => new HoldingsExcludedFiler(
+                    group.Key.InstitutionalHolderId,
+                    group.First().Name,
+                    group.Sum(position =>
+                        SplitAdjustment.AdjustShareCount(
+                            position.Shares,
+                            position.ReportDate,
+                            ShareCountSplitScope.ForListedSeries(
+                                splits,
+                                primaryTicker,
+                                position.ListedTicker ?? primaryTicker
+                            )
+                        )
+                    )
+                )
+            );
+        HoldingsExcludedFiler Filer(DateOnly date, Guid holder) =>
+            filers.GetValueOrDefault((date, holder)) ?? new HoldingsExcludedFiler(holder, null, 0);
+        return statuses.ToDictionary(
+            entry => entry.Key,
+            entry =>
+                entry.Value with
+                {
+                    ExcludedFilers = entry
+                        .Value.MissingPreviousFilers.Select(id => Filer(entry.Value.ReportDate, id))
+                        .Concat(
+                            entry.Value.MissingCurrentFilers.Select(id =>
+                                Filer(entry.Value.PreviousReportDate, id)
+                            )
+                        )
+                        .ToList(),
+                }
+        );
+    }
+
+    private sealed class ExcludedPosition
+    {
+        public DateOnly ReportDate { get; init; }
+        public Guid InstitutionalHolderId { get; init; }
+        public string Name { get; init; }
+        public string ListedTicker { get; init; }
+        public long Shares { get; init; }
     }
 
     public static async Task<HoldingsComparisonStatus> Activity(

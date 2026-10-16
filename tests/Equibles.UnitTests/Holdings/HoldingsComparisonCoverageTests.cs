@@ -1,13 +1,16 @@
+using System.Globalization;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
@@ -27,7 +30,7 @@ public class HoldingsComparisonCoverageTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task History_MissingFilersOnEitherSide_WithholdsDelta(bool missingPrior)
+    public async Task History_MissingFilerOnEitherSide_ComparesLikeForLike(bool missingPrior)
     {
         await using var db = NewDb();
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -49,16 +52,161 @@ public class HoldingsComparisonCoverageTests
         var coverage = await HoldingsComparisonCoverage.History(
             repository,
             stock,
-            [Prior, Current]
+            [Prior, Current],
+            []
         );
-        coverage[Current].ComparisonAvailable.Should().BeFalse();
-        coverage[Current].CanCompareHolder(stable.Id).Should().BeTrue();
-        coverage[Current].CanCompareHolder(missing.Id).Should().BeFalse();
+        var status = coverage[Current];
+        status.ComparisonAvailable.Should().BeTrue();
+        status.CanCompareHolder(stable.Id).Should().BeTrue();
+        status.CanCompareHolder(missing.Id).Should().BeFalse();
+        status.ExcludedCurrentShares.Should().Be(missingPrior ? 900 : 0);
+        status.ExcludedPreviousShares.Should().Be(missingPrior ? 0 : 900);
+        status
+            .LikeForLikeShares(missingPrior ? 1010 : 110, missingPrior ? 100 : 1000)
+            .Should()
+            .Be((110L, 100L));
+
         var history = await Tools(db).GetInstitutionalOwnershipHistory("AAPL");
-        history.Should().Contain("unavailable (coverage)");
+        history.Should().Contain("| +10.0% |").And.NotContain("unavailable (");
+        history
+            .Should()
+            .Contain(
+                missingPrior
+                    ? "2025-12-31: Excluded 1 holder with no observed 2025-09-30 13F (900 shares); largest: CoverageGapFiler 900 (no 2025-09-30 13F)."
+                    : "2025-12-31: Excluded 1 holder with no observed 2025-12-31 13F (900 shares as of 2025-09-30); largest: CoverageGapFiler 900 (no 2025-12-31 13F)."
+            );
         var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
-        movers.Should().Contain("Stable").And.NotContain("CoverageGapFiler");
-        movers.Should().Contain("no observed");
+        movers.Should().Contain("| Stable |").And.NotContain("| CoverageGapFiler |");
+        movers.Should().Contain("largest: CoverageGapFiler 900");
+    }
+
+    [Fact]
+    public async Task History_CombinedQuarter_ComparesHoldersYetToFileAtTheirCarriedPositions()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
+        var early = new InstitutionalHolder { Name = "EarlyFiler", Cik = "100" };
+        var late = new InstitutionalHolder { Name = "LateFiler", Cik = "200" };
+        db.AddRange(stock, early, late);
+        db.AddRange(
+            Holding(stock, early, Prior, 100),
+            Holding(stock, early, Current, 110),
+            Holding(stock, late, Prior, 900)
+        );
+        await db.SaveChangesAsync();
+
+        var asFiled = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [Prior, Current],
+            []
+        );
+        var combined = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [Prior, Current],
+            [],
+            combinedReportDate: Current
+        );
+
+        asFiled[Current].ExcludedPreviousShares.Should().Be(900);
+        combined[Current].MissingCurrentFilers.Should().BeEmpty();
+        combined[Current].Note.Should().BeNull();
+        // The combined total carries LateFiler's 900 shares, so it stays on both sides.
+        combined[Current].LikeForLikeShares(1010, 1000).Should().Be((1010L, 1000L));
+    }
+
+    [Fact]
+    public async Task History_ExcludedShares_RestateOntoTodaysSplitBasisLikeTheTotals()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
+        var stable = new InstitutionalHolder { Name = "Stable", Cik = "100" };
+        var gone = new InstitutionalHolder { Name = "Gone", Cik = "200" };
+        db.AddRange(stock, stable, gone);
+        db.AddRange(
+            Holding(stock, stable, Prior, 100),
+            Holding(stock, stable, Current, 220),
+            Holding(stock, gone, Prior, 900)
+        );
+        await db.SaveChangesAsync();
+        var split = new StockSplit
+        {
+            EquityIssuerId = stock.Id,
+            PriceSeriesTicker = "AAPL",
+            EffectiveDate = new DateOnly(2025, 11, 14),
+            Numerator = 2,
+            Denominator = 1,
+        };
+
+        var coverage = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [Prior, Current],
+            [split]
+        );
+
+        coverage[Current].ExcludedPreviousShares.Should().Be(1800);
+        // Restated totals: 220 now, (100 + 900) x 2 before; only Stable's 200 -> 220 remains.
+        coverage[Current].LikeForLikeShares(220, 2000).Should().Be((220L, 200L));
+    }
+
+    [Fact]
+    public void Note_NamesTheThreeLargestExclusionsWithInvariantNumbers()
+    {
+        var holders = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+        var status = new HoldingsComparisonStatus(
+            Current,
+            Prior,
+            new HashSet<Guid> { holders[0], holders[1] },
+            new HashSet<Guid> { holders[2], holders[3] }
+        )
+        {
+            ExcludedFilers =
+            [
+                new(holders[0], "Newcomer", 750_000),
+                new(holders[1], "Tiny", 70),
+                new(holders[2], "NORGES BANK", 16_457_471),
+                new(holders[3], "Lapsed", 184_038),
+            ],
+        };
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+
+            status
+                .Note.Should()
+                .Be(
+                    "Excluded 2 holders with no observed 2025-09-30 13F (750,070 shares) and 2 holders with no observed 2025-12-31 13F (16,641,509 shares as of 2025-09-30); largest: NORGES BANK 16,457,471 (no 2025-12-31 13F), Newcomer 750,000 (no 2025-09-30 13F), Lapsed 184,038 (no 2025-12-31 13F)."
+                );
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void LikeForLikeShares_NonconsecutiveQuarters_IsUnavailable()
+    {
+        var status = new HoldingsComparisonStatus(
+            Current,
+            new DateOnly(2025, 6, 30),
+            new HashSet<Guid>(),
+            new HashSet<Guid>()
+        );
+
+        status.LikeForLikeShares(110, 100).Should().BeNull();
+        status.Note.Should().StartWith("Comparison unavailable");
     }
 
     [Theory]
@@ -87,7 +235,12 @@ public class HoldingsComparisonCoverageTests
             Holding(other, holder, entry ? Prior : Current, 0)
         );
         await db.SaveChangesAsync();
-        var coverage = await HoldingsComparisonCoverage.History(new(db), stock, [Prior, Current]);
+        var coverage = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [Prior, Current],
+            []
+        );
         coverage[Current].ComparisonAvailable.Should().BeTrue();
         var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
         movers.Should().Contain("Reporter");
@@ -108,7 +261,12 @@ public class HoldingsComparisonCoverageTests
         prior.FilingType = FilingType.Schedule13G;
         db.AddRange(prior, Holding(stock, holder, Current, 900));
         await db.SaveChangesAsync();
-        var coverage = await HoldingsComparisonCoverage.History(new(db), stock, [Prior, Current]);
+        var coverage = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [Prior, Current],
+            []
+        );
         coverage[Current].MissingPreviousFilers.Should().Contain(holder.Id);
     }
 
@@ -126,7 +284,12 @@ public class HoldingsComparisonCoverageTests
         var older = new DateOnly(2025, 6, 30);
         db.AddRange(Holding(stock, holder, older, 100), Holding(stock, holder, Current, 110));
         await db.SaveChangesAsync();
-        var coverage = await HoldingsComparisonCoverage.History(new(db), stock, [older, Current]);
+        var coverage = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [older, Current],
+            []
+        );
         coverage[Current].ComparisonAvailable.Should().BeFalse();
         coverage[Current].CanCompareHolder(holder.Id).Should().BeFalse();
     }

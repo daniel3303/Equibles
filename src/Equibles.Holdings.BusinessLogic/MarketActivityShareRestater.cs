@@ -93,10 +93,7 @@ public class MarketActivityShareRestater
         if (activity.Count == 0)
             return;
 
-        var splits = await _stockSplitRepository
-            .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        var splits = await EffectiveSplits(stock, cancellationToken);
         if (splits.Count == 0)
             return;
 
@@ -125,6 +122,17 @@ public class MarketActivityShareRestater
                 : 0;
         }
     }
+
+    // The splits RestateStockActivity applies, for callers that restate holder-level shares
+    // beside those totals.
+    public Task<List<StockSplit>> EffectiveSplits(
+        EquityIssuer stock,
+        CancellationToken cancellationToken = default
+    ) =>
+        _stockSplitRepository
+            .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
     internal static long RestateListingTotal(
         IReadOnlyList<StockQuarterlyListingActivity> listingShares,
