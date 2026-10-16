@@ -91,5 +91,24 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
                 t.TransactionCode,
                 t.IsRule10b5One,
             });
+
+        // Carries every column a company's chart-marker read filters and returns (including the query
+        // filter's FilingDate) for an index-only scan; named apart from the key-only index it replaces.
+        builder
+            .Entity<InsiderTransaction>()
+            .HasIndex(t => new { t.EquityIssuerId, t.TransactionDate })
+            .HasDatabaseName("IX_InsiderTransaction_EquityIssuerId_TransactionDate_Covering")
+            .IncludeProperties(t => new
+            {
+                t.FilingDate,
+                t.TransactionCode,
+                t.Shares,
+                t.PricePerShare,
+                t.InsiderOwnerId,
+                t.IsRule10b5One,
+                t.IsPriceValid,
+                t.SecurityKind,
+                t.SecurityTitle,
+            });
     }
 }
