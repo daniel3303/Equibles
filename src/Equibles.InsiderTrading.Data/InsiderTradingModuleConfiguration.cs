@@ -91,5 +91,26 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
                 t.TransactionCode,
                 t.IsRule10b5One,
             });
+
+        // A company's trades by date carry every column the per-company trade reads filter and
+        // return (including the query filter's FilingDate), so they resolve as an index-only scan
+        // instead of one heap page per trade. Named apart from the key-only index it replaces so
+        // the migration can build it concurrently before dropping that one.
+        builder
+            .Entity<InsiderTransaction>()
+            .HasIndex(t => new { t.EquityIssuerId, t.TransactionDate })
+            .HasDatabaseName("IX_InsiderTransaction_EquityIssuerId_TransactionDate_Covering")
+            .IncludeProperties(t => new
+            {
+                t.FilingDate,
+                t.TransactionCode,
+                t.Shares,
+                t.PricePerShare,
+                t.InsiderOwnerId,
+                t.IsRule10b5One,
+                t.IsPriceValid,
+                t.SecurityKind,
+                t.SecurityTitle,
+            });
     }
 }

@@ -1954,7 +1954,10 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("Date");
 
                     b.HasIndex("EquityListingId", "Date")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_DailyShortVolume_EquityListingId_Date_Covering");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("EquityListingId", "Date"), new[] { "ShortVolume", "ShortExemptVolume", "TotalVolume" });
 
                     b.ToTable("DailyShortVolume");
                 });
@@ -3575,7 +3578,10 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("AccessionNumber", "TransactionOrder")
                         .IsUnique();
 
-                    b.HasIndex("EquityIssuerId", "TransactionDate");
+                    b.HasIndex("EquityIssuerId", "TransactionDate")
+                        .HasDatabaseName("IX_InsiderTransaction_EquityIssuerId_TransactionDate_Covering");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("EquityIssuerId", "TransactionDate"), new[] { "FilingDate", "TransactionCode", "Shares", "PricePerShare", "InsiderOwnerId", "IsRule10b5One", "IsPriceValid", "SecurityKind", "SecurityTitle" });
 
                     b.HasIndex("InsiderOwnerId", "TransactionDate");
 
