@@ -32,6 +32,22 @@ public class CoverShortVolumeAndCompanyInsiderTradeReadsMigrationTests(ParadeDbF
     }
 
     [Fact]
+    public async Task ShortVolume_VacuumsOnInsertsSoIndexOnlyScansStayReachable()
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT reloptions FROM pg_class WHERE oid = '\"DailyShortVolume\"'::regclass",
+            connection
+        );
+
+        var options = (string[])await command.ExecuteScalarAsync();
+
+        Assert.Contains("autovacuum_vacuum_insert_threshold=10000", options);
+        Assert.Contains("autovacuum_vacuum_insert_scale_factor=0", options);
+    }
+
+    [Fact]
     public async Task InsiderTrades_ReplaceTheCompanyDateIndexWithTheCoveringOne()
     {
         var indexes = await Indexes("InsiderTransaction");

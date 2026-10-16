@@ -5,20 +5,10 @@
 namespace Equibles.Migrations.Migrations
 {
     /// <summary>
-    /// Replaces the key-only (EquityListingId, Date) short-volume index and the key-only
-    /// (EquityIssuerId, TransactionDate) insider-trade index with covering versions, so a
-    /// listing's short-volume history and a company's trades resolve as index-only scans. On
-    /// production those reads touched about a thousand and about six hundred heap pages per
-    /// stock, one per row.
-    ///
-    /// Raw SQL, like WidenInsiderTransactionCoveringIndex: CONCURRENTLY so neither build locks
-    /// the live tables against the FINRA and Form 4 writers, IF NOT EXISTS so a hand-built index
-    /// is a no-op, and create-before-drop so the unique (listing, date) key and the per-company
-    /// date lookup are never without an index.
-    ///
-    /// DailyShortVolume also gets an insert-driven vacuum: it takes about 12k rows a day against
-    /// 14M, so the server-wide insert scale factor of 0.2 almost never vacuums it and production
-    /// sat at 71% all-visible pages, which keeps the planner off an index-only scan.
+    /// Replaces the key-only short-volume (listing, date) and insider-trade (company, date) indexes with
+    /// covering ones, built concurrently before each drop so uniqueness and the lookup never lapse.
+    /// DailyShortVolume gets an insert-driven vacuum so its visibility map stays fresh enough for
+    /// index-only scans.
     /// </summary>
     public partial class CoverShortVolumeAndCompanyInsiderTradeReads : Migration
     {
