@@ -15,6 +15,7 @@ using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -61,10 +62,28 @@ public class HoldingsComparisonCoverageTests
         status.CanCompareHolder(missing.Id).Should().BeFalse();
         status.ExcludedCurrentShares.Should().Be(missingPrior ? 900 : 0);
         status.ExcludedPreviousShares.Should().Be(missingPrior ? 0 : 900);
-        status
-            .LikeForLikeShares(missingPrior ? 1010 : 110, missingPrior ? 100 : 1000)
-            .Should()
-            .Be((110L, 100L));
+        status.LikeForLike.Should().Be((110L, 100L));
+        var activity = await HoldingsComparisonCoverage.Activity(
+            repository,
+            [
+                new HolderStockActivity
+                {
+                    InstitutionalHolderId = stable.Id,
+                    CurrentPositionCount = 1,
+                    PreviousPositionCount = 1,
+                },
+                new HolderStockActivity
+                {
+                    InstitutionalHolderId = missing.Id,
+                    CurrentPositionCount = missingPrior ? 1 : 0,
+                    PreviousPositionCount = missingPrior ? 0 : 1,
+                },
+            ],
+            Current,
+            Prior
+        );
+        // Only History sums both sides, so a ranking's status never claims a total change.
+        activity.LikeForLike.Should().BeNull();
 
         var history = await Tools(db).GetInstitutionalOwnershipHistory("AAPL");
         history.Should().Contain("| +10.0% |").And.NotContain("unavailable (");
@@ -117,7 +136,7 @@ public class HoldingsComparisonCoverageTests
         combined[Current].MissingCurrentFilers.Should().BeEmpty();
         combined[Current].Note.Should().BeNull();
         // The combined total carries LateFiler's 900 shares, so it stays on both sides.
-        combined[Current].LikeForLikeShares(1010, 1000).Should().Be((1010L, 1000L));
+        combined[Current].LikeForLike.Should().Be((1010L, 1000L));
     }
 
     [Fact]
@@ -155,8 +174,8 @@ public class HoldingsComparisonCoverageTests
         );
 
         coverage[Current].ExcludedPreviousShares.Should().Be(1800);
-        // Restated totals: 220 now, (100 + 900) x 2 before; only Stable's 200 -> 220 remains.
-        coverage[Current].LikeForLikeShares(220, 2000).Should().Be((220L, 200L));
+        // Stable's 100 restates to 200 before the split; Gone's 1,800 leaves the prior side.
+        coverage[Current].LikeForLike.Should().Be((220L, 200L));
     }
 
     [Fact]
@@ -193,20 +212,6 @@ public class HoldingsComparisonCoverageTests
         {
             CultureInfo.CurrentCulture = original;
         }
-    }
-
-    [Fact]
-    public void LikeForLikeShares_NonconsecutiveQuarters_IsUnavailable()
-    {
-        var status = new HoldingsComparisonStatus(
-            Current,
-            new DateOnly(2025, 6, 30),
-            new HashSet<Guid>(),
-            new HashSet<Guid>()
-        );
-
-        status.LikeForLikeShares(110, 100).Should().BeNull();
-        status.Note.Should().StartWith("Comparison unavailable");
     }
 
     [Theory]
@@ -292,6 +297,8 @@ public class HoldingsComparisonCoverageTests
         );
         coverage[Current].ComparisonAvailable.Should().BeFalse();
         coverage[Current].CanCompareHolder(holder.Id).Should().BeFalse();
+        coverage[Current].LikeForLike.Should().BeNull();
+        coverage[Current].Note.Should().StartWith("Comparison unavailable");
     }
 
     [Fact]

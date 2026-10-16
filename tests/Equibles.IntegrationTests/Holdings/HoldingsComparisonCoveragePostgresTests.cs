@@ -59,7 +59,7 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
     }
 
     [Fact]
-    public async Task History_ExcludedFilersLoadInOneBatchedRead()
+    public async Task History_LikeForLikeTotalsAndNamesLoadInBatchedReads()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "COVER",
@@ -98,15 +98,60 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
             .OnlyContain(filer => filer.Name == "Lapsing filer" && filer.Shares == 100);
         result[dates[1]].ExcludedPreviousShares.Should().Be(100);
         result[dates[2]].ExcludedCurrentShares.Should().Be(100);
+        result
+            .Values.Select(status => status.LikeForLike)
+            .Should()
+            .AllBeEquivalentTo(((long, long)?)(100L, 100L));
         counter
             .Reads.Should()
-            .Be(3, "presence, missing-side evidence and excluded shares each use one batched read");
+            .Be(
+                3,
+                "presence with shares, missing-side evidence and names each use one batched read"
+            );
+    }
+
+    [Fact]
+    public async Task History_SumsEveryListedRowOfAFilerOnItsSide()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COVER",
+            Name: "Coverage subject"
+        );
+        var stable = new InstitutionalHolder { Cik = "1", Name = "Stable filer" };
+        var lapsed = new InstitutionalHolder { Cik = "2", Name = "Lapsed filer" };
+        var prior = new DateOnly(2025, 9, 30);
+        var current = new DateOnly(2025, 12, 31);
+        await using (var seed = fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, stable, lapsed);
+            seed.Add(Holding(stock, stable, prior));
+            seed.Add(Holding(stock, stable, current, shares: 120));
+            // Primary rows stored with and without the label, plus a sibling class.
+            seed.Add(Holding(stock, lapsed, prior, shares: 40));
+            seed.Add(Holding(stock, lapsed, prior, shares: 60, listedTicker: "COVER"));
+            seed.Add(Holding(stock, lapsed, prior, shares: 7, listedTicker: "COVER.B"));
+            await seed.SaveChangesAsync();
+        }
+        await using var db = fixture.CreateDbContext();
+
+        var result = await HoldingsComparisonCoverage.History(
+            new InstitutionalHoldingRepository(db),
+            stock,
+            [prior, current],
+            []
+        );
+
+        result[current].ExcludedPreviousShares.Should().Be(107);
+        result[current].LikeForLike.Should().Be((120L, 100L));
+        result[current].Note.Should().Contain("Lapsed filer 107");
     }
 
     private static InstitutionalHolding Holding(
         EquityIssuer stock,
         InstitutionalHolder holder,
-        DateOnly date
+        DateOnly date,
+        long shares = 100,
+        string listedTicker = null
     ) =>
         new()
         {
@@ -115,8 +160,9 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
             ReportDate = date,
             FilingDate = date.AddDays(40),
             FilingType = FilingType.Form13F,
-            Shares = 100,
-            Value = 10000,
+            Shares = shares,
+            Value = shares * 100,
+            ListedTicker = listedTicker,
             AccessionNumber = Guid.NewGuid().ToString("N"),
             ShareType = ShareType.Shares,
         };

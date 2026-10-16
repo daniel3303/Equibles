@@ -509,7 +509,6 @@ public class InstitutionalHoldingsTools
             "|------------|-------------|-------------|-----------------|--------|"
         );
 
-        long previousShares = 0;
         var combinedRowShown = false;
         foreach (var row in activity)
         {
@@ -521,8 +520,7 @@ public class InstitutionalHoldingsTools
             {
                 null => "—",
                 { ConsecutiveQuarters: false } => "unavailable (gap)",
-                _ => comparison.LikeForLikeShares(row.CurrentShares, previousShares)
-                    is (var current, var previous)
+                _ => comparison.LikeForLike is (var current, var previous)
                     ? FormatShareChange(current, previous)
                     : "—",
             };
@@ -530,8 +528,6 @@ public class InstitutionalHoldingsTools
             result.AppendLine(
                 $"| {FormatDate(row.ReportDate)}{(isCombinedRow ? " \\*" : "")} | {McpFormat.WholeNumber(row.CurrentFilerCount)} | {McpFormat.WholeNumber(row.CurrentShares)} | {FormatMillions(row.CurrentValue)} | {change} |"
             );
-
-            previousShares = row.CurrentShares;
         }
 
         foreach (

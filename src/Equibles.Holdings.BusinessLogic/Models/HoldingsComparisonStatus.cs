@@ -15,6 +15,10 @@ public sealed record HoldingsComparisonStatus(
     // subtracts them from both totals, so a partial list misstates it.
     public IReadOnlyList<HoldingsExcludedFiler> ExcludedFilers { get; init; } = [];
 
+    // Both share totals over filers with an observed 13F in both quarters, summed from the same
+    // rows as the exclusions. Only History computes it; null means no like-for-like change.
+    public (long Current, long Previous)? LikeForLike { get; init; }
+
     public bool ConsecutiveQuarters =>
         PreviousReportDate == HoldingsCorpusCoverage.PreviousQuarterEnd(ReportDate);
 
@@ -37,16 +41,6 @@ public sealed record HoldingsComparisonStatus(
             .OrderByDescending(filer => filer.Shares)
             .ThenBy(filer => filer.InstitutionalHolderId)
             .Take(NamedExclusions);
-
-    // Both totals restricted to filers with an observed 13F in both quarters; null when the
-    // quarters are not consecutive.
-    public (long Current, long Previous)? LikeForLikeShares(
-        long currentShares,
-        long previousShares
-    ) =>
-        ConsecutiveQuarters
-            ? (currentShares - ExcludedCurrentShares, previousShares - ExcludedPreviousShares)
-            : null;
 
     public string Note
     {
