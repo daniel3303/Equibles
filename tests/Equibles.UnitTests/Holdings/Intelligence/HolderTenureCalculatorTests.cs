@@ -108,6 +108,6 @@ public class HolderTenureCalculatorTests
         HolderTenureCalculator.Summarize([]).Should().Be(new HolderTenureSummary(null, null));
     }
 
-    private static ulong Mask(params int[] quarters) =>
-        quarters.Aggregate(0UL, HolderTenureCalculator.Set);
+    private static long Mask(params int[] quarters) =>
+        quarters.Aggregate(0L, HolderTenureCalculator.Set);
 }

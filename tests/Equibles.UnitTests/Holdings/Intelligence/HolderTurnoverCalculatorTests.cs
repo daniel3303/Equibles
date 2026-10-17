@@ -108,10 +108,12 @@ public class HolderTurnoverCalculatorTests
     public void Trades_ZeroShareRowsAreNotPositions()
     {
         var trades = HolderTurnoverCalculator.Trades(
-            [new(Increased, 100, 1_000), new(Exited, 0, 0)],
-            [new(Increased, 100, 1_000)]
+            [new(Increased, 100, 1_000), new(Exited, 0, 500)],
+            [new(Increased, 100, 1_000), new(Reduced, 0, 700)]
         );
 
+        trades.EquityAum.Should().Be(1_000);
+        trades.PreviousEquityAum.Should().Be(1_000);
         trades.NewCount.Should().Be(0);
         trades.ExitCount.Should().Be(0);
         trades.Turnover.Should().Be(0m);

@@ -4,8 +4,8 @@ namespace Equibles.Holdings.BusinessLogic.Intelligence;
 
 /// <summary>
 /// Consecutive quarters a filer has held a security, read from bitmasks where bit i is the i-th
-/// calendar quarter since <see cref="FirstQuarter"/>: one mask of quarters it held the security, one
-/// of quarters it filed a 13F at all.
+/// calendar quarter since <see cref="FirstQuarter"/> (bit 63 is the sign bit of a signed 64-bit mask):
+/// one mask of quarters it held the security, one of quarters it filed a 13F at all.
 /// </summary>
 public static class HolderTenureCalculator
 {
@@ -23,7 +23,7 @@ public static class HolderTenureCalculator
     /// <summary>The quarter's bit index, or null for a date that is not a covered quarter end.</summary>
     public static int? QuarterIndex(DateOnly reportDate)
     {
-        if (reportDate.AddDays(1).Day != 1 || reportDate.Month % 3 != 0)
+        if (!HoldingsCorpusCoverage.IsCalendarQuarterEnd(reportDate))
             return null;
         var index =
             (reportDate.Year - FirstQuarter.Year) * 4 + (reportDate.Month - FirstQuarter.Month) / 3;
@@ -36,7 +36,7 @@ public static class HolderTenureCalculator
     /// <see cref="MaximumBridgedQuarters"/> between held quarters counts as held; a quarter the
     /// filer filed without the security ends the run.
     /// </summary>
-    public static HolderTenure? Tenure(ulong held, ulong filed, int quarter)
+    public static HolderTenure? Tenure(long held, long filed, int quarter)
     {
         if (!IsSet(held, quarter))
             return null;
@@ -88,7 +88,7 @@ public static class HolderTenureCalculator
             : new HolderTenureSummary(null, null);
     }
 
-    public static ulong Set(ulong mask, int quarter) => mask | (1UL << quarter);
+    public static long Set(long mask, int quarter) => mask | (1L << quarter);
 
-    private static bool IsSet(ulong mask, int quarter) => (mask & (1UL << quarter)) != 0;
+    private static bool IsSet(long mask, int quarter) => (mask & (1L << quarter)) != 0;
 }
