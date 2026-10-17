@@ -101,11 +101,18 @@ public class NCenDataSetImportService
                     stored
                 );
             }
-            catch (InvalidDataException exception)
+            catch (Exception exception)
+                when (exception is InvalidDataException
+                    || exception
+                        is HttpRequestException
+                        {
+                            StatusCode: HttpStatusCode.NotFound or HttpStatusCode.Gone,
+                        }
+                )
             {
                 _logger.LogError(
                     exception,
-                    "N-CEN data set {Year} Q{Quarter} is unreadable; retrying after {Delay}",
+                    "N-CEN data set {Year} Q{Quarter} is unreadable or missing; retrying after {Delay}",
                     link.Year,
                     link.Quarter,
                     FailureRetryDelay
@@ -175,14 +182,31 @@ public class NCenDataSetImportService
                 cancellationToken
             );
 
-            // The quarter's previous copy and any copy of these accessions another quarter holds are
-            // replaced, so the newest import owns an accession SEC publishes twice.
+            // SEC has never listed an accession in two quarters; if it does, refuse the quarter
+            // rather than guess which copy wins, since a later re-post could silently drop it.
             var accessions = reports.Select(report => report.AccessionNumber).ToList();
+            var elsewhere = await dbContext
+                .Set<NCenRegistrantReport>()
+                .Where(report =>
+                    accessions.Contains(report.AccessionNumber)
+                    && (report.DataSetYear != link.Year || report.DataSetQuarter != link.Quarter)
+                )
+                .Select(report => new
+                {
+                    report.AccessionNumber,
+                    report.DataSetYear,
+                    report.DataSetQuarter,
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (elsewhere != null)
+                throw new InvalidDataException(
+                    $"Accession {elsewhere.AccessionNumber} was already imported from {elsewhere.DataSetYear} Q{elsewhere.DataSetQuarter}."
+                );
+
             var replaced = dbContext
                 .Set<NCenRegistrantReport>()
                 .Where(report =>
                     report.DataSetYear == link.Year && report.DataSetQuarter == link.Quarter
-                    || accessions.Contains(report.AccessionNumber)
                 );
             var ciks = (
                 await replaced

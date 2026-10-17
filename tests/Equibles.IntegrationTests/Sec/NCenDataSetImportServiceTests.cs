@@ -340,7 +340,7 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AccessionPublishedInTwoQuarters_BelongsToTheNewestImport()
+    public async Task AccessionPublishedInTwoQuarters_FailsTheLaterQuarterLoudly()
     {
         List("2026q2_ncen.zip", Archive("2026q3", only: MasonOriginal));
         List("2026q3_ncen.zip", Archive("2026q3"));
@@ -348,30 +348,41 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
         await Sut().ImportPending(4, CancellationToken.None);
 
         await using var verify = _fixture.CreateDbContext();
-        var copy = await verify
-            .Set<NCenRegistrantReport>()
-            .SingleAsync(report => report.AccessionNumber == MasonOriginal);
-        copy.DataSetQuarter.Should().Be(3);
-        (await verify.Set<NCenDataSetImport>().SingleAsync(row => row.Quarter == 3))
-            .ReportCount.Should()
-            .Be(6);
+        (
+            await verify
+                .Set<NCenRegistrantReport>()
+                .SingleAsync(r => r.AccessionNumber == MasonOriginal)
+        )
+            .DataSetQuarter.Should()
+            .Be(2);
+        var later = await verify.Set<NCenDataSetImport>().SingleAsync(row => row.Quarter == 3);
+        later.FileName.Should().BeNull();
+        later.LastFailure.Should().Contain(MasonOriginal).And.Contain("2026 Q2");
+        (await verify.Set<NCenRegistrantReport>().CountAsync()).Should().Be(1);
     }
 
     [Fact]
-    public async Task RepostOfTheEarlierQuarter_KeepsAnAccessionTheLaterQuarterOwns()
+    public async Task ArchiveSecNoLongerServes_IsRecordedAndLaterQuartersStillImport()
     {
-        List("2026q2_ncen.zip", Archive("2026q3", only: MasonOriginal));
+        _catalog.Add("2018q3_ncen.zip");
+        _edgar
+            .DownloadStream(Folder + "2018q3_ncen.zip")
+            .Returns<Task<Stream>>(_ =>
+                throw new HttpRequestException(
+                    "Not Found",
+                    null,
+                    System.Net.HttpStatusCode.NotFound
+                )
+            );
         List("2026q3_ncen.zip", Archive("2026q3"));
-        await Sut().ImportPending(4, CancellationToken.None);
 
-        _catalog.Remove("2026q2_ncen.zip");
-        List("2026q2_ncen_0.zip", Archive("2026q3", only: "0000856517-26-000004"));
-        await Sut().ImportPending(4, CancellationToken.None);
+        (await Sut().ImportPending(1, CancellationToken.None)).Should().BeTrue();
+        (await Sut().ImportPending(1, CancellationToken.None)).Should().BeFalse();
 
         await using var verify = _fixture.CreateDbContext();
-        (await verify.Set<NCenRegistrantReport>().AnyAsync(r => r.AccessionNumber == MasonOriginal))
-            .Should()
-            .BeTrue();
+        var ledger = await verify.Set<NCenDataSetImport>().OrderBy(row => row.Year).ToListAsync();
+        ledger[0].LastFailureAt.Should().NotBeNull();
+        ledger[1].FileName.Should().Be("2026q3_ncen.zip");
     }
 
     private static Task<bool> Superseded(EquiblesFinancialDbContext context, string accession) =>
