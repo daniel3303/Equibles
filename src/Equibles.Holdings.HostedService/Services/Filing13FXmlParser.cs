@@ -60,8 +60,17 @@ public class Filing13FXmlParser
             FilingManagerName = Value(Child(filingManager, "name")),
             City = Value(Child(address, "city")),
             StateOrCountry = Value(Child(address, "stateOrCountry")),
-            Form13FFileNumber = Value(Descendant(coverPage, "form13FFileNumber")),
-            CrdNumber = Value(Descendant(coverPage, "crdNumber")),
+            // The filer's own identifiers are direct children of coverPage; a descendant scan
+            // would read a parent's numbers from the cover's otherManagersInfo list instead.
+            Form13FFileNumber = HoldingsParsingHelper.NormalizeIdentifier(
+                Value(Child(coverPage, "form13FFileNumber"))
+            ),
+            CrdNumber = HoldingsParsingHelper.NormalizeIdentifier(
+                Value(Child(coverPage, "crdNumber"))
+            ),
+            SecFileNumber = HoldingsParsingHelper.NormalizeIdentifier(
+                Value(Child(coverPage, "secFileNumber"))
+            ),
             ReportType = Value(Child(coverPage, "reportType")),
         };
 
