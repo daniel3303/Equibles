@@ -560,13 +560,19 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
             connection
         );
         await vacuum.ExecuteNonQueryAsync();
+        // The rebuild joins the issuer tables too; without fresh statistics their row estimates
+        // depend on whether autovacuum ran, which moved the chosen holdings index between runs.
+        await using var analyze = new NpgsqlCommand(
+            "ANALYZE \"EquityIssuer\", \"EquityIssuerPresentation\", \"EquityListing\";",
+            connection
+        );
+        await analyze.ExecuteNonQueryAsync();
     }
 
     // The same statement and the same typed parameters the scan sent, planned the way Npgsql
     // plans them (at Bind, with the values), with sequential and bitmap heap scans disabled so
     // only an index the planner cannot use for the statement leaves it unused. Parallel plans
-    // are off too: on the small seed a parallel skip scan of another index ties on cost and
-    // the planner picked it in some CI runs.
+    // are off too, so a worker discount on the small seed cannot decide which index wins.
     private async Task<List<string>> Explain(IEnumerable<CapturedCommand> commands)
     {
         var plans = new List<string>();
