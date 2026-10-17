@@ -273,7 +273,7 @@ public class RateLimiterTests
         ordered.Should().HaveCount(6);
 
         // A stamp is taken after its continuation resumes, so it is never earlier than the release;
-        // bounding stamps from the clock start makes resume latency harmless (25ms covers clock skew).
+        // bounding stamps from the clock start makes resume latency harmless (25ms covers clock resolution).
         for (var k = maxRequests; k < ordered.Length; k++)
         {
             var lowerBoundMs = (long)(k / maxRequests * timeWindow.TotalMilliseconds) - 25;
@@ -281,7 +281,7 @@ public class RateLimiterTests
                 .Should()
                 .BeGreaterThanOrEqualTo(
                     lowerBoundMs,
-                    $"release {k} may happen only after {k / maxRequests} full {timeWindow.TotalMilliseconds}ms windows; releasing it sooner lets more than {maxRequests} requests into one window"
+                    $"release {k} may happen only after {k / maxRequests} full window(s) of {timeWindow.TotalMilliseconds}ms; releasing it sooner lets more than {maxRequests} requests into one window"
                 );
         }
     }
