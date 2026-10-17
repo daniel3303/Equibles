@@ -2218,23 +2218,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Include(h => h.InstitutionalHolder);
     }
 
-    // Successions whose successor's first 13F is one of these quarters. A predecessor that has
-    // since filed a 13F for that quarter is no longer succeeded, before the refresh drops the pair.
+    // Current successions whose successor's first 13F is one of these quarters.
     public IQueryable<HolderSuccession> GetSuccessionsFirstReportedOn(
         IReadOnlyCollection<DateOnly> reportDates
     ) =>
         DbContext
             .Set<HolderSuccession>()
-            .Where(succession =>
-                reportDates.Contains(succession.SuccessorFirstReportDate)
-                && !DbContext
-                    .Set<InstitutionalFiling>()
-                    .Any(filing =>
-                        filing.InstitutionalHolderId == succession.PredecessorHolderId
-                        && filing.ReportDate == succession.SuccessorFirstReportDate
-                        && filing.FilingType == FilingType.Form13F
-                    )
-            );
+            .Where(succession => reportDates.Contains(succession.SuccessorFirstReportDate))
+            .StillSucceeded(DbContext);
 
     // Distinct holder ids among the given set that filed ANY 13F at reportDate — the "has this
     // fund reported yet?" test behind the combined view's reported-so-far counts.

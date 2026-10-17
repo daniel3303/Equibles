@@ -37,6 +37,17 @@ public class HolderTypeBadgeViewRenderingTests
     }
 
     [Fact]
+    public async Task GetHoldingsCombined_ProfiledAndUnprofiledHolders_BadgesOnlyTheProfiledType()
+    {
+        await SeedAsync();
+
+        var html = await GetHtml("/Stocks/AAPL/Holdings?combined=true");
+
+        html.Should().Contain("Example Trust Co").And.Contain("Example ETF Fund LLC");
+        Badges(html).Should().NotBeEmpty().And.OnlyContain(label => label == "Bank");
+    }
+
+    [Fact]
     public async Task GetShowHolder_ProfiledBank_RendersBankBadge()
     {
         await SeedAsync();
@@ -117,6 +128,7 @@ public class HolderTypeBadgeViewRenderingTests
                 }
             );
             var reportDate = new DateOnly(2024, 12, 31);
+            db.Add(MakeHolding(stock.Id, bank, reportDate.AddMonths(-3), 1_500));
             db.Add(MakeHolding(stock.Id, bank, reportDate, 2_000));
             db.Add(MakeHolding(stock.Id, unprofiled, reportDate, 1_000));
             db.Add(MakeHolding(stock.Id, undecided, reportDate, 500));

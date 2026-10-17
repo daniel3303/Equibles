@@ -991,11 +991,7 @@ public class StockTabService
         {
             Stock = stock,
             Holder = holder,
-            HolderType = (
-                await _institutionalHolderRepository.GetEntityTypes([holder.Id])
-            ).TryGetValue(holder.Id, out var holderType)
-                ? holderType
-                : null,
+            HolderType = await _institutionalHolderRepository.GetEntityType(holder),
             Holdings = holdings,
         };
     }

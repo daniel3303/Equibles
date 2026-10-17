@@ -46,8 +46,9 @@ public class InstitutionalHoldingsToolsHolderTypeTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
 
         var all = await Sut(verify).GetTopHolders("AAPL");
-        var banks = await Sut(verify).GetTopHolders("AAPL", holderType: "bank,unk");
-        var refused = await Sut(verify).GetTopHolders("AAPL", holderType: "hedge");
+        var banks = await Sut(verify).GetTopHolders("AAPL", holderTypes: ["unk", "BANK"]);
+        var none = await Sut(verify).GetTopHolders("AAPL", holderTypes: ["ins"]);
+        var refused = await Sut(verify).GetTopHolders("AAPL", holderTypes: ["hedge"]);
 
         all.Should()
             .Contain("| 1 | Adviser Capital | Common | 6,000 | 0.6 | 60.00% | Registered adviser |")
@@ -60,6 +61,7 @@ public class InstitutionalHoldingsToolsHolderTypeTests : ParadeDbMcpTestBase
             .And.Contain("| 2 | New Filer LLC |")
             .And.Contain("30.00%")
             .And.NotContain("Adviser Capital");
+        none.Should().Be("No institutional holders of AAPL with holder type ins as of 2024-12-31.");
         refused.Should().StartWith("Unknown holder type 'hedge'.");
     }
 
@@ -75,7 +77,9 @@ public class InstitutionalHoldingsToolsHolderTypeTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
 
         var all = await Sut(verify).SearchInstitutions("harbor");
-        var unknown = await Sut(verify).SearchInstitutions("harbor", type: "unk");
+        var unknown = await Sut(verify).SearchInstitutions("harbor", holderTypes: ["unk"]);
+        var banks = await Sut(verify).SearchInstitutions("harbor", holderTypes: ["bank"]);
+        var insurers = await Sut(verify).SearchInstitutions("harbor", holderTypes: ["ins"]);
 
         all.Should()
             .Contain(
@@ -89,6 +93,16 @@ public class InstitutionalHoldingsToolsHolderTypeTests : ParadeDbMcpTestBase
             .And.Contain("Harbor Holdings")
             .And.NotContain("Harbor Bank")
             .And.NotContain("Harbor Advisers");
+        banks
+            .Should()
+            .Contain("Institutions matching 'harbor' with holder type bank (")
+            .And.Contain("Harbor Bank")
+            .And.NotContain("Harbor Partners")
+            .And.NotContain("Harbor Holdings")
+            .And.NotContain("Harbor Advisers");
+        insurers
+            .Should()
+            .StartWith("No match for 'harbor' with holder type ins in the tracked 13F filer set.");
     }
 
     [Fact]
@@ -147,6 +161,85 @@ public class InstitutionalHoldingsToolsHolderTypeTests : ParadeDbMcpTestBase
                 "| Earlier CIK | BlackRock Inc. (old) (1364742), last 13F 2024-06-30, continued here from 2024-09-30 |"
             );
     }
+
+    [Fact]
+    public async Task GetInstitutionSummary_UnprofiledHolder_StillShowsTheCikItContinues()
+    {
+        var old = Holder("1364742", "BlackRock Inc. (old)", null);
+        var renamed = Holder("2012383", "BlackRock Inc.", null);
+        SeedHoldings(old, renamed);
+        DbContext.Add(Succession(old, renamed));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        await using var verify = Fixture.CreateDbContext();
+
+        var output = await Sut(verify).GetInstitutionSummary("2012383");
+
+        output
+            .Should()
+            .Contain("_Not yet classified; profiles refresh with each 13F import cycle._")
+            .And.Contain(
+                "| Earlier CIK | BlackRock Inc. (old) (1364742), last 13F 2024-06-30, continued here from 2024-09-30 |"
+            );
+    }
+
+    [Fact]
+    public async Task GetInstitutionSummary_PredecessorFiledTheSuccessorsFirstQuarter_ShowsNoLink()
+    {
+        var old = Holder("1364742", "BlackRock Inc. (old)", null);
+        var renamed = Holder("2012383", "BlackRock Inc.", HolderEntityType.RegisteredAdviser);
+        SeedHoldings(old, renamed);
+        DbContext.Add(Succession(old, renamed));
+        DbContext.Add(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-old-resumed",
+                InstitutionalHolderId = old.Id,
+                FilingDate = new DateOnly(2024, 11, 14),
+                ReportDate = new DateOnly(2024, 9, 30),
+                FilingType = FilingType.Form13F,
+                PositionCount = 1,
+                TotalValue = 1,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        await using var verify = Fixture.CreateDbContext();
+
+        var successor = await Sut(verify).GetInstitutionSummary("2012383");
+        var predecessor = await Sut(verify).GetInstitutionSummary("1364742");
+
+        successor.Should().Contain("| Holder type |").And.NotContain("Earlier CIK");
+        predecessor.Should().NotContain("Later CIK");
+    }
+
+    private void SeedHoldings(params InstitutionalHolder[] holders)
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        DbContext.Add(stock);
+        foreach (var holder in holders)
+            DbContext.Add(Holding(stock, holder, 1_000));
+    }
+
+    private static HolderSuccession Succession(
+        InstitutionalHolder predecessor,
+        InstitutionalHolder successor
+    ) =>
+        new()
+        {
+            PredecessorHolderId = predecessor.Id,
+            SuccessorHolderId = successor.Id,
+            PredecessorLastReportDate = new DateOnly(2024, 6, 30),
+            SuccessorFirstReportDate = new DateOnly(2024, 9, 30),
+            Basis = HolderSuccessionBasis.SameIncludedManagers,
+            PredecessorGroupValue = 1,
+            SuccessorGroupValue = 1,
+            DerivationVersion = 1,
+        };
 
     private InstitutionalHolder Holder(
         string cik,

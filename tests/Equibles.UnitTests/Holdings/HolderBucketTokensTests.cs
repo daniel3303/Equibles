@@ -58,4 +58,26 @@ public class HolderBucketTokensTests
         HolderBucketTokens.Label(null).Should().Be("—");
         HolderBucketTokens.Label(HolderEntityType.BrokerDealer).Should().Be("Broker-dealer");
     }
+
+    [Fact]
+    public void ParseEntityTypes_ReadsOneTokenPerElementAndCommasInsideOne()
+    {
+        var (types, error) = HolderBucketTokens.ParseEntityTypes(["BANK", null, "ins, plan", " "]);
+
+        error.Should().BeNull();
+        types
+            .Should()
+            .BeEquivalentTo([
+                HolderEntityType.Bank,
+                HolderEntityType.InsuranceCompany,
+                HolderEntityType.BenefitPlan,
+            ]);
+    }
+
+    [Fact]
+    public void ParseEntityTypes_EmptyOrNullArray_MeansNoFilter()
+    {
+        HolderBucketTokens.ParseEntityTypes((string[])null).Types.Should().BeNull();
+        HolderBucketTokens.ParseEntityTypes(new string[0]).Types.Should().BeNull();
+    }
 }

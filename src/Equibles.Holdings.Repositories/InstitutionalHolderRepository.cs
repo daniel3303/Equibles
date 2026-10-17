@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -397,19 +398,29 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
                 cancellationToken
             );
 
+    // The holder's entity type, null when it is not yet profiled.
+    public Task<HolderEntityType?> GetEntityType(
+        InstitutionalHolder holder,
+        CancellationToken cancellationToken = default
+    ) =>
+        GetProfile(holder)
+            .Select(profile => (HolderEntityType?)profile.EntityType)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public IQueryable<InstitutionalHolderProfile> GetProfile(InstitutionalHolder holder) =>
         DbContext
             .Set<InstitutionalHolderProfile>()
             .Where(profile => profile.InstitutionalHolderId == holder.Id);
 
-    // The successions the holder continues or is continued by.
+    // The holder's current successions, as predecessor or successor.
     public IQueryable<HolderSuccession> GetSuccessions(InstitutionalHolder holder) =>
         DbContext
             .Set<HolderSuccession>()
             .Where(succession =>
                 succession.PredecessorHolderId == holder.Id
                 || succession.SuccessorHolderId == holder.Id
-            );
+            )
+            .StillSucceeded(DbContext);
 
     private async Task<List<InstitutionalHolderSearchMatch>> RankWithStats(
         IQueryable<InstitutionalHolder> source,

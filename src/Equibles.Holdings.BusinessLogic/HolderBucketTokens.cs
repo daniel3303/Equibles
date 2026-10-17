@@ -46,16 +46,28 @@ public static class HolderBucketTokens
     /// </summary>
     public static (IReadOnlySet<HolderEntityType> Types, string Error) ParseEntityTypes(
         string tokens
+    ) => ParseEntityTypes(tokens == null ? null : [tokens]);
+
+    /// <summary>
+    /// Parses entity type tokens given one per element; an element may also hold several
+    /// comma-separated tokens.
+    /// </summary>
+    public static (IReadOnlySet<HolderEntityType> Types, string Error) ParseEntityTypes(
+        IEnumerable<string> tokens
     )
     {
-        if (string.IsNullOrWhiteSpace(tokens))
+        if (tokens == null)
             return (null, null);
         var types = new HashSet<HolderEntityType>();
         foreach (
-            var token in tokens.Split(
-                ',',
-                StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
-            )
+            var token in tokens
+                .Where(element => element != null)
+                .SelectMany(element =>
+                    element.Split(
+                        ',',
+                        StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
+                    )
+                )
         )
         {
             var match = EntityTypes.FirstOrDefault(entry =>
