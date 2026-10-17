@@ -441,7 +441,14 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .OrderBy(state => state.ReportDate)
             .ToListAsync();
         states.Select(state => state.ReportDate).Should().Equal(BeforeCorpus, Q1, Q2, Q3);
-        states[0].DirtyAt.Should().Be(stamped, "a quarter before the corpus is never drained");
+        // Postgres keeps microseconds, so the stored stamp drops the last tick digit.
+        states[0]
+            .DirtyAt.Should()
+            .BeCloseTo(
+                stamped,
+                TimeSpan.FromMilliseconds(1),
+                "a quarter before the corpus is never drained"
+            );
         states
             .Skip(1)
             .Should()
