@@ -125,7 +125,7 @@ internal static class HolderIdentifierRules
                     .Where(row => row.ReportEndingPeriod == latest && row.Crd != null)
                     .DistinctBy(row => row.Crd);
             })
-            .GroupBy(row => row.Crd.Value)
+            .GroupBy(row => row.Crd.GetValueOrDefault())
             .ToDictionary(
                 group => group.Key,
                 group =>
