@@ -74,7 +74,9 @@ internal static class QuarterAveragePriceLoader
             .Concat(
                 listings
                     .Where(listing => listing.IsPresentation)
-                    .Select(listing => (listing.Id, listing.EquityIssuerId, Ticker: (string)null))
+                    .Select(listing =>
+                        (listing.Id, listing.EquityIssuerId, Ticker: default(string))
+                    )
             )
             .Where(listing => storedKeys.ContainsKey((listing.EquityIssuerId, listing.Ticker)))
             .ToDictionary(
@@ -130,10 +132,11 @@ internal static class QuarterAveragePriceLoader
         ).ToLookup(split => split.EquityIssuerId);
 
         var prices = new Dictionary<HolderSecurityKey, decimal>();
-        foreach (var session in sessions)
+        foreach (
+            var session in sessions.Where(session => lastSessions.ContainsKey(session.ListingId))
+        )
         {
-            if (!lastSessions.TryGetValue(session.ListingId, out var last))
-                continue;
+            var last = lastSessions[session.ListingId];
             var key = securityByListing[session.ListingId];
             var issuerSplits = splits[key.IssuerId].ToList();
             var factorResolved = SplitBasisResolver.TryResolveFactor(
