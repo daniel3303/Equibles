@@ -85,11 +85,13 @@ public static class HolderStyleBandClassifier
     }
 
     private static bool MostlyIndexFunds(HolderStyleInputs inputs) =>
-        inputs is { IndexSeriesNetAssets: > 0, AdvisedSeriesNetAssets: > 0 }
-        && inputs.IndexSeriesNetAssets.Value
-            >= IndexLikeMinimumIndexFundShare * inputs.AdvisedSeriesNetAssets.Value
-        && inputs.IndexSeriesNetAssets.Value
-            >= IndexLikeMinimumIndexAssetsToBook * inputs.EquityAum;
+        inputs
+            is {
+                IndexSeriesNetAssets: decimal index and > 0,
+                AdvisedSeriesNetAssets: decimal advised and > 0,
+            }
+        && index >= IndexLikeMinimumIndexFundShare * advised
+        && index >= IndexLikeMinimumIndexAssetsToBook * inputs.EquityAum;
 
     public static HolderTurnoverBand TurnoverBand(decimal? trailingAnnualTurnover) =>
         trailingAnnualTurnover switch
