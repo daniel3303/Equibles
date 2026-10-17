@@ -68,6 +68,56 @@ public class GovernmentContractsImportServiceParentFallbackTests
     }
 
     [Fact]
+    public async Task Import_SubsidiaryListingItselfBesideItsCurrentParent_ResolvesThroughTheParent()
+    {
+        var options = NewDbOptions();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var stockId = SeedCompany(options);
+        var scopeFactory = ScopeFactory(options);
+
+        // SAM history lists the subsidiary as its own parent beside its current owner; the
+        // self entry is reporting noise and must not make the parent ambiguous.
+        var client = ClientReturning(AwardFor(today));
+        client
+            .GetRecipientProfile(SubsidiaryRecipientId, Arg.Any<CancellationToken>())
+            .Returns(
+                new UsaSpendingRecipientProfile
+                {
+                    RecipientId = SubsidiaryRecipientId,
+                    Duns = "111111111",
+                    ParentId = "def456-P",
+                    ParentName = "CACI INTERNATIONAL INC",
+                    ParentDuns = "045534641",
+                    Parents =
+                    [
+                        new UsaSpendingRecipientParentRef
+                        {
+                            ParentId = "def456-P",
+                            ParentName = "CACI INTERNATIONAL INC",
+                            ParentDuns = "045534641",
+                        },
+                        new UsaSpendingRecipientParentRef
+                        {
+                            ParentId = "abc123-P",
+                            ParentName = SubsidiaryName,
+                            ParentDuns = "111111111",
+                        },
+                    ],
+                }
+            );
+
+        await NewService(scopeFactory, client).Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        ctx.Set<GovernmentContract>().AsNoTracking().Single().EquityIssuerId.Should().Be(stockId);
+        ctx.Set<GovernmentContractRecipientParent>()
+            .AsNoTracking()
+            .Single()
+            .ParentNames.Should()
+            .Be("CACI INTERNATIONAL INC");
+    }
+
+    [Fact]
     public async Task Import_FreshCachedParent_ResolvesWithoutRefetchingTheProfile()
     {
         var options = NewDbOptions();
