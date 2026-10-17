@@ -33,4 +33,46 @@ public class FormAdvAdviserData
     public bool ChargesCommissions { get; set; }
     public bool ChargesPerformanceBased { get; set; }
     public bool ChargesOther { get; set; }
+
+    /// <summary>The roster's <c>Firm Type</c> ("Registered" or "ERA"); null in layouts without it.</summary>
+    public string FirmType { get; set; }
+
+    /// <summary>The first CIK the adviser reports, as filed.</summary>
+    public string Cik { get; set; }
+
+    public int? CikCount { get; set; }
+
+    /// <summary>Item 1.P as filed; placeholders such as "N/A" are not filtered here.</summary>
+    public string Lei { get; set; }
+
+    public DateOnly? LatestFilingDate { get; set; }
+
+    /// <summary>Item 3.A as filed, e.g. "Limited Liability Company".</summary>
+    public string OrganizationForm { get; set; }
+
+    /// <summary>Checked Item 2.A boxes; item (n) is bit n-1.</summary>
+    public int RegistrationBasisItems { get; set; }
+
+    /// <summary>Checked Item 2.B boxes; item (n) is bit n-1.</summary>
+    public int ExemptionBasisItems { get; set; }
+
+    /// <summary>Checked Item 6.A boxes; item (n) is bit n-1.</summary>
+    public int OtherBusinessItems { get; set; }
+
+    /// <summary>Checked Item 7.A boxes; item (n) is bit n-1.</summary>
+    public int RelatedPersonItems { get; set; }
+
+    public bool? AdvisesPrivateFunds { get; set; }
+    public int? PrivateFundCount { get; set; }
+    public int? HedgeFundCount { get; set; }
+    public int? PrivateEquityFundCount { get; set; }
+    public int? VentureCapitalFundCount { get; set; }
+    public int? RealEstateFundCount { get; set; }
+    public int? LiquidityFundCount { get; set; }
+    public int? SecuritizedAssetFundCount { get; set; }
+    public int? OtherPrivateFundCount { get; set; }
+    public long? PrivateFundGrossAssets { get; set; }
+
+    /// <summary>Item 5.D client types the adviser reports clients or assets for.</summary>
+    public List<FormAdvClientTypeData> ClientTypes { get; set; } = [];
 }

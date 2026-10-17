@@ -12,4 +12,10 @@ public class RecipientParentChoice
     public string ParentId { get; set; }
 
     public List<string> Names { get; set; } = [];
+
+    /// <summary>
+    /// True when the choice only exists because history entries naming the recipient itself
+    /// were set aside; logged so the recipients this rule newly resolves can be audited.
+    /// </summary>
+    public bool ResolvedByDroppingSelfEntries { get; set; }
 }

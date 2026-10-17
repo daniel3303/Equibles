@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -51,7 +52,7 @@ public class YahooFinanceClientHistoricalPartialRaggedOhlcTests
             + "\"open\":[100.10],\"high\":[101.50],\"low\":[99.80],"
             + "\"close\":[101.00,102.00],\"volume\":[1500000,1600000]}]}}]}}";
 
-        var sut = new YahooFinanceClient(
+        var sut = new OfflineYahooFinanceClient(
             new HttpClient(new StubHandler(json)),
             Substitute.For<ILogger<YahooFinanceClient>>()
         );
@@ -76,7 +77,7 @@ public class YahooFinanceClientHistoricalPartialRaggedOhlcTests
             + "\"open\":[287.54],\"high\":[310.88],\"low\":[287.76],"
             + "\"close\":[310.23],\"volume\":[1686983]}]}}]}}";
 
-        var sut = new YahooFinanceClient(
+        var sut = new OfflineYahooFinanceClient(
             new HttpClient(new StubHandler(json)),
             Substitute.For<ILogger<YahooFinanceClient>>()
         );
