@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -23,7 +24,7 @@ public class YahooFinanceClientHistoricalEmptyResultTests
     {
         var json = "{\"chart\":{\"result\":[]}}";
 
-        var sut = new YahooFinanceClient(
+        var sut = new OfflineYahooFinanceClient(
             new HttpClient(new StubHandler(json)),
             Substitute.For<ILogger<YahooFinanceClient>>()
         );
