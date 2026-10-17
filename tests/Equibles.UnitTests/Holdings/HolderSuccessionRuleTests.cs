@@ -212,19 +212,70 @@ public class HolderSuccessionRuleTests
         Derive(old, renamed).Should().BeEmpty();
     }
 
-    [Fact]
-    public void ManagerFiledWithoutIdentifiers_DoesNotCountTowardTheMinimum()
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(3, true)]
+    public void ManagerFiledWithoutIdentifiers_NeitherCountsNorBlocks(int keyed, bool succeeds)
     {
         var old = Filer("81", "2020-03-31", "2024-06-30");
         var renamed = Filer("82", "2024-09-30", "2026-06-30");
-        Report(old, "2024-06-30", "o", [.. Managers("028-1", "028-2", "028-3"), Manager()]);
-        Report(renamed, "2024-09-30", "n", Managers("028-1", "028-2", "028-3", "028-4"));
+        var fileNumbers = Enumerable.Range(1, keyed).Select(n => $"028-{n}").ToArray();
+        Report(old, "2024-06-30", "o", [.. Managers(fileNumbers), Manager()]);
+        Report(renamed, "2024-09-30", "n", [.. Managers(fileNumbers), .. Managers("028-9")]);
 
         Derive(old, renamed)
+            .Select(succession => succession.Basis)
+            .Should()
+            .BeEquivalentTo(
+                succeeds
+                    ? [HolderSuccessionBasis.SameIncludedManagers]
+                    : Array.Empty<HolderSuccessionBasis>()
+            );
+    }
+
+    [Fact]
+    public void SuccessorSideEvidence_IsTheFilingThatIncludedTheMatch()
+    {
+        var old = Filer("111", "2020-03-31", "2025-12-31");
+        var merged = Filer("112", "2026-03-31", "2026-06-30");
+        Report(merged, "2026-03-31", "m", Manager(cik: "7"));
+        Report(merged, "2026-03-31", "m-amendment", Manager(cik: "111"));
+
+        Derive(old, merged)
             .Should()
             .ContainSingle()
-            .Which.Basis.Should()
-            .Be(HolderSuccessionBasis.SameIncludedManagers);
+            .Which.EvidenceAccession.Should()
+            .Be("m-amendment");
+    }
+
+    [Fact]
+    public void SeveralPredecessorsFoldedIntoOne_CountTheSuccessorOnce()
+    {
+        var first = Filer("121", "2020-03-31", "2025-12-31", crd: "1");
+        var second = Filer("122", "2020-03-31", "2025-12-31", crd: "2");
+        // The merged filer stops after one quarter, and its own successor is a separate group.
+        var merged = Filer("123", "2026-03-31", "2026-03-31");
+        var later = Filer("124", "2026-06-30", "2026-06-30");
+        Report(merged, "2026-03-31", "m", Manager(crd: "1"), Manager(crd: "2"));
+        Report(later, "2026-06-30", "l", Manager(cik: "123"));
+        Value(first, "2025-12-31", 400);
+        Value(second, "2025-12-31", 500);
+        Value(merged, "2026-03-31", 950);
+        Value(later, "2026-06-30", 990);
+
+        var successions = Derive(first, second, merged, later);
+
+        successions
+            .Where(succession => succession.SuccessorHolderId == merged.HolderId)
+            .Should()
+            .HaveCount(2)
+            .And.OnlyContain(succession =>
+                succession.PredecessorGroupValue == 900 && succession.SuccessorGroupValue == 950
+            );
+        var onward = successions.Single(succession =>
+            succession.SuccessorHolderId == later.HolderId
+        );
+        (onward.PredecessorGroupValue, onward.SuccessorGroupValue).Should().Be((950L, 990L));
     }
 
     [Fact]
