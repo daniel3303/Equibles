@@ -23,6 +23,8 @@ public class UsaSpendingClientRecipientProfileTests
             {
               "recipient_id": "abc123-C",
               "name": "CACI, INC. - FEDERAL",
+              "duns": "123456789",
+              "uei": "ABCDEFGHJKL1",
               "recipient_level": "C",
               "parent_id": "def456-P",
               "parent_name": "CACI INTERNATIONAL INC",
@@ -43,6 +45,8 @@ public class UsaSpendingClientRecipientProfileTests
             .BeTrue("profile reads share the search endpoint's fresh-connection rule");
         profile.Should().NotBeNull();
         profile.RecipientLevel.Should().Be("C");
+        profile.Duns.Should().Be("123456789");
+        profile.Uei.Should().Be("ABCDEFGHJKL1");
         profile.ParentId.Should().Be("def456-P");
         profile.ParentName.Should().Be("CACI INTERNATIONAL INC");
         profile.Parents.Should().ContainSingle(p => p.ParentId == "def456-P");

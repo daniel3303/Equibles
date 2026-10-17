@@ -17,6 +17,16 @@ public class UsaSpendingRecipientProfile
     [JsonProperty("name")]
     public string Name { get; set; }
 
+    /// <summary>
+    /// The recipient's OWN DUNS, used to recognise parent entries naming the recipient itself.
+    /// </summary>
+    [JsonProperty("duns")]
+    public string Duns { get; set; }
+
+    /// <summary>The recipient's OWN UEI; recognises self entries when a DUNS is missing.</summary>
+    [JsonProperty("uei")]
+    public string Uei { get; set; }
+
     /// <summary>"R" (recipient), "P" (parent) or "C" (child) — the hash's level qualifier.</summary>
     [JsonProperty("recipient_level")]
     public string RecipientLevel { get; set; }

@@ -10,9 +10,10 @@ namespace Equibles.UnitTests.GovernmentContracts;
 // hash). One registrant under several names (legal renames) collapses to a single choice
 // carrying every name; several registrants means ownership moved over the recipient's
 // history, and one link cannot be right for awards spanning both eras — always dropped,
-// never guessed. The fixtures mirror profiles verified live against USAspending
-// (Sikorsky: RTX + Lockheed; CACI, Inc. - Federal: CACI International + its former name
-// Systemware under one DUNS).
+// never guessed. Entries naming the recipient itself (by its own DUNS or UEI) are dropped
+// only beside a different current parent. The fixtures mirror profiles verified live
+// against USAspending (Sikorsky: RTX + Lockheed; CACI, Inc. - Federal: CACI International +
+// its former name Systemware under one DUNS; Kratos SRE: Kratos Defense + itself).
 public class GovernmentContractsImportServiceChooseParentTests
 {
     [Fact]
@@ -50,6 +51,7 @@ public class GovernmentContractsImportServiceChooseParentTests
 
         choice.Should().NotBeNull();
         choice.ParentId.Should().Be("5eb76328-P");
+        choice.ResolvedByDroppingSelfEntries.Should().BeFalse();
         choice
             .Names.Should()
             .BeEquivalentTo(
@@ -105,13 +107,14 @@ public class GovernmentContractsImportServiceChooseParentTests
     [Fact]
     public void ChooseParent_SelfRegistrationEraBesideALaterOwner_IsAmbiguous()
     {
-        // CACI NSS, LLC (live shape): SAM lists the recipient itself as a parent (its
-        // independent era, under its own registrant DUNS) beside CACI International. The
-        // independent era's awards must not be attributed to the later owner, so the
-        // self-group counts toward ambiguity by design.
+        // CACI NSS, LLC (live shape): SAM lists the recipient itself as a parent beside CACI
+        // International, and its CURRENT top-level parent is itself too. Self entries are
+        // only dropped beside a different current parent, so this stays ambiguous.
         var profile = new UsaSpendingRecipientProfile
         {
             RecipientId = "49aa319d-C",
+            Duns = "043033294",
+            Uei = "Y9CDLHK3A125",
             ParentId = "d644a583-P",
             ParentName = "CACI NSS, LLC",
             ParentDuns = "043033294",
@@ -131,6 +134,126 @@ public class GovernmentContractsImportServiceChooseParentTests
                     ParentName = "CACI INTERNATIONAL INC",
                     ParentDuns = "045534641",
                     ParentUei = "QSRTXLFKV857",
+                },
+            ],
+        };
+
+        GovernmentContractsImportService.ChooseParent(profile).Should().BeNull();
+    }
+
+    [Fact]
+    public void ChooseParent_SelfEntryBesideADifferentCurrentParent_ResolvesToTheCurrentParent()
+    {
+        // KRATOS SRE, INC. (live shape): the current parent is Kratos Defense, but the history
+        // also lists the recipient itself under its own DUNS/UEI. Award records show the
+        // self era overlapping years of Kratos ownership, so the self entry is SAM noise.
+        var profile = new UsaSpendingRecipientProfile
+        {
+            RecipientId = "3b5b3071-54b8-49dc-37a3-9ef0ba5e3e68-C",
+            Name = "KRATOS SRE, INC.",
+            Duns = "006648179",
+            Uei = "GM11ZH81LBY7",
+            RecipientLevel = "C",
+            ParentId = "6ed33a3b-1910-7875-9717-c4b6701f032b-P",
+            ParentName = "KRATOS DEFENSE & SECURITY SOLUTIONS, INC.",
+            ParentDuns = "884457813",
+            ParentUei = "H6BWMHGJ5AF5",
+            Parents =
+            [
+                new UsaSpendingRecipientParentRef
+                {
+                    ParentId = "6ed33a3b-1910-7875-9717-c4b6701f032b-P",
+                    ParentName = "KRATOS DEFENSE & SECURITY SOLUTIONS, INC.",
+                    ParentDuns = "884457813",
+                    ParentUei = "H6BWMHGJ5AF5",
+                },
+                new UsaSpendingRecipientParentRef
+                {
+                    ParentId = "3b5b3071-54b8-49dc-37a3-9ef0ba5e3e68-P",
+                    ParentName = "KRATOS SRE, INC.",
+                    ParentDuns = "006648179",
+                    ParentUei = "GM11ZH81LBY7",
+                },
+            ],
+        };
+
+        var choice = GovernmentContractsImportService.ChooseParent(profile);
+
+        choice.Should().NotBeNull();
+        choice.ParentId.Should().Be("6ed33a3b-1910-7875-9717-c4b6701f032b-P");
+        choice.Names.Should().Equal("KRATOS DEFENSE & SECURITY SOLUTIONS, INC.");
+        choice
+            .ResolvedByDroppingSelfEntries.Should()
+            .BeTrue("the choice exists only because the self entry was set aside");
+    }
+
+    [Fact]
+    public void ChooseParent_SelfEntryRecognisedByUeiAlone_IsDropped()
+    {
+        // The profile carries no DUNS of its own (post-migration), so the self entry is
+        // recognised by UEI alone.
+        var profile = new UsaSpendingRecipientProfile
+        {
+            RecipientId = "child-C",
+            Uei = "SELFUEI00001",
+            ParentId = "owner-P",
+            ParentName = "Owner Holdings Inc",
+            ParentUei = "OWNERUEI0001",
+            Parents =
+            [
+                new UsaSpendingRecipientParentRef
+                {
+                    ParentId = "owner-P",
+                    ParentName = "Owner Holdings Inc",
+                    ParentUei = "OWNERUEI0001",
+                },
+                new UsaSpendingRecipientParentRef
+                {
+                    ParentId = "child-P",
+                    ParentName = "Child Operating LLC",
+                    ParentUei = "SELFUEI00001",
+                },
+            ],
+        };
+
+        var choice = GovernmentContractsImportService.ChooseParent(profile);
+
+        choice.Should().NotBeNull();
+        choice.ParentId.Should().Be("owner-P");
+        choice.Names.Should().Equal("Owner Holdings Inc");
+    }
+
+    [Fact]
+    public void ChooseParent_TwoNonSelfOwnersBesideASelfEntry_StaysAmbiguous()
+    {
+        // Dropping the self entry still leaves two different owners: ownership moved, so
+        // one link cannot be right for both eras.
+        var profile = new UsaSpendingRecipientProfile
+        {
+            RecipientId = "child-C",
+            Duns = "111111111",
+            ParentId = "new-owner-P",
+            ParentName = "New Owner Corp",
+            ParentDuns = "222222222",
+            Parents =
+            [
+                new UsaSpendingRecipientParentRef
+                {
+                    ParentId = "new-owner-P",
+                    ParentName = "New Owner Corp",
+                    ParentDuns = "222222222",
+                },
+                new UsaSpendingRecipientParentRef
+                {
+                    ParentId = "old-owner-P",
+                    ParentName = "Old Owner Corp",
+                    ParentDuns = "333333333",
+                },
+                new UsaSpendingRecipientParentRef
+                {
+                    ParentId = "child-P",
+                    ParentName = "Child Operating LLC",
+                    ParentDuns = "111111111",
                 },
             ],
         };

@@ -26,7 +26,8 @@ namespace Equibles.UnitTests.GovernmentContracts;
 // only reaches history by re-walking it. A stored checkpoint stamped with an older
 // MatchingVersion pulls the cursor back to the 2007-10-01 epoch exactly ONCE (cursor and
 // stamp move in one save; the re-walk deduplicates by AwardUniqueKey); a checkpoint born
-// under the current version never resets.
+// under the current version never resets. Crossing the self-parent version also purges
+// cached parentless answers so the rescan re-fetches them.
 public class GovernmentContractsImportServiceMatchingVersionResetTests
 {
     private const string ScanStateName = "award-scan";
@@ -119,6 +120,103 @@ public class GovernmentContractsImportServiceMatchingVersionResetTests
                 Arg.Any<decimal>(),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Fact]
+    public async Task Import_MatchingVersionReset_PurgesCachedParentlessAnswersOnly()
+    {
+        var options = NewDbOptions();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        SeedCompany(options);
+        SeedParentCache(options);
+        using (var seed = NewContext(options))
+        {
+            seed.Add(
+                new GovernmentContractsScanState
+                {
+                    Name = ScanStateName,
+                    LastCompletedWindowEnd = today,
+                    UpdatedAt = DateTime.UtcNow,
+                    MatchingVersion = GovernmentContractsImportService.SelfParentHistoryVersion - 1,
+                }
+            );
+            seed.SaveChanges();
+        }
+
+        await NewService(ScopeFactory(options), EmptyClient()).Import(CancellationToken.None);
+
+        // Parentless readings predate the self-entry rule and would stay fresh for months;
+        // named readings and short-lived failure rows are kept.
+        ReadCachedRecipientIds(options).Should().BeEquivalentTo(["named-C", "failed-C"]);
+    }
+
+    [Fact]
+    public async Task Import_CurrentMatchingVersion_KeepsCachedParentlessAnswers()
+    {
+        var options = NewDbOptions();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        SeedCompany(options);
+        SeedParentCache(options);
+        using (var seed = NewContext(options))
+        {
+            seed.Add(
+                new GovernmentContractsScanState
+                {
+                    Name = ScanStateName,
+                    LastCompletedWindowEnd = today,
+                    UpdatedAt = DateTime.UtcNow,
+                    MatchingVersion = GovernmentContractsImportService.RecipientMatchingVersion,
+                }
+            );
+            seed.SaveChanges();
+        }
+
+        await NewService(ScopeFactory(options), EmptyClient()).Import(CancellationToken.None);
+
+        ReadCachedRecipientIds(options)
+            .Should()
+            .BeEquivalentTo(["parentless-C", "named-C", "failed-C"]);
+    }
+
+    private static void SeedParentCache(DbContextOptions<EquiblesFinancialDbContext> options)
+    {
+        using var seed = NewContext(options);
+        var resolvedAt = DateTime.UtcNow.AddDays(-1);
+        seed.AddRange(
+            new GovernmentContractRecipientParent
+            {
+                RecipientId = "parentless-C",
+                RecipientName = "Parentless LLC",
+                ResolvedAt = resolvedAt,
+            },
+            new GovernmentContractRecipientParent
+            {
+                RecipientId = "named-C",
+                RecipientName = "Named Subsidiary LLC",
+                ParentRecipientId = "owner-P",
+                ParentNames = "Owner Holdings Inc",
+                ResolvedAt = resolvedAt,
+            },
+            new GovernmentContractRecipientParent
+            {
+                RecipientId = "failed-C",
+                RecipientName = "Failed Profile LLC",
+                ResolvedAt = resolvedAt,
+                ProfileFetchFailed = true,
+            }
+        );
+        seed.SaveChanges();
+    }
+
+    private static List<string> ReadCachedRecipientIds(
+        DbContextOptions<EquiblesFinancialDbContext> options
+    )
+    {
+        using var ctx = NewContext(options);
+        return ctx.Set<GovernmentContractRecipientParent>()
+            .AsNoTracking()
+            .Select(p => p.RecipientId)
+            .ToList();
     }
 
     private static IUsaSpendingClient EmptyClient()
