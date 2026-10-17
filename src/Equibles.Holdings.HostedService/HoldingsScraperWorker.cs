@@ -751,7 +751,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 .ServiceProvider.GetRequiredService<HolderIdentityBackfillService>()
                 .Run(HolderIdentityBackfillPerCycle, cancellationToken);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "Holder identity backfill failed; retrying next cycle");
         }

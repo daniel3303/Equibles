@@ -1051,7 +1051,7 @@ public class HoldingsImportService
 
     // Refresh the identity numbers (13F file number, CRD, SEC file number) from each filer's newest
     // 13F report in this import, unless a stored 13F covers a later quarter, so an oldest-first replay
-    // never moves them backward. A blank number is "not filed", never a reason to erase a known one.
+    // never moves them backward. A blank keeps a known number (HolderIdentityNumbers).
     internal static void RefreshHolderIdentityNumbers(
         ImportContext context,
         List<InstitutionalHolder> holders,
@@ -1076,10 +1076,35 @@ public class HoldingsImportService
             )
                 continue;
 
-            holder.Form13FFileNumber =
-                ClampLength(coverPage.Form13FFileNumber, 32) ?? holder.Form13FFileNumber;
-            holder.CrdNumber = ClampLength(coverPage.CrdNumber, 32) ?? holder.CrdNumber;
-            holder.SecFileNumber = ClampLength(coverPage.SecFileNumber, 32) ?? holder.SecFileNumber;
+            context.CoverPageOtherManagers.TryGetValue(
+                submission.AccessionNumber,
+                out var coverManagers
+            );
+            coverManagers ??= [];
+            holder.Form13FFileNumber = ClampLength(
+                HolderIdentityNumbers.Resolve(
+                    coverPage.Form13FFileNumber,
+                    holder.Form13FFileNumber,
+                    coverManagers.Select(manager => manager.Form13FFileNumber)
+                ),
+                32
+            );
+            holder.CrdNumber = ClampLength(
+                HolderIdentityNumbers.Resolve(
+                    coverPage.CrdNumber,
+                    holder.CrdNumber,
+                    coverManagers.Select(manager => manager.CrdNumber)
+                ),
+                32
+            );
+            holder.SecFileNumber = ClampLength(
+                HolderIdentityNumbers.Resolve(
+                    coverPage.SecFileNumber,
+                    holder.SecFileNumber,
+                    coverManagers.Select(manager => manager.SecFileNumber)
+                ),
+                32
+            );
             holder.IdentityAccession = submission.AccessionNumber;
         }
     }

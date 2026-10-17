@@ -33,8 +33,8 @@ public class InstitutionalHolder
     public string SecFileNumber { get; set; }
 
     /// <summary>
-    /// Accession of the 13F cover page the identity numbers were last read from; null until a
-    /// cover has been applied since the column existed.
+    /// Accession of the 13F cover page last applied to the identity numbers above (a blank number
+    /// there keeps the stored one); null until a cover has been applied since the column existed.
     /// </summary>
     [MaxLength(32)]
     public string IdentityAccession { get; set; }
