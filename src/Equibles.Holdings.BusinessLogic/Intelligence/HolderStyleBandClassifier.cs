@@ -106,7 +106,7 @@ public static class HolderStyleBandClassifier
     /// </summary>
     public static HolderHorizonBand HorizonBand(
         decimal? valueWeightedTenureQuarters,
-        decimal? censoredValueShare = 0
+        decimal? censoredValueShare
     ) =>
         valueWeightedTenureQuarters switch
         {
