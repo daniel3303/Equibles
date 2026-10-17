@@ -97,6 +97,7 @@ internal sealed class HolderProfileSources
                 .Select(group =>
                     group
                         .OrderByDescending(row => row.ReportEndingPeriod)
+                        .ThenByDescending(row => row.FilingDate)
                         .ThenByDescending(row => row.AccessionNumber, StringComparer.Ordinal)
                         .First()
                 )

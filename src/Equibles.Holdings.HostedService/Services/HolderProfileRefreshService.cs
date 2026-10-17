@@ -193,7 +193,8 @@ public class HolderProfileRefreshService
                 report.RegistrantCik,
                 report.AccessionNumber,
                 report.ReportEndingPeriod,
-                report.InvestmentCompanyType
+                report.InvestmentCompanyType,
+                report.FilingDate
             ))
             .ToListAsync(cancellationToken);
     }
@@ -209,12 +210,11 @@ public class HolderProfileRefreshService
             .AsNoTracking()
             .Where(adviser =>
                 adviser.Role == NCenAdviserRole.InvestmentAdviser
-                && adviser.Crd != null
                 && !adviser.FundReport.IsSuperseded
                 && adviser.FundReport.ReportEndingPeriod >= since
             )
             .Select(adviser => new AdvisedSeriesRow(
-                adviser.Crd.Value,
+                adviser.Crd,
                 // FundId is per filing; a registrant without series is one fund across its reports.
                 adviser.FundReport.SeriesId
                     ?? adviser.FundReport.RegistrantCik,

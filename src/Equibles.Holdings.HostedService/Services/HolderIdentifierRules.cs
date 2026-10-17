@@ -111,13 +111,14 @@ internal static class HolderIdentifierRules
         rows.GroupBy(row => row.SeriesKey, StringComparer.Ordinal)
             .SelectMany(series =>
             {
-                // Every primary adviser of the latest report counts the series once.
+                // Every primary adviser of the latest report counts the series once; one the
+                // report names without a CRD is unknown, never the previous adviser.
                 var latest = series.Max(row => row.ReportEndingPeriod);
                 return series
-                    .Where(row => row.ReportEndingPeriod == latest)
+                    .Where(row => row.ReportEndingPeriod == latest && row.Crd != null)
                     .DistinctBy(row => row.Crd);
             })
-            .GroupBy(row => row.Crd)
+            .GroupBy(row => row.Crd.Value)
             .ToDictionary(
                 group => group.Key,
                 group =>

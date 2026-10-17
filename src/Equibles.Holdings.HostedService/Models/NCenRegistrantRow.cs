@@ -5,5 +5,6 @@ public record NCenRegistrantRow(
     string Cik,
     string AccessionNumber,
     DateOnly ReportEndingPeriod,
-    string InvestmentCompanyType
+    string InvestmentCompanyType,
+    DateOnly FilingDate
 );

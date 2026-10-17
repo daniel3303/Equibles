@@ -187,8 +187,28 @@ public class HolderProfileBuilderTests
             ],
             registrants:
             [
-                new NCenRegistrantRow("19617", "old", new DateOnly(2025, 6, 30), "N-2"),
-                new NCenRegistrantRow("19617", "new", new DateOnly(2026, 6, 30), "N-1A"),
+                new NCenRegistrantRow(
+                    "19617",
+                    "old",
+                    new DateOnly(2025, 6, 30),
+                    "N-2",
+                    new DateOnly(2025, 9, 1)
+                ),
+                // An amendment for the same period wins by its later filing date.
+                new NCenRegistrantRow(
+                    "19617",
+                    "z-original",
+                    new DateOnly(2026, 6, 30),
+                    "N-2",
+                    new DateOnly(2026, 9, 1)
+                ),
+                new NCenRegistrantRow(
+                    "19617",
+                    "new",
+                    new DateOnly(2026, 6, 30),
+                    "N-1A",
+                    new DateOnly(2026, 9, 20)
+                ),
             ]
         );
         var holder = Holder(cik: "19617");

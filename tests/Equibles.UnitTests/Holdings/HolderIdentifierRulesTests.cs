@@ -90,4 +90,15 @@ public class HolderIdentifierRulesTests
         summaries[200].NetAssets.Should().Be(70m);
         summaries[300].SeriesCount.Should().Be(1);
     }
+
+    [Fact]
+    public void SummarizeAdvisedSeries_LatestReportWithoutAnAdviserCrd_CountsForNobody()
+    {
+        var summaries = HolderIdentifierRules.SummarizeAdvisedSeries([
+            new AdvisedSeriesRow(100, "S1", new DateOnly(2025, 9, 30), NCenFundTypes.None, 50m),
+            new AdvisedSeriesRow(null, "S1", new DateOnly(2026, 9, 30), NCenFundTypes.None, 60m),
+        ]);
+
+        summaries.Should().BeEmpty();
+    }
 }

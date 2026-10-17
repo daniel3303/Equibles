@@ -2,9 +2,12 @@ using Equibles.Sec.Data.Models;
 
 namespace Equibles.Holdings.HostedService.Models;
 
-/// <summary>A registered fund series an adviser manages as primary adviser, from one N-CEN report.</summary>
+/// <summary>
+/// A registered fund series and one primary adviser named on one N-CEN report; the CRD is null when
+/// the report gives none.
+/// </summary>
 public record AdvisedSeriesRow(
-    int Crd,
+    int? Crd,
     string SeriesKey,
     DateOnly ReportEndingPeriod,
     NCenFundTypes FundTypes,
