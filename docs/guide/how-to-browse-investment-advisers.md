@@ -1,6 +1,6 @@
 # Browse investment advisers (SEC Form ADV)
 
-This guide shows you how to use the Investment Advisers page to look up SEC-registered and exempt reporting investment advisers and read their Form ADV profiles — assets under management, location, employee count, and fee structure. Exempt reporting advisers do not file Item 5, so those figures appear for registered advisers only.
+This guide shows you how to use the Investment Advisers page to look up SEC-registered and exempt reporting investment advisers and read their Form ADV profiles — assets under management, location, employee count, and fee structure. Exempt reporting advisers do not file Item 5, so the AUM, employee and fee figures appear for registered advisers only.
 
 ## Open the advisers page
 
