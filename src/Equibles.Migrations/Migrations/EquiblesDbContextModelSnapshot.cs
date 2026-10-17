@@ -2497,6 +2497,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("NoticeCount")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ParserVersion")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("FileName")

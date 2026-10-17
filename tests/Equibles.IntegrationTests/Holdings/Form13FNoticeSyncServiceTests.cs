@@ -80,25 +80,95 @@ public class Form13FNoticeSyncServiceTests : ParadeDbMcpTestBase
             .Include(notice => notice.Reporters)
             .SingleAsync(notice => notice.AccessionNumber == "0001193125-26-328872");
         simmons.DataSetFileName.Should().Be(Newer);
+        // Reading the same data set again replaces its ledger row.
+        using (var again = Archive())
+            await Sut().Import(again, Newer, CancellationToken.None);
+        (await LedgerNames()).Should().BeEquivalentTo([Older, Newer]);
         simmons.Reporters.Select(r => r.Name).Should().Equal("Simmons Bank");
         (await verify.Set<Form13FNotice>().CountAsync()).Should().Be(4);
     }
 
     [Fact]
-    public async Task SyncMissing_MissingArchive_IsSkippedAndTheNextIsRead()
+    public async Task SyncMissing_ArchiveTheCatalogDoesNotList_IsSkippedAndTheNextIsRead()
     {
         await MarkProcessed(Older, Newer);
         Serve(Older, Archive());
         _edgar
-            .DownloadStream(Arg.Is<string>(url => url.EndsWith(Newer)))
+            .DownloadStream(Arg.Is<string>(url => url.EndsWith("/" + Newer)))
             .ThrowsAsync(new HttpRequestException("Not found", null, HttpStatusCode.NotFound));
+        // The catalog lists another archive, so the client rethrows the original 404.
         _edgar
             .DownloadStream(HoldingsDataSetClient.CatalogUrl)
-            .ThrowsAsync(new HttpRequestException("Not found", null, HttpStatusCode.NotFound));
+            .Returns(_ => new MemoryStream(
+                """<a href="/files/structureddata/data/form-13f-data-sets/2019q1_form13f.zip">2019 Q1</a>"""u8.ToArray()
+            ));
 
         (await Sut().SyncMissing([Older, Newer], 5, CancellationToken.None)).Should().Be(1);
 
         (await LedgerNames()).Should().Equal(Older);
+    }
+
+    [Theory]
+    [InlineData("OTHERMANAGER.tsv")]
+    [InlineData("COVERPAGE.tsv")]
+    [InlineData("SUBMISSION.tsv")]
+    public async Task SyncMissing_ArchiveMissingATableOrNotices_IsNotRecordedAsRead(string broken)
+    {
+        await MarkProcessed(Newer);
+        // A missing table, or a submission table with no notices, stays unread for a retry.
+        Serve(
+            Newer,
+            Archive(
+                (table, text) =>
+                    table != broken ? text
+                    : broken == "SUBMISSION.tsv" ? text.Replace("13F-NT", "13F-HR")
+                    : null
+            )
+        );
+
+        (await Sut().SyncMissing([Newer], 5, CancellationToken.None)).Should().Be(0);
+
+        (await LedgerNames()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SyncMissing_DataSetsMarkedWithoutAnImport_AreNotDownloaded()
+    {
+        DbContext.Add(
+            new ProcessedDataSet
+            {
+                FileName = Older,
+                ParserVersion = ProcessedDataSet.CurrentParserVersion,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await Sut().SyncMissing([Older], 5, CancellationToken.None)).Should().Be(0);
+
+        await _edgar.DidNotReceive().DownloadStream(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task SyncMissing_DataSetReadByAnOlderReader_IsReadAgain()
+    {
+        await MarkProcessed(Newer);
+        Serve(Newer, Archive());
+        DbContext.Add(
+            new Form13FNoticeDataSet
+            {
+                FileName = Newer,
+                NoticeCount = 1,
+                ParserVersion = 0,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await Sut().SyncMissing([Newer], 5, CancellationToken.None)).Should().Be(1);
+
+        await using var verify = Fixture.CreateDbContext();
+        var ledger = await verify.Set<Form13FNoticeDataSet>().SingleAsync();
+        ledger.ParserVersion.Should().Be(Form13FNoticeDataSet.CurrentParserVersion);
+        ledger.NoticeCount.Should().Be(4);
     }
 
     // Real rows from SEC's 01jun2026-31aug2026 data set: four notices among two 13F-HR reports.
@@ -118,8 +188,11 @@ public class Form13FNoticeSyncServiceTests : ParadeDbMcpTestBase
                         table
                     )
                 );
+                var content = edit == null ? text : edit(table, text);
+                if (content == null)
+                    continue;
                 using var writer = new StreamWriter(archive.CreateEntry(table).Open());
-                writer.Write(edit == null ? text : edit(table, text));
+                writer.Write(content);
             }
         }
 
@@ -154,6 +227,7 @@ public class Form13FNoticeSyncServiceTests : ParadeDbMcpTestBase
                 {
                     FileName = fileName,
                     ParserVersion = ProcessedDataSet.CurrentParserVersion,
+                    SubmissionCount = 11852,
                 }
             );
         await DbContext.SaveChangesAsync();

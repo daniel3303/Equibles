@@ -42,16 +42,20 @@ public class Form13FNoticeSyncService
         CancellationToken cancellationToken
     )
     {
-        // Only processed data sets are known to be published; a future window would 404 every cycle.
+        // Only imported data sets are known to be published; a future window would 404 every cycle,
+        // and a fresh install marks its history processed without importing it (no submissions).
         var processed = await _dbContext
             .Set<ProcessedDataSet>()
             .AsNoTracking()
-            .Where(dataSet => dataSetFileNames.Contains(dataSet.FileName))
+            .Where(dataSet =>
+                dataSetFileNames.Contains(dataSet.FileName) && dataSet.SubmissionCount > 0
+            )
             .Select(dataSet => dataSet.FileName)
             .ToListAsync(cancellationToken);
         var read = await _dbContext
             .Set<Form13FNoticeDataSet>()
             .AsNoTracking()
+            .Where(dataSet => dataSet.ParserVersion >= Form13FNoticeDataSet.CurrentParserVersion)
             .Select(dataSet => dataSet.FileName)
             .ToListAsync(cancellationToken);
         var pending = dataSetFileNames
@@ -119,7 +123,12 @@ public class Form13FNoticeSyncService
                 .ExecuteDeleteAsync(cancellationToken);
             _dbContext.AddRange(notices);
             _dbContext.Add(
-                new Form13FNoticeDataSet { FileName = fileName, NoticeCount = notices.Count }
+                new Form13FNoticeDataSet
+                {
+                    FileName = fileName,
+                    NoticeCount = notices.Count,
+                    ParserVersion = Form13FNoticeDataSet.CurrentParserVersion,
+                }
             );
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

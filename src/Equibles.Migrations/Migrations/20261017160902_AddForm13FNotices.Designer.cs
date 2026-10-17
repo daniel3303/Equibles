@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261017155143_AddForm13FNotices")]
+    [Migration("20261017160902_AddForm13FNotices")]
     partial class AddForm13FNotices
     {
         /// <inheritdoc />
@@ -2498,6 +2498,9 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("NoticeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ParserVersion")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");

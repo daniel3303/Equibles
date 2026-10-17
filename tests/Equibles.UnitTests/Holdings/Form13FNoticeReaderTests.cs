@@ -125,6 +125,39 @@ public class Form13FNoticeReaderTests
         await read.Should().ThrowAsync<InvalidDataException>();
     }
 
+    [Fact]
+    public async Task Read_NoNoticesInTheData_IsUnreadable()
+    {
+        using var archive = FixtureArchive(
+            (table, text) => table == "SUBMISSION.tsv" ? text.Replace("13F-NT", "13F-HR") : text
+        );
+
+        var read = () => Form13FNoticeReader.Read(archive, DataSet, new TsvParser());
+
+        await read.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Fact]
+    public void BulkCycle_ReadsNoticesAfterTheIdentityBackfill()
+    {
+        // The notice sync has no other caller; losing this call would stop notices silently.
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Equibles.sln")))
+            directory = directory.Parent;
+        var source = File.ReadAllText(
+            Path.Combine(
+                directory.FullName,
+                "src",
+                "Equibles.Holdings.HostedService",
+                "HoldingsScraperWorker.cs"
+            )
+        );
+        var doWork = source[source.IndexOf("protected override async Task DoWork(")..];
+        doWork = doWork[..doWork.IndexOf("\n    }\n")];
+
+        doWork.Should().Contain("await SyncForm13FNotices(fileNames, stoppingToken);");
+    }
+
     [Theory]
     [InlineData("13F-NT")]
     [InlineData("13F-NT/A")]

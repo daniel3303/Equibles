@@ -18,9 +18,7 @@ internal static class Form13FNoticeReader
         TsvParser tsvParser
     )
     {
-        var submissions =
-            FindEntry(archive, "SUBMISSION.tsv")
-            ?? throw new InvalidDataException("The 13F data set has no SUBMISSION.tsv table.");
+        var submissions = Required(archive, "SUBMISSION.tsv");
 
         var notices = new Dictionary<string, Form13FNotice>(StringComparer.OrdinalIgnoreCase);
         await foreach (var row in tsvParser.ParseEntry(submissions))
@@ -49,11 +47,12 @@ internal static class Form13FNoticeReader
             };
         }
 
+        // Every 13F data set carries notices; none means the table's layout changed, and recording
+        // the data set as read would hide that for good.
         if (notices.Count == 0)
-            return [];
+            throw new InvalidDataException("The 13F data set has no readable 13F-NT submissions.");
 
-        var coverPages = FindEntry(archive, "COVERPAGE.tsv");
-        if (coverPages != null)
+        var coverPages = Required(archive, "COVERPAGE.tsv");
         {
             await foreach (var row in tsvParser.ParseEntry(coverPages))
             {
@@ -69,8 +68,7 @@ internal static class Form13FNoticeReader
             }
         }
 
-        var otherManagers = FindEntry(archive, "OTHERMANAGER.tsv");
-        if (otherManagers != null)
+        var otherManagers = Required(archive, "OTHERMANAGER.tsv");
         {
             var reporters =
                 new List<(Form13FNotice Notice, long Sort, Form13FNoticeReporter Reporter)>();
@@ -117,6 +115,10 @@ internal static class Form13FNoticeReader
 
         return notices.Values.ToList();
     }
+
+    private static ZipArchiveEntry Required(ZipArchive archive, string table) =>
+        FindEntry(archive, table)
+        ?? throw new InvalidDataException($"The 13F data set has no {table} table.");
 
     private static string Identifier(Dictionary<string, string> row, string column) =>
         Clamp(NormalizeIdentifier(GetValue(row, column)), 32);

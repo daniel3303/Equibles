@@ -39,6 +39,7 @@ namespace Equibles.Migrations.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     FileName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     NoticeCount = table.Column<int>(type: "integer", nullable: false),
+                    ParserVersion = table.Column<int>(type: "integer", nullable: false),
                     ImportedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
