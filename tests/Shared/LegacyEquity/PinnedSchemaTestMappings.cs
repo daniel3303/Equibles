@@ -53,5 +53,9 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         // Added by 20261017121009_AddHolderIdentityNumbers.
         builder.Entity<InstitutionalHolder>().Ignore(holder => holder.SecFileNumber);
         builder.Entity<InstitutionalHolder>().Ignore(holder => holder.IdentityAccession);
+
+        // Added by 20261017145057_AddNCenFilingParserVersion.
+        builder.Entity<NCenFiling>().Ignore(filing => filing.ParserVersion);
+        builder.Entity<NCenFiling>().Ignore(filing => filing.ReprocessAttempts);
     }
 }
