@@ -49,7 +49,10 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                 await Task.Delay(TickInterval, stoppingToken);
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
     }
 
     internal async Task DrainOnce(DateOnly today, CancellationToken cancellationToken)
