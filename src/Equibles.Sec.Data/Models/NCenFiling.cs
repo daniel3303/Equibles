@@ -20,6 +20,13 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(FilingDate))]
 public class NCenFiling : IIssuerFiling
 {
+    /// <summary>
+    /// Version of <c>NCenFilingProcessor</c>'s parsing stored rows were read with; a filing below it
+    /// is re-read from EDGAR. Version 1 reads the family flag and every provider's country in both
+    /// of the forms N-CEN uses.
+    /// </summary>
+    public const int CurrentParserVersion = 1;
+
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -81,6 +88,18 @@ public class NCenFiling : IIssuerFiling
     /// filing — the operational backbone behind the registrant.
     /// </summary>
     public virtual List<NCenServiceProvider> ServiceProviders { get; set; } = [];
+
+    /// <summary>
+    /// Parser version this row was read with (see <see cref="CurrentParserVersion"/>); 0 marks a
+    /// filing imported before versioning.
+    /// </summary>
+    public int ParserVersion { get; set; }
+
+    /// <summary>
+    /// Failed re-reads of this filing; at the reprocess ceiling it is advanced to the current version
+    /// with its stored facts, so an unreadable filing cannot hold the backlog.
+    /// </summary>
+    public int ReprocessAttempts { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
