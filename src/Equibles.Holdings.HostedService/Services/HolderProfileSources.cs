@@ -63,27 +63,31 @@ internal sealed class HolderProfileSources
             sources.AdvisersByCik[group.Key] = group.Single().adviser;
 
         // Only the client types filed with the adviser's current roster row describe it now.
-        foreach (var clientType in clientTypes)
-        {
-            if (
-                !sources.AdvisersByCrd.TryGetValue(clientType.Crd, out var adviser)
-                || adviser.ReportDate != clientType.ReportDate
+        foreach (
+            var clientType in clientTypes.Where(clientType =>
+                sources.AdvisersByCrd.TryGetValue(clientType.Crd, out var adviser)
+                && adviser.ReportDate == clientType.ReportDate
             )
-                continue;
+        )
+        {
             if (!sources.ClientTypesByCrd.TryGetValue(clientType.Crd, out var list))
                 sources.ClientTypesByCrd[clientType.Crd] = list = [];
             list.Add(clientType);
         }
 
-        foreach (var profile in filerProfiles.Where(profile => profile.Found))
-        {
-            var cik = CikNormalizer.Canonicalize(profile.Cik);
-            if (cik != null)
-                sources.FilerProfilesByCik[cik] = profile;
-        }
+        foreach (
+            var (cik, profile) in filerProfiles
+                .Where(profile => profile.Found)
+                .Select(profile => (Cik: CikNormalizer.Canonicalize(profile.Cik), Profile: profile))
+                .Where(pair => pair.Cik != null)
+        )
+            sources.FilerProfilesByCik[cik] = profile;
 
-        foreach (var filing in beneficialOwnership)
-        foreach (var (cik, fact) in HolderIdentifierRules.AttributeBeneficialOwnership(filing))
+        foreach (
+            var (cik, fact) in beneficialOwnership.SelectMany(
+                HolderIdentifierRules.AttributeBeneficialOwnership
+            )
+        )
         {
             if (!sources.BeneficialOwnershipByCik.TryGetValue(cik, out var list))
                 sources.BeneficialOwnershipByCik[cik] = list = [];

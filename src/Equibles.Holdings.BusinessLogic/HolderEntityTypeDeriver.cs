@@ -90,27 +90,26 @@ public static class HolderEntityTypeDeriver
                 .Select(item => item.Fact.SourceKey)
                 .Distinct()
                 .Count() > 1;
-        foreach (var source in Precedence)
-        {
-            var decisive = current
-                .Where(item => Rank(item.Fact.Source) == source)
-                .OrderBy(item => item.Fact.MatchedOn)
-                .ThenByDescending(item => item.Fact.AsOf)
-                .ThenByDescending(item => item.Fact.SourceKey, StringComparer.Ordinal)
-                .FirstOrDefault();
-            if (decisive.Fact == null)
-                continue;
+        var decisive = Precedence
+            .Select(source =>
+                current
+                    .Where(item => Rank(item.Fact.Source) == source)
+                    .OrderBy(item => item.Fact.MatchedOn)
+                    .ThenByDescending(item => item.Fact.AsOf)
+                    .ThenByDescending(item => item.Fact.SourceKey, StringComparer.Ordinal)
+                    .FirstOrDefault()
+            )
+            .FirstOrDefault(item => item.Fact != null);
+        if (decisive.Fact == null)
+            return HolderEntityTypeDecision.Unknown;
 
-            return new HolderEntityTypeDecision(
-                decisive.Types[0],
-                decisive.Fact.Source,
-                decisive.Fact.SourceKey,
-                decisive.Fact.AsOf,
-                conflicting
-            );
-        }
-
-        return HolderEntityTypeDecision.Unknown;
+        return new HolderEntityTypeDecision(
+            decisive.Types[0],
+            decisive.Fact.Source,
+            decisive.Fact.SourceKey,
+            decisive.Fact.AsOf,
+            conflicting
+        );
     }
 
     /// <summary>The types a fact implies, strongest first; empty when it implies none.</summary>
