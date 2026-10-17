@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
@@ -28,7 +29,25 @@ public class FilingRollupTypeBackfillOffQuarterTests : ParadeDbMcpTestBase
             Rollup(holder, "month-end", new DateOnly(2026, 4, 30), FilingType.Form13F, 1),
             // A 13F with no positions is filed as of a quarter end and has no holdings rows.
             Rollup(holder, "quarter-end", new DateOnly(2026, 6, 30), FilingType.Form13F, 0),
-            Rollup(holder, "event-date", new DateOnly(2026, 4, 17), FilingType.Schedule13G, 1)
+            Rollup(holder, "event-date", new DateOnly(2026, 4, 17), FilingType.Schedule13G, 1),
+            // Mis-dated but still backed by holdings: the importer heals it, so it stays.
+            Rollup(holder, "held", new DateOnly(2026, 4, 17), FilingType.Form13F, 1)
+        );
+        var issuer = new EquityIssuer { Name = "Issuer" };
+        DbContext.Add(issuer);
+        DbContext.Add(
+            new InstitutionalHolding
+            {
+                EquityIssuerId = issuer.Id,
+                InstitutionalHolderId = holder.Id,
+                Cusip = "037833100",
+                ReportDate = new DateOnly(2026, 4, 17),
+                FilingDate = new DateOnly(2026, 4, 27),
+                FilingType = FilingType.Form13F,
+                ShareType = ShareType.Shares,
+                Shares = 100,
+                AccessionNumber = "held",
+            }
         );
         await DbContext.SaveChangesAsync();
 
@@ -38,7 +57,7 @@ public class FilingRollupTypeBackfillOffQuarterTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         (await verify.Set<InstitutionalFiling>().Select(f => f.AccessionNumber).ToListAsync())
             .Should()
-            .BeEquivalentTo(["quarter-end", "event-date"]);
+            .BeEquivalentTo(["quarter-end", "event-date", "held"]);
     }
 
     private static InstitutionalFiling Rollup(

@@ -17,8 +17,8 @@ namespace Equibles.Holdings.HostedService.Services;
 /// bounded per cycle, self-terminating (a restamped row no longer matches), and a no-op scan
 /// once drained. Values are copied from the holdings' own <c>FilingType</c> — never inferred
 /// from date shape, because 13D/G rows dated on quarter ends exist. A row typed 13F on a date that
-/// is not a calendar quarter end and with no holdings left is such a rollup whose stake is gone, so
-/// it is removed instead.
+/// is not a calendar quarter end and with no holdings left is a 13D/G rollup whose holdings are
+/// gone, so it is removed instead.
 /// </remarks>
 [Service]
 public class FilingRollupTypeBackfillService
@@ -110,14 +110,15 @@ public class FilingRollupTypeBackfillService
         return restamped;
     }
 
-    // Form 13F reports as of a calendar quarter end and the importers refuse any other period, so
-    // a 13F-typed row on another date with nothing under its accession summarises no 13F.
+    // Form 13F reports as of a calendar quarter end and the importers refuse any other period
+    // (HoldingsCorpusCoverage.IsCalendarQuarterEnd), so a 13F-typed row on another date with
+    // nothing under its accession summarises no 13F.
     private async Task<int> RemoveOffQuarterOrphans(
         EquiblesFinancialDbContext dbContext,
         CancellationToken cancellationToken
     )
     {
-        var orphans = await dbContext
+        var orphans = dbContext
             .Set<InstitutionalFiling>()
             .Where(f =>
                 f.FilingType == FilingType.Form13F
@@ -125,21 +126,27 @@ public class FilingRollupTypeBackfillService
                 && !dbContext
                     .Set<InstitutionalHolding>()
                     .Any(h => h.AccessionNumber == f.AccessionNumber)
-            )
+            );
+        var selected = await orphans
             .OrderBy(f => f.Id)
             .Take(MaxRowsPerCycle)
+            .Select(f => new { f.Id, f.AccessionNumber })
             .ToListAsync(cancellationToken);
-        if (orphans.Count == 0)
+        if (selected.Count == 0)
         {
             return 0;
         }
 
-        dbContext.RemoveRange(orphans);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        // The delete re-checks the condition, so a rollup an import refilled meanwhile stays.
+        var ids = selected.Select(f => f.Id).ToList();
+        var removed = await orphans
+            .Where(f => ids.Contains(f.Id))
+            .ExecuteDeleteAsync(cancellationToken);
         _logger.LogInformation(
-            "Removed {Count} off-quarter 13F filing rollup row(s) with no holdings",
-            orphans.Count
+            "Removed {Count} off-quarter 13F filing rollup row(s) with no holdings: {Accessions}",
+            removed,
+            string.Join(", ", selected.Take(20).Select(f => f.AccessionNumber))
         );
-        return orphans.Count;
+        return removed;
     }
 }

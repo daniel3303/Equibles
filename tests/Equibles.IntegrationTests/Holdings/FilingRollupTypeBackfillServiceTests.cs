@@ -157,20 +157,4 @@ public class FilingRollupTypeBackfillServiceTests : IDisposable
         (await CreateService().Backfill(CancellationToken.None)).Should().Be(1);
         (await CreateService().Backfill(CancellationToken.None)).Should().Be(0);
     }
-
-    [Fact]
-    public async Task Backfill_OffQuarterThirteenFRollupWithoutHoldings_IsRemoved()
-    {
-        // Both rollups are dated 2026-07-23; only the one with nothing under its accession goes.
-        await Seed("acc-gone", FilingType.Form13F, FilingType.Schedule13G, withHolding: false);
-        await Seed("acc-13f", FilingType.Form13F, FilingType.Form13F);
-
-        (await CreateService().Backfill(CancellationToken.None)).Should().Be(1);
-        (await CreateService().Backfill(CancellationToken.None)).Should().Be(0);
-
-        var verify = CreateSharedContext();
-        (await verify.Set<InstitutionalFiling>().Select(f => f.AccessionNumber).ToListAsync())
-            .Should()
-            .Equal("acc-13f");
-    }
 }
