@@ -243,7 +243,7 @@
                                     <td class="max-w-xs truncate">
                                         @(e.InstitutionalHolder?.Name ?? "Unknown")
                                         @if (e.InstitutionalHolder != null) {
-                                            <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
+                                            <partial name="_HolderTypeBadge" model="Model.HolderType(e.InstitutionalHolderId)" />
                                         }
                                     </td>
                                     <td class="text-right font-mono whitespace-nowrap"><compactable-number value="@e.CurrentShares" /></td>
@@ -319,7 +319,7 @@
                                         <td class="max-w-xs truncate">
                                             @(e.InstitutionalHolder?.Name ?? "Unknown")
                                             @if (e.InstitutionalHolder != null) {
-                                                <partial name="_FundClassificationBadge" model="e.InstitutionalHolder.Classification" />
+                                                <partial name="_HolderTypeBadge" model="Model.HolderType(e.InstitutionalHolderId)" />
                                             }
                                         </td>
                                         <td class="text-right font-mono"><compactable-number value="@e.CurrentShares" /></td>

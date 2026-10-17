@@ -9,7 +9,7 @@
         <div>
             <h1 class="text-3xl font-bold mb-2">
                 @Model.Name
-                <partial name="_FundClassificationBadge" model="Model.Classification" />
+                <partial name="_HolderTypeBadge" model="Model.HolderType" />
             </h1>
             <p class="text-base-content/60">
                 Institutional holder@(string.IsNullOrWhiteSpace(Model.Location) ? "" : " · " + Model.Location) · CIK @Model.Cik

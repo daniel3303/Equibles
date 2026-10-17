@@ -349,14 +349,14 @@ This self-hosted build exposes 62 tools over MCP. The hosted server at `https://
 **13F institutional holdings**
 
 - GetInstitutionCloneBacktest — backtest cloning a filer's 13F portfolio vs a benchmark
-- GetTopHolders — top institutional holders of a stock (13F-HR)
+- GetTopHolders — top institutional holders of a stock (13F-HR), with each holder's type and a holder-type filter
 - GetInstitutionalOwnershipHistory — institutional ownership trend across quarters
 - GetInstitutionPortfolio — an institution's 13F portfolio
-- SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, and position count
+- SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, position count, and holder type
 - GetTopInstitutionalBuyersSellers — biggest adds/reductions on a stock this quarter
 - GetMarketWide13FActivity — market-wide 13F leaderboards
 - GetMostHeldStocks — stocks by institutional breadth
-- GetInstitutionSummary — filer summary (value, concentration, turnover)
+- GetInstitutionSummary — filer summary (value, concentration, turnover, holder profile)
 - GetInstitutionSectorAllocation — allocation by sector
 - GetInstitutionQuarterlyActivity — initiated/increased/reduced/exited vs prior quarter
 - CompareInstitutionPortfolios — portfolio overlap between two institutions

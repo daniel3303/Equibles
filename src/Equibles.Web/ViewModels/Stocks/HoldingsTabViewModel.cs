@@ -1,3 +1,5 @@
+using Equibles.Holdings.Data.Models;
+
 namespace Equibles.Web.ViewModels.Stocks;
 
 public class HoldingsTabViewModel : StockTabViewModel
@@ -24,6 +26,12 @@ public class HoldingsTabViewModel : StockTabViewModel
     public int TotalSellerCount { get; set; }
 
     public HashSet<PositionChangeType> ActiveTypes { get; set; }
+
+    // Profiled entity types of the listed holders; a holder not yet profiled is absent.
+    public Dictionary<Guid, HolderEntityType> HolderTypes { get; set; } = [];
+
+    public HolderEntityType? HolderType(Guid holderId) =>
+        HolderTypes.TryGetValue(holderId, out var type) ? type : null;
 
     public bool IsCombinedAvailable { get; set; }
     public bool IsCombinedView { get; set; }

@@ -8,7 +8,9 @@ public class InstitutionProfileViewModel
     public string Name { get; set; }
     public string Cik { get; set; }
     public string Location { get; set; }
-    public FundClassification Classification { get; set; }
+
+    // Null until the holder is profiled.
+    public HolderEntityType? HolderType { get; set; }
     public bool ConfidentialTreatmentRequested { get; set; }
     public List<HoldingRowViewModel> Holdings { get; set; } = [];
 
