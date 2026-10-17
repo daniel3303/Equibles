@@ -34,5 +34,11 @@ public class Parsed13DGFiling
     public string IssuerName { get; set; }
     public string SecuritiesClassTitle { get; set; }
 
+    /// <summary>A 13G's <c>designateRulePursuantThisScheduleFiled</c> values, e.g. "Rule 13d-1(b)".</summary>
+    public List<string> RuleDesignations { get; set; } = [];
+
+    /// <summary>A 13G's Item 3 <c>typeOfPersonFiling</c> codes, e.g. <c>IA</c>.</summary>
+    public List<string> FilingPersonTypeCodes { get; set; } = [];
+
     public List<Parsed13DGReportingPerson> ReportingPersons { get; set; } = [];
 }
