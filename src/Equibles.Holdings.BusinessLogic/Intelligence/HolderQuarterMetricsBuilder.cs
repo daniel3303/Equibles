@@ -42,7 +42,7 @@ public static class HolderQuarterMetricsBuilder
                 group => group.Key,
                 group =>
                     group.All(position => position.Value != null)
-                        ? group.Sum(position => (decimal)position.Value.Value)
+                        ? group.Sum(position => (decimal)position.Value.GetValueOrDefault())
                         : 0m
             );
         var toSet = new List<HolderSecurityKey>();
