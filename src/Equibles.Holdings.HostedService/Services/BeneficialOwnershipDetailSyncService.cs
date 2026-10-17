@@ -70,6 +70,7 @@ public class BeneficialOwnershipDetailSyncService
         var stored = 0;
         var unreadable = 0;
         var skipped = 0;
+        var outageFailuresInARow = 0;
         foreach (var candidate in candidates.Take(maxFilings))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -79,9 +80,24 @@ public class BeneficialOwnershipDetailSyncService
                     stored++;
                 else
                     unreadable++;
+                outageFailuresInARow = 0;
             }
             catch (HttpRequestException exception) when (IsOutage(exception))
             {
+                // One document answering like an outage is skipped, so it cannot hold the head of
+                // the order; a second in a row is an outage and ends the pass.
+                if (++outageFailuresInARow < 2)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "13D/13G detail sync skipped {Accession} this pass ({Status})",
+                        candidate.AccessionNumber,
+                        exception.StatusCode
+                    );
+                    skipped++;
+                    continue;
+                }
+
                 _logger.LogWarning(
                     exception,
                     "13D/13G detail sync stopped: EDGAR is unavailable ({Status}) after {Stored} filings",

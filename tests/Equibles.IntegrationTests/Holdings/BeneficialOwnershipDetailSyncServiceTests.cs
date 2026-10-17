@@ -104,7 +104,7 @@ public class BeneficialOwnershipDetailSyncServiceTests : ParadeDbMcpTestBase
     [InlineData(HttpStatusCode.Forbidden)]
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.ServiceUnavailable)]
-    public async Task SyncMissing_EdgarOutage_StopsTheWholePassWithoutMarkingOrContinuing(
+    public async Task SyncMissing_OneDocumentAnsweringLikeAnOutage_IsSkippedAndTheNextIsRead(
         HttpStatusCode? status
     )
     {
@@ -118,7 +118,48 @@ public class BeneficialOwnershipDetailSyncServiceTests : ParadeDbMcpTestBase
         Serve(AyurMaya13D, "sc13d-multiple-type-codes.xml");
         Throw(MorganStanley13G, new HttpRequestException("EDGAR unavailable", null, status));
 
-        (await Sut().SyncMissing(1, CancellationToken.None)).Should().BeFalse();
+        await Sut().SyncMissing(10, CancellationToken.None);
+
+        (await Accessions()).Should().Equal(AyurMaya13D);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task SyncMissing_TwoOutageAnswersInARow_StopTheWholePassWithoutContinuing(
+        HttpStatusCode? status
+    )
+    {
+        await SeedFiling(
+            MorganStanley13G,
+            "895421",
+            FilingType.Schedule13G,
+            new DateOnly(2026, 10, 9)
+        );
+        await SeedFiling(
+            "0000895421-26-000001",
+            "895421",
+            FilingType.Schedule13G,
+            new DateOnly(2026, 6, 1)
+        );
+        await SeedFiling(AyurMaya13D, "1975990", FilingType.Schedule13D, new DateOnly(2025, 5, 23));
+        await SeedFiling(
+            "0000902664-25-000001",
+            "1975990",
+            FilingType.Schedule13D,
+            new DateOnly(2025, 1, 2)
+        );
+        Serve(AyurMaya13D, "sc13d-multiple-type-codes.xml");
+        Throw(MorganStanley13G, new HttpRequestException("EDGAR unavailable", null, status));
+        Throw("0000895421-26-000001", new HttpRequestException("EDGAR unavailable", null, status));
+
+        // The batch reaches the 13D and more remain, so only the stop keeps it unread and the pass idle.
+        (await Sut().SyncMissing(3, CancellationToken.None))
+            .Should()
+            .BeFalse();
 
         (await Accessions()).Should().BeEmpty();
         await _edgar
