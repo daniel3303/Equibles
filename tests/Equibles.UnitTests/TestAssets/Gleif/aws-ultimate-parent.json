@@ -1,0 +1,148 @@
+{
+ "meta": {
+  "goldenCopy": {
+   "publishDate": "2026-10-17T08:00:00Z"
+  }
+ },
+ "data": {
+  "type": "lei-records",
+  "id": "ZXTILKJKG63JELOEG630",
+  "attributes": {
+   "lei": "ZXTILKJKG63JELOEG630",
+   "entity": {
+    "legalName": {
+     "name": "AMAZON.COM, INC.",
+     "language": "en"
+    },
+    "otherNames": [],
+    "transliteratedOtherNames": [],
+    "legalAddress": {
+     "language": "en",
+     "addressLines": [
+      "C/O CORPORATION SERVICE COMPANY",
+      "251 LITTLE FALLS DRIVE"
+     ],
+     "addressNumber": null,
+     "addressNumberWithinBuilding": null,
+     "mailRouting": null,
+     "city": "WILMINGTON",
+     "region": "US-DE",
+     "country": "US",
+     "postalCode": "19808"
+    },
+    "headquartersAddress": {
+     "language": "en",
+     "addressLines": [
+      "410 Terry Ave North"
+     ],
+     "addressNumber": null,
+     "addressNumberWithinBuilding": null,
+     "mailRouting": null,
+     "city": "Seattle",
+     "region": "US-WA",
+     "country": "US",
+     "postalCode": "98109"
+    },
+    "registeredAt": {
+     "id": "RA000602",
+     "other": null
+    },
+    "registeredAs": "2620453",
+    "jurisdiction": "US-DE",
+    "category": "GENERAL",
+    "legalForm": {
+     "id": "XTIQ",
+     "other": null
+    },
+    "associatedEntity": {
+     "lei": null,
+     "name": null
+    },
+    "status": "ACTIVE",
+    "expiration": {
+     "date": null,
+     "reason": null
+    },
+    "successorEntity": {
+     "lei": null,
+     "name": null
+    },
+    "successorEntities": [],
+    "creationDate": "1996-05-28T00:00:00Z",
+    "subCategory": null,
+    "otherAddresses": [],
+    "eventGroups": []
+   },
+   "registration": {
+    "initialRegistrationDate": "2012-06-06T15:52:00Z",
+    "lastUpdateDate": "2026-10-16T05:44:00Z",
+    "status": "ISSUED",
+    "nextRenewalDate": "2027-11-07T19:23:00Z",
+    "managingLou": "5493001KJTIIGC8Y1R12",
+    "corroborationLevel": "FULLY_CORROBORATED",
+    "validatedAt": {
+     "id": "RA000602",
+     "other": null
+    },
+    "validatedAs": "2620453",
+    "otherValidationAuthorities": []
+   },
+   "bic": null,
+   "mic": null,
+   "ocid": "us_de/2620453",
+   "qcc": null,
+   "gem": "E100000151586",
+   "spglobal": [
+    "18749"
+   ],
+   "conformityFlag": "CONFORMING"
+  },
+  "relationships": {
+   "managing-lou": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/managing-lou"
+    }
+   },
+   "lei-issuer": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/lei-issuer"
+    }
+   },
+   "field-modifications": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/field-modifications"
+    }
+   },
+   "direct-parent": {
+    "links": {
+     "reporting-exception": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/direct-parent-reporting-exception"
+    }
+   },
+   "ultimate-parent": {
+    "links": {
+     "reporting-exception": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/ultimate-parent-reporting-exception"
+    }
+   },
+   "direct-children": {
+    "links": {
+     "relationship-records": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/direct-child-relationships",
+     "related": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/direct-children"
+    }
+   },
+   "ultimate-children": {
+    "links": {
+     "relationship-records": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/ultimate-child-relationships",
+     "related": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/ultimate-children"
+    }
+   },
+   "isins": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630/isins"
+    }
+   }
+  },
+  "links": {
+   "self": "https://api.gleif.org/api/v1/lei-records/ZXTILKJKG63JELOEG630"
+  }
+ }
+}
