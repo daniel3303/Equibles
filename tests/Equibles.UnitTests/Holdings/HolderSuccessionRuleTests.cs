@@ -146,6 +146,19 @@ public class HolderSuccessionRuleTests
     }
 
     [Fact]
+    public void SameCikStoredUnderTwoSpellings_IsASuccession()
+    {
+        var padded = Filer("0000102909", "2020-03-31", "2025-03-31");
+        var trimmed = Filer("102909", "2025-06-30", "2026-06-30");
+
+        Derive(padded, trimmed)
+            .Should()
+            .ContainSingle()
+            .Which.Basis.Should()
+            .Be(HolderSuccessionBasis.SameIdentityNumber);
+    }
+
+    [Fact]
     public void PredecessorThatFilesAgain_HasNoSuccessor()
     {
         // It resumed after a gap, so its last 13F is not the quarter before the new filer's first.

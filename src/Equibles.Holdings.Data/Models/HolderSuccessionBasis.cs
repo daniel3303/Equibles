@@ -27,7 +27,7 @@ public enum HolderSuccessionBasis
     [Display(Name = "Same included managers")]
     SameIncludedManagers = 1 << 3,
 
-    /// <summary>Both filers carry the same CRD, 13F file number or SEC file number.</summary>
+    /// <summary>Both filers carry the same CIK, CRD, 13F file number or SEC file number.</summary>
     [Display(Name = "Same identity number")]
     SameIdentityNumber = 1 << 4,
 }

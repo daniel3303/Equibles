@@ -106,7 +106,8 @@ internal static class HolderSuccessionRule
                             index.Accession(successor)
                         );
 
-            foreach (var successor in index.Filers(ownKeys.Where(key => !key.StartsWith("c:"))))
+            // A shared CIK is a filer stored under two spellings of it.
+            foreach (var successor in index.Filers(ownKeys))
                 Add(successor, HolderSuccessionBasis.SameIdentityNumber, null);
         }
 
