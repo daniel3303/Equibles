@@ -201,7 +201,7 @@ public class HolderStyleBandClassifierTests
     [InlineData(12.0, HolderHorizonBand.Long)]
     public void HorizonBand_Thresholds(double? quarters, HolderHorizonBand band)
     {
-        HolderStyleBandClassifier.HorizonBand((decimal?)quarters).Should().Be(band);
+        HolderStyleBandClassifier.HorizonBand((decimal?)quarters, 0m).Should().Be(band);
     }
 
     [Theory]
