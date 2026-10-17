@@ -2549,6 +2549,134 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FilingOtherManager");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.Form13FNotice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccessionNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("CrdNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("DataSetFileName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FilerCik")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("FilerName")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateOnly>("FilingDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Form13FFileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("IsAmendment")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("SecFileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("FilerCik", "ReportDate");
+
+                    b.ToTable("Form13FNotice");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.Form13FNoticeDataSet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("NoticeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ParserVersion")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileName")
+                        .IsUnique();
+
+                    b.ToTable("Form13FNoticeDataSet");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.Form13FNoticeReporter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Cik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("CrdNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Form13FFileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("Form13FNoticeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SecFileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Cik");
+
+                    b.HasIndex("Form13FFileNumber");
+
+                    b.HasIndex("Form13FNoticeId", "Ordinal")
+                        .IsUnique();
+
+                    b.ToTable("Form13FNoticeReporter");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.FundScore", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6352,6 +6480,17 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Filing");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.Form13FNoticeReporter", b =>
+                {
+                    b.HasOne("Equibles.Holdings.Data.Models.Form13FNotice", "Notice")
+                        .WithMany("Reporters")
+                        .HasForeignKey("Form13FNoticeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Notice");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.FundScore", b =>
                 {
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
@@ -6956,6 +7095,11 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Holdings.Data.Models.BeneficialOwnershipFiling", b =>
                 {
                     b.Navigation("ReportingPersons");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.Form13FNotice", b =>
+                {
+                    b.Navigation("Reporters");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolder", b =>

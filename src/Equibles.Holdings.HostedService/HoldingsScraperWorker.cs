@@ -188,6 +188,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // After the filer profiles, so the holder profiles read fresh SIC codes.
         await RefreshHolderProfiles(stoppingToken);
 
+        await SyncForm13FNotices(fileNames, stoppingToken);
+
         // Position coverage does not depend on valuation. Check it before maintenance can
         // spend the cycle repricing a large backlog, but let maintenance survive SEC outages.
         try
@@ -757,6 +759,27 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "Holder identity backfill failed; retrying next cycle");
+        }
+    }
+
+    // Bounded per cycle because each data set is a full archive download.
+    internal const int Form13FNoticeDataSetsPerCycle = 8;
+
+    private async Task SyncForm13FNotices(
+        IReadOnlyCollection<string> fileNames,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<Form13FNoticeSyncService>()
+                .SyncMissing(fileNames, Form13FNoticeDataSetsPerCycle, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogError(exception, "13F notice sync failed; retrying next cycle");
         }
     }
 
