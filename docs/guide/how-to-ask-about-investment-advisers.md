@@ -6,7 +6,7 @@ Equibles builds a directory of SEC-registered and exempt reporting investment ad
 
 - Connect an AI assistant to the MCP server first — see [Connect an AI assistant](tutorial-connect-ai-assistant.md).
 - Let the worker run after startup so the Form ADV adviser data has been imported.
-- The importer follows the newest registered-adviser ZIP linked by the SEC catalogue; the report date identifies its published month.
+- The importer follows the newest registered and exempt reporting adviser ZIPs linked by the SEC catalogue; each report date identifies its published month.
 
 ## Find an adviser by name
 
@@ -29,4 +29,4 @@ The assistant calls the `GetInvestmentAdviser` tool with the CRD number and repl
 
 ## What you should see
 
-For a search, a ranked table of advisory firms with their CRD numbers. For a profile, a single firm's complete Form ADV detail. If a search returns nothing, the firm may not be SEC-registered (state advisers and exempt reporting advisers are not in the federal Form ADV set), or its filing may not have been imported yet — try a large, well-known firm such as Vanguard to confirm the data is flowing.
+For a search, a ranked table of advisory firms with their CRD numbers. For a profile, a single firm's complete Form ADV detail. If a search returns nothing, the firm may be a state-registered adviser, which is not in the SEC's Form ADV rosters, or its filing may not have been imported yet — try a large, well-known firm such as Vanguard to confirm the data is flowing.
