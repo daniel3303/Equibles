@@ -653,26 +653,27 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         await Seed(seed => seed.Add(berkshire));
         await Seed(seed =>
         {
-            seed.AddRange(Bars(berkshire, 800m, 1_000m));
+            // The classes trade within 2% of each other, so only the listing keeps them apart.
+            seed.AddRange(Bars(berkshire, 8m, 10m));
             if (siblingTraded)
-                seed.AddRange(Bars(classB, 8m, 10m));
+                seed.AddRange(Bars(classB, 8.16m, 10.2m));
             seed.AddRange(
                 Filing(_holder, Q1),
-                Holding(berkshire, _holder, Q1, 10, 10_000),
-                Holding(berkshire, _holder, Q1, 100, 1_000, listedTicker: "BRKB"),
+                Holding(berkshire, _holder, Q1, 10, 100),
+                Holding(berkshire, _holder, Q1, 100, 1_020, listedTicker: "BRKB"),
                 Filing(_holder, Q2),
-                Holding(berkshire, _holder, Q2, 20, 20_000),
-                Holding(berkshire, _holder, Q2, 200, 2_000, listedTicker: "BRKB")
+                Holding(berkshire, _holder, Q2, 20, 200),
+                Holding(berkshire, _holder, Q2, 200, 2_040, listedTicker: "BRKB")
             );
         });
 
         await Rebuild(Q2);
 
-        var classA = 10m * 21_000m / 26m;
+        var classA = 10m * 210m / 26m;
         (await Metrics(Q2))
             .BuyValue.Should()
             .BeApproximately(
-                classA + (siblingTraded ? 100m * 210m / 26m : 1_000m),
+                classA + (siblingTraded ? 100m * 214.2m / 26m : 1_020m),
                 0.01m,
                 "class B is priced from its own bars, or at its quarter-end value without them"
             );
