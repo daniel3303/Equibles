@@ -1,6 +1,6 @@
 # Ask your AI assistant about investment advisers (SEC Form ADV)
 
-Equibles builds a directory of SEC-registered investment advisers from the Form ADV filings it ingests, and exposes it through the MCP server, so you can ask your AI assistant to find an advisory firm by name and then pull its full regulatory profile. To browse the same data on the web portal instead, see [browse investment advisers](how-to-browse-investment-advisers.md).
+Equibles builds a directory of SEC-registered and exempt reporting investment advisers from the Form ADV filings it ingests, and exposes it through the MCP server, so you can ask your AI assistant to find an advisory firm by name and then pull its full regulatory profile. To browse the same data on the web portal instead, see [browse investment advisers](how-to-browse-investment-advisers.md).
 
 ## Before you start
 

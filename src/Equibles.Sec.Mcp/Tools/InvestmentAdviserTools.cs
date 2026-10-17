@@ -105,7 +105,7 @@ public class InvestmentAdviserTools
         ReadOnly = true
     )]
     [Description(
-        "Get the full Form ADV profile for a single SEC-registered investment adviser by its Organization CRD number: legal and business names, SEC file number, main office, website, regulatory assets under management (discretionary, non-discretionary and total), employee count, and how the firm is compensated (fee structure). Find CRD numbers with SearchInvestmentAdvisers."
+        "Get the full Form ADV profile for a single SEC-registered or exempt reporting investment adviser by its Organization CRD number: legal and business names, SEC file number, main office, website, regulatory assets under management (discretionary, non-discretionary and total), employee count, and how the firm is compensated (fee structure). Find CRD numbers with SearchInvestmentAdvisers."
     )]
     public Task<string> GetInvestmentAdviser(
         [Description("The adviser's Organization CRD number (e.g., 231)")] int crd

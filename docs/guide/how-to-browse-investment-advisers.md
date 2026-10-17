@@ -1,6 +1,6 @@
 # Browse investment advisers (SEC Form ADV)
 
-This guide shows you how to use the Investment Advisers page to look up SEC-registered investment advisers and read their Form ADV profiles — assets under management, location, employee count, and fee structure.
+This guide shows you how to use the Investment Advisers page to look up SEC-registered and exempt reporting investment advisers and read their Form ADV profiles — assets under management, location, employee count, and fee structure.
 
 ## Open the advisers page
 
