@@ -168,23 +168,24 @@ public class ImageManagerTests
     [Theory]
     [InlineData("gif")]
     [InlineData("webp")]
-    [InlineData("bmp")]
-    public async Task SaveImage_WebRasterFormat_IsDecoded(string extension)
+    public async Task SaveImage_WebRasterFormat_IsDecodedAndResized(string extension)
     {
         var content = Encode(extension);
 
-        var image = await _sut.SaveImage(content, $"logo.{extension}", null, null);
+        var image = await _sut.SaveImage(content, $"logo.{extension}", 3, null);
 
-        image.Width.Should().Be(6);
-        image.Height.Should().Be(4);
+        image.Width.Should().Be(3);
+        image.Height.Should().Be(2);
     }
 
-    [Fact]
-    public async Task SaveImage_Tiff_IsNotDecoded()
+    [Theory]
+    [InlineData("tiff")]
+    [InlineData("bmp")]
+    public async Task SaveImage_UnsafeFormat_IsNotDecoded(string extension)
     {
-        var content = Encode("tiff");
+        var content = Encode(extension);
 
-        var act = () => _sut.SaveImage(content, "scan.tiff", null, null);
+        var act = () => _sut.SaveImage(content, $"scan.{extension}", null, null);
 
         await act.Should().ThrowAsync<UnknownImageFormatException>();
     }

@@ -5,7 +5,6 @@ using Equibles.Media.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using MimeTypes;
 using SixLabors.ImageSharp.Formats;
-using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
@@ -19,15 +18,14 @@ namespace Equibles.Media.BusinessLogic;
 public class ImageManager : IImageManager
 {
     // Uploaded and fetched images are untrusted bytes: decode only the web raster formats, so
-    // ImageSharp 3.1's unpatched TIFF decoder and encoders are never reached.
+    // ImageSharp 3.1's unpatched TIFF code and the BMP decoder's unbounded ICC allocation are never reached.
     private static readonly DecoderOptions UntrustedDecoderOptions = new()
     {
         Configuration = new SixLabors.ImageSharp.Configuration(
             new PngConfigurationModule(),
             new JpegConfigurationModule(),
             new GifConfigurationModule(),
-            new WebpConfigurationModule(),
-            new BmpConfigurationModule()
+            new WebpConfigurationModule()
         ),
     };
 
