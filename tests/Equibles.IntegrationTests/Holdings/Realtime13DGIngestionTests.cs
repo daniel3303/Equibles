@@ -210,6 +210,10 @@ public class Realtime13DGIngestionTests : IAsyncLifetime
             new Filing13DGXmlParser(),
             new Realtime13DGArchiveBuilder(),
             importService,
+            new BeneficialOwnershipDetailWriter(
+                scopeFactory,
+                Substitute.For<ILogger<BeneficialOwnershipDetailWriter>>()
+            ),
             scopeFactory,
             Substitute.For<ILogger<Realtime13DGIngestionService>>()
         );
@@ -241,5 +245,35 @@ public class Realtime13DGIngestionTests : IAsyncLifetime
         holding.IsAmendment.Should().BeFalse();
         holding.ReportDate.Should().Be(new DateOnly(2025, 4, 29));
         holding.InstitutionalHolder.Cik.Should().Be(FilerCik);
+
+        // Every reporting person's cover-page details are kept, the GP marked as the lead.
+        var detail = await verify
+            .Set<BeneficialOwnershipFiling>()
+            .Include(f => f.ReportingPersons)
+            .SingleAsync();
+        detail.AccessionNumber.Should().Be("0001140361-25-017533");
+        detail.FilingType.Should().Be(FilingType.Schedule13D);
+        detail.DateOfEvent.Should().Be(new DateOnly(2025, 4, 29));
+        detail.IssuerCusip.Should().Be(IssuerCusip);
+        detail
+            .ReportingPersons.OrderBy(p => p.Ordinal)
+            .Select(p => (p.Name, p.Cik, p.Types, p.AggregateAmountOwned, p.IsLead))
+            .Should()
+            .Equal(
+                (
+                    "Affinity Partners Fund I LP",
+                    null,
+                    ReportingPersonTypes.Partnership,
+                    164_310L,
+                    false
+                ),
+                (
+                    "Affinity Partners GP LP",
+                    "2059583",
+                    ReportingPersonTypes.Partnership,
+                    32_671_542L,
+                    true
+                )
+            );
     }
 }
