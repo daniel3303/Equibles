@@ -41,6 +41,7 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
     private readonly List<EquiblesFinancialDbContext> _contexts = [];
     private readonly ISecEdgarClient _edgar = Substitute.For<ISecEdgarClient>();
     private readonly List<string> _catalog = [];
+    private readonly IServiceScopeFactory _reporterScopes = Substitute.For<IServiceScopeFactory>();
 
     public NCenDataSetImportServiceTests(ParadeDbFixture fixture)
     {
@@ -222,19 +223,124 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UnreadableQuarter_IsLeftUnrecorded_AndLaterQuartersStillImport()
+    public async Task UnreadableQuarter_WaitsADay_WithoutBlockingLaterQuarters()
     {
         List("2018q3_ncen.zip", Archive("2018q3", omit: "ADVISER"));
         List("2026q3_ncen.zip", Archive("2026q3"));
 
-        await Sut().ImportPending(4, CancellationToken.None);
+        (await Sut().ImportPending(1, CancellationToken.None)).Should().BeTrue();
+        (await Sut().ImportPending(1, CancellationToken.None)).Should().BeFalse();
 
         await using var verify = _fixture.CreateDbContext();
-        (await verify.Set<NCenDataSetImport>().SingleAsync()).Year.Should().Be(2026);
+        var ledger = await verify.Set<NCenDataSetImport>().OrderBy(row => row.Year).ToListAsync();
+        ledger[0].FileName.Should().BeNull();
+        ledger[0].LastFailure.Should().Contain("ADVISER");
+        ledger[0].LastFailureAt.Should().NotBeNull();
+        ledger[1].FileName.Should().Be("2026q3_ncen.zip");
+        await _edgar.Received(1).DownloadStream(Folder + "2018q3_ncen.zip");
+        _reporterScopes.ReceivedWithAnyArgs().CreateScope();
     }
 
     [Fact]
-    public async Task AccessionPublishedInTwoQuarters_KeepsTheFirstCopy()
+    public async Task FailedQuarter_IsRetriedAfterTheDelay()
+    {
+        List("2026q3_ncen.zip", Archive("2026q3"));
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Add(
+                new NCenDataSetImport
+                {
+                    Year = 2026,
+                    Quarter = 3,
+                    LastFailureAt =
+                        DateTime.UtcNow
+                        - NCenDataSetImportService.FailureRetryDelay
+                        - TimeSpan.FromMinutes(1),
+                    LastFailure = "earlier failure",
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        await Sut().ImportPending(4, CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        var row = await verify.Set<NCenDataSetImport>().SingleAsync();
+        row.FileName.Should().Be("2026q3_ncen.zip");
+        row.LastFailure.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SameDayAmendment_IsCurrentByAccessionOrder()
+    {
+        List(
+            "2026q3_ncen.zip",
+            Archive(
+                "2026q3",
+                rewrite: (table, line) =>
+                    [
+                        table == "SUBMISSION" && line.StartsWith(MasonAmendment)
+                            ? line.Replace("11-SEP-2026", "09-SEP-2026")
+                            : line,
+                    ]
+            )
+        );
+
+        await Sut().ImportPending(4, CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        (await Superseded(verify, MasonOriginal)).Should().BeTrue();
+        (await Superseded(verify, MasonAmendment)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AmendmentOfARegistrantWithoutSeries_SupersedesItsFund()
+    {
+        const string original = "0000940400-26-026182";
+        const string amendment = "0000940400-26-026999";
+        List(
+            "2026q3_ncen.zip",
+            Archive(
+                "2026q3",
+                rewrite: (table, line) =>
+                    !line.Contains(original)
+                        ? [line]
+                        :
+                        [
+                            line,
+                            table == "SUBMISSION"
+                                ? line.Replace(original + "\tN-CEN\t", amendment + "\tN-CEN/A\t")
+                                    .Replace("07-JUL-2026", "08-JUL-2026")
+                                : line.Replace(original, amendment),
+                        ]
+            )
+        );
+
+        await Sut().ImportPending(4, CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        (await Superseded(verify, original)).Should().BeTrue();
+        (await Superseded(verify, amendment)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RepostDroppingARegistrant_RemarksItsReportsInOtherQuarters()
+    {
+        List("2026q2_ncen.zip", Archive("2026q3", without: MasonAmendment));
+        List("2026q3_ncen.zip", Archive("2026q3", only: MasonAmendment));
+        await Sut().ImportPending(4, CancellationToken.None);
+
+        // SEC re-posts Q3 without Mason at all; the Q2 original is current again.
+        _catalog.Remove("2026q3_ncen.zip");
+        List("2026q3_ncen_0.zip", Archive("2026q3", only: "0000856517-26-000004"));
+        await Sut().ImportPending(4, CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        (await Superseded(verify, MasonOriginal)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AccessionPublishedInTwoQuarters_BelongsToTheNewestImport()
     {
         List("2026q2_ncen.zip", Archive("2026q3", only: MasonOriginal));
         List("2026q3_ncen.zip", Archive("2026q3"));
@@ -245,10 +351,27 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
         var copy = await verify
             .Set<NCenRegistrantReport>()
             .SingleAsync(report => report.AccessionNumber == MasonOriginal);
-        copy.DataSetQuarter.Should().Be(2);
+        copy.DataSetQuarter.Should().Be(3);
         (await verify.Set<NCenDataSetImport>().SingleAsync(row => row.Quarter == 3))
             .ReportCount.Should()
-            .Be(5);
+            .Be(6);
+    }
+
+    [Fact]
+    public async Task RepostOfTheEarlierQuarter_KeepsAnAccessionTheLaterQuarterOwns()
+    {
+        List("2026q2_ncen.zip", Archive("2026q3", only: MasonOriginal));
+        List("2026q3_ncen.zip", Archive("2026q3"));
+        await Sut().ImportPending(4, CancellationToken.None);
+
+        _catalog.Remove("2026q2_ncen.zip");
+        List("2026q2_ncen_0.zip", Archive("2026q3", only: "0000856517-26-000004"));
+        await Sut().ImportPending(4, CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<NCenRegistrantReport>().AnyAsync(r => r.AccessionNumber == MasonOriginal))
+            .Should()
+            .BeTrue();
     }
 
     private static Task<bool> Superseded(EquiblesFinancialDbContext context, string accession) =>
@@ -284,22 +407,20 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
         return new NCenDataSetImportService(
             scopeFactory,
             _edgar,
-            new ErrorReporter(
-                Substitute.For<IServiceScopeFactory>(),
-                Substitute.For<ILogger<ErrorReporter>>()
-            ),
+            new ErrorReporter(_reporterScopes, Substitute.For<ILogger<ErrorReporter>>()),
             Substitute.For<ILogger<NCenDataSetImportService>>()
         );
     }
 
-    // Builds an archive from the fixture slice, optionally dropping one accession's rows, keeping
-    // only one accession, dropping only its fund rows, or omitting a table.
+    // Builds an archive from the fixture slice: drop or keep one accession's rows, drop only its fund
+    // rows, omit a table, or rewrite each data line into zero or more lines.
     private static byte[] Archive(
         string vintage,
         string without = null,
         string only = null,
         string withoutFundsOf = null,
-        string omit = null
+        string omit = null,
+        Func<string, string, IEnumerable<string>> rewrite = null
     )
     {
         using var zip = new MemoryStream();
@@ -320,7 +441,8 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
                     .Skip(1)
                     .Where(line => without == null || !line.Contains(without))
                     .Where(line => only == null || line.Contains(only))
-                    .Where(line => withoutFundsOf == null || !line.Contains(withoutFundsOf + "_"));
+                    .Where(line => withoutFundsOf == null || !line.Contains(withoutFundsOf + "_"))
+                    .SelectMany(line => rewrite == null ? [line] : rewrite(table, line));
                 var entry = archive.CreateEntry(table + ".tsv");
                 using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
                 writer.Write(string.Join("\n", rows.Prepend(lines[0])) + "\n");

@@ -30,6 +30,8 @@ public class NCenDataSetImportService
 
     private const int InsertBatchSize = 500;
 
+    internal static readonly TimeSpan FailureRetryDelay = TimeSpan.FromHours(24);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ErrorReporter _errorReporter;
@@ -50,6 +52,8 @@ public class NCenDataSetImportService
 
     /// <summary>
     /// Imports up to <paramref name="maxDataSets"/> due quarters and returns true when more remain.
+    /// A quarter that fails is recorded and waits <see cref="FailureRetryDelay"/>, so it never
+    /// blocks later quarters.
     /// </summary>
     public async Task<bool> ImportPending(int maxDataSets, CancellationToken cancellationToken)
     {
@@ -71,12 +75,16 @@ public class NCenDataSetImportService
                 .ToDictionaryAsync(row => (row.Year, row.Quarter), cancellationToken);
         }
 
+        var retryCutoff = DateTime.UtcNow - FailureRetryDelay;
         var due = catalog
             .Where(link =>
-                !ledger.TryGetValue((link.Year, link.Quarter), out var imported)
-                || imported.FileName != link.FileName
-                || imported.ParserVersion < ParserVersion
-            )
+            {
+                if (!ledger.TryGetValue((link.Year, link.Quarter), out var row))
+                    return true;
+                if (row.FileName == link.FileName && row.ParserVersion >= ParserVersion)
+                    return false;
+                return row.LastFailureAt == null || row.LastFailureAt < retryCutoff;
+            })
             .ToList();
 
         foreach (var link in due.Take(maxDataSets))
@@ -95,13 +103,14 @@ public class NCenDataSetImportService
             }
             catch (InvalidDataException exception)
             {
-                // A malformed archive stays unrecorded and is retried; later quarters still import.
                 _logger.LogError(
                     exception,
-                    "N-CEN data set {Year} Q{Quarter} is unreadable",
+                    "N-CEN data set {Year} Q{Quarter} is unreadable; retrying after {Delay}",
                     link.Year,
-                    link.Quarter
+                    link.Quarter,
+                    FailureRetryDelay
                 );
+                await RecordFailure(link, exception.Message, cancellationToken);
                 await _errorReporter.Report(
                     ErrorSource.NCenDataSets,
                     "NCenDataSet.Unreadable",
@@ -114,12 +123,47 @@ public class NCenDataSetImportService
         return due.Count > maxDataSets;
     }
 
+    private async Task RecordFailure(
+        NCenDataSetLink link,
+        string message,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var row = await dbContext
+            .Set<NCenDataSetImport>()
+            .SingleOrDefaultAsync(
+                row => row.Year == link.Year && row.Quarter == link.Quarter,
+                cancellationToken
+            );
+        if (row == null)
+        {
+            row = new NCenDataSetImport { Year = link.Year, Quarter = link.Quarter };
+            dbContext.Add(row);
+        }
+        row.LastFailureAt = DateTime.UtcNow;
+        row.LastFailure = message.TruncateToFit(1024);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<int> ImportDataSet(NCenDataSetLink link, CancellationToken cancellationToken)
     {
-        List<NCenRegistrantReportData> reports;
+        List<NCenRegistrantReportData> parsed;
         await using (var zipStream = await _secEdgarClient.DownloadStream(link.Url))
         using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
-            reports = NCenDataSetParser.Parse(archive);
+            parsed = NCenDataSetParser.Parse(archive);
+
+        var reports = parsed.Select(report => ToEntity(report, link)).ToList();
+        var unidentified = reports.Count(report => report == null);
+        if (unidentified > 0)
+            _logger.LogWarning(
+                "N-CEN data set {Year} Q{Quarter}: skipped {Count} reports without a usable CIK",
+                link.Year,
+                link.Quarter,
+                unidentified
+            );
+        reports.RemoveAll(report => report == null);
 
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -131,43 +175,28 @@ public class NCenDataSetImportService
                 cancellationToken
             );
 
-            // Registrants of a replaced copy are re-marked too, in case the re-post dropped them.
-            var quarterReports = dbContext
+            // The quarter's previous copy and any copy of these accessions another quarter holds are
+            // replaced, so the newest import owns an accession SEC publishes twice.
+            var accessions = reports.Select(report => report.AccessionNumber).ToList();
+            var replaced = dbContext
                 .Set<NCenRegistrantReport>()
                 .Where(report =>
                     report.DataSetYear == link.Year && report.DataSetQuarter == link.Quarter
+                    || accessions.Contains(report.AccessionNumber)
                 );
             var ciks = (
-                await quarterReports
+                await replaced
                     .Select(report => report.RegistrantCik)
                     .Distinct()
                     .ToListAsync(cancellationToken)
             ).ToHashSet(StringComparer.Ordinal);
-            await quarterReports.ExecuteDeleteAsync(cancellationToken);
+            await replaced.ExecuteDeleteAsync(cancellationToken);
 
-            // An accession SEC already published in another quarter keeps that copy.
-            var accessions = reports.Select(report => report.AccessionNumber).ToList();
-            var storedElsewhere = (
-                await dbContext
-                    .Set<NCenRegistrantReport>()
-                    .Where(report => accessions.Contains(report.AccessionNumber))
-                    .Select(report => report.AccessionNumber)
-                    .ToListAsync(cancellationToken)
-            ).ToHashSet(StringComparer.Ordinal);
-
-            var stored = 0;
-            foreach (
-                var batch in reports
-                    .Where(report => !storedElsewhere.Contains(report.AccessionNumber))
-                    .Select(report => ToEntity(report, link))
-                    .Where(report => report != null)
-                    .Chunk(InsertBatchSize)
-            )
+            foreach (var batch in reports.Chunk(InsertBatchSize))
             {
                 dbContext.AddRange(batch);
                 await dbContext.SaveChangesAsync(cancellationToken);
                 dbContext.ChangeTracker.Clear();
-                stored += batch.Length;
                 ciks.UnionWith(batch.Select(report => report.RegistrantCik));
             }
 
@@ -186,12 +215,14 @@ public class NCenDataSetImportService
             }
             ledger.FileName = link.FileName;
             ledger.ParserVersion = ParserVersion;
-            ledger.ReportCount = stored;
+            ledger.ReportCount = reports.Count;
             ledger.ImportedAt = DateTime.UtcNow;
+            ledger.LastFailureAt = null;
+            ledger.LastFailure = null;
             await dbContext.SaveChangesAsync(cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
-            return stored;
+            return reports.Count;
         });
     }
 
@@ -204,27 +235,25 @@ public class NCenDataSetImportService
     )
     {
         var funds = dbContext.Set<NCenFundReport>();
+        // Only rows whose flag changes are written, so re-marking a registrant leaves the rest alone.
         return funds
             .Where(fund => ciks.Contains(fund.RegistrantCik))
+            .Where(fund =>
+                fund.IsSuperseded
+                != funds.Any(other =>
+                    other.RegistrantCik == fund.RegistrantCik
+                    && other.ReportEndingPeriod == fund.ReportEndingPeriod
+                    && other.SeriesId == fund.SeriesId
+                    && (
+                        other.FilingDate > fund.FilingDate
+                        || other.FilingDate == fund.FilingDate
+                            && string.Compare(other.AccessionNumber, fund.AccessionNumber) > 0
+                    )
+                )
+            )
             .ExecuteUpdateAsync(
                 setters =>
-                    setters.SetProperty(
-                        fund => fund.IsSuperseded,
-                        fund =>
-                            funds.Any(other =>
-                                other.RegistrantCik == fund.RegistrantCik
-                                && other.ReportEndingPeriod == fund.ReportEndingPeriod
-                                && other.SeriesId == fund.SeriesId
-                                && (
-                                    other.FilingDate > fund.FilingDate
-                                    || other.FilingDate == fund.FilingDate
-                                        && string.Compare(
-                                            other.AccessionNumber,
-                                            fund.AccessionNumber
-                                        ) > 0
-                                )
-                            )
-                    ),
+                    setters.SetProperty(fund => fund.IsSuperseded, fund => !fund.IsSuperseded),
                 cancellationToken
             );
     }

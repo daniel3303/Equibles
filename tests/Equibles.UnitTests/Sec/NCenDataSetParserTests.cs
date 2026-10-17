@@ -202,6 +202,92 @@ public class NCenDataSetParserTests
     }
 
     [Theory]
+    [InlineData("IS_ETF", NCenFundTypes.ExchangeTradedFund)]
+    [InlineData("IS_ETMF", NCenFundTypes.ExchangeTradedManagedFund)]
+    [InlineData("IS_INDEX", NCenFundTypes.IndexFund)]
+    [InlineData("IS_MULTI_INVERSE_INDEX", NCenFundTypes.MultipleOrInverseIndexFund)]
+    [InlineData("IS_INTERVAL", NCenFundTypes.IntervalFund)]
+    [InlineData("IS_FUND_OF_FUND", NCenFundTypes.FundOfFunds)]
+    [InlineData("IS_MASTER_FEEDER", NCenFundTypes.MasterFeederFund)]
+    [InlineData("IS_MONEY_MARKET", NCenFundTypes.MoneyMarketFund)]
+    [InlineData("IS_TARGET_DATE", NCenFundTypes.TargetDateFund)]
+    [InlineData("IS_UNDERLYING_FUND", NCenFundTypes.UnderlyingFund)]
+    public void Parse_EachFundTypeColumn_SetsItsOwnFlag(string column, NCenFundTypes expected)
+    {
+        // The Valued Advisers fund reported no type; marking one column must yield only its flag.
+        var fund = Parse(
+                "2026q3",
+                rewrite: (table, header, fields) =>
+                    Set(table, header, fields, "FUND_REPORTED_INFO", "S000042102", column, "Y")
+            )
+            .SelectMany(r => r.Funds)
+            .Single(f => f.SeriesId == "S000042102");
+
+        fund.FundTypes.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Parse_FlagWrittenAsTrue_IsRefused()
+    {
+        var act = () =>
+            Parse(
+                "2026q3",
+                rewrite: (table, header, fields) =>
+                    Set(table, header, fields, "FUND_REPORTED_INFO", "S000042102", "IS_ETF", "true")
+            );
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*flag value 'true'*");
+    }
+
+    [Fact]
+    public void Parse_UnreadableAdviserDate_IsRefused()
+    {
+        var act = () =>
+            Parse(
+                "2026q3",
+                rewrite: (table, header, fields) =>
+                    Set(
+                        table,
+                        header,
+                        fields,
+                        "ADVISER",
+                        "S000029069",
+                        "ADVISOR_START_DATE",
+                        "2026-05-29"
+                    )
+            );
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*unreadable date '2026-05-29'*");
+    }
+
+    [Fact]
+    public void Parse_MissingNetAssetsColumn_IsRefused()
+    {
+        var act = () =>
+            Parse(
+                "2026q3",
+                renameHeader: ("FUND_REPORTED_INFO", "MONTHLY_AVG_NET_ASSETS", "MONTHLY_NET_ASSETS")
+            );
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*MONTHLY_AVG_NET_ASSETS*");
+    }
+
+    [Fact]
+    public void Parse_MalformedAccessionNumber_IsRefused()
+    {
+        var act = () =>
+            Parse(
+                "2026q3",
+                rewrite: (table, header, fields) =>
+                    table == "SUBMISSION" && fields[0] == "0000856517-26-000004"
+                        ? ["0000856517-26-0000040", .. fields[1..]]
+                        : fields
+            );
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*malformed accession*");
+    }
+
+    [Theory]
     [InlineData("29-JUL-2026", 2026, 7, 29)]
     [InlineData("01-Mar-2022", 2022, 3, 1)]
     public void Date_ReadsSecsDayMonthYear(string value, int year, int month, int day)
@@ -223,19 +309,22 @@ public class NCenDataSetParserTests
         string vintage,
         (string Table, string Row)? extraRow = null,
         string omit = null,
-        (string Table, string From, string To)? renameHeader = null
+        (string Table, string From, string To)? renameHeader = null,
+        Func<string, string[], string[], string[]> rewrite = null
     )
     {
-        using var zip = BuildArchive(vintage, extraRow, omit, renameHeader);
+        using var zip = BuildArchive(vintage, extraRow, omit, renameHeader, rewrite);
         using var archive = new ZipArchive(zip, ZipArchiveMode.Read);
         return NCenDataSetParser.Parse(archive);
     }
 
+    // rewrite(table, header, fields) may return changed fields for a data row.
     internal static MemoryStream BuildArchive(
         string vintage,
         (string Table, string Row)? extraRow = null,
         string omit = null,
-        (string Table, string From, string To)? renameHeader = null
+        (string Table, string From, string To)? renameHeader = null,
+        Func<string, string[], string[], string[]> rewrite = null
     )
     {
         var zip = new MemoryStream();
@@ -252,6 +341,21 @@ public class NCenDataSetParserTests
                         table + ".tsv"
                     )
                 );
+                if (rewrite != null)
+                {
+                    var lines = text.TrimEnd('\n').Split('\n');
+                    var header = lines[0].Split('\t');
+                    text =
+                        string.Join(
+                            "\n",
+                            lines
+                                .Skip(1)
+                                .Select(line =>
+                                    string.Join("\t", rewrite(table, header, line.Split('\t')))
+                                )
+                                .Prepend(lines[0])
+                        ) + "\n";
+                }
                 if (renameHeader is { } rename && rename.Table == table)
                     text = text.Replace("\t" + rename.From + "\t", "\t" + rename.To + "\t");
                 if (extraRow is { } extra && extra.Table == table)
@@ -263,5 +367,23 @@ public class NCenDataSetParserTests
         }
         zip.Position = 0;
         return zip;
+    }
+
+    // Sets one column on the rows of a table whose FUND_ID ends with the given series.
+    private static string[] Set(
+        string table,
+        string[] header,
+        string[] fields,
+        string targetTable,
+        string series,
+        string column,
+        string value
+    )
+    {
+        if (table != targetTable || !fields[Array.IndexOf(header, "FUND_ID")].EndsWith(series))
+            return fields;
+        var copy = (string[])fields.Clone();
+        copy[Array.IndexOf(header, column)] = value;
+        return copy;
     }
 }

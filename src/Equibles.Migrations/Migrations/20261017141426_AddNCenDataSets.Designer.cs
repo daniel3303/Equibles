@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261017134126_AddNCenDataSets")]
+    [Migration("20261017141426_AddNCenDataSets")]
     partial class AddNCenDataSets
     {
         /// <inheritdoc />
@@ -4408,7 +4408,14 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<DateTime>("ImportedAt")
+                    b.Property<DateTime?>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastFailure")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime?>("LastFailureAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("ParserVersion")

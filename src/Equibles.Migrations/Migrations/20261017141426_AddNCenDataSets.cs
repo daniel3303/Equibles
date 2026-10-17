@@ -21,7 +21,9 @@ namespace Equibles.Migrations.Migrations
                     FileName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
                     ParserVersion = table.Column<int>(type: "integer", nullable: false),
                     ReportCount = table.Column<int>(type: "integer", nullable: false),
-                    ImportedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    ImportedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    LastFailureAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    LastFailure = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true)
                 },
                 constraints: table =>
                 {

@@ -27,6 +27,9 @@ public class NCenDataSetWorker : BaseScraperWorker
     // Staggered behind the time-sensitive SEC scrapers.
     protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(11);
 
+    // A deploy inside the daily interval skips the startup cycle instead of re-reading the catalogue.
+    protected override bool SkipStartupCycleWhenFresh => true;
+
     public NCenDataSetWorker(
         ILogger<NCenDataSetWorker> logger,
         IServiceScopeFactory scopeFactory,
