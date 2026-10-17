@@ -8,6 +8,7 @@ using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.Data.Models;
 using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -743,6 +744,95 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             );
         });
 
+    [Fact]
+    public async Task RebuildQuarter_ReadsTheAdvisersSeriesAsOfTheQuarterEnd()
+    {
+        var adviser = new InstitutionalHolder
+        {
+            Cik = "0000000003",
+            Name = "Index Adviser",
+            CrdNumber = "123",
+        };
+        await Seed(seed =>
+        {
+            seed.AddRange(adviser, Filing(adviser, Q2), Holding(_apple, adviser, Q2, 100, 10_000));
+            Series(seed, "A1", new DateOnly(2024, 3, 31), "S1", 123, NCenFundTypes.IndexFund, 300m);
+            // The same series' next report, for a period after the quarter, is not yet its state.
+            Series(seed, "A2", new DateOnly(2024, 9, 30), "S1", 123, NCenFundTypes.IndexFund, 999m);
+            // A report 21 months before the quarter end still counts; an older one does not.
+            Series(seed, "A3", new DateOnly(2022, 9, 30), "S2", 123, NCenFundTypes.None, 100m);
+            Series(
+                seed,
+                "A4",
+                new DateOnly(2022, 6, 30),
+                "S3",
+                123,
+                NCenFundTypes.IndexFund,
+                5_000m
+            );
+            Series(
+                seed,
+                "A5",
+                new DateOnly(2024, 7, 31),
+                "S4",
+                123,
+                NCenFundTypes.IndexFund,
+                7_000m
+            );
+        });
+
+        (await Rebuild(Q2)).Should().BeTrue();
+
+        var metrics = await Metrics(Q2, adviser);
+        metrics.IndexSeriesNetAssets.Should().Be(300m);
+        metrics.AdvisedSeriesNetAssets.Should().Be(400m);
+        metrics.AdvisedSeriesAsOf.Should().Be(new DateOnly(2024, 3, 31));
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_TakesTheProfilesAdviserBeforeTheCoverCrd()
+    {
+        var profiled = new InstitutionalHolder
+        {
+            Cik = "0000000003",
+            Name = "Profiled Filer",
+            CrdNumber = "111",
+        };
+        var coverOnly = new InstitutionalHolder
+        {
+            Cik = "0000000004",
+            Name = "Cover Only Filer",
+            CrdNumber = "111",
+        };
+        await Seed(seed =>
+        {
+            seed.AddRange(
+                profiled,
+                coverOnly,
+                new InstitutionalHolderProfile
+                {
+                    InstitutionalHolderId = profiled.Id,
+                    EntityType = HolderEntityType.InvestmentAdviser,
+                    AdviserCrd = 222,
+                },
+                Filing(profiled, Q2),
+                Holding(_apple, profiled, Q2, 100, 10_000),
+                Filing(coverOnly, Q2),
+                Holding(_apple, coverOnly, Q2, 100, 10_000),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 100, 10_000)
+            );
+            Series(seed, "A1", Q1, "S1", 111, NCenFundTypes.IndexFund, 100m);
+            Series(seed, "A2", Q1, "S2", 222, NCenFundTypes.IndexFund, 500m);
+        });
+
+        (await Rebuild(Q2)).Should().BeTrue();
+
+        (await Metrics(Q2, profiled)).IndexSeriesNetAssets.Should().Be(500m);
+        (await Metrics(Q2, coverOnly)).IndexSeriesNetAssets.Should().Be(100m);
+        (await Metrics(Q2)).AdvisedSeriesAsOf.Should().BeNull("Filer One names no adviser");
+    }
+
     private static List<EquityDailyStockPrice> Bars(
         EquityIssuer issuer,
         decimal close,
@@ -790,12 +880,18 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     private TestDrainWorker Drain() =>
         new(_provider.GetRequiredService<IServiceScopeFactory>(), beforeRebuild: null);
 
-    private async Task<HolderQuarterlyMetrics> Metrics(DateOnly reportDate)
+    private Task<HolderQuarterlyMetrics> Metrics(DateOnly reportDate) =>
+        Metrics(reportDate, _holder);
+
+    private async Task<HolderQuarterlyMetrics> Metrics(
+        DateOnly reportDate,
+        InstitutionalHolder holder
+    )
     {
         await using var read = _fixture.CreateDbContext();
         return await read.Set<HolderQuarterlyMetrics>()
             .SingleAsync(row =>
-                row.InstitutionalHolderId == _holder.Id && row.ReportDate == reportDate
+                row.InstitutionalHolderId == holder.Id && row.ReportDate == reportDate
             );
     }
 
@@ -862,6 +958,51 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             AccessionNumber = $"{holder.Cik}-{reportDate:yyyyMMdd}-{type}",
             Cusip = (listedTicker ?? issuer.Presentation.Listing.Ticker).PadRight(9, '0'),
         };
+
+    // One N-CEN report naming one series and its primary adviser.
+    private static void Series(
+        EquiblesFinancialDbContext seed,
+        string accession,
+        DateOnly period,
+        string seriesId,
+        int crd,
+        NCenFundTypes fundTypes,
+        decimal netAssets
+    )
+    {
+        var report = new NCenRegistrantReport
+        {
+            AccessionNumber = accession,
+            RegistrantCik = "0000009000",
+            RegistrantName = "Fund Trust",
+            InvestmentCompanyType = "N-1A",
+            FilingDate = period.AddMonths(2),
+            ReportEndingPeriod = period,
+        };
+        var fund = new NCenFundReport
+        {
+            RegistrantReportId = report.Id,
+            FundId = accession + "-" + seriesId,
+            SeriesId = seriesId,
+            FundName = "Fund " + seriesId,
+            RegistrantCik = report.RegistrantCik,
+            AccessionNumber = accession,
+            FilingDate = report.FilingDate,
+            ReportEndingPeriod = period,
+            FundTypes = fundTypes,
+            MonthlyAverageNetAssets = netAssets,
+        };
+        fund.Advisers.Add(
+            new NCenFundAdviser
+            {
+                FundReportId = fund.Id,
+                Role = NCenAdviserRole.InvestmentAdviser,
+                Name = "Adviser " + crd,
+                Crd = crd,
+            }
+        );
+        seed.AddRange(report, fund);
+    }
 
     private static StockSplit Split(
         EquityIssuer issuer,

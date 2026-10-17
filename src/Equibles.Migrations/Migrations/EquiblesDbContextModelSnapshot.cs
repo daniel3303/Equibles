@@ -2845,6 +2845,13 @@ namespace Equibles.Migrations.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("AdvisedSeriesAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("AdvisedSeriesNetAssets")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
                     b.Property<decimal?>("AggregateActiveShare")
                         .HasPrecision(12, 6)
                         .HasColumnType("numeric(12,6)");
@@ -2891,6 +2898,10 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("IndexLikeEvidence")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("IndexSeriesNetAssets")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
 
                     b.Property<Guid>("InstitutionalHolderId")
                         .HasColumnType("uuid");

@@ -17,10 +17,6 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class HolderProfileRefreshService
 {
-    // N-CEN is yearly and reaches SEC's quarterly data sets up to about six months after the
-    // period ends, so a current series' latest report can be 18 months old.
-    internal const int AdvisedSeriesLookbackMonths = 21;
-
     // Each save is bounded so the change tracker never holds the whole generation.
     private const int WriteBatchSize = 5_000;
 
@@ -67,7 +63,7 @@ public class HolderProfileRefreshService
                 .ToListAsync(cancellationToken),
             await LoadBeneficialOwnership(today, cancellationToken),
             await LoadRegistrants(today, cancellationToken),
-            await LoadAdvisedSeries(today, cancellationToken)
+            await AdvisedSeriesLoader.Load(_dbContext, today, cancellationToken)
         );
         var context = new HolderEvidenceContext(
             today,
@@ -195,34 +191,6 @@ public class HolderProfileRefreshService
                 report.ReportEndingPeriod,
                 report.InvestmentCompanyType,
                 report.FilingDate
-            ))
-            .ToListAsync(cancellationToken);
-    }
-
-    private Task<List<AdvisedSeriesRow>> LoadAdvisedSeries(
-        DateOnly today,
-        CancellationToken cancellationToken
-    )
-    {
-        var since = today.AddMonths(-AdvisedSeriesLookbackMonths);
-        return _dbContext
-            .Set<NCenFundAdviser>()
-            .AsNoTracking()
-            .Where(adviser =>
-                adviser.Role == NCenAdviserRole.InvestmentAdviser
-                && !adviser.FundReport.IsSuperseded
-                && adviser.FundReport.ReportEndingPeriod >= since
-            )
-            .Select(adviser => new AdvisedSeriesRow(
-                adviser.Crd,
-                // FundId is per filing; a registrant without series is one fund across its reports.
-                adviser.FundReport.SeriesId
-                    ?? adviser.FundReport.RegistrantCik,
-                adviser.FundReport.ReportEndingPeriod,
-                adviser.FundReport.FundTypes,
-                // Money market funds report daily average net assets instead (Item C.19.b).
-                adviser.FundReport.MonthlyAverageNetAssets
-                    ?? adviser.FundReport.DailyAverageNetAssets
             ))
             .ToListAsync(cancellationToken);
     }
