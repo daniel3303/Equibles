@@ -21,7 +21,7 @@ If the name is ambiguous, the assistant first calls `SearchInstitutions`. Discov
 ## What you should see
 
 - **`GetInstitutionPortfolio`** — the fund's holdings: each tracked stock with share count and market value.
-- **`GetInstitutionSummary`** — a header with reported AUM, position count, top-10 / top-25 concentration, quarter-over-quarter turnover, and the latest and prior report dates, then a holder profile: its type and the filing that decided it, Form ADV facts such as regulatory assets, client base and private funds, and any earlier or later CIK its 13F reports continue under. Good for "how big and how concentrated is this fund?" and "what kind of firm is this?"
+- **`GetInstitutionSummary`** — a header with reported AUM, position count, top-10 / top-25 concentration, quarter-over-quarter turnover, and the latest and prior report dates, then a holder profile: its type and the record that decided it, Form ADV facts such as regulatory assets, client base and private funds, and any earlier or later CIK its 13F reports continue under. Good for "how big and how concentrated is this fund?" and "what kind of firm is this?"
 - **`GetInstitutionSectorAllocation`** — holdings grouped by industry/sector and sorted by percentage of the portfolio. Good for "is this fund a tech specialist or a generalist?"
 - **`GetInstitutionQuarterlyActivity`** — the stocks the fund initiated, increased, reduced, or exited versus the prior quarter, sorted by the size of the change.
 
