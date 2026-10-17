@@ -77,12 +77,7 @@ public class FilingRollupTypeBackfillServiceTests : IDisposable
 
     private FilingRollupTypeBackfillService CreateService() => new(CreateScopeFactory(), _logger);
 
-    private async Task Seed(
-        string accession,
-        FilingType rollupType,
-        FilingType holdingType,
-        bool withHolding = true
-    )
+    private async Task Seed(string accession, FilingType rollupType, FilingType holdingType)
     {
         var seedContext = CreateSharedContext();
         var holderId = Guid.NewGuid();
@@ -110,24 +105,23 @@ public class FilingRollupTypeBackfillServiceTests : IDisposable
                     TotalValue = 45_000_000L,
                 }
             );
-        if (withHolding)
-            seedContext
-                .Set<InstitutionalHolding>()
-                .Add(
-                    new InstitutionalHolding
-                    {
-                        EquityIssuerId = Guid.NewGuid(),
-                        InstitutionalHolderId = holderId,
-                        FilingDate = new DateOnly(2026, 7, 23),
-                        ReportDate = new DateOnly(2026, 7, 23),
-                        FilingType = holdingType,
-                        Shares = 1_000,
-                        Value = 45_000_000L,
-                        ShareType = ShareType.Shares,
-                        InvestmentDiscretion = InvestmentDiscretion.Sole,
-                        AccessionNumber = accession,
-                    }
-                );
+        seedContext
+            .Set<InstitutionalHolding>()
+            .Add(
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = Guid.NewGuid(),
+                    InstitutionalHolderId = holderId,
+                    FilingDate = new DateOnly(2026, 7, 23),
+                    ReportDate = new DateOnly(2026, 7, 23),
+                    FilingType = holdingType,
+                    Shares = 1_000,
+                    Value = 45_000_000L,
+                    ShareType = ShareType.Shares,
+                    InvestmentDiscretion = InvestmentDiscretion.Sole,
+                    AccessionNumber = accession,
+                }
+            );
         await seedContext.SaveChangesAsync();
     }
 

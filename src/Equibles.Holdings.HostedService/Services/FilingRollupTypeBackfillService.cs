@@ -143,8 +143,9 @@ public class FilingRollupTypeBackfillService
             .Where(f => ids.Contains(f.Id))
             .ExecuteDeleteAsync(cancellationToken);
         _logger.LogInformation(
-            "Removed {Count} off-quarter 13F filing rollup row(s) with no holdings: {Accessions}",
+            "Removed {Removed} of {Selected} selected off-quarter 13F filing rollup row(s) with no holdings; selected: {Accessions}",
             removed,
+            selected.Count,
             string.Join(", ", selected.Take(20).Select(f => f.AccessionNumber))
         );
         return removed;
