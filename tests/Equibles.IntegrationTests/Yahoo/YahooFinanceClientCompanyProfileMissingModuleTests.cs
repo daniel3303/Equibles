@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -26,7 +27,7 @@ public class YahooFinanceClientCompanyProfileMissingModuleTests
         // Yahoo response shape for tickers without analyst-curated profile data.
         var json = "{\"quoteSummary\":{\"result\":[{}]}}";
 
-        var sut = new YahooFinanceClient(
+        var sut = new OfflineYahooFinanceClient(
             new HttpClient(new ConstantHandler(json)),
             Substitute.For<ILogger<YahooFinanceClient>>()
         );

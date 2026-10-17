@@ -168,12 +168,18 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 - [`FdaAdvisoryCommitteeCalendarImportService`](../../src/Equibles.FdaCatalysts.HostedService/Services/FdaAdvisoryCommitteeCalendarImportService.cs) parses the calendar, then upserts each meeting by its stable per-meeting slug (`FdaCatalyst.SourceReference`): an existing row refreshes its mutable fields, a new meeting inserts.
 - The calendar is mutable — scheduled dates and venues shift before a meeting happens — so a `max(date)` cursor would skip edits to already-stored meetings. Re-reading every cycle keeps stored rows in sync.
 
-### Government contracts — windowed scan with unique-key dedup
+### Government contracts — checkpointed windowed scan with parent fallback
 
-[`GovernmentContractsImportService`](../../src/Equibles.GovernmentContracts.HostedService/Services/GovernmentContractsImportService.cs) resumes from a `SyncDateResolver` watermark like the cursor scrapers above (`max(ActionDate)`), but USAspending requires a bounded date range per request, so it walks forward from that start date in `WindowDays`-sized chunks.
+[`GovernmentContractsImportService`](../../src/Equibles.GovernmentContracts.HostedService/Services/GovernmentContractsImportService.cs) walks USAspending in `WindowDays`-sized action-date windows (default 1 day), because the API requires a bounded range per request.
 
-- Awards back-fill into past dates, so a monotonic cursor alone would re-import already-stored rows. Each window's mapped awards are de-duplicated against `LoadExistingKeys` by `AwardUniqueKey` before persistence — only genuinely new awards insert.
-- A transient transport failure aborts the scan and records one error; the next run resumes from the same watermark. Window-specific failures fall through so the remaining windows still process.
+- A persisted checkpoint (`GovernmentContractsScanState.LastCompletedWindowEnd`) records the contiguous fully-scanned frontier. It advances only while every window this cycle has succeeded; the first failed window pulls it back behind that window.
+- Each cycle resumes the day after the frontier, but never later than a trailing `RescanLookbackDays` window (default 7), so awards USAspending publishes late are still picked up. Without a checkpoint the start falls back to `SyncDateResolver` over `max(ActionDate)`. Every start is clamped to the 2007-10-01 epoch.
+- Re-scanned awards de-duplicate against `LoadExistingKeys` by `AwardUniqueKey`, so only new awards insert.
+- A 422 rejects only that window: it is reported and stepped over. Any other HTTP failure, or five consecutive window failures, aborts the cycle for the worker to back off.
+- Unmatched awards are dropped, not stored. When the stored `MatchingVersion` is older than `RecipientMatchingVersion`, the next cycle pulls the checkpoint back to the epoch once so improved matching reaches history. Crossing version 3 also purges cached parentless answers so they are re-fetched.
+- A recipient whose name matches no company gets one retry through its SAM parent from the recipient profile. The current parent and the `parents[]` history are grouped by registrant (DUNS, then UEI, then hash), and only a single registrant resolves; every name it has carried is tried by exact match.
+- Entries naming the recipient itself (its own DUNS or UEI) are dropped when the current parent is a different registrant, since SAM records such eras during the owner's tenure. A subsidiary's pre-acquisition awards may therefore link to its current owner, as in USAspending's own roll-up.
+- Parent answers cache in `GovernmentContractRecipientParent`, including "no usable parent". Readings stay fresh for 180 days; rows recording a failed profile fetch retry after 7 days. More than three failed profile fetches in one window fail the window instead of caching.
 
 ### Congress — fixed-window re-scan across both chambers
 

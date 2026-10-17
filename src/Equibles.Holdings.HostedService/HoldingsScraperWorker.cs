@@ -184,6 +184,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
         await ApplyPendingRealtimeReplay(stoppingToken);
 
         await BackfillHolderIdentity(stoppingToken);
+        await RefreshHolderFilerProfiles(stoppingToken);
 
         await SyncForm13FNotices(fileNames, stoppingToken);
 
@@ -777,6 +778,23 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "13F notice sync failed; retrying next cycle");
+        }
+    }
+
+    internal const int HolderFilerProfilesPerCycle = 2000;
+
+    private async Task RefreshHolderFilerProfiles(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<HolderFilerProfileRefreshService>()
+                .Run(HolderFilerProfilesPerCycle, cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogError(exception, "Holder EDGAR profile refresh failed; retrying next cycle");
         }
     }
 

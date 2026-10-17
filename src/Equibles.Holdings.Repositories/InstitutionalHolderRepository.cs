@@ -43,6 +43,17 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .ToDictionaryAsync(r => r.HolderId, r => r.ReportDate, cancellationToken);
     }
 
+    // CIKs of every holder that filed at least one 13F report, as stored (either padding).
+    public IQueryable<string> Get13FFilerCiks()
+    {
+        var filings = DbContext
+            .Set<InstitutionalFiling>()
+            .Where(f => f.FilingType == FilingType.Form13F);
+        return GetAll()
+            .Where(h => filings.Any(f => f.InstitutionalHolderId == h.Id))
+            .Select(h => h.Cik);
+    }
+
     // Holders whose identity numbers were never read from a cover page since IdentityAccession
     // existed, each with its newest 13F filings (latest report, then filing date, then accession).
     public async Task<List<HolderIdentityBackfillCandidate>> GetIdentityBackfillCandidates(

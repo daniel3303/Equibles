@@ -38,8 +38,11 @@ public class GovernmentContractsImportService : IImporter
     // previously dropped, and the next cycle pulls the cursor back to the epoch once
     // (deduplicated by AwardUniqueKey). Version 1 is the original exact-name matching;
     // 2 added the 2-character key floor, EDGAR slash-marker stripping, and SAM
-    // parent-fallback resolution.
-    internal const int RecipientMatchingVersion = 2;
+    // parent-fallback resolution; 3 drops self entries beside a different current parent.
+    internal const int RecipientMatchingVersion = SelfParentHistoryVersion;
+
+    // Stored versions below this also purge cached parentless answers, which predate the rule.
+    internal const int SelfParentHistoryVersion = 3;
 
     // Re-fetch a cached recipient-parent profile at point of use once it is older than
     // this — acquisitions move subsidiaries between listed parents, and a permanently
@@ -446,6 +449,15 @@ public class GovernmentContractsImportService : IImporter
                 }
 
                 var parent = ChooseParent(profile);
+                if (parent?.ResolvedByDroppingSelfEntries == true)
+                {
+                    _logger.LogInformation(
+                        "Government contracts import: recipient {RecipientId} resolved to parent "
+                            + "{ParentName} only after dropping its self-registration entries",
+                        recipientId,
+                        parent.Names[0]
+                    );
+                }
 
                 if (staleRows.TryGetValue(recipientId, out var row))
                 {
@@ -511,43 +523,48 @@ public class GovernmentContractsImportService : IImporter
     /// ownership moved over the recipient's history (Sikorsky lists both RTX and Lockheed
     /// Martin), and one link cannot be right for awards spanning both eras — verified
     /// live against USAspending, and the epoch rescan would make a guess permanent, so
-    /// ambiguity is always dropped. A recipient's own self-registration era (SAM lists
-    /// the recipient as its own parent, under a DIFFERENT registrant identity) forms its
-    /// own group and therefore contributes ambiguity by design: an era in which the
-    /// recipient answered to no listed parent must not have its awards attributed to a
-    /// later owner.
+    /// ambiguity is always dropped.
+    ///
+    /// Self entries (the recipient listed as its own parent, recognised by its own DUNS or
+    /// UEI) are dropped only when the current parent is a DIFFERENT registrant: SAM records
+    /// such eras while the owner already held the recipient (Kratos SRE lists itself for
+    /// awards signed under Kratos ownership), so they are reporting noise, not independence.
+    /// The accepted trade-off, shared with USAspending's own parent roll-up, is that awards
+    /// from before an acquisition may also link to the current owner. A current parent that
+    /// IS the recipient (CACI NSS) drops nothing, so its history stays ambiguous.
     /// </summary>
     internal static RecipientParentChoice ChooseParent(UsaSpendingRecipientProfile profile)
     {
         if (profile == null)
             return null;
 
-        var candidates = new List<UsaSpendingRecipientParentRef>();
+        UsaSpendingRecipientParentRef current = null;
         if (!string.IsNullOrWhiteSpace(profile.ParentName))
         {
-            candidates.Add(
-                new UsaSpendingRecipientParentRef
-                {
-                    ParentId = profile.ParentId,
-                    ParentName = profile.ParentName,
-                    ParentDuns = profile.ParentDuns,
-                    ParentUei = profile.ParentUei,
-                }
-            );
+            current = new UsaSpendingRecipientParentRef
+            {
+                ParentId = profile.ParentId,
+                ParentName = profile.ParentName,
+                ParentDuns = profile.ParentDuns,
+                ParentUei = profile.ParentUei,
+            };
         }
-        candidates.AddRange(
-            (profile.Parents ?? []).Where(p => !string.IsNullOrWhiteSpace(p?.ParentName))
-        );
 
-        var groups = candidates
-            .Select(c => (Key: RegistrantKey(c), Candidate: c))
-            .Where(x => x.Key != null)
-            .GroupBy(x => x.Key, StringComparer.Ordinal)
+        var candidates = (profile.Parents ?? [])
+            .Where(p => !string.IsNullOrWhiteSpace(p?.ParentName))
+            .Prepend(current)
+            .Where(c => c != null && RegistrantKey(c) != null)
             .ToList();
+
+        var dropSelf =
+            current != null && RegistrantKey(current) != null && !IsSelf(profile, current);
+        var kept = dropSelf ? candidates.Where(c => !IsSelf(profile, c)).ToList() : candidates;
+
+        var groups = kept.GroupBy(RegistrantKey, StringComparer.Ordinal).ToList();
         if (groups.Count != 1)
             return null;
 
-        var members = groups[0].Select(x => x.Candidate).ToList();
+        var members = groups[0].ToList();
         return new RecipientParentChoice
         {
             ParentId = members
@@ -557,8 +574,21 @@ public class GovernmentContractsImportService : IImporter
                 .Select(m => m.ParentName.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
+            ResolvedByDroppingSelfEntries =
+                candidates.Select(RegistrantKey).Distinct(StringComparer.Ordinal).Count() != 1,
         };
     }
+
+    /// <summary>
+    /// Whether a parent entry names the recipient itself, by its own DUNS or UEI. Hashes
+    /// cannot decide it: a self entry carries the parent-level hash, not the recipient's.
+    /// </summary>
+    private static bool IsSelf(
+        UsaSpendingRecipientProfile profile,
+        UsaSpendingRecipientParentRef candidate
+    ) =>
+        (!string.IsNullOrWhiteSpace(profile.Duns) && candidate.ParentDuns == profile.Duns)
+        || (!string.IsNullOrWhiteSpace(profile.Uei) && candidate.ParentUei == profile.Uei);
 
     /// <summary>
     /// The identity two parent entries must share to count as the SAME registrant. DUNS
@@ -622,9 +652,9 @@ public class GovernmentContractsImportService : IImporter
     /// Pull the scan cursor back to the epoch ONCE when the recipient-matching code is
     /// newer than the version the stored range was matched under. Unmatched awards are
     /// dropped rather than stored, so this rescan is the only way a matching improvement
-    /// reaches history; everything re-fetched deduplicates by AwardUniqueKey. Cursor and
-    /// version stamp move in one save — a crash between cycles just re-triggers the same
-    /// idempotent rescan. Unlike the checkpoint writes this is NOT best-effort: failing to
+    /// reaches history; everything re-fetched deduplicates by AwardUniqueKey. Cursor,
+    /// version stamp and any parent-cache purge move in one save — a crash between cycles
+    /// just re-triggers the same idempotent rescan. Unlike the checkpoint writes this is NOT best-effort: failing to
     /// persist must fail the cycle, or the scan would advance and re-stamp under the new
     /// version without ever having re-walked history.
     /// </summary>
@@ -664,6 +694,25 @@ public class GovernmentContractsImportService : IImporter
             RecipientMatchingVersion,
             UsaSpendingMinimumActionDate
         );
+
+        if (state.MatchingVersion < SelfParentHistoryVersion)
+        {
+            // Cached "no usable parent" readings were decided before self entries could be
+            // dropped and stay fresh for months; purge them so the rescan re-fetches.
+            // Failure rows already re-resolve on their short retry window.
+            var parentRepository =
+                scope.ServiceProvider.GetRequiredService<GovernmentContractRecipientParentRepository>();
+            var parentless = await parentRepository
+                .GetAll()
+                .Where(p => p.ParentNames == null && !p.ProfileFetchFailed)
+                .ToListAsync(cancellationToken);
+            parentRepository.Delete(parentless);
+            _logger.LogInformation(
+                "Government contracts import: purged {Count} cached parentless recipient "
+                    + "answers ahead of the rescan",
+                parentless.Count
+            );
+        }
 
         state.LastCompletedWindowEnd = UsaSpendingMinimumActionDate.AddDays(-1);
         state.MatchingVersion = RecipientMatchingVersion;

@@ -309,6 +309,8 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<HoldingLabelConvergenceState>();
         builder.Entity<InstitutionalFiling>();
         builder.Entity<RealtimeSweepState>();
+        builder.Entity<BeneficialOwnershipFiling>();
+        builder.Entity<BeneficialOwnershipReportingPerson>();
         builder.Entity<FundScore>();
         builder.Entity<FundScoreAttempt>();
 

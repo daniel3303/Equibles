@@ -71,6 +71,9 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<FailedFilingIngest>();
         builder.Entity<EsefOversizedReport>();
         builder.Entity<FormAdvAdviser>();
+        builder.Entity<FormAdvAdviserClientType>();
+        builder.Entity<FormAdvRosterImport>();
+        builder.Entity<SecFilerProfile>();
         builder
             .Entity<FormDFiling>()
             .HasOne(row => row.Issuer)

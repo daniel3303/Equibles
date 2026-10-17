@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -29,7 +30,7 @@ public class YahooFinanceClientKeyStatisticsMarketCapTests
             + "}]}}";
 
         var handler = new CapturingHandler(json);
-        var sut = new YahooFinanceClient(
+        var sut = new OfflineYahooFinanceClient(
             new HttpClient(handler),
             Substitute.For<ILogger<YahooFinanceClient>>()
         );

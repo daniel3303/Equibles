@@ -81,6 +81,9 @@ public class Filing13DGXmlParser
         foreach (var person in personElements)
             filing.ReportingPersons.Add(ParseReportingPerson(person));
 
+        filing.RuleDesignations = Values(root, "designateRulePursuantThisScheduleFiled");
+        filing.FilingPersonTypeCodes = Codes(Descendants(root, "typeOfPersonFiling"));
+
         return filing;
     }
 
@@ -134,7 +137,7 @@ public class Filing13DGXmlParser
                 )
             ),
             PercentOfClass = ParsePercent(FirstValue(person, "percentOfClass", "classPercent")),
-            TypeOfReportingPerson = Value(Descendant(person, "typeOfReportingPerson")),
+            TypeCodes = Codes(Descendants(person, "typeOfReportingPerson")),
             CitizenshipOrOrganization = Value(Descendant(person, "citizenshipOrOrganization")),
         };
     }
@@ -160,6 +163,26 @@ public class Filing13DGXmlParser
         parent == null ? null : Children(parent, localName).FirstOrDefault();
 
     private static string Value(XElement element) => element?.Value.Trim();
+
+    private static List<string> Values(XElement parent, string localName) =>
+        Descendants(parent, localName)
+            .Select(Value)
+            .Where(value => !string.IsNullOrEmpty(value))
+            .ToList();
+
+    // One element normally holds one code, but a filer may list several in one, so split on
+    // separators and keep each code once in filed order.
+    private static List<string> Codes(IEnumerable<XElement> elements) =>
+        elements
+            .SelectMany(element =>
+                (element.Value ?? "").Split(
+                    [',', ';', ' ', '\t', '\r', '\n'],
+                    StringSplitOptions.RemoveEmptyEntries
+                )
+            )
+            .Select(code => code.ToUpperInvariant())
+            .Distinct()
+            .ToList();
 
     /// <summary>First non-empty descendant value among the candidate local names.</summary>
     private static string FirstValue(XElement parent, params string[] localNames)

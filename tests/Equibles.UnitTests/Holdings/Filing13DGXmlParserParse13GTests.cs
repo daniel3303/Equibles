@@ -67,7 +67,8 @@ public class Filing13DGXmlParserParse13GTests
         person.AggregateAmountOwned.Should().Be(1624818);
         // Sourced from classPercent, not percentOfClass.
         person.PercentOfClass.Should().Be(9.9m);
-        person.TypeOfReportingPerson.Should().Be("IA");
+        // Citadel Advisors states three codes; only the first used to survive.
+        person.TypeCodes.Should().Equal("IA", "HC", "OO");
         person.CitizenshipOrOrganization.Should().Be("DE");
     }
 }
