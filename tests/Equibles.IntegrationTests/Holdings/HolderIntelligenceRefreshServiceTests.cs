@@ -599,7 +599,10 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             ? new DateTime(2024, 8, 16, 0, 0, 0, DateTimeKind.Utc)
             : null;
         await Seed(seed => seed.Add(split));
-        await SeedAppleBoughtAndMicrosoftSold(Bars(_apple, 4m, 5m));
+        // Before the split is applied the closes still sit on the filing basis and match it.
+        await SeedAppleBoughtAndMicrosoftSold(
+            applied ? Bars(_apple, 4m, 5m) : Bars(_apple, 8m, 10m)
+        );
 
         await Rebuild(Q2);
 
@@ -609,7 +612,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
                 .Should()
                 .BeApproximately(100m * 210m / 26m, 0.01m, "the closes are on the 2-for-1 basis");
         else
-            buyValue.Should().Be(1_000m, "until the split is applied the closes' basis is unknown");
+            buyValue.Should().Be(1_000m, "an unapplied split leaves the closes' basis unproven");
     }
 
     [Fact]
