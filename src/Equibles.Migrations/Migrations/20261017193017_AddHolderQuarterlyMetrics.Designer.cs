@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261017192556_AddHolderQuarterlyMetrics")]
+    [Migration("20261017193017_AddHolderQuarterlyMetrics")]
     partial class AddHolderQuarterlyMetrics
     {
         /// <inheritdoc />
@@ -2647,7 +2647,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderIntelligenceQuarterState", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<int>("CalculationVersion")
@@ -2825,7 +2824,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockPresence", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("EquityIssuerId")

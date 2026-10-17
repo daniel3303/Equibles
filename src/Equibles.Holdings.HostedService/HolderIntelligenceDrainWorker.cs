@@ -109,6 +109,7 @@ public class HolderIntelligenceDrainWorker : BackgroundService
 
         try
         {
+            await BeforeRebuild(reportDate);
             var rebuilt = await scope
                 .ServiceProvider.GetRequiredService<HolderIntelligenceRefreshService>()
                 .RebuildQuarter(reportDate, today, cancellationToken);
@@ -152,6 +153,9 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                 );
         }
     }
+
+    // Test seam for a stamp written between reading it and rebuilding.
+    protected virtual Task BeforeRebuild(DateOnly reportDate) => Task.CompletedTask;
 
     // Every computable quarter has a state row, born due; a version bump dirties computed rows.
     private static async Task EnsureQuarters(

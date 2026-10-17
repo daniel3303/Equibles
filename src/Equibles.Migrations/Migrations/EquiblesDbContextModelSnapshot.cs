@@ -2644,7 +2644,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderIntelligenceQuarterState", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<int>("CalculationVersion")
@@ -2822,7 +2821,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockPresence", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("EquityIssuerId")

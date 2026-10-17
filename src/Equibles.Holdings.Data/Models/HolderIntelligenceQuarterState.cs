@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
@@ -10,6 +11,8 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(ReportDate), IsUnique = true)]
 public class HolderIntelligenceQuarterState
 {
+    // Client-generated, so FlexLabs UpsertRange sends it; a store-generated key inserts null.
+    [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
     public DateOnly ReportDate { get; set; }
 

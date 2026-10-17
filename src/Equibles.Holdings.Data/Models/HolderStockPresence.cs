@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Equibles.Holdings.Data.Models;
 
@@ -9,6 +10,8 @@ namespace Equibles.Holdings.Data.Models;
 /// </summary>
 public class HolderStockPresence
 {
+    // Client-generated, so FlexLabs UpsertRange sends it; a store-generated key inserts null.
+    [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid InstitutionalHolderId { get; set; }
     public virtual InstitutionalHolder InstitutionalHolder { get; set; }
