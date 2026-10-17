@@ -77,7 +77,12 @@ public class FilingRollupTypeBackfillServiceTests : IDisposable
 
     private FilingRollupTypeBackfillService CreateService() => new(CreateScopeFactory(), _logger);
 
-    private async Task Seed(string accession, FilingType rollupType, FilingType holdingType)
+    private async Task Seed(
+        string accession,
+        FilingType rollupType,
+        FilingType holdingType,
+        bool withHolding = true
+    )
     {
         var seedContext = CreateSharedContext();
         var holderId = Guid.NewGuid();
@@ -105,23 +110,24 @@ public class FilingRollupTypeBackfillServiceTests : IDisposable
                     TotalValue = 45_000_000L,
                 }
             );
-        seedContext
-            .Set<InstitutionalHolding>()
-            .Add(
-                new InstitutionalHolding
-                {
-                    EquityIssuerId = Guid.NewGuid(),
-                    InstitutionalHolderId = holderId,
-                    FilingDate = new DateOnly(2026, 7, 23),
-                    ReportDate = new DateOnly(2026, 7, 23),
-                    FilingType = holdingType,
-                    Shares = 1_000,
-                    Value = 45_000_000L,
-                    ShareType = ShareType.Shares,
-                    InvestmentDiscretion = InvestmentDiscretion.Sole,
-                    AccessionNumber = accession,
-                }
-            );
+        if (withHolding)
+            seedContext
+                .Set<InstitutionalHolding>()
+                .Add(
+                    new InstitutionalHolding
+                    {
+                        EquityIssuerId = Guid.NewGuid(),
+                        InstitutionalHolderId = holderId,
+                        FilingDate = new DateOnly(2026, 7, 23),
+                        ReportDate = new DateOnly(2026, 7, 23),
+                        FilingType = holdingType,
+                        Shares = 1_000,
+                        Value = 45_000_000L,
+                        ShareType = ShareType.Shares,
+                        InvestmentDiscretion = InvestmentDiscretion.Sole,
+                        AccessionNumber = accession,
+                    }
+                );
         await seedContext.SaveChangesAsync();
     }
 
@@ -150,5 +156,21 @@ public class FilingRollupTypeBackfillServiceTests : IDisposable
 
         (await CreateService().Backfill(CancellationToken.None)).Should().Be(1);
         (await CreateService().Backfill(CancellationToken.None)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Backfill_OffQuarterThirteenFRollupWithoutHoldings_IsRemoved()
+    {
+        // Both rollups are dated 2026-07-23; only the one with nothing under its accession goes.
+        await Seed("acc-gone", FilingType.Form13F, FilingType.Schedule13G, withHolding: false);
+        await Seed("acc-13f", FilingType.Form13F, FilingType.Form13F);
+
+        (await CreateService().Backfill(CancellationToken.None)).Should().Be(1);
+        (await CreateService().Backfill(CancellationToken.None)).Should().Be(0);
+
+        var verify = CreateSharedContext();
+        (await verify.Set<InstitutionalFiling>().Select(f => f.AccessionNumber).ToListAsync())
+            .Should()
+            .Equal("acc-13f");
     }
 }

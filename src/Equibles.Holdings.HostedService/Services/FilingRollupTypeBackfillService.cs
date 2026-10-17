@@ -16,7 +16,9 @@ namespace Equibles.Holdings.HostedService.Services;
 /// sync stamps new rows correctly, so this sweep only ever touches the pre-column backlog:
 /// bounded per cycle, self-terminating (a restamped row no longer matches), and a no-op scan
 /// once drained. Values are copied from the holdings' own <c>FilingType</c> — never inferred
-/// from date shape, because 13D/G rows dated on quarter ends exist.
+/// from date shape, because 13D/G rows dated on quarter ends exist. A row typed 13F on a date that
+/// is not a calendar quarter end and with no holdings left is such a rollup whose stake is gone, so
+/// it is removed instead.
 /// </remarks>
 [Service]
 public class FilingRollupTypeBackfillService
@@ -44,6 +46,15 @@ public class FilingRollupTypeBackfillService
             dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
         }
 
+        return await Restamp(dbContext, cancellationToken)
+            + await RemoveOffQuarterOrphans(dbContext, cancellationToken);
+    }
+
+    private async Task<int> Restamp(
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken cancellationToken
+    )
+    {
         var rows = await dbContext
             .Set<InstitutionalFiling>()
             .Where(f =>
@@ -97,5 +108,38 @@ public class FilingRollupTypeBackfillService
         }
 
         return restamped;
+    }
+
+    // Form 13F reports as of a calendar quarter end and the importers refuse any other period, so
+    // a 13F-typed row on another date with nothing under its accession summarises no 13F.
+    private async Task<int> RemoveOffQuarterOrphans(
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var orphans = await dbContext
+            .Set<InstitutionalFiling>()
+            .Where(f =>
+                f.FilingType == FilingType.Form13F
+                && (f.ReportDate.Month % 3 != 0 || f.ReportDate.AddDays(1).Day != 1)
+                && !dbContext
+                    .Set<InstitutionalHolding>()
+                    .Any(h => h.AccessionNumber == f.AccessionNumber)
+            )
+            .OrderBy(f => f.Id)
+            .Take(MaxRowsPerCycle)
+            .ToListAsync(cancellationToken);
+        if (orphans.Count == 0)
+        {
+            return 0;
+        }
+
+        dbContext.RemoveRange(orphans);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Removed {Count} off-quarter 13F filing rollup row(s) with no holdings",
+            orphans.Count
+        );
+        return orphans.Count;
     }
 }
