@@ -2849,8 +2849,7 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("date");
 
                     b.Property<decimal?>("AdvisedSeriesNetAssets")
-                        .HasPrecision(20, 2)
-                        .HasColumnType("numeric(20,2)");
+                        .HasColumnType("numeric");
 
                     b.Property<decimal?>("AggregateActiveShare")
                         .HasPrecision(12, 6)
@@ -2900,8 +2899,7 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal?>("IndexSeriesNetAssets")
-                        .HasPrecision(20, 2)
-                        .HasColumnType("numeric(20,2)");
+                        .HasColumnType("numeric");
 
                     b.Property<Guid>("InstitutionalHolderId")
                         .HasColumnType("uuid");

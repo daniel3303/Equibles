@@ -757,6 +757,8 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         {
             seed.AddRange(adviser, Filing(adviser, Q2), Holding(_apple, adviser, Q2, 100, 10_000));
             Series(seed, "A1", new DateOnly(2024, 3, 31), "S1", 123, NCenFundTypes.IndexFund, 300m);
+            // A fiscal year ending on the quarter end is that quarter's state.
+            Series(seed, "A6", Q2, "S5", 123, NCenFundTypes.IndexFund, 50m);
             // The same series' next report, for a period after the quarter, is not yet its state.
             Series(seed, "A2", new DateOnly(2024, 9, 30), "S1", 123, NCenFundTypes.IndexFund, 999m);
             // A report 21 months before the quarter end still counts; an older one does not.
@@ -784,9 +786,9 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         (await Rebuild(Q2)).Should().BeTrue();
 
         var metrics = await Metrics(Q2, adviser);
-        metrics.IndexSeriesNetAssets.Should().Be(300m);
-        metrics.AdvisedSeriesNetAssets.Should().Be(400m);
-        metrics.AdvisedSeriesAsOf.Should().Be(new DateOnly(2024, 3, 31));
+        metrics.IndexSeriesNetAssets.Should().Be(350m);
+        metrics.AdvisedSeriesNetAssets.Should().Be(450m);
+        metrics.AdvisedSeriesAsOf.Should().Be(Q2);
     }
 
     [Fact]
@@ -815,6 +817,9 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
                     EntityType = HolderEntityType.InvestmentAdviser,
                     AdviserCrd = 222,
                 },
+                // Every holder has a profile; most link no Form ADV adviser.
+                new InstitutionalHolderProfile { InstitutionalHolderId = coverOnly.Id },
+                new InstitutionalHolderProfile { InstitutionalHolderId = _holder.Id },
                 Filing(profiled, Q2),
                 Holding(_apple, profiled, Q2, 100, 10_000),
                 Filing(coverOnly, Q2),

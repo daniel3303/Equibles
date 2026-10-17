@@ -65,10 +65,7 @@ public class HolderQuarterlyMetrics
     /// Net assets of the index series and of every registered fund series the filer's adviser
     /// manages, by each series' latest N-CEN report for a period ending up to the quarter end.
     /// </summary>
-    [Precision(20, 2)]
     public decimal? IndexSeriesNetAssets { get; set; }
-
-    [Precision(20, 2)]
     public decimal? AdvisedSeriesNetAssets { get; set; }
 
     /// <summary>The latest N-CEN period behind the advised series figures.</summary>

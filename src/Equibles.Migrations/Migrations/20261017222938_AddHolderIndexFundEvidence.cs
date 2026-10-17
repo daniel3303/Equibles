@@ -20,17 +20,13 @@ namespace Equibles.Migrations.Migrations
             migrationBuilder.AddColumn<decimal>(
                 name: "AdvisedSeriesNetAssets",
                 table: "HolderQuarterlyMetrics",
-                type: "numeric(20,2)",
-                precision: 20,
-                scale: 2,
+                type: "numeric",
                 nullable: true);
 
             migrationBuilder.AddColumn<decimal>(
                 name: "IndexSeriesNetAssets",
                 table: "HolderQuarterlyMetrics",
-                type: "numeric(20,2)",
-                precision: 20,
-                scale: 2,
+                type: "numeric",
                 nullable: true);
         }
 

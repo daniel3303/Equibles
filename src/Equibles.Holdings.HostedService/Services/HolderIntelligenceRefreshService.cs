@@ -280,17 +280,18 @@ public class HolderIntelligenceRefreshService
         CancellationToken cancellationToken
     )
     {
-        var profiles = await _dbContext
-            .Set<InstitutionalHolderProfile>()
-            .AsNoTracking()
-            .Where(profile =>
-                holderIds.Contains(profile.InstitutionalHolderId) && profile.AdviserCrd != null
-            )
-            .ToDictionaryAsync(
-                profile => profile.InstitutionalHolderId,
-                profile => profile.AdviserCrd.Value,
-                cancellationToken
-            );
+        var profiles = (
+            await _dbContext
+                .Set<InstitutionalHolderProfile>()
+                .Where(profile =>
+                    holderIds.Contains(profile.InstitutionalHolderId) && profile.AdviserCrd != null
+                )
+                .Select(profile => new { profile.InstitutionalHolderId, profile.AdviserCrd })
+                .ToListAsync(cancellationToken)
+        ).ToDictionary(
+            profile => profile.InstitutionalHolderId,
+            profile => profile.AdviserCrd.Value
+        );
         var covers = await _dbContext
             .Set<InstitutionalHolder>()
             .AsNoTracking()
