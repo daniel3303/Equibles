@@ -253,6 +253,166 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RebuildQuarter_AFailedPublishStillLeavesLaterQuartersStamped()
+    {
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                new HolderIntelligenceQuarterState { ReportDate = Q2 },
+                new HolderIntelligenceQuarterState { ReportDate = Q3 }
+            )
+        );
+
+        await using (var context = _fixture.CreateDbContext())
+        {
+            var failing = new FailingPublishRefreshService(
+                context,
+                _provider.GetRequiredService<HoldingsCorpusCoverage>()
+            );
+            var rebuild = () => failing.RebuildQuarter(Q1, Today, CancellationToken.None);
+            await rebuild.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        (await Masks()).Should().ContainKey(_apple.Id, "the presence bit committed");
+        await using var read = _fixture.CreateDbContext();
+        (await read.Set<HolderIntelligenceQuarterState>().AllAsync(state => state.DirtyAt != null))
+            .Should()
+            .BeTrue("the bit and the stamp of the quarters that read it commit together");
+        (await read.Set<HolderQuarterlyMetrics>().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_AFailedPublishAfterAWithdrawnFilingStillStampsLaterQuarters()
+    {
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                new HolderIntelligenceQuarterState { ReportDate = Q2 }
+            )
+        );
+        await Rebuild(Q1);
+        await using (var mutate = _fixture.CreateDbContext())
+        {
+            await mutate
+                .Set<HolderIntelligenceQuarterState>()
+                .ExecuteUpdateAsync(setters =>
+                    setters.SetProperty(state => state.DirtyAt, (DateTime?)null)
+                );
+            await mutate.Set<InstitutionalHolding>().ExecuteDeleteAsync();
+            await mutate.Set<InstitutionalFiling>().ExecuteDeleteAsync();
+        }
+
+        await using (var context = _fixture.CreateDbContext())
+        {
+            var failing = new FailingPublishRefreshService(
+                context,
+                _provider.GetRequiredService<HoldingsCorpusCoverage>()
+            );
+            var rebuild = () => failing.RebuildQuarter(Q1, Today, CancellationToken.None);
+            await rebuild.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        (await Masks())[_apple.Id].Should().Be(0, "the withdrawn filing's bit is cleared");
+        await using var read = _fixture.CreateDbContext();
+        (await read.Set<HolderIntelligenceQuarterState>().SingleAsync())
+            .DirtyAt.Should()
+            .NotBeNull("the clear and the stamp commit together");
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_ATurnoverChangeDirtiesTheThreeQuartersThatSumIt()
+    {
+        var q4 = new DateOnly(2024, 12, 31);
+        var q5 = new DateOnly(2025, 3, 31);
+        var q6 = new DateOnly(2025, 6, 30);
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                Holding(_microsoft, _holder, Q1, 100, 10_000),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 150, 18_000),
+                Holding(_microsoft, _holder, Q2, 50, 6_000),
+                new HolderIntelligenceQuarterState { ReportDate = Q3 },
+                new HolderIntelligenceQuarterState { ReportDate = q4 },
+                new HolderIntelligenceQuarterState { ReportDate = q5 },
+                new HolderIntelligenceQuarterState { ReportDate = q6 }
+            )
+        );
+        await Rebuild(Q1);
+        await Rebuild(Q2);
+        await using (var mutate = _fixture.CreateDbContext())
+        {
+            await mutate
+                .Set<HolderIntelligenceQuarterState>()
+                .ExecuteUpdateAsync(setters =>
+                    setters.SetProperty(state => state.DirtyAt, (DateTime?)null)
+                );
+            // An amendment to Q1 changes Q2's trades but not which securities are held.
+            await mutate
+                .Set<InstitutionalHolding>()
+                .Where(holding =>
+                    holding.ReportDate == Q1 && holding.EquityIssuerId == _microsoft.Id
+                )
+                .ExecuteUpdateAsync(setters =>
+                    setters.SetProperty(h => h.Shares, 80).SetProperty(h => h.Value, 8_000)
+                );
+        }
+
+        await Rebuild(Q2);
+
+        await using var read = _fixture.CreateDbContext();
+        var states = await read.Set<HolderIntelligenceQuarterState>()
+            .ToDictionaryAsync(state => state.ReportDate, state => state.DirtyAt);
+        states[Q3].Should().NotBeNull();
+        states[q4].Should().NotBeNull();
+        states[q5].Should().NotBeNull();
+        states[q6].Should().BeNull("only three later quarters sum this turnover");
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_KeepsSiblingShareClassesApart()
+    {
+        var berkshire = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BRKA",
+            Name: "Berkshire",
+            SecondaryTickers: ["BRKB"]
+        );
+        await Seed(seed => seed.Add(berkshire));
+        await Seed(seed =>
+            seed.AddRange(
+                Split(berkshire, new DateOnly(2024, 5, 15), "BRKA"),
+                Filing(_holder, Q1),
+                Holding(berkshire, _holder, Q1, 100, 10_000),
+                Holding(berkshire, _holder, Q1, 100, 1_000, listedTicker: "BRKB"),
+                Filing(_holder, Q2),
+                Holding(berkshire, _holder, Q2, 200, 10_000),
+                Holding(berkshire, _holder, Q2, 100, 1_100, listedTicker: "BRKB")
+            )
+        );
+
+        await Rebuild(Q1);
+        await Rebuild(Q2);
+
+        var metrics = await Metrics(Q2);
+        metrics.IncreasedCount.Should().Be(0, "the split restates only the class it names");
+        metrics.ReducedCount.Should().Be(0);
+        metrics.StockCount.Should().Be(1, "both classes are one issuer");
+        await using var read = _fixture.CreateDbContext();
+        var rows = await read.Set<HolderStockPresence>()
+            .Where(row => row.EquityIssuerId == berkshire.Id)
+            .Select(row => new { row.ListedTicker, row.HeldMask })
+            .ToListAsync();
+        rows.Should()
+            .BeEquivalentTo([
+                new { ListedTicker = (string)null, HeldMask = Bits(Q1, Q2) },
+                new { ListedTicker = "BRKB", HeldMask = Bits(Q1, Q2) },
+            ]);
+    }
+
+    [Fact]
     public async Task RebuildQuarter_RefusesAnOpenOrUncoveredQuarter()
     {
         (await Rebuild(new DateOnly(2024, 12, 31))).Should().BeFalse("its filing window is open");
@@ -355,6 +515,32 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DrainOnce_AFailedRebuildCountsTheFailureAndStampsAgain()
+    {
+        await Seed(seed =>
+            seed.AddRange(Filing(_holder, Q1), Holding(_apple, _holder, Q1, 100, 10_000))
+        );
+        var before = DateTime.UtcNow.AddSeconds(-1);
+        var worker = new TestDrainWorker(
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            beforeRebuild: reportDate =>
+                reportDate == Q1
+                    ? Task.FromException(new InvalidOperationException("boom"))
+                    : Task.CompletedTask
+        );
+
+        await worker.DrainOnce(Today, CancellationToken.None);
+
+        await using var read = _fixture.CreateDbContext();
+        var state = await read.Set<HolderIntelligenceQuarterState>()
+            .SingleAsync(s => s.ReportDate == Q1);
+        state.FailureCount.Should().Be(1);
+        state.LastError.Should().Be("boom");
+        state.DirtyAt.Should().BeAfter(before);
+        state.ComputedAt.Should().BeNull();
+    }
+
+    [Fact]
     public async Task BaseRebuild_StampsTheQuarterAndTheNextOne()
     {
         await Seed(seed =>
@@ -437,11 +623,13 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         long shares,
         long value,
         FilingType type = FilingType.Form13F,
-        OptionType? optionType = null
+        OptionType? optionType = null,
+        string listedTicker = null
     ) =>
         new()
         {
             EquityIssuerId = issuer.Id,
+            ListedTicker = listedTicker,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(40),
             ReportDate = reportDate,
@@ -452,7 +640,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             FilingType = type,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = $"{holder.Cik}-{reportDate:yyyyMMdd}-{type}",
-            Cusip = issuer.Presentation.Listing.Ticker.PadRight(9, '0'),
+            Cusip = (listedTicker ?? issuer.Presentation.Listing.Ticker).PadRight(9, '0'),
         };
 
     private static StockSplit Split(
@@ -471,6 +659,20 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             Denominator = 1m,
             Source = StockSplitSource.External,
         };
+
+    private sealed class FailingPublishRefreshService(
+        EquiblesFinancialDbContext dbContext,
+        HoldingsCorpusCoverage corpusCoverage
+    )
+        : HolderIntelligenceRefreshService(
+            dbContext,
+            corpusCoverage,
+            NullLogger<HolderIntelligenceRefreshService>.Instance
+        )
+    {
+        protected override Task BeforePublish(DateOnly reportDate) =>
+            throw new InvalidOperationException("publish failed");
+    }
 
     private sealed class TestDrainWorker : HolderIntelligenceDrainWorker
     {

@@ -29,6 +29,9 @@ public class HolderIntelligenceRefreshService
 
     internal const int HolderBatchSize = 250;
 
+    // A quarter-wide aggregate over millions of holdings outlasts the default 30-second timeout.
+    internal static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(30);
+
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly HoldingsCorpusCoverage _corpusCoverage;
     private readonly ILogger<HolderIntelligenceRefreshService> _logger;
@@ -71,6 +74,7 @@ public class HolderIntelligenceRefreshService
     {
         if (!IsComputable(reportDate, today))
             return false;
+        _dbContext.Database.SetCommandTimeout(CommandTimeout);
         var quarter = HolderTenureCalculator.QuarterIndex(reportDate).Value;
         var bit = HolderTenureCalculator.Set(0, quarter);
         var previous = HoldingsCorpusCoverage.PreviousQuarterEnd(reportDate);
@@ -86,24 +90,7 @@ public class HolderIntelligenceRefreshService
                 ? (await LoadFilers(previous, cancellationToken)).ToHashSet()
                 : [];
 
-        // A filer whose 13F for the quarter is gone no longer holds anything in it.
-        var presenceChanged =
-            await _dbContext
-                .Set<HolderStockPresence>()
-                .Where(presence =>
-                    (presence.HeldMask & bit) != 0
-                    && !_dbContext
-                        .Set<InstitutionalFiling>()
-                        .Any(filing =>
-                            filing.InstitutionalHolderId == presence.InstitutionalHolderId
-                            && filing.ReportDate == reportDate
-                            && filing.FilingType == FilingType.Form13F
-                        )
-                )
-                .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(p => p.HeldMask, p => p.HeldMask & ~bit),
-                    cancellationToken
-                ) > 0;
+        var presenceChanged = await ClearNonFilers(reportDate, bit, cancellationToken);
 
         var metrics = new List<HolderQuarterlyMetrics>(filers.Count);
         foreach (var batch in filers.Chunk(HolderBatchSize))
@@ -118,23 +105,17 @@ public class HolderIntelligenceRefreshService
                 cancellationToken
             );
             metrics.AddRange(results.Select(result => result.Result.Metrics));
-            presenceChanged |= await WritePresence(results, presenceIds, bit, cancellationToken);
+            presenceChanged |= await WritePresence(
+                results,
+                presenceIds,
+                reportDate,
+                bit,
+                cancellationToken
+            );
         }
 
-        await using (var transaction = await BeginTransaction(cancellationToken))
-        {
-            await _dbContext
-                .Set<HolderQuarterlyMetrics>()
-                .Where(row => row.ReportDate == reportDate)
-                .ExecuteDeleteAsync(cancellationToken);
-            _dbContext.Set<HolderQuarterlyMetrics>().AddRange(metrics);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            if (presenceChanged)
-                await DirtyLaterQuarters(reportDate, cancellationToken);
-            if (transaction != null)
-                await transaction.CommitAsync(cancellationToken);
-        }
-        _dbContext.ChangeTracker.Clear();
+        await BeforePublish(reportDate);
+        await Publish(reportDate, metrics, cancellationToken);
 
         _logger.LogInformation(
             "Holder intelligence for {ReportDate}: {Count} filers, presence changed: {Changed}",
@@ -158,12 +139,17 @@ public class HolderIntelligenceRefreshService
         CancellationToken cancellationToken
     )
     {
+        // Nothing before the corpus is a baseline, so its rows are never read.
+        var readPrevious = previousFilers.Count > 0;
         var rows = await _dbContext
             .Set<InstitutionalHolding>()
             .AsNoTracking()
             .Where(holding =>
                 holderIds.Contains(holding.InstitutionalHolderId)
-                && (holding.ReportDate == reportDate || holding.ReportDate == previous)
+                && (
+                    holding.ReportDate == reportDate
+                    || readPrevious && holding.ReportDate == previous
+                )
                 && holding.FilingType == FilingType.Form13F
             )
             .Select(holding => new HolderIntelligenceRow
@@ -256,14 +242,11 @@ public class HolderIntelligenceRefreshService
 
     private Task<List<PresenceRow>> LoadPresence(
         IReadOnlyCollection<Guid> holderIds,
-        CancellationToken cancellationToken,
-        bool emptyOnly = false
+        CancellationToken cancellationToken
     ) =>
         _dbContext
             .Set<HolderStockPresence>()
-            .Where(row =>
-                holderIds.Contains(row.InstitutionalHolderId) && (!emptyOnly || row.HeldMask == 0)
-            )
+            .Where(row => holderIds.Contains(row.InstitutionalHolderId))
             .Select(row => new PresenceRow
             {
                 Id = row.Id,
@@ -331,10 +314,11 @@ public class HolderIntelligenceRefreshService
     }
 
     // Sets and clears the batch's presence bits relative to the stored masks, so a concurrent
-    // rebuild of another quarter never loses its own bit. Returns whether any bit changed.
+    // rebuild of another quarter never loses its own bit, and stamps later quarters with them.
     private async Task<bool> WritePresence(
         List<(Guid HolderId, HolderQuarterResult Result)> results,
         Dictionary<PresenceKey, Guid> presenceIds,
+        DateOnly reportDate,
         long bit,
         CancellationToken cancellationToken
     )
@@ -364,7 +348,7 @@ public class HolderIntelligenceRefreshService
         {
             await InsertPresence(missing, cancellationToken);
             var holderIds = missing.Select(key => key.HolderId).Distinct().ToList();
-            foreach (var row in await LoadPresence(holderIds, cancellationToken, emptyOnly: true))
+            foreach (var row in await LoadPresence(holderIds, cancellationToken))
                 presenceIds[row.Key] = row.Id;
         }
         var setIds = toSet.Select(key => presenceIds[key]).ToList();
@@ -383,6 +367,7 @@ public class HolderIntelligenceRefreshService
                 setters => setters.SetProperty(row => row.HeldMask, row => row.HeldMask & ~bit),
                 cancellationToken
             );
+        await DirtyLaterQuarters(reportDate, null, cancellationToken);
         if (transaction != null)
             await transaction.CommitAsync(cancellationToken);
         return true;
@@ -409,19 +394,113 @@ public class HolderIntelligenceRefreshService
             .NoUpdate()
             .RunAsync(cancellationToken);
 
-    // A later quarter's tenure reads this quarter's bits: stamp it with a fresh time already past
-    // the cooldown, so the drain picks it up next and a rebuild already reading it re-runs.
-    private Task DirtyLaterQuarters(DateOnly reportDate, CancellationToken cancellationToken)
+    // Stamps later quarters, up to through when given, with a fresh time already past the
+    // cooldown, so the drain picks them up next and a rebuild already reading them re-runs.
+    private Task DirtyLaterQuarters(
+        DateOnly reportDate,
+        DateOnly? through,
+        CancellationToken cancellationToken
+    )
     {
         var stamp = DateTime.UtcNow - Cooldown - TimeSpan.FromSeconds(1);
+        var last = through ?? DateOnly.MaxValue;
         return _dbContext
             .Set<HolderIntelligenceQuarterState>()
-            .Where(state => state.ReportDate > reportDate)
+            .Where(state => state.ReportDate > reportDate && state.ReportDate <= last)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(state => state.DirtyAt, stamp),
                 cancellationToken
             );
     }
+
+    // A filer whose 13F for the quarter is gone no longer holds anything in it; the clear and
+    // the stamp of the later quarters whose tenure reads it commit together.
+    private async Task<bool> ClearNonFilers(
+        DateOnly reportDate,
+        long bit,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var transaction = await BeginTransaction(cancellationToken);
+        var cleared = await _dbContext
+            .Set<HolderStockPresence>()
+            .Where(presence =>
+                (presence.HeldMask & bit) != 0
+                && !_dbContext
+                    .Set<InstitutionalFiling>()
+                    .Any(filing =>
+                        filing.InstitutionalHolderId == presence.InstitutionalHolderId
+                        && filing.ReportDate == reportDate
+                        && filing.FilingType == FilingType.Form13F
+                    )
+            )
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(p => p.HeldMask, p => p.HeldMask & ~bit),
+                cancellationToken
+            );
+        if (cleared > 0)
+            await DirtyLaterQuarters(reportDate, null, cancellationToken);
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+        return cleared > 0;
+    }
+
+    // Replaces the quarter's metrics in one transaction. A changed filer set re-dirties every later
+    // quarter (tenure bridges unfiled quarters); a changed turnover the three whose trailing sum reads it.
+    private async Task Publish(
+        DateOnly reportDate,
+        List<HolderQuarterlyMetrics> metrics,
+        CancellationToken cancellationToken
+    )
+    {
+        await using (var transaction = await BeginTransaction(cancellationToken))
+        {
+            var stored = await _dbContext
+                .Set<HolderQuarterlyMetrics>()
+                .Where(row => row.ReportDate == reportDate)
+                .Select(row => new { row.InstitutionalHolderId, row.Turnover })
+                .ToDictionaryAsync(
+                    row => row.InstitutionalHolderId,
+                    row => row.Turnover,
+                    cancellationToken
+                );
+            await _dbContext
+                .Set<HolderQuarterlyMetrics>()
+                .Where(row => row.ReportDate == reportDate)
+                .ExecuteDeleteAsync(cancellationToken);
+            _dbContext.Set<HolderQuarterlyMetrics>().AddRange(metrics);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var filersChanged =
+                stored.Count != metrics.Count
+                || metrics.Any(row => !stored.ContainsKey(row.InstitutionalHolderId));
+            if (filersChanged)
+                await DirtyLaterQuarters(reportDate, null, cancellationToken);
+            else if (
+                metrics.Any(row => TurnoverChanged(stored[row.InstitutionalHolderId], row.Turnover))
+            )
+                await DirtyLaterQuarters(
+                    reportDate,
+                    reportDate.AddDays(1).AddMonths(3 * TrailingQuarters).AddDays(-1),
+                    cancellationToken
+                );
+            if (transaction != null)
+                await transaction.CommitAsync(cancellationToken);
+        }
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    // The stored turnover is rounded to the column's six decimals.
+    private static bool TurnoverChanged(decimal? stored, decimal? current) =>
+        stored == null || current == null
+            ? stored != current
+            : Math.Abs(stored.Value - current.Value) >= 0.000001m;
+
+    // The quarters after this one whose trailing annual turnover sums its turnover.
+    private const int TrailingQuarters = 3;
+
+    // Test seam for a failure after the presence bits are written and before the metrics publish.
+    protected virtual Task BeforePublish(DateOnly reportDate) => Task.CompletedTask;
 
     // Every 13F filer's common-share value per issuer, the benchmark aggregate active share uses.
     private Task<Dictionary<Guid, decimal>> LoadAggregateBenchmark(

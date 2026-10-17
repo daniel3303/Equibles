@@ -9,12 +9,10 @@ namespace Equibles.Holdings.BusinessLogic.Intelligence;
 public static class HolderTurnoverCalculator
 {
     /// <summary>
-    /// <paramref name="previous"/> is null when the filer filed no 13F the quarter before; its shares
-    /// must already be restated onto the current quarter's basis. A security held on both sides whose
-    /// split basis could not be resolved (<paramref name="unresolvedBasis"/>) is an unpriced trade of
-    /// unknown direction. <paramref name="averagePrices"/> are per share on the current quarter's
-    /// basis, so a stored close series restated for a later split must be put back on it first; a
-    /// price of zero or less counts as missing.
+    /// <paramref name="previous"/> (null without a 13F the quarter before) and
+    /// <paramref name="averagePrices"/> (a price of zero or less is missing) are on the current
+    /// quarter's share basis. A security held on both sides in <paramref name="unresolvedBasis"/> is
+    /// an unpriced trade of unknown direction.
     /// </summary>
     public static HolderTradeSummary Trades(
         IReadOnlyList<HolderEquityPosition> current,

@@ -1,3 +1,4 @@
+using Equibles.Core.Extensions;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.Data.Models;
@@ -8,12 +9,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService;
 
 /// <summary>
-/// Rebuilds dirty holder-intelligence quarters, oldest first, once their stamp is past the
-/// cooldown; a stamp before the corpus's first complete quarter is never drained. Every
-/// computable quarter gets a state row, and a row computed by an older
-/// <see cref="HolderIntelligenceRefreshService.CalculationVersion"/> is dirtied again. A rebuild
-/// clears the stamp only when it still holds the value read just before the rebuild, so a stamp
-/// written meanwhile survives for another pass.
+/// Rebuilds every computable holder-intelligence quarter whose stamp is past the cooldown, oldest
+/// first, including quarters computed by an older calculation version. A stamp is cleared only
+/// while it still holds the value read before the rebuild, so a stamp written meanwhile survives.
 /// </summary>
 public class HolderIntelligenceDrainWorker : BackgroundService
 {
@@ -44,7 +42,7 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                 {
                     await DrainOnce(DateOnly.FromDateTime(DateTime.UtcNow), stoppingToken);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                 {
                     _logger.LogError(ex, "Holder intelligence drain tick failed; retrying");
                 }
@@ -131,7 +129,7 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                     cancellationToken
                 );
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(
                 ex,
@@ -148,7 +146,10 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                                 state => state.FailureCount,
                                 state => state.FailureCount + 1
                             )
-                            .SetProperty(state => state.LastError, ex.Message),
+                            .SetProperty(
+                                state => state.LastError,
+                                ex.GetBaseException().Message.TruncateToFit(2000)
+                            ),
                     CancellationToken.None
                 );
         }
