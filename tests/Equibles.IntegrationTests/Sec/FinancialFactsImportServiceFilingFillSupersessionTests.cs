@@ -116,6 +116,49 @@ public class FinancialFactsImportServiceFilingFillSupersessionTests : IAsyncLife
         rows.Should().HaveCount(5);
     }
 
+    [Fact]
+    public async Task Import_NothingNewFiled_StillSupersedesFillsOnALateProcessedAccession()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "CHEF",
+            Name: "Chefs' Warehouse",
+            Cik: Cik
+        );
+        var eps = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "EarningsPerShareDiluted",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.AddRange(issuer, eps);
+            await seed.SaveChangesAsync();
+        }
+        var client = Substitute.For<ISecEdgarClient>();
+        client
+            .GetCompanyFacts(Cik)
+            .Returns(Response(("Revenues", "USD", EmittedAccession, 1_168_613_000m)));
+        await Sut(client).Import(issuer, CancellationToken.None);
+
+        // The watermark already covers the accession's filed date when the fill shows up.
+        FinancialFact unstated;
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            unstated = Fill(issuer, eps, EmittedAccession, DocumentType.TenQ, 0.76m, "USD/shares");
+            unstated.FinancialConceptId = eps.Id;
+            unstated.FinancialConcept = null;
+            seed.Add(unstated);
+            await seed.SaveChangesAsync();
+        }
+        await Sut(client).Import(issuer, CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<FinancialFact>().AnyAsync(f => f.Id == unstated.Id))
+            .Should()
+            .BeFalse("the nothing-new skip must not keep a superseded fill");
+    }
+
     private FinancialFactsImportService Sut(ISecEdgarClient client) =>
         new(
             ScopeFactory(),

@@ -5613,6 +5613,10 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("DocumentId");
 
+                    b.HasIndex("EquityIssuerId", "AccessionNumber")
+                        .HasDatabaseName("IX_FinancialFact_FilingXbrlFill")
+                        .HasFilter("\"Source\" = 1 AND \"DimensionsKey\" = ''");
+
                     b.HasIndex("FinancialConceptId", "PeriodEnd");
 
                     b.HasIndex("EquityIssuerId", "FinancialConceptId", "PeriodEnd");

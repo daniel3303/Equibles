@@ -87,7 +87,11 @@ public class XbrlFactExtractionService
     /// <summary>Filing date from which every captured 10-Q/10-K joins the version-9 replay.</summary>
     internal static readonly DateOnly TargetedReplayFiledSince = new(2026, 1, 1);
 
-    /// <summary>Domestic periodic forms whose consolidated facts may fill a Company Facts gap.</summary>
+    /// <summary>
+    /// Domestic periodic forms whose consolidated facts may fill a Company Facts gap. EF queries
+    /// spell the same set out (XbrlFactsExtractionWorker.SelectDueDocuments,
+    /// FinancialFactsImportService.DeleteSupersededFilingFills); keep them in step.
+    /// </summary>
     internal static readonly DocumentType[] DomesticPeriodicForms =
     [
         DocumentType.TenQ,
@@ -317,7 +321,20 @@ public class XbrlFactExtractionService
         }
         await PersistDimensions(document, dimensionsByKey, cancellationToken);
 
-        var persistedCount = facts.Count + consolidatedFills.Count;
+        // Company Facts may have imported the accession while these fills were written; its
+        // cleanup ran before they existed, so withdraw them here instead.
+        var withdrawnFills = 0;
+        if (
+            periodicFill
+            && consolidatedFills.Count > 0
+            && await HasCompanyFactsCoverage(document, cancellationToken)
+        )
+        {
+            await WithdrawPeriodicFills(document, cancellationToken);
+            withdrawnFills = consolidatedFills.Count;
+        }
+
+        var persistedCount = facts.Count + consolidatedFills.Count - withdrawnFills;
         if (deferredCalendarFacts > 0)
             throw new FiscalCalendarEvidencePendingException(persistedCount, deferredCalendarFacts);
         return persistedCount;
@@ -334,17 +351,39 @@ public class XbrlFactExtractionService
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        return await dbContext
+        var companyFacts = dbContext
             .Set<FinancialFact>()
-            .AnyAsync(
+            .Where(f =>
+                f.DimensionsKey == ""
+                && f.Source == FinancialFactSource.CompanyFacts
+                && f.FinancialConcept.Taxonomy != FactTaxonomy.Custom
+            );
+        // The importer links its rows to the stored document, so the DocumentId index answers
+        // the common covered case; the accession probe catches rows imported before the
+        // document was stored.
+        return await companyFacts.AnyAsync(f => f.DocumentId == document.Id, cancellationToken)
+            || await companyFacts.AnyAsync(
                 f =>
                     f.EquityIssuerId == document.EquityIssuerId
-                    && f.AccessionNumber == document.AccessionNumber
-                    && f.DimensionsKey == ""
-                    && f.Source == FinancialFactSource.CompanyFacts
-                    && f.FinancialConcept.Taxonomy != FactTaxonomy.Custom,
+                    && f.AccessionNumber == document.AccessionNumber,
                 cancellationToken
             );
+    }
+
+    private async Task WithdrawPeriodicFills(Document document, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        await dbContext
+            .Set<FinancialFact>()
+            .Where(f =>
+                f.EquityIssuerId == document.EquityIssuerId
+                && f.AccessionNumber == document.AccessionNumber
+                && f.DimensionsKey == ""
+                && f.Source == FinancialFactSource.FilingXbrl
+                && f.FinancialConcept.Taxonomy != FactTaxonomy.Custom
+            )
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     /// <summary>

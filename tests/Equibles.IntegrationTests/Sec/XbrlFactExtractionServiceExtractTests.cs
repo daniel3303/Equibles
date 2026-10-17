@@ -607,6 +607,43 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             .Be(0);
     }
 
+    // Company Facts coverage means a consolidated standard row on this accession: extension and
+    // dimensional rows (which predate Source and read CompanyFacts) and the issuer's other
+    // accessions never stand in for it.
+    [Theory]
+    [InlineData("custom")]
+    [InlineData("dimensional")]
+    [InlineData("other-accession")]
+    public async Task Extract_RowsThatAreNotCoverageOfThisAccession_StillFill(string shape)
+    {
+        var document = await SeedChefQuarter();
+        DbContext.Add(
+            new FinancialFact
+            {
+                EquityIssuerId = document.EquityIssuerId,
+                FinancialConcept = new FinancialConcept
+                {
+                    Taxonomy = shape == "custom" ? FactTaxonomy.Custom : FactTaxonomy.UsGaap,
+                    Tag = shape == "custom" ? "chef:CustomerCount" : "CompanyFactsCoverageProbe",
+                },
+                Unit = "USD",
+                PeriodType = FactPeriodType.Instant,
+                PeriodStart = document.ReportingForDate,
+                PeriodEnd = document.ReportingForDate,
+                Value = 1m,
+                Form = DocumentType.TenQ,
+                FiledDate = document.ReportingDate,
+                AccessionNumber =
+                    shape == "other-accession" ? "0001517175-26-000023" : ChefAccession,
+                DimensionsKey = shape == "dimensional" ? new string('a', 64) : "",
+                Source = FinancialFactSource.CompanyFacts,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(5);
+    }
+
     [Theory]
     [InlineData("EightK", "0001517175")]
     [InlineData("TenQ", "0000320193")]

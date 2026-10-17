@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261017203549_AddFinancialFactSource")]
+    [Migration("20261017205920_AddFinancialFactSource")]
     partial class AddFinancialFactSource
     {
         /// <inheritdoc />
@@ -5615,6 +5615,10 @@ namespace Equibles.Migrations.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DocumentId");
+
+                    b.HasIndex("EquityIssuerId", "AccessionNumber")
+                        .HasDatabaseName("IX_FinancialFact_FilingXbrlFill")
+                        .HasFilter("\"Source\" = 1 AND \"DimensionsKey\" = ''");
 
                     b.HasIndex("FinancialConceptId", "PeriodEnd");
 

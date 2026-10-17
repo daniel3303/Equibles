@@ -215,11 +215,18 @@ public class FinancialFactsImportService
 
         var syncStatus = await GetSyncStatus(stock, cancellationToken);
         var lastSeen = syncStatus?.LastFiledDateSeen;
+        // A filing SEC processed late carries an old filed date, so the watermark alone would skip
+        // the Company Facts rows that supersede its filing-XBRL fills.
         if (
             syncStatus?.ImporterVersion >= CurrentImporterVersion
             && syncStatus.CalendarEvidenceFingerprint == calendar.Fingerprint
             && lastSeen.HasValue
             && lastSeen.Value >= maxFiled
+            && !await HasSupersededFilingFills(
+                stock,
+                parsed.Select(p => p.Accession).Distinct().ToList(),
+                cancellationToken
+            )
         )
         {
             // Nothing filed since the last successful sync — record the check
@@ -808,11 +815,7 @@ public class FinancialFactsImportService
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    // A 10-Q/10-K consolidated fill stands in for Company Facts only until the API carries its
-    // accession. The upsert above re-stamped every fill the API re-emitted, so a fill still on an
-    // emitted accession is one the API does not state, and goes. Extension concepts and dimensional
-    // rows never reach the API, and foreign-form fills keep filling what it omits.
-    private async Task DeleteSupersededFilingFills(
+    private async Task<bool> HasSupersededFilingFills(
         EquityIssuer stock,
         List<string> emittedAccessions,
         CancellationToken cancellationToken
@@ -820,7 +823,18 @@ public class FinancialFactsImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var deleted = await dbContext
+        return await PeriodicFilingFills(dbContext, stock, emittedAccessions)
+            .AnyAsync(cancellationToken);
+    }
+
+    // The consolidated 10-Q/10-K filing-XBRL fills of the issuer on accessions Company Facts
+    // emits. The form list mirrors XbrlFactExtractionService.DomesticPeriodicForms.
+    private static IQueryable<FinancialFact> PeriodicFilingFills(
+        EquiblesFinancialDbContext dbContext,
+        EquityIssuer stock,
+        List<string> emittedAccessions
+    ) =>
+        dbContext
             .Set<FinancialFact>()
             .Where(f =>
                 f.EquityIssuerId == stock.Id
@@ -834,7 +848,21 @@ public class FinancialFactsImportService
                     || f.Form == DocumentType.TenKa
                 )
                 && emittedAccessions.Contains(f.AccessionNumber)
-            )
+            );
+
+    // A 10-Q/10-K consolidated fill stands in for Company Facts only until the API carries its
+    // accession. The upsert above re-stamped every fill the API re-emitted, so a fill still on an
+    // emitted accession is one the API does not state, and goes. Extension concepts and dimensional
+    // rows never reach the API, and foreign-form fills keep filling what it omits.
+    private async Task DeleteSupersededFilingFills(
+        EquityIssuer stock,
+        List<string> emittedAccessions,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var deleted = await PeriodicFilingFills(dbContext, stock, emittedAccessions)
             .ExecuteDeleteAsync(cancellationToken);
         if (deleted > 0)
             _logger.LogInformation(

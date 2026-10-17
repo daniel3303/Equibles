@@ -181,6 +181,7 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
             || (
                 d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
                 && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
+                // XbrlFactExtractionService.DomesticPeriodicForms, spelled out for EF.
                 && (
                     d.DocumentType == DocumentType.TenQ
                     || d.DocumentType == DocumentType.TenQa
