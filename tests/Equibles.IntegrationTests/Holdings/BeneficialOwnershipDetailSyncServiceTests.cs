@@ -98,8 +98,15 @@ public class BeneficialOwnershipDetailSyncServiceTests : ParadeDbMcpTestBase
         (await Accessions()).Should().BeEquivalentTo([MorganStanley13G, AyurMaya13D]);
     }
 
-    [Fact]
-    public async Task SyncMissing_EdgarOutage_StopsWithoutMarkingAnything()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task SyncMissing_EdgarOutage_StopsTheWholePassWithoutMarkingOrContinuing(
+        HttpStatusCode? status
+    )
     {
         await SeedFiling(
             MorganStanley13G,
@@ -107,24 +114,92 @@ public class BeneficialOwnershipDetailSyncServiceTests : ParadeDbMcpTestBase
             FilingType.Schedule13G,
             new DateOnly(2026, 10, 9)
         );
-        _edgar
-            .GetDocumentFileBytes(
-                Arg.Any<string>(),
-                MorganStanley13G,
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>()
-            )
-            .ThrowsAsync(
-                new HttpRequestException(
-                    "Service Unavailable",
-                    null,
-                    HttpStatusCode.ServiceUnavailable
-                )
-            );
+        await SeedFiling(AyurMaya13D, "1975990", FilingType.Schedule13D, new DateOnly(2025, 5, 23));
+        Serve(AyurMaya13D, "sc13d-multiple-type-codes.xml");
+        Throw(MorganStanley13G, new HttpRequestException("EDGAR unavailable", null, status));
 
-        (await Sut().SyncMissing(10, CancellationToken.None)).Should().BeTrue();
+        (await Sut().SyncMissing(1, CancellationToken.None)).Should().BeFalse();
 
         (await Accessions()).Should().BeEmpty();
+        await _edgar
+            .DidNotReceive()
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                AyurMaya13D,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Gone)]
+    public async Task SyncMissing_EdgarRefusesTheDocument_MarksItUnreadableAndMovesOn(
+        HttpStatusCode status
+    )
+    {
+        await SeedFiling(
+            MorganStanley13G,
+            "895421",
+            FilingType.Schedule13G,
+            new DateOnly(2026, 10, 9)
+        );
+        await SeedFiling(AyurMaya13D, "1975990", FilingType.Schedule13D, new DateOnly(2025, 5, 23));
+        Serve(AyurMaya13D, "sc13d-multiple-type-codes.xml");
+        Throw(MorganStanley13G, new HttpRequestException("Refused", null, status));
+
+        await Sut().SyncMissing(10, CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var details = await verify
+            .Set<BeneficialOwnershipFiling>()
+            .ToDictionaryAsync(f => f.AccessionNumber);
+        details[MorganStanley13G].IsUnreadable.Should().BeTrue();
+        details[AyurMaya13D].IsUnreadable.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SyncMissing_TimeoutOrUnexpectedFailure_SkipsTheDocumentWithoutMarkingIt()
+    {
+        await SeedFiling(
+            MorganStanley13G,
+            "895421",
+            FilingType.Schedule13G,
+            new DateOnly(2026, 10, 9)
+        );
+        await SeedFiling(AyurMaya13D, "1975990", FilingType.Schedule13D, new DateOnly(2025, 5, 23));
+        await SeedFiling(
+            "0000902664-25-000001",
+            "1975990",
+            FilingType.Schedule13D,
+            new DateOnly(2025, 1, 2)
+        );
+        Serve("0000902664-25-000001", "sc13d-multiple-type-codes.xml");
+        Throw(MorganStanley13G, new TaskCanceledException("The request timed out"));
+        Throw(AyurMaya13D, new InvalidOperationException("Unexpected"));
+
+        await Sut().SyncMissing(10, CancellationToken.None);
+
+        (await Accessions()).Should().Equal("0000902664-25-000001");
+    }
+
+    [Fact]
+    public async Task SyncMissing_PassThatStoresNothing_DoesNotContinueAtOnce()
+    {
+        await SeedFiling(
+            MorganStanley13G,
+            "895421",
+            FilingType.Schedule13G,
+            new DateOnly(2026, 10, 9)
+        );
+        await SeedFiling(AyurMaya13D, "1975990", FilingType.Schedule13D, new DateOnly(2025, 5, 23));
+        Serve(AyurMaya13D, "sc13d-multiple-type-codes.xml");
+        Throw(MorganStanley13G, new TaskCanceledException("The request timed out"));
+
+        // More remain, but the only document read this pass failed.
+        (await Sut().SyncMissing(1, CancellationToken.None))
+            .Should()
+            .BeFalse();
     }
 
     [Fact]
@@ -200,6 +275,61 @@ public class BeneficialOwnershipDetailSyncServiceTests : ParadeDbMcpTestBase
             .Equal("Morgan Stanley");
     }
 
+    [Fact]
+    public async Task Write_ConcurrentWriterStoresTheAccessionFirst_KeepsItsRowWithoutFailing()
+    {
+        var filing = new Filing13DGXmlParser().ParseFiling(
+            Asset("sc13ga-morgan-stanley-x0202.xml"),
+            MorganStanley13G,
+            "0000895421",
+            new DateOnly(2026, 10, 9)
+        );
+        await using var other = Fixture.CreateDbContext();
+        await using var transaction = await other.Database.BeginTransactionAsync();
+        other.Add(
+            new BeneficialOwnershipFiling
+            {
+                AccessionNumber = MorganStanley13G,
+                FilingType = FilingType.Schedule13G,
+                FilingDate = new DateOnly(2026, 10, 9),
+                IsUnreadable = true,
+            }
+        );
+        await other.SaveChangesAsync();
+
+        // The write's delete cannot see the uncommitted row, so its insert waits on the unique
+        // index until the other transaction commits and then fails with a unique violation.
+        var write = Writer().Write(filing, CancellationToken.None);
+        await WaitForALockWait();
+        await transaction.CommitAsync();
+        await write;
+
+        await using var verify = Fixture.CreateDbContext();
+        (await verify.Set<BeneficialOwnershipFiling>().SingleAsync())
+            .IsUnreadable.Should()
+            .BeTrue();
+        (await verify.Set<BeneficialOwnershipReportingPerson>().CountAsync()).Should().Be(0);
+    }
+
+    private async Task WaitForALockWait()
+    {
+        await using var probe = Fixture.CreateDbContext();
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (
+            await probe
+                .Database.SqlQueryRaw<int>(
+                    "SELECT count(*)::int AS \"Value\" FROM pg_stat_activity WHERE wait_event_type = 'Lock'"
+                )
+                .SingleAsync() == 0
+        )
+        {
+            DateTime
+                .UtcNow.Should()
+                .BeBefore(deadline, "the write should block on the unique index");
+            await Task.Delay(50);
+        }
+    }
+
     private void Serve(string accession, string asset) =>
         _edgar
             .GetDocumentFileBytes(
@@ -209,6 +339,16 @@ public class BeneficialOwnershipDetailSyncServiceTests : ParadeDbMcpTestBase
                 Arg.Any<CancellationToken>()
             )
             .Returns(System.Text.Encoding.UTF8.GetBytes(Asset(asset)));
+
+    private void Throw(string accession, Exception exception) =>
+        _edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                accession,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(exception);
 
     private static string Asset(string name) =>
         File.ReadAllText(

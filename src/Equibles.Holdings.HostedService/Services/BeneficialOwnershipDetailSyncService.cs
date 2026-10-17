@@ -41,8 +41,9 @@ public class BeneficialOwnershipDetailSyncService
     }
 
     /// <summary>
-    /// Reads up to <paramref name="maxFilings"/> filings without details and returns true when more
-    /// remain. An EDGAR outage ends the pass early and leaves the rest for the next one.
+    /// Reads up to <paramref name="maxFilings"/> filings without details and returns true when the
+    /// worker should continue at once: more remain and this pass stored something. An EDGAR outage
+    /// ends the pass and leaves the rest for the next cycle.
     /// </summary>
     public async Task<bool> SyncMissing(int maxFilings, CancellationToken cancellationToken)
     {
@@ -56,93 +57,111 @@ public class BeneficialOwnershipDetailSyncService
                     .Any(detail => detail.AccessionNumber == filing.AccessionNumber)
             )
             .OrderByDescending(filing => filing.FilingDate)
-            .ThenBy(filing => filing.AccessionNumber)
-            .Select(filing => new
-            {
+            .ThenByDescending(filing => filing.AccessionNumber)
+            .Select(filing => new DetailCandidate(
                 filing.AccessionNumber,
                 filing.FilingType,
                 filing.FilingDate,
-                filing.InstitutionalHolder.Cik,
-            })
+                filing.InstitutionalHolder.Cik
+            ))
             .Take(maxFilings + 1)
             .ToListAsync(cancellationToken);
 
-        var batch = candidates
-            .DistinctBy(candidate => candidate.AccessionNumber, StringComparer.OrdinalIgnoreCase)
-            .Take(maxFilings)
-            .ToList();
-        var read = 0;
+        var stored = 0;
         var unreadable = 0;
-        foreach (var candidate in batch)
+        var skipped = 0;
+        foreach (var candidate in candidates.Take(maxFilings))
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            byte[] bytes;
             try
             {
-                bytes = string.IsNullOrWhiteSpace(candidate.Cik)
-                    ? []
-                    : await _edgarClient.GetDocumentFileBytes(
-                        candidate.Cik,
-                        candidate.AccessionNumber,
-                        PrimaryDocument,
-                        cancellationToken
-                    );
+                if (await Sync(candidate, cancellationToken))
+                    stored++;
+                else
+                    unreadable++;
             }
             catch (HttpRequestException exception) when (IsOutage(exception))
             {
                 _logger.LogWarning(
                     exception,
-                    "13D/13G detail sync stopped: EDGAR is unavailable ({Status}) after {Read} filings",
+                    "13D/13G detail sync stopped: EDGAR is unavailable ({Status}) after {Stored} filings",
                     exception.StatusCode,
-                    read
+                    stored
                 );
-                return true;
+                return false;
             }
-            catch (TaskCanceledException exception)
-                when (!cancellationToken.IsCancellationRequested)
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
-                // A timed-out request is retried on a later pass rather than marked unreadable.
+                // A timeout or a failed write is retried on a later pass, never marked unreadable.
                 _logger.LogWarning(
                     exception,
-                    "13D/13G detail sync timed out on {Accession}",
+                    "13D/13G detail sync skipped {Accession} this pass",
                     candidate.AccessionNumber
                 );
-                continue;
+                skipped++;
             }
-
-            var filing = TryParse(
-                bytes,
-                candidate.AccessionNumber,
-                candidate.Cik,
-                candidate.FilingDate
-            );
-            if (filing == null)
-            {
-                // A missing or unparseable document never changes; record it so it is not refetched.
-                await _writer.WriteUnreadable(
-                    candidate.AccessionNumber,
-                    candidate.FilingType,
-                    candidate.FilingDate,
-                    candidate.Cik,
-                    cancellationToken
-                );
-                unreadable++;
-                continue;
-            }
-
-            await _writer.Write(filing, cancellationToken);
-            read++;
         }
 
-        if (batch.Count > 0)
+        if (candidates.Count > 0)
             _logger.LogInformation(
-                "13D/13G detail sync stored {Read} filings and marked {Unreadable} unreadable",
-                read,
-                unreadable
+                "13D/13G detail sync stored {Stored} filings, marked {Unreadable} unreadable and skipped {Skipped}",
+                stored,
+                unreadable,
+                skipped
             );
 
-        return candidates.Count > maxFilings;
+        // Documents that keep failing stay at the head of the order, so a pass that stored nothing
+        // waits for the next cycle instead of fetching them again at once.
+        return candidates.Count > maxFilings && stored + unreadable > 0;
+    }
+
+    // Returns true when the details were stored, false when the filing was recorded as unreadable.
+    private async Task<bool> Sync(DetailCandidate candidate, CancellationToken cancellationToken)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = string.IsNullOrWhiteSpace(candidate.Cik)
+                ? []
+                : await _edgarClient.GetDocumentFileBytes(
+                    candidate.Cik,
+                    candidate.AccessionNumber,
+                    PrimaryDocument,
+                    cancellationToken
+                );
+        }
+        catch (HttpRequestException exception) when (!IsOutage(exception))
+        {
+            // Any refusal other than an outage is final for the document, like a 404.
+            _logger.LogInformation(
+                "EDGAR refused 13D/13G {Accession} ({Status})",
+                candidate.AccessionNumber,
+                exception.StatusCode
+            );
+            bytes = [];
+        }
+
+        var filing = TryParse(
+            bytes,
+            candidate.AccessionNumber,
+            candidate.Cik,
+            candidate.FilingDate
+        );
+        if (filing == null)
+        {
+            // A missing or unparseable document never changes; record it so it is not refetched.
+            await _writer.WriteUnreadable(
+                candidate.AccessionNumber,
+                candidate.FilingType,
+                candidate.FilingDate,
+                candidate.Cik,
+                cancellationToken
+            );
+            return false;
+        }
+
+        await _writer.Write(filing, cancellationToken);
+        return true;
     }
 
     private Parsed13DGFiling TryParse(
