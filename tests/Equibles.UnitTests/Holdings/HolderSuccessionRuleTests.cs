@@ -199,19 +199,134 @@ public class HolderSuccessionRuleTests
         Derive(stopped, started).Should().BeEmpty();
     }
 
+    [Fact]
+    public void DuplicatedIncludedManagers_CountOnceTowardTheMinimum()
+    {
+        // A NEW HOLDINGS amendment repeating the original's list is still two managers.
+        var old = Filer("71", "2020-03-31", "2024-06-30");
+        var renamed = Filer("72", "2024-09-30", "2026-06-30");
+        Report(old, "2024-06-30", "o", Managers("028-1", "028-2"));
+        Report(old, "2024-06-30", "o-a", Managers("028-1", "028-2"));
+        Report(renamed, "2024-09-30", "n", Managers("028-1", "028-2"));
+
+        Derive(old, renamed).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ManagerFiledWithoutIdentifiers_DoesNotCountTowardTheMinimum()
+    {
+        var old = Filer("81", "2020-03-31", "2024-06-30");
+        var renamed = Filer("82", "2024-09-30", "2026-06-30");
+        Report(old, "2024-06-30", "o", [.. Managers("028-1", "028-2", "028-3"), Manager()]);
+        Report(renamed, "2024-09-30", "n", Managers("028-1", "028-2", "028-3", "028-4"));
+
+        Derive(old, renamed)
+            .Should()
+            .ContainSingle()
+            .Which.Basis.Should()
+            .Be(HolderSuccessionBasis.SameIncludedManagers);
+    }
+
+    [Fact]
+    public void Evidence_IsTheFilingThatStatesTheTie()
+    {
+        var group = Filer("91", "2020-03-31", "2025-12-31");
+        var advisers = Filer("92", "2026-03-31", "2026-06-30", fileNumber: "028-16887");
+        var parent = Filer("93", "2026-03-31", "2026-06-30");
+        Report(group, "2025-12-31", "g", Manager(cik: "5"));
+        Report(group, "2025-12-31", "g-amendment", Manager(fileNumber: "028-16887"));
+        Report(parent, "2026-03-31", "p", Manager(cik: "6"));
+        Report(parent, "2026-03-31", "p-amendment", Manager(cik: "91"));
+        // The earlier period's notice is kept, whatever order the notices arrive in.
+        _notices.Add(Notice("91", "2026-06-30", "n-later", Manager(cik: "93")));
+        _notices.Add(Notice("91", "2026-03-31", "n-first", Manager(cik: "93")));
+
+        var bySuccessor = Derive(group, advisers, parent)
+            .ToDictionary(succession => succession.SuccessorHolderId);
+
+        bySuccessor[advisers.HolderId].EvidenceAccession.Should().Be("g-amendment");
+        bySuccessor[parent.HolderId].EvidenceAccession.Should().Be("n-first");
+        bySuccessor[parent.HolderId]
+            .Basis.Should()
+            .Be(
+                HolderSuccessionBasis.NoticeReportedBy
+                    | HolderSuccessionBasis.SuccessorIncludesPredecessor
+            );
+    }
+
+    [Fact]
+    public void EveryPairOfAGroup_CarriesTheWholeGroupsBookValues()
+    {
+        var group = Filer("101", "2020-03-31", "2025-12-31");
+        var fiduciary = Filer("102", "2026-03-31", "2026-06-30");
+        var advisers = Filer("103", "2026-03-31", "2026-06-30");
+        var old = Filer("104", "2020-03-31", "2025-12-31", crd: "9");
+        var renamed = Filer("105", "2026-03-31", "2026-06-30", crd: "9");
+        Report(group, "2025-12-31", "g", Manager(cik: "102"), Manager(cik: "103"));
+        Value(group, "2025-12-31", 1_000);
+        Value(fiduciary, "2026-03-31", 600);
+        Value(advisers, "2026-03-31", 350);
+        Value(old, "2025-12-31", 50);
+        Value(renamed, "2026-03-31", 55);
+
+        var successions = Derive(group, fiduciary, advisers, old, renamed);
+
+        successions
+            .Where(succession => succession.PredecessorHolderId == group.HolderId)
+            .Should()
+            .HaveCount(2)
+            .And.OnlyContain(succession =>
+                succession.PredecessorGroupValue == 1_000 && succession.SuccessorGroupValue == 950
+            );
+        var single = successions.Single(succession =>
+            succession.PredecessorHolderId == old.HolderId
+        );
+        (single.PredecessorGroupValue, single.SuccessorGroupValue).Should().Be((50L, 55L));
+    }
+
+    [Theory]
+    [InlineData("2026-10-17", "2026-06-30")]
+    [InlineData("2026-11-14", "2026-06-30")]
+    [InlineData("2026-11-15", "2026-09-30")]
+    public void LatestClosedQuarter_WaitsForTheFilingDeadline(string today, string expected)
+    {
+        HolderSuccessionRefreshService
+            .LatestClosedQuarter(DateOnly.Parse(today))
+            .Should()
+            .Be(DateOnly.Parse(expected));
+    }
+
     private List<HolderSuccession> Derive(params SuccessionFiler[] filers) =>
         HolderSuccessionRule.Derive(filers, _reports, _notices, Closed);
 
+    // Adds one filing's included managers to the filer's report for the quarter.
     private void Report(
         SuccessionFiler filer,
         string reportDate,
         string accession,
         params ManagerReference[] included
-    ) =>
-        _reports[(filer.HolderId, DateOnly.Parse(reportDate))] = new SuccessionReport(
-            accession,
-            included
-        );
+    )
+    {
+        var key = (filer.HolderId, DateOnly.Parse(reportDate));
+        var report = _reports.GetValueOrDefault(key) ?? new SuccessionReport([], 0);
+        _reports[key] = report with
+        {
+            Included =
+            [
+                .. report.Included,
+                .. included.Select(manager => new IncludedManager(manager, accession)),
+            ],
+        };
+    }
+
+    private void Value(SuccessionFiler filer, string reportDate, long value)
+    {
+        var key = (filer.HolderId, DateOnly.Parse(reportDate));
+        _reports[key] = (_reports.GetValueOrDefault(key) ?? new SuccessionReport([], 0)) with
+        {
+            TotalValue = value,
+        };
+    }
 
     private static SuccessionFiler Filer(
         string cik,

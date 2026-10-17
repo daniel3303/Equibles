@@ -6,10 +6,9 @@ using Equibles.Holdings.HostedService.Models;
 namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
-/// Finds filers whose 13F reports continue under another CIK. A predecessor files no 13F after
-/// quarter Q, a successor's first 13F is Q+1, and a filing ties them by identifier: a later 13F
-/// notice from the predecessor, the predecessor's last included managers, the successor's first
-/// included managers, or a shared identity number. Names are never compared.
+/// Finds filers whose 13F reports continue under another CIK: a predecessor files no 13F after
+/// quarter Q, a successor's first 13F is Q+1, and a filing ties them by identifier, never by name.
+/// Each pair is stamped with its group's book values (<see cref="HoldingsSuccessionGroups"/>).
 /// </summary>
 internal static class HolderSuccessionRule
 {
@@ -29,7 +28,16 @@ internal static class HolderSuccessionRule
         var noticesByCik = notices
             .Where(notice => CikNormalizer.Canonicalize(notice.FilerCik) != null)
             .GroupBy(notice => CikNormalizer.Canonicalize(notice.FilerCik), StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+            // Earliest period first, so a pair keeps the first notice that names it.
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                    group
+                        .OrderBy(notice => notice.ReportDate)
+                        .ThenBy(notice => notice.AccessionNumber, StringComparer.Ordinal)
+                        .ToList(),
+                StringComparer.Ordinal
+            );
         var startedByQuarter = filers
             .GroupBy(filer => filer.FirstReportDate)
             .ToDictionary(group => group.Key, group => group.ToList());
@@ -72,17 +80,17 @@ internal static class HolderSuccessionRule
                 foreach (var successor in index.Filers(Keys(reporter)))
                     Add(successor, HolderSuccessionBasis.NoticeReportedBy, notice.AccessionNumber);
 
-            reports.TryGetValue(
-                (predecessor.HolderId, predecessor.LastReportDate),
-                out var lastReport
-            );
-            var lastIncluded = lastReport?.Included ?? [];
-            foreach (var manager in lastIncluded)
-            foreach (var successor in index.Filers(Keys(manager)))
+            var lastIncluded =
+                reports
+                    .GetValueOrDefault((predecessor.HolderId, predecessor.LastReportDate))
+                    ?.Included
+                ?? [];
+            foreach (var included in lastIncluded)
+            foreach (var successor in index.Filers(Keys(included.Manager)))
                 Add(
                     successor,
                     HolderSuccessionBasis.IncludedInLastReport,
-                    lastReport.AccessionNumber
+                    included.AccessionNumber
                 );
 
             var ownKeys = Keys(predecessor).ToList();
@@ -90,20 +98,17 @@ internal static class HolderSuccessionRule
                 Add(
                     successor,
                     HolderSuccessionBasis.SuccessorIncludesPredecessor,
-                    index.Accession(successor)
+                    index.Accession(successor, ownKeys)
                 );
 
-            if (lastIncluded.Count >= MinimumSharedManagers)
-                foreach (var successor in index.Including(Keys(lastIncluded[0])))
-                    if (
-                        lastIncluded.All(manager =>
-                            Keys(manager).Any(index.IncludedKeys(successor).Contains)
-                        )
-                    )
+            var managers = DistinctManagers(lastIncluded);
+            if (managers.Count >= MinimumSharedManagers)
+                foreach (var successor in index.Including(managers[0]))
+                    if (managers.All(keys => keys.Any(index.IncludedKeys(successor).ContainsKey)))
                         Add(
                             successor,
                             HolderSuccessionBasis.SameIncludedManagers,
-                            index.Accession(successor)
+                            index.Accession(successor, managers[0])
                         );
 
             // A shared CIK is a filer stored under two spellings of it.
@@ -111,7 +116,63 @@ internal static class HolderSuccessionRule
                 Add(successor, HolderSuccessionBasis.SameIdentityNumber, null);
         }
 
-        return found.Values.ToList();
+        var successions = found.Values.ToList();
+        foreach (
+            var group in HoldingsSuccessionGroups.Connect(
+                successions,
+                succession => succession.SuccessorFirstReportDate,
+                succession => succession.PredecessorHolderId,
+                succession => succession.SuccessorHolderId
+            )
+        )
+        {
+            var predecessorValue = group
+                .DistinctBy(succession => succession.PredecessorHolderId)
+                .Sum(succession =>
+                    reports
+                        .GetValueOrDefault(
+                            (succession.PredecessorHolderId, succession.PredecessorLastReportDate)
+                        )
+                        ?.TotalValue
+                    ?? 0
+                );
+            var successorValue = group
+                .DistinctBy(succession => succession.SuccessorHolderId)
+                .Sum(succession =>
+                    reports
+                        .GetValueOrDefault(
+                            (succession.SuccessorHolderId, succession.SuccessorFirstReportDate)
+                        )
+                        ?.TotalValue
+                    ?? 0
+                );
+            foreach (var succession in group)
+            {
+                succession.PredecessorGroupValue = predecessorValue;
+                succession.SuccessorGroupValue = successorValue;
+            }
+        }
+        return successions;
+    }
+
+    // The included managers filed with an identifier, one entry per manager however often it is
+    // listed: rows sharing any identifier are the same manager.
+    private static List<HashSet<string>> DistinctManagers(IEnumerable<IncludedManager> included)
+    {
+        var managers = new List<HashSet<string>>();
+        foreach (var manager in included)
+        {
+            var keys = Keys(manager.Manager).ToHashSet(StringComparer.Ordinal);
+            if (keys.Count == 0)
+                continue;
+            foreach (var same in managers.Where(keys.Overlaps).ToList())
+            {
+                keys.UnionWith(same);
+                managers.Remove(same);
+            }
+            managers.Add(keys);
+        }
+        return managers;
     }
 
     // Each filed identifier as a typed key, so a CIK never matches a CRD with the same digits.
@@ -147,8 +208,9 @@ internal static class HolderSuccessionRule
         private readonly Dictionary<string, List<SuccessionFiler>> _byIncludedKey = new(
             StringComparer.Ordinal
         );
-        private readonly Dictionary<Guid, HashSet<string>> _includedKeys = [];
-        private readonly Dictionary<Guid, string> _accessions = [];
+
+        // Each started filer's included keys, with the earliest filing that listed each.
+        private readonly Dictionary<Guid, Dictionary<string, string>> _includedKeys = [];
 
         internal QuarterIndex(
             IEnumerable<SuccessionFiler> started,
@@ -160,14 +222,15 @@ internal static class HolderSuccessionRule
             {
                 foreach (var key in Keys(filer))
                     Append(_byKey, key, filer);
-                var keys = new HashSet<string>(StringComparer.Ordinal);
-                if (reports.TryGetValue((filer.HolderId, quarter), out var report))
-                {
-                    _accessions[filer.HolderId] = report.AccessionNumber;
-                    keys.UnionWith(report.Included.SelectMany(Keys));
-                }
+                var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (
+                    var included in reports.GetValueOrDefault((filer.HolderId, quarter))?.Included
+                        ?? []
+                )
+                foreach (var key in Keys(included.Manager))
+                    keys.TryAdd(key, included.AccessionNumber);
                 _includedKeys[filer.HolderId] = keys;
-                foreach (var key in keys)
+                foreach (var key in keys.Keys)
                     Append(_byIncludedKey, key, filer);
             }
         }
@@ -178,11 +241,13 @@ internal static class HolderSuccessionRule
         internal IEnumerable<SuccessionFiler> Including(IEnumerable<string> keys) =>
             Lookup(_byIncludedKey, keys);
 
-        internal HashSet<string> IncludedKeys(SuccessionFiler filer) =>
+        internal IReadOnlyDictionary<string, string> IncludedKeys(SuccessionFiler filer) =>
             _includedKeys[filer.HolderId];
 
-        internal string Accession(SuccessionFiler filer) =>
-            _accessions.GetValueOrDefault(filer.HolderId);
+        // The filing that listed the first of these keys the filer included.
+        internal string Accession(SuccessionFiler filer, IEnumerable<string> keys) =>
+            keys.Select(key => _includedKeys[filer.HolderId].GetValueOrDefault(key))
+                .FirstOrDefault(accession => accession != null);
 
         private static IEnumerable<SuccessionFiler> Lookup(
             Dictionary<string, List<SuccessionFiler>> index,

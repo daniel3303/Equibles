@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261017172107_AddHolderSuccessions")]
+    [Migration("20261017175531_AddHolderSuccessions")]
     partial class AddHolderSuccessions
     {
         /// <inheritdoc />
@@ -2860,6 +2860,9 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<long>("PredecessorGroupValue")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid>("PredecessorHolderId")
                         .HasColumnType("uuid");
 
@@ -2868,6 +2871,9 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<DateOnly>("SuccessorFirstReportDate")
                         .HasColumnType("date");
+
+                    b.Property<long>("SuccessorGroupValue")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("SuccessorHolderId")
                         .HasColumnType("uuid");

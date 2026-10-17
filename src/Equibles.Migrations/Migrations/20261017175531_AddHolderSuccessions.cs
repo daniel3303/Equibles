@@ -22,6 +22,8 @@ namespace Equibles.Migrations.Migrations
                     SuccessorFirstReportDate = table.Column<DateOnly>(type: "date", nullable: false),
                     Basis = table.Column<int>(type: "integer", nullable: false),
                     EvidenceAccession = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    PredecessorGroupValue = table.Column<long>(type: "bigint", nullable: false),
+                    SuccessorGroupValue = table.Column<long>(type: "bigint", nullable: false),
                     DerivationVersion = table.Column<int>(type: "integer", nullable: false),
                     ComputedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },

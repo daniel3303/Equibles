@@ -29,6 +29,15 @@ public class HolderSuccession
     [MaxLength(32)]
     public string EvidenceAccession { get; set; }
 
+    /// <summary>
+    /// The tracked 13F value of this pair's whole group, the pairs joined by a shared filer in
+    /// the same successor quarter: every predecessor's last quarter and every successor's first.
+    /// </summary>
+    public long PredecessorGroupValue { get; set; }
+
+    /// <summary>The successors' side of <see cref="PredecessorGroupValue"/>.</summary>
+    public long SuccessorGroupValue { get; set; }
+
     public int DerivationVersion { get; set; }
     public DateTime ComputedAt { get; set; } = DateTime.UtcNow;
 }

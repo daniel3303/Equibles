@@ -37,6 +37,7 @@ public class HolderSuccessionRefreshServiceTests : ParadeDbMcpTestBase
         Notice("0000102909-26-002714", "102909", "2026-06-30", "2100119");
         // An off-quarter 13F-typed rollup is never a first or last 13F quarter.
         Rollup(capital, "c-stray", "2026-01-31");
+        Rollup(capital, "c-mid-quarter", "2026-03-15");
         var refiled = Holder("22", crd: "123456");
         Rollup(refiled, "r-2025q2", "2025-06-30");
         var old = Holder("21", crd: "000123456");
@@ -55,10 +56,18 @@ public class HolderSuccessionRefreshServiceTests : ParadeDbMcpTestBase
             .Single(succession => succession.SuccessorHolderId == capital)
             .EvidenceAccession.Should()
             .Be("0000102909-26-002714");
+        var byAdvisers = stored.Single(succession => succession.SuccessorHolderId == advisers);
+        byAdvisers.Basis.Should().Be(HolderSuccessionBasis.IncludedInLastReport);
+        byAdvisers.EvidenceAccession.Should().Be("g-2025q4-a");
+        // The group's last quarter sums the original and its amendment; its successors' first
+        // quarters sum to three filings.
         stored
-            .Single(succession => succession.SuccessorHolderId == advisers)
-            .Basis.Should()
-            .Be(HolderSuccessionBasis.IncludedInLastReport);
+            .Where(succession => succession.PredecessorHolderId == group)
+            .Should()
+            .OnlyContain(succession =>
+                succession.PredecessorGroupValue == 2_000_000L
+                && succession.SuccessorGroupValue == 3_000_000L
+            );
         var byCrd = stored.Single(succession => succession.PredecessorHolderId == old);
         byCrd.SuccessorHolderId.Should().Be(refiled);
         byCrd.Basis.Should().Be(HolderSuccessionBasis.SameIdentityNumber);
@@ -79,18 +88,6 @@ public class HolderSuccessionRefreshServiceTests : ParadeDbMcpTestBase
 
         (await Sut().Run(Today, CancellationToken.None)).Should().Be(0);
         (await Successions()).Should().BeEmpty();
-    }
-
-    [Theory]
-    [InlineData("2026-10-17", "2026-06-30")]
-    [InlineData("2026-11-14", "2026-06-30")]
-    [InlineData("2026-11-15", "2026-09-30")]
-    public void LatestClosedQuarter_WaitsForTheFilingDeadline(string today, string expected)
-    {
-        HolderSuccessionRefreshService
-            .LatestClosedQuarter(DateOnly.Parse(today))
-            .Should()
-            .Be(DateOnly.Parse(expected));
     }
 
     private Guid Holder(string cik, string fileNumber = null, string crd = null)

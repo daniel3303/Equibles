@@ -37,21 +37,18 @@ public class HolderSuccessionRefreshService
     {
         var latestClosedQuarter = LatestClosedQuarter(today);
         var filers = await LoadFilers(cancellationToken);
-        var startQuarters = filers
-            .Select(filer =>
-                HoldingsCorpusCoverage.FirstQuarterEndOnOrAfter(filer.LastReportDate.AddDays(1))
-            )
-            .Where(quarter => quarter <= latestClosedQuarter)
-            .ToHashSet();
+        static DateOnly Next(SuccessionFiler filer) =>
+            HoldingsCorpusCoverage.FirstQuarterEndOnOrAfter(filer.LastReportDate.AddDays(1));
+        var firstQuarters = filers.Select(filer => filer.FirstReportDate).ToHashSet();
+        // A filer can only be succeeded in a closed quarter where some other filer started.
         var predecessors = filers
             .Where(filer =>
-                startQuarters.Contains(
-                    HoldingsCorpusCoverage.FirstQuarterEndOnOrAfter(filer.LastReportDate.AddDays(1))
-                )
+                Next(filer) <= latestClosedQuarter && firstQuarters.Contains(Next(filer))
             )
             .ToList();
+        var nextQuarters = predecessors.Select(Next).ToHashSet();
         var successors = filers
-            .Where(filer => startQuarters.Contains(filer.FirstReportDate))
+            .Where(filer => nextQuarters.Contains(filer.FirstReportDate))
             .ToList();
         var candidates = predecessors
             .Concat(successors)
@@ -133,7 +130,7 @@ public class HolderSuccessionRefreshService
     }
 
     // The predecessors' last and the successors' first 13F reports, with every manager each
-    // included; amendments for the same quarter add their lists to the original's.
+    // included and the tracked value; amendments for the same quarter add to the original's.
     private async Task<Dictionary<(Guid, DateOnly), SuccessionReport>> LoadReports(
         IEnumerable<SuccessionFiler> predecessors,
         IEnumerable<SuccessionFiler> successors,
@@ -141,11 +138,18 @@ public class HolderSuccessionRefreshService
     )
     {
         var wanted = predecessors
-            .Select(filer => (filer.HolderId, filer.LastReportDate))
-            .Concat(successors.Select(filer => (filer.HolderId, filer.FirstReportDate)))
+            .Select(filer => (filer.HolderId, ReportDate: filer.LastReportDate))
+            .Concat(successors.Select(filer => (filer.HolderId, ReportDate: filer.FirstReportDate)))
             .ToHashSet();
+        var reportDates = wanted.Select(item => item.ReportDate).Distinct().ToArray();
         var filings =
-            new List<(Guid HolderId, DateOnly ReportDate, string Accession, DateOnly FilingDate)>();
+            new List<(
+                Guid HolderId,
+                DateOnly ReportDate,
+                string Accession,
+                DateOnly FilingDate,
+                long TotalValue
+            )>();
         foreach (var batch in wanted.Select(item => item.HolderId).Distinct().Chunk(QueryBatchSize))
         {
             var rows = await _dbContext
@@ -154,6 +158,7 @@ public class HolderSuccessionRefreshService
                 .Where(filing =>
                     filing.FilingType == FilingType.Form13F
                     && batch.Contains(filing.InstitutionalHolderId)
+                    && reportDates.Contains(filing.ReportDate)
                 )
                 .Select(filing => new
                 {
@@ -161,6 +166,7 @@ public class HolderSuccessionRefreshService
                     filing.ReportDate,
                     filing.AccessionNumber,
                     filing.FilingDate,
+                    filing.TotalValue,
                 })
                 .ToListAsync(cancellationToken);
             filings.AddRange(
@@ -170,13 +176,14 @@ public class HolderSuccessionRefreshService
                             row.InstitutionalHolderId,
                             row.ReportDate,
                             row.AccessionNumber,
-                            row.FilingDate
+                            row.FilingDate,
+                            row.TotalValue
                         )
                     )
             );
         }
 
-        var included = new Dictionary<string, List<ManagerReference>>(StringComparer.Ordinal);
+        var included = new Dictionary<string, List<IncludedManager>>(StringComparer.Ordinal);
         foreach (var batch in filings.Select(filing => filing.Accession).Chunk(QueryBatchSize))
         {
             var rows = await _dbContext
@@ -200,11 +207,14 @@ public class HolderSuccessionRefreshService
                 if (!included.TryGetValue(row.AccessionNumber, out var list))
                     included[row.AccessionNumber] = list = [];
                 list.Add(
-                    new ManagerReference(
-                        row.Cik,
-                        row.Form13FFileNumber,
-                        row.CrdNumber,
-                        row.SecFileNumber
+                    new IncludedManager(
+                        new ManagerReference(
+                            row.Cik,
+                            row.Form13FFileNumber,
+                            row.CrdNumber,
+                            row.SecFileNumber
+                        ),
+                        row.AccessionNumber
                     )
                 );
             }
@@ -214,21 +224,14 @@ public class HolderSuccessionRefreshService
             .GroupBy(filing => (filing.HolderId, filing.ReportDate))
             .ToDictionary(
                 group => group.Key,
-                group =>
-                {
-                    var ordered = group
+                group => new SuccessionReport(
+                    group
                         .OrderBy(filing => filing.FilingDate)
                         .ThenBy(filing => filing.Accession, StringComparer.Ordinal)
-                        .ToList();
-                    return new SuccessionReport(
-                        ordered[0].Accession,
-                        ordered
-                            .SelectMany(filing =>
-                                included.GetValueOrDefault(filing.Accession) ?? []
-                            )
-                            .ToList()
-                    );
-                }
+                        .SelectMany(filing => included.GetValueOrDefault(filing.Accession) ?? [])
+                        .ToList(),
+                    group.Sum(filing => filing.TotalValue)
+                )
             );
     }
 
