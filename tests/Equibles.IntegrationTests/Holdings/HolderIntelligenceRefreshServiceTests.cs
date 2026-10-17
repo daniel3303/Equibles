@@ -25,6 +25,7 @@ namespace Equibles.IntegrationTests.Holdings;
 [Collection(ParadeDbCollection.Name)]
 public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
 {
+    private static readonly DateOnly BeforeCorpus = new(2023, 12, 31);
     private static readonly DateOnly Q1 = new(2024, 3, 31);
     private static readonly DateOnly Q2 = new(2024, 6, 30);
     private static readonly DateOnly Q3 = new(2024, 9, 30);
@@ -73,6 +74,8 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         {
             seed.Add(blockHolder);
             seed.AddRange(
+                Filing(_holder, BeforeCorpus),
+                Holding(_apple, _holder, BeforeCorpus, 100, 9_000),
                 Filing(_holder, Q1),
                 Holding(_apple, _holder, Q1, 100, 10_000),
                 Holding(_microsoft, _holder, Q1, 50, 5_000),
@@ -107,6 +110,9 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .Turnover.Should()
             .BeApproximately(5_000m / 16_500m, 0.000001m, "stored at six decimals");
         second.PutValue.Should().Be(700);
+        second
+            .AggregateActiveShare.Should()
+            .Be(0m, "the benchmark is the 13F aggregate, which here is this book alone");
         second.CalculationVersion.Should().Be(HolderIntelligenceRefreshService.CalculationVersion);
     }
 
@@ -250,14 +256,13 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     public async Task RebuildQuarter_RefusesAnOpenOrUncoveredQuarter()
     {
         (await Rebuild(new DateOnly(2024, 12, 31))).Should().BeFalse("its filing window is open");
-        (await Rebuild(new DateOnly(2023, 12, 31))).Should().BeFalse("it precedes the corpus");
+        (await Rebuild(BeforeCorpus)).Should().BeFalse("it precedes the corpus");
         (await Rebuild(new DateOnly(2024, 5, 31))).Should().BeFalse("it is not a quarter end");
     }
 
     [Fact]
     public async Task DrainOnce_ComputesEveryClosedQuarterFromTheCorpusStart()
     {
-        var beforeCorpus = new DateOnly(2023, 12, 31);
         var stamped = DateTime.UtcNow.AddDays(-1);
         await Seed(seed =>
             seed.AddRange(
@@ -265,7 +270,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
                 Holding(_apple, _holder, Q1, 100, 10_000),
                 Filing(_holder, Q3),
                 Holding(_apple, _holder, Q3, 100, 12_000),
-                new HolderIntelligenceQuarterState { ReportDate = beforeCorpus, DirtyAt = stamped }
+                new HolderIntelligenceQuarterState { ReportDate = BeforeCorpus, DirtyAt = stamped }
             )
         );
 
@@ -275,7 +280,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         var states = await read.Set<HolderIntelligenceQuarterState>()
             .OrderBy(state => state.ReportDate)
             .ToListAsync();
-        states.Select(state => state.ReportDate).Should().Equal(beforeCorpus, Q1, Q2, Q3);
+        states.Select(state => state.ReportDate).Should().Equal(BeforeCorpus, Q1, Q2, Q3);
         states[0].DirtyAt.Should().Be(stamped, "a quarter before the corpus is never drained");
         states
             .Skip(1)
