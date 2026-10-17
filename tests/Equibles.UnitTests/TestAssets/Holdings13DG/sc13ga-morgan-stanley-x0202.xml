@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13g" xmlns:com="http://www.sec.gov/edgar/common" xmlns:g="http://xml.ms.com/ns/itlnc/filelink/US13GFiling/v1.0">
+  <schemaVersion>X0202</schemaVersion>
+<headerData>
+    <submissionType>SCHEDULE 13G/A</submissionType>
+    <previousAccessionNumber/>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <cik>0000895421</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <amendmentNo>8</amendmentNo>
+      <securitiesClassTitle>4.75% Series B Cumulative Preferred Shares</securitiesClassTitle>
+      <eventDateRequiresFilingThisStatement>08/31/2026</eventDateRequiresFilingThisStatement>
+      <issuerInfo>
+        <issuerCik>0001678130</issuerCik>
+        <issuerName>RiverNorth/DoubleLine Strategic Opportunity Fund,  Inc.</issuerName>
+        <issuerCusips>
+          <issuerCusipNumber>76882G404</issuerCusipNumber>
+        </issuerCusips>
+        <issuerPrincipalExecutiveOfficeAddress>
+          <com:street1>360 S. ROSEMARY AVE</com:street1>
+          <com:street2>SUITE 1420</com:street2>
+          <com:city>WEST PALM BEACH</com:city>
+          <com:stateOrCountry>FL</com:stateOrCountry>
+          <com:zipCode>33401</com:zipCode>
+        </issuerPrincipalExecutiveOfficeAddress>
+      </issuerInfo>
+      <designateRulesPursuantThisScheduleFiled>
+        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>
+      </designateRulesPursuantThisScheduleFiled>
+    </coverPageHeader>
+    <coverPageHeaderReportingPersonDetails>
+
+
+      <reportingPersonName>Morgan Stanley</reportingPersonName>
+      <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+      <reportingPersonBeneficiallyOwnedNumberOfShares>
+        <soleVotingPower>0</soleVotingPower>
+        <sharedVotingPower>1</sharedVotingPower>
+        <soleDispositivePower>0</soleDispositivePower>
+        <sharedDispositivePower>245955</sharedDispositivePower>
+      </reportingPersonBeneficiallyOwnedNumberOfShares>
+      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>245955</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>
+      <classPercent>10.2</classPercent>
+      <typeOfReportingPerson>HC</typeOfReportingPerson>
+      <typeOfReportingPerson>CO</typeOfReportingPerson>
+    </coverPageHeaderReportingPersonDetails>
+    <coverPageHeaderReportingPersonDetails>
+
+      <reportingPersonName>Morgan Stanley Smith Barney LLC</reportingPersonName>
+      <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+      <reportingPersonBeneficiallyOwnedNumberOfShares>
+        <soleVotingPower>0</soleVotingPower>
+        <sharedVotingPower>1</sharedVotingPower>
+        <soleDispositivePower>0</soleDispositivePower>
+        <sharedDispositivePower>245955</sharedDispositivePower>
+      </reportingPersonBeneficiallyOwnedNumberOfShares>
+      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>245955</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>
+      <classPercent>10.2</classPercent>
+      <typeOfReportingPerson>BD</typeOfReportingPerson>
+      <typeOfReportingPerson>IA</typeOfReportingPerson>
+      <typeOfReportingPerson>CO</typeOfReportingPerson>
+    </coverPageHeaderReportingPersonDetails>
+    <items>
+      <item1>
+        <issuerName>RiverNorth/DoubleLine Strategic Opportunity Fund,  Inc.</issuerName>
+        <issuerPrincipalExecutiveOfficeAddress>360 S. ROSEMARY AVE, SUITE 1420, WEST PALM BEACH, FL, 33401</issuerPrincipalExecutiveOfficeAddress>
+      </item1>
+      <item2>
+        <filingPersonName>1: Morgan Stanley 2: Morgan Stanley Smith Barney LLC</filingPersonName>
+        <principalBusinessOfficeOrResidenceAddress>1: 1585 Broadway, New York, NY 10036 ;2: 1585 Broadway, New York, NY 10036</principalBusinessOfficeOrResidenceAddress>
+        <citizenship>1: Delaware 2: Delaware</citizenship>
+      </item2>
+      <item3>
+        <notApplicableFlag>N</notApplicableFlag>
+        <typeOfPersonFiling>BD</typeOfPersonFiling>
+        <typeOfPersonFiling>IA</typeOfPersonFiling>
+        <typeOfPersonFiling>HC</typeOfPersonFiling>
+      </item3>
+      <item4>
+        <amountBeneficiallyOwned>See the response(s) to Item 9 on the attached cover page(s).</amountBeneficiallyOwned>
+        <classPercent>10.2</classPercent>
+        <numberOfSharesPersonHas>
+          <solePowerOrDirectToVote>See the response(s) to Item 5 on the attached cover page(s).</solePowerOrDirectToVote>
+          <sharedPowerOrDirectToVote>See the response(s) to Item 6 on the attached cover page(s).</sharedPowerOrDirectToVote>
+          <solePowerOrDirectToDispose>See the response(s) to Item 7 on the attached cover page(s).</solePowerOrDirectToDispose>
+          <sharedPowerOrDirectToDispose>See the response(s) to Item 8 on the attached cover page(s).</sharedPowerOrDirectToDispose>
+        </numberOfSharesPersonHas>
+      </item4>
+      <item5>
+        <notApplicableFlag>Y</notApplicableFlag>
+        <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>
+      </item5>
+      <item6>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item6>
+      <item7>
+        <notApplicableFlag>N</notApplicableFlag>
+        <subsidiaryIdentificationAndClassification>See Exhibit 99.2</subsidiaryIdentificationAndClassification>
+      </item7>
+      <item8>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item8>
+      <item9>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item9>
+      <item10>
+        <notApplicableFlag>N</notApplicableFlag>
+        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under § 240.14a-11.
+
+					*  In Accordance with the Securities and Exchange Commission Release
+					No. 34-39538 (January 12, 1998) (the "Release"), this filing reflects the
+					securities beneficially owned, or that may be deemed to be beneficially owned,
+					by certain operating units (collectively, the "MS Reporting Units") of Morgan
+					Stanley and its subsidiaries and affiliates (collectively, "MS").  This filing
+					does not reflect securities, if any, beneficially owned by any operating units
+					of MS whose ownership of securities is disaggregated from that of the MS
+					Reporting Units in accordance with the Release.
+					</certifications>
+      </item10>
+    </items>
+    <exhibitInfo>
+
+					EXHIBIT NO.                         EXHIBITS
+					------------------         ------------------------------------
+
+					99.1                       Joint Filing Agreement
+
+					99.2                       Item 7 Information
+
+					*  Attention. Intentional misstatements or omissions of fact constitute federal
+					criminal violations (see 18 U.S.C. 1001).
+				</exhibitInfo>
+    <signatureInformation>
+      <reportingPersonName>Morgan Stanley</reportingPersonName>
+      <signatureDetails>
+        <signature>Claire Gordon</signature>
+        <title>Authorized Signatory, Morgan Stanley</title>
+        <date>10/13/2026</date>
+      </signatureDetails>
+    </signatureInformation>
+    <signatureInformation>
+      <reportingPersonName>Morgan Stanley Smith Barney LLC</reportingPersonName>
+      <signatureDetails>
+        <signature>David Galasso</signature>
+        <title>Authorized Signatory, Morgan Stanley Smith Barney LLC</title>
+        <date>10/13/2026</date>
+      </signatureDetails>
+    </signatureInformation>
+  </formData>
+
+</edgarSubmission>

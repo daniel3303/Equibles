@@ -54,7 +54,7 @@ public class Filing13DGXmlParserParse13DAmendmentTests
         person.SoleDispositivePower.Should().Be(11615772);
         person.AggregateAmountOwned.Should().Be(11615772);
         person.PercentOfClass.Should().Be(60.4m);
-        person.TypeOfReportingPerson.Should().Be("OO");
+        person.TypeCodes.Should().Equal("OO");
         person.CitizenshipOrOrganization.Should().Be("C0");
     }
 }
