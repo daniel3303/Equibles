@@ -30,20 +30,33 @@ public class HolderIntelligenceRefreshService
     internal const int HolderBatchSize = 250;
 
     private readonly EquiblesFinancialDbContext _dbContext;
+    private readonly HoldingsCorpusCoverage _corpusCoverage;
     private readonly ILogger<HolderIntelligenceRefreshService> _logger;
 
     public HolderIntelligenceRefreshService(
         EquiblesFinancialDbContext dbContext,
+        HoldingsCorpusCoverage corpusCoverage,
         ILogger<HolderIntelligenceRefreshService> logger
     )
     {
         _dbContext = dbContext;
+        _corpusCoverage = corpusCoverage;
         _logger = logger;
     }
 
+    /// <summary>
+    /// The 13F corpus's first complete quarter, never before the first bit of the presence masks;
+    /// tenure reaching it is censored.
+    /// </summary>
+    public DateOnly FirstComputableQuarter =>
+        _corpusCoverage.CoverageStartDate > HolderTenureCalculator.FirstQuarter
+            ? _corpusCoverage.CoverageStartDate
+            : HolderTenureCalculator.FirstQuarter;
+
     /// <summary>A covered quarter end whose 13F filing window has closed.</summary>
-    public static bool IsComputable(DateOnly reportDate, DateOnly today) =>
-        HolderTenureCalculator.QuarterIndex(reportDate) != null
+    public bool IsComputable(DateOnly reportDate, DateOnly today) =>
+        reportDate >= FirstComputableQuarter
+        && HolderTenureCalculator.QuarterIndex(reportDate) != null
         && reportDate <= CombinedQuarterHelper.CompletedReportDateCutoff(today);
 
     /// <summary>
@@ -67,7 +80,11 @@ public class HolderIntelligenceRefreshService
 
         var benchmark = await LoadAggregateBenchmark(reportDate, cancellationToken);
         var filers = await LoadFilers(reportDate, cancellationToken);
-        var previousFilers = (await LoadFilers(previous, cancellationToken)).ToHashSet();
+        // A quarter before the corpus is incidental, so the first covered quarter has no trades.
+        var previousFilers =
+            previous >= FirstComputableQuarter
+                ? (await LoadFilers(previous, cancellationToken)).ToHashSet()
+                : [];
 
         // A filer whose 13F for the quarter is gone no longer holds anything in it.
         var presenceChanged =
@@ -163,12 +180,13 @@ public class HolderIntelligenceRefreshService
             })
             .ToListAsync(cancellationToken);
         var presence = await LoadPresence(holderIds, cancellationToken);
+        var firstQuarter = FirstComputableQuarter;
         var filed = await _dbContext
             .Set<InstitutionalFiling>()
             .Where(filing =>
                 holderIds.Contains(filing.InstitutionalHolderId)
                 && filing.FilingType == FilingType.Form13F
-                && filing.ReportDate >= HolderTenureCalculator.FirstQuarter
+                && filing.ReportDate >= firstQuarter
                 && filing.ReportDate <= reportDate
             )
             .Select(filing => new { filing.InstitutionalHolderId, filing.ReportDate })
@@ -220,6 +238,7 @@ public class HolderIntelligenceRefreshService
                                     ? HolderTenureCalculator.Set(mask, index)
                                     : mask
                         ),
+                    FirstCoveredQuarter = HolderTenureCalculator.QuarterIndex(firstQuarter).Value,
                     AggregateBenchmark = benchmark,
                     PriorTurnovers = priorDates
                         .Select(date =>

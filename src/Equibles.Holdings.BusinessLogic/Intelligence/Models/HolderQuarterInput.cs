@@ -24,6 +24,9 @@ public sealed record HolderQuarterInput
     /// <summary>The quarters the filer filed a 13F, as a presence-style bitmask.</summary>
     public long FiledMask { get; init; }
 
+    /// <summary>The bit of the corpus's first complete quarter, where tenure is censored.</summary>
+    public int FirstCoveredQuarter { get; init; }
+
     /// <summary>Every 13F filer's combined common-share value per issuer this quarter.</summary>
     public IReadOnlyDictionary<Guid, decimal> AggregateBenchmark { get; init; } =
         new Dictionary<Guid, decimal>();

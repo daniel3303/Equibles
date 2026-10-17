@@ -52,7 +52,13 @@ public static class HolderQuarterMetricsBuilder
             var mask = input.Presence.GetValueOrDefault(security);
             if ((mask & bit) == 0)
                 toSet.Add(security);
-            tenures.Add((value, HolderTenureCalculator.Tenure(mask | bit, filed, quarter).Value));
+            var run = HolderTenureCalculator.Tenure(
+                mask | bit,
+                filed,
+                quarter,
+                input.FirstCoveredQuarter
+            );
+            tenures.Add((value, run.Value));
         }
         var toClear = input
             .Presence.Where(pair => (pair.Value & bit) != 0 && !held.ContainsKey(pair.Key))
@@ -74,6 +80,7 @@ public static class HolderQuarterMetricsBuilder
                 TopTenWeight = concentration.TopTenWeight,
                 EffectivePositions = concentration.EffectivePositions,
                 ValueWeightedTenureQuarters = tenure.ValueWeightedQuarters,
+                CensoredValueShare = tenure.CensoredValueShare,
                 IndexSeriesNetAssets = input.IndexSeriesNetAssets,
                 AdvisedSeriesNetAssets = input.AdvisedSeriesNetAssets,
             }

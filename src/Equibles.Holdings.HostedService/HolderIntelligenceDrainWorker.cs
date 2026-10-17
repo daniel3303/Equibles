@@ -9,7 +9,8 @@ namespace Equibles.Holdings.HostedService;
 
 /// <summary>
 /// Rebuilds dirty holder-intelligence quarters, oldest first, once their stamp is past the
-/// cooldown. Every computable quarter gets a state row, and a row computed by an older
+/// cooldown; a stamp before the corpus's first complete quarter is never drained. Every
+/// computable quarter gets a state row, and a row computed by an older
 /// <see cref="HolderIntelligenceRefreshService.CalculationVersion"/> is dirtied again. A rebuild
 /// clears the stamp only when it still holds the value read just before the rebuild, so a stamp
 /// written meanwhile survives for another pass.
@@ -59,13 +60,22 @@ public class HolderIntelligenceDrainWorker : BackgroundService
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-            await EnsureQuarters(dbContext, today, cancellationToken);
+            var refresh =
+                scope.ServiceProvider.GetRequiredService<HolderIntelligenceRefreshService>();
+            var quarters = ComputableQuarters(refresh, today);
+            if (quarters.Count == 0)
+                return;
+            await EnsureQuarters(dbContext, quarters, cancellationToken);
             var cutoff = DateTime.UtcNow - Cooldown;
-            var latest = LatestComputableQuarter(today);
+            var first = quarters[0];
+            var latest = quarters[^1];
             due = await dbContext
                 .Set<HolderIntelligenceQuarterState>()
                 .Where(state =>
-                    state.DirtyAt != null && state.DirtyAt < cutoff && state.ReportDate <= latest
+                    state.DirtyAt != null
+                    && state.DirtyAt < cutoff
+                    && state.ReportDate >= first
+                    && state.ReportDate <= latest
                 )
                 .OrderBy(state => state.ReportDate)
                 .Select(state => state.ReportDate)
@@ -146,30 +156,22 @@ public class HolderIntelligenceDrainWorker : BackgroundService
     // Every computable quarter has a state row, born due; a version bump dirties computed rows.
     private static async Task EnsureQuarters(
         EquiblesFinancialDbContext dbContext,
-        DateOnly today,
+        List<DateOnly> quarters,
         CancellationToken cancellationToken
     )
     {
-        var quarters = new List<HolderIntelligenceQuarterState>();
-        for (
-            var quarter = HolderTenureCalculator.FirstQuarter;
-            HolderIntelligenceRefreshService.IsComputable(quarter, today);
-            quarter = NextQuarter(quarter)
-        )
-            quarters.Add(
-                new HolderIntelligenceQuarterState
+        await dbContext
+            .Set<HolderIntelligenceQuarterState>()
+            .UpsertRange(
+                quarters.Select(quarter => new HolderIntelligenceQuarterState
                 {
                     ReportDate = quarter,
                     DirtyAt = DateTime.UnixEpoch,
-                }
-            );
-        if (quarters.Count > 0)
-            await dbContext
-                .Set<HolderIntelligenceQuarterState>()
-                .UpsertRange(quarters)
-                .On(state => state.ReportDate)
-                .NoUpdate()
-                .RunAsync(cancellationToken);
+                })
+            )
+            .On(state => state.ReportDate)
+            .NoUpdate()
+            .RunAsync(cancellationToken);
         await dbContext
             .Set<HolderIntelligenceQuarterState>()
             .Where(state =>
@@ -182,12 +184,19 @@ public class HolderIntelligenceDrainWorker : BackgroundService
             );
     }
 
-    private static DateOnly LatestComputableQuarter(DateOnly today)
+    private static List<DateOnly> ComputableQuarters(
+        HolderIntelligenceRefreshService refresh,
+        DateOnly today
+    )
     {
-        var latest = HolderTenureCalculator.FirstQuarter;
-        while (HolderIntelligenceRefreshService.IsComputable(NextQuarter(latest), today))
-            latest = NextQuarter(latest);
-        return latest;
+        var quarters = new List<DateOnly>();
+        for (
+            var quarter = refresh.FirstComputableQuarter;
+            refresh.IsComputable(quarter, today);
+            quarter = NextQuarter(quarter)
+        )
+            quarters.Add(quarter);
+        return quarters;
     }
 
     private static DateOnly NextQuarter(DateOnly quarter) =>
