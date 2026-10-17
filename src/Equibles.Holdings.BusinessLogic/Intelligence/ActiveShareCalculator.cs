@@ -7,10 +7,9 @@ namespace Equibles.Holdings.BusinessLogic.Intelligence;
 public static class ActiveShareCalculator
 {
     /// <summary>
-    /// Both inputs are values or weights in any scale; each side is normalised to sum to one. Null
-    /// when either side is empty. Only the portfolio's holdings are visited: a benchmark holding the
-    /// portfolio lacks contributes its whole weight, which is one minus the weight the portfolio's
-    /// holdings take of the benchmark.
+    /// Each side is normalised to sum to one, and null when empty. Benchmark holdings the portfolio
+    /// lacks contribute one minus the weight its holdings take of the benchmark, so the differences
+    /// are summed over the portfolio's holdings only.
     /// </summary>
     public static decimal? ActiveShare<TKey>(
         IReadOnlyDictionary<TKey, decimal> portfolio,

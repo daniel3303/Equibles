@@ -47,7 +47,7 @@ public static class HolderStyleBandClassifier
             style,
             evidence,
             TurnoverBand(inputs.TrailingAnnualTurnover),
-            HorizonBand(inputs.ValueWeightedTenureQuarters)
+            HorizonBand(inputs.ValueWeightedTenureQuarters, inputs.CensoredValueShare)
         );
     }
 
@@ -100,12 +100,20 @@ public static class HolderStyleBandClassifier
             _ => HolderTurnoverBand.High,
         };
 
-    public static HolderHorizonBand HorizonBand(decimal? valueWeightedTenureQuarters) =>
+    /// <summary>
+    /// A censored tenure is only a lower bound, so it can still reach Long but cannot be called
+    /// Short or Medium.
+    /// </summary>
+    public static HolderHorizonBand HorizonBand(
+        decimal? valueWeightedTenureQuarters,
+        decimal? censoredValueShare = 0
+    ) =>
         valueWeightedTenureQuarters switch
         {
             null => HolderHorizonBand.Unknown,
+            >= LongHorizonFromQuarters => HolderHorizonBand.Long,
+            _ when censoredValueShare is not 0m => HolderHorizonBand.Unknown,
             < ShortHorizonBelowQuarters => HolderHorizonBand.Short,
-            < LongHorizonFromQuarters => HolderHorizonBand.Medium,
-            _ => HolderHorizonBand.Long,
+            _ => HolderHorizonBand.Medium,
         };
 }

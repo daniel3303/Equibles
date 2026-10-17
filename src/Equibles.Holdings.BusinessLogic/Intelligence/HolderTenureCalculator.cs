@@ -34,15 +34,25 @@ public static class HolderTenureCalculator
     /// The run of quarters ending at <paramref name="quarter"/> in which the security was held, or
     /// null when it was not held then. A gap of unfiled quarters no longer than
     /// <see cref="MaximumBridgedQuarters"/> between held quarters counts as held; a quarter the
-    /// filer filed without the security ends the run.
+    /// filer filed without the security ends the run, and reaching
+    /// <paramref name="firstCoveredQuarter"/> (where the corpus starts) censors it.
     /// </summary>
-    public static HolderTenure? Tenure(long held, long filed, int quarter)
+    public static HolderTenure? Tenure(
+        long held,
+        long filed,
+        int quarter,
+        int firstCoveredQuarter = 0
+    )
     {
+        CheckQuarter(quarter);
+        CheckQuarter(firstCoveredQuarter);
+        if (quarter < firstCoveredQuarter)
+            throw new ArgumentOutOfRangeException(nameof(quarter), quarter, null);
         if (!IsSet(held, quarter))
             return null;
         var quarters = 1;
         var index = quarter - 1;
-        while (index >= 0)
+        while (index >= firstCoveredQuarter)
         {
             if (IsSet(held, index))
             {
@@ -51,9 +61,13 @@ public static class HolderTenureCalculator
                 continue;
             }
             var gap = 0;
-            while (index - gap >= 0 && !IsSet(filed, index - gap) && !IsSet(held, index - gap))
+            while (
+                index - gap >= firstCoveredQuarter
+                && !IsSet(filed, index - gap)
+                && !IsSet(held, index - gap)
+            )
                 gap++;
-            if (gap == 0 || gap > MaximumBridgedQuarters || index - gap < 0)
+            if (gap == 0 || gap > MaximumBridgedQuarters || index - gap < firstCoveredQuarter)
                 return new HolderTenure(quarters, false);
             if (!IsSet(held, index - gap))
                 return new HolderTenure(quarters, false);
@@ -88,7 +102,18 @@ public static class HolderTenureCalculator
             : new HolderTenureSummary(null, null);
     }
 
-    public static long Set(long mask, int quarter) => mask | (1L << quarter);
+    public static long Set(long mask, int quarter)
+    {
+        CheckQuarter(quarter);
+        return mask | (1L << quarter);
+    }
 
     private static bool IsSet(long mask, int quarter) => (mask & (1L << quarter)) != 0;
+
+    // A shift wraps past bit 63, so an out-of-range quarter would silently read another bit.
+    private static void CheckQuarter(int quarter)
+    {
+        if (quarter is < 0 or >= MaximumQuarters)
+            throw new ArgumentOutOfRangeException(nameof(quarter), quarter, null);
+    }
 }
