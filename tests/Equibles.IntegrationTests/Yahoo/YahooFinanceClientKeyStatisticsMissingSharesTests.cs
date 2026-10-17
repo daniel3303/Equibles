@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -25,7 +26,7 @@ public class YahooFinanceClientKeyStatisticsMissingSharesTests
         // has no sharesOutstanding field at all.
         var json = "{\"quoteSummary\":{\"result\":[{\"defaultKeyStatistics\":{}}]}}";
 
-        var sut = new YahooFinanceClient(
+        var sut = new OfflineYahooFinanceClient(
             new HttpClient(new ConstantHandler(json)),
             Substitute.For<ILogger<YahooFinanceClient>>()
         );
