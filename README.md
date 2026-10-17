@@ -26,7 +26,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **SEC Filings** | SEC EDGAR | ✅ | ✅ | Annual, quarterly and current reports (10-K, 10-Q, 8-K, 20-F, 6-K, 40-F), proxies (DEF 14A, DEFA14A, PRE 14A), registration statements (S-1, S-3, S-3ASR, S-4, F-1, F-3, F-3ASR, F-4), tender offers (SC TO, SC 14D9) and late-filing notices (NT 10-K, NT 10-Q, NT 20-F), with full-text search |
 | **Financial Statements** | SEC XBRL | ✅ | ✅ | Parsed income statement, balance sheet, and cash flow facts per fiscal period |
 | **Holdings** | SEC 13F-HR | ✅ | ✅ | Institutional ownership — who owns what, how much, and trend over time |
-| **Fund Filings** | SEC NPORT / N-CEN / Form D | ✅ | ✅ | Fund portfolio holdings, registered-fund operations (service providers), and exempt offerings (private placements) |
+| **Fund Filings** | SEC NPORT / N-CEN / Form D | ✅ | ✅ | Fund portfolio holdings, registered-fund operations (service providers, fund types, advisers by CRD), and exempt offerings (private placements) |
 | **Investment Advisers** | SEC Form ADV | ✅ | ✅ | SEC-registered advisers — assets under management, main office, employee count, fee structure |
 | **Insider Trading** | SEC Forms 3/4/5/144 | ✅ | ✅ | Director, officer, and 10% owner transactions, annual ownership statements, and proposed (Form 144) sales |
 | **Congressional Trading** | House/Senate disclosures | ✅ | ✅ | Securities transactions by members of Congress, including the filed stock, option, bond, or other instrument |

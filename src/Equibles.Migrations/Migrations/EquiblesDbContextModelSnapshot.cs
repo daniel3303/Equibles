@@ -4404,6 +4404,45 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FundSeries");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenDataSetImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastFailure")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime?>("LastFailureAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ParserVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quarter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReportCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Year", "Quarter")
+                        .IsUnique();
+
+                    b.ToTable("NCenDataSetImport");
+                });
+
             modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFiling", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4474,6 +4513,251 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("EquityIssuerId", "FilingDate");
 
                     b.ToTable("NCenFiling");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundAdviser", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("Crd")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("FundReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool?>("IsAffiliated")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("IsHiredDuringPeriod")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Lei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateOnly?>("TerminationDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Crd");
+
+                    b.HasIndex("FundReportId");
+
+                    b.ToTable("NCenFundAdviser");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundExchangeListing", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Exchange")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("FundReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Ticker")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FundReportId");
+
+                    b.HasIndex("Ticker");
+
+                    b.ToTable("NCenFundExchangeListing");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccessionNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("DailyAverageNetAssets")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateOnly>("FilingDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("FundId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FundLei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("FundName")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("FundTypes")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("IsIndexAffiliated")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("IsIndexExclusive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSuperseded")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("MonthlyAverageNetAssets")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("RegistrantCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("RegistrantReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("ReportEndingPeriod")
+                        .HasColumnType("date");
+
+                    b.Property<string>("SeriesId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FundId")
+                        .IsUnique();
+
+                    b.HasIndex("RegistrantReportId");
+
+                    b.HasIndex("SeriesId", "ReportEndingPeriod");
+
+                    b.HasIndex("RegistrantCik", "ReportEndingPeriod", "SeriesId");
+
+                    b.ToTable("NCenFundReport");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundShareClass", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClassId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ClassName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("FundReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Ticker")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FundReportId");
+
+                    b.HasIndex("Ticker");
+
+                    b.ToTable("NCenFundShareClass");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenRegistrantReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccessionNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("DataSetQuarter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DataSetYear")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FamilyInvestmentCompanyName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateOnly>("FilingDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("InvestmentCompanyFileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("InvestmentCompanyType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("IsAmendment")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("IsFamilyInvestmentCompany")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RegistrantCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("RegistrantLei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RegistrantName")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateOnly>("ReportEndingPeriod")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("TotalSeries")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("DataSetYear", "DataSetQuarter");
+
+                    b.HasIndex("RegistrantCik", "ReportEndingPeriod");
+
+                    b.ToTable("NCenRegistrantReport");
                 });
 
             modelBuilder.Entity("Equibles.Sec.Data.Models.NCenServiceProvider", b =>
@@ -5945,6 +6229,50 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Issuer");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundAdviser", b =>
+                {
+                    b.HasOne("Equibles.Sec.Data.Models.NCenFundReport", "FundReport")
+                        .WithMany("Advisers")
+                        .HasForeignKey("FundReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FundReport");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundExchangeListing", b =>
+                {
+                    b.HasOne("Equibles.Sec.Data.Models.NCenFundReport", "FundReport")
+                        .WithMany("ExchangeListings")
+                        .HasForeignKey("FundReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FundReport");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundReport", b =>
+                {
+                    b.HasOne("Equibles.Sec.Data.Models.NCenRegistrantReport", "RegistrantReport")
+                        .WithMany("Funds")
+                        .HasForeignKey("RegistrantReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RegistrantReport");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundShareClass", b =>
+                {
+                    b.HasOne("Equibles.Sec.Data.Models.NCenFundReport", "FundReport")
+                        .WithMany("ShareClasses")
+                        .HasForeignKey("FundReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FundReport");
+                });
+
             modelBuilder.Entity("Equibles.Sec.Data.Models.NCenServiceProvider", b =>
                 {
                     b.HasOne("Equibles.Sec.Data.Models.NCenFiling", "NCenFiling")
@@ -6192,6 +6520,20 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFiling", b =>
                 {
                     b.Navigation("ServiceProviders");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenFundReport", b =>
+                {
+                    b.Navigation("Advisers");
+
+                    b.Navigation("ExchangeListings");
+
+                    b.Navigation("ShareClasses");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.NCenRegistrantReport", b =>
+                {
+                    b.Navigation("Funds");
                 });
 
             modelBuilder.Entity("Equibles.Sec.Data.Models.NportFiling", b =>
