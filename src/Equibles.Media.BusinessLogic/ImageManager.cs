@@ -4,7 +4,11 @@ using Equibles.Media.Data.Models;
 using Equibles.Media.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using MimeTypes;
+using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
@@ -13,6 +17,19 @@ namespace Equibles.Media.BusinessLogic;
 [Service(ServiceLifetime.Scoped, typeof(IImageManager))]
 public class ImageManager : IImageManager
 {
+    // Uploaded and fetched images are untrusted bytes: decode only the web raster formats, so
+    // ImageSharp 3.1's unpatched TIFF code and the BMP decoder's unbounded ICC allocation are
+    // never reached.
+    private static readonly DecoderOptions UntrustedDecoderOptions = new()
+    {
+        Configuration = new SixLabors.ImageSharp.Configuration(
+            new PngConfigurationModule(),
+            new JpegConfigurationModule(),
+            new GifConfigurationModule(),
+            new WebpConfigurationModule()
+        ),
+    };
+
     private readonly ImageRepository _imageRepository;
     private readonly FileStorageRouter _storageRouter;
 
@@ -56,7 +73,10 @@ public class ImageManager : IImageManager
         }
 
         using var contentStream = new MemoryStream(content);
-        using var imageProcessor = await SixLabors.ImageSharp.Image.LoadAsync(contentStream);
+        using var imageProcessor = await SixLabors.ImageSharp.Image.LoadAsync(
+            UntrustedDecoderOptions,
+            contentStream
+        );
         // maxWidth/maxHeight are a *maximum* — only resize when the source
         // actually exceeds them. A source already within bounds must not be
         // enlarged (wastes storage and blurs the image).

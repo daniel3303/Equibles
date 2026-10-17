@@ -13,3 +13,7 @@
   - `aws-ultimate-parent.json` (unchanged) comes from `/api/v1/lei-records/2549000I2PRQGGIGCA75/ultimate-parent`. It names Amazon.com, Inc.
   - `google-direct-parent.json` (unchanged) comes from `/api/v1/lei-records/7ZW8QJWVPR4P1J1KQY45/direct-parent`. It names Alphabet Inc.
   - `alphabet-ultimate-parent-404.json` (unchanged) is the 404 body from `/api/v1/lei-records/5493006MHB84DD0ZWV18/ultimate-parent`, which GLEIF returns for an entity with no reported parent.
+- Captured unchanged on 2026-10-17 for `GleifEntityClient.Suggest`:
+  - `samsung-electronics-autocomplete.json` comes from `https://api.gleif.org/api/v1/autocompletions?field=fulltext&q=Samsung Electronics Co. Ltd.`. Two of its five suggestions ("SAMSUNG ELECTRONICS CO., LTD" and "Thai Samsung Electronics Co., Ltd.") carry no LEI.
+  - `samsung-electronics-lei-records.json` comes from `/api/v1/lei-records?filter[lei]=254900SHHC9DE6P8N928,2549000PB5BA9MOMBQ96,254900UDOY5DHMH56386&page[size]=3`. GLEIF returns the three records in the reverse of the requested order.
+- On the same day, GLEIF's full-text search for "Google" did not return GOOGLE LLC (`7ZW8QJWVPR4P1J1KQY45`) in its first ten records, while autocomplete suggested it first.

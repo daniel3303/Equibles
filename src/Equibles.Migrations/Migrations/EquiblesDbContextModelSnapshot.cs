@@ -2769,151 +2769,43 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FundScoreAttempt");
                 });
 
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderIntelligenceQuarterState", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("CalculationVersion")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("ComputedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("DirtyAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("FailureCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LastError")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly>("ReportDate")
-                        .HasColumnType("date");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReportDate")
-                        .IsUnique();
-
-                    b.ToTable("HolderIntelligenceQuarterState");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyMetrics", b =>
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderClassificationEvidence", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<decimal?>("AggregateActiveShare")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
+                    b.Property<DateOnly>("AsOf")
+                        .HasColumnType("date");
 
-                    b.Property<int>("BandVersion")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("BuyValue")
-                        .HasPrecision(20, 2)
-                        .HasColumnType("numeric(20,2)");
-
-                    b.Property<int>("CalculationVersion")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("CallValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<decimal?>("CensoredValueShare")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<DateTime>("ComputedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("EffectivePositions")
-                        .HasPrecision(14, 4)
-                        .HasColumnType("numeric(14,4)");
-
-                    b.Property<long>("EquityAum")
-                        .HasColumnType("bigint");
-
-                    b.Property<int?>("ExitCount")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("Herfindahl")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<int>("HorizonBand")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("IncreasedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("IndexLikeEvidence")
-                        .HasColumnType("integer");
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("InstitutionalHolderId")
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("NewCount")
+                    b.Property<int>("MatchedOn")
                         .HasColumnType("integer");
 
-                    b.Property<long?>("PreviousEquityAum")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("PrincipalValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("PutValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<int?>("ReducedCount")
+                    b.Property<int>("Source")
                         .HasColumnType("integer");
 
-                    b.Property<DateOnly>("ReportDate")
-                        .HasColumnType("date");
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
-                    b.Property<decimal?>("SellValue")
-                        .HasPrecision(20, 2)
-                        .HasColumnType("numeric(20,2)");
-
-                    b.Property<int>("StockCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StyleBand")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("TopTenWeight")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<decimal?>("TrailingAnnualTurnover")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<decimal?>("Turnover")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<int>("TurnoverBand")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("UnpricedTradeCount")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("ValueWeightedTenureQuarters")
-                        .HasPrecision(10, 4)
-                        .HasColumnType("numeric(10,4)");
+                    b.Property<string>("Value")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("InstitutionalHolderId", "ReportDate")
-                        .IsUnique();
+                    b.HasIndex("InstitutionalHolderId");
 
-                    b.HasIndex("ReportDate", "StyleBand");
-
-                    b.ToTable("HolderQuarterlyMetrics");
+                    b.ToTable("HolderClassificationEvidence");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlySnapshot", b =>
@@ -2944,34 +2836,6 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("ReportDate");
 
                     b.ToTable("HolderQuarterlySnapshot");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockPresence", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("EquityIssuerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("HeldMask")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("InstitutionalHolderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ListedTicker")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker")
-                        .IsUnique();
-
-                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker"), false);
-
-                    b.ToTable("HolderStockPresence");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HoldingLabelConvergenceState", b =>
@@ -3256,6 +3120,103 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("Name");
 
                     b.ToTable("InstitutionalHolder");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolderProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AdvisedNetAssets")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateOnly?>("AdvisedSeriesAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<int>("AdvisedSeriesCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("AdviserAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("AdviserCrd")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("AdvisesPrivateFunds")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ClientBase")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("ClientBaseAumShare")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DerivationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EntityType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("EntityTypeAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("EntityTypeSource")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EntityTypeSourceKey")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("EtfSeriesCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("HasConflictingEvidence")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("IndexNetAssets")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("IndexSeriesCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("InstitutionalHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Lei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("PooledVehicleAumShare")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("PrivateFundCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PrivateFundFocus")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("PrivateFundGrossAssets")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("RegulatoryAum")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Sic")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityType");
+
+                    b.HasIndex("InstitutionalHolderId")
+                        .IsUnique();
+
+                    b.ToTable("InstitutionalHolderProfile");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolding", b =>
@@ -6552,18 +6513,7 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("InstitutionalHolder");
                 });
 
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyMetrics", b =>
-                {
-                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
-                        .WithMany()
-                        .HasForeignKey("InstitutionalHolderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InstitutionalHolder");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockPresence", b =>
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderClassificationEvidence", b =>
                 {
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
                         .WithMany()
@@ -6575,6 +6525,17 @@ namespace Equibles.Migrations.Migrations
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalFiling", b =>
+                {
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
+                        .WithMany()
+                        .HasForeignKey("InstitutionalHolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InstitutionalHolder");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolderProfile", b =>
                 {
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
                         .WithMany()
