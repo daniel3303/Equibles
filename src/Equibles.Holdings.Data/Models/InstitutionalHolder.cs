@@ -28,6 +28,17 @@ public class InstitutionalHolder
     [MaxLength(32)]
     public string CrdNumber { get; set; }
 
+    /// <summary>The filer's own SEC file number (801- for a registered adviser) from its cover page.</summary>
+    [MaxLength(32)]
+    public string SecFileNumber { get; set; }
+
+    /// <summary>
+    /// Accession of the 13F cover page the identity numbers were last read from; null until a
+    /// cover has been applied since the column existed.
+    /// </summary>
+    [MaxLength(32)]
+    public string IdentityAccession { get; set; }
+
     public FundClassification Classification { get; set; }
 
     public bool ConfidentialTreatmentRequested { get; set; }

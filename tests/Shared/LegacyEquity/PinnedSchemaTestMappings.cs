@@ -45,5 +45,9 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         // Added by 20261015133022_DocumentAsFiledPdf.
         builder.Entity<Document>().Ignore(document => document.AsFiledPdfContent);
         builder.Entity<Document>().Ignore(document => document.AsFiledPdfContentId);
+
+        // Added by 20261017121009_AddHolderIdentityNumbers.
+        builder.Entity<InstitutionalHolder>().Ignore(holder => holder.SecFileNumber);
+        builder.Entity<InstitutionalHolder>().Ignore(holder => holder.IdentityAccession);
     }
 }

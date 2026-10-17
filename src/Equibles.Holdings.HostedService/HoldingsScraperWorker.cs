@@ -183,6 +183,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Reapply their later tail only after the entire oldest-first bulk pass has finished.
         await ApplyPendingRealtimeReplay(stoppingToken);
 
+        await BackfillHolderIdentity(stoppingToken);
+
         // Position coverage does not depend on valuation. Check it before maintenance can
         // spend the cycle repricing a large backlog, but let maintenance survive SEC outages.
         try
@@ -734,6 +736,25 @@ public class HoldingsScraperWorker : BaseScraperWorker
             MaxRetries
         );
         return false;
+    }
+
+    // Bounded per cycle so the one-off cover-page reads never crowd out the realtime 13F sweep,
+    // which shares the SEC rate limiter.
+    internal const int HolderIdentityBackfillPerCycle = 2000;
+
+    private async Task BackfillHolderIdentity(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<HolderIdentityBackfillService>()
+                .Run(HolderIdentityBackfillPerCycle, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            Logger.LogError(exception, "Holder identity backfill failed; retrying next cycle");
+        }
     }
 
     private async Task BackfillHolderClassifications(CancellationToken cancellationToken)
