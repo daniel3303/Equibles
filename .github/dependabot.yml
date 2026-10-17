@@ -18,10 +18,10 @@ updates:
     labels:
       - "type: dependencies"
     ignore:
-      # SixLabors.ImageSharp 4.x requires a paid commercial license.
-      # Stay on the 3.x line, which remains under the Six Labors Split License.
+      # SixLabors.ImageSharp 3.2.0 and 4.x enforce a Six Labors license key on
+      # Release builds. Stay on 3.1.x; untrusted decodes exclude TIFF.
       - dependency-name: "SixLabors.ImageSharp"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # MassTransit 9.x requires a paid commercial license. Stay on the 8.x
       # line (Apache-2.0) — covers MassTransit, .EntityFrameworkCore and
       # .SqlTransport.PostgreSQL.

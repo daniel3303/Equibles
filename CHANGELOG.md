@@ -151,6 +151,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Document chunking counts failed attempts per document and parks a document after five failures instead of letting it burn a batch slot every cycle; a content replacement or chunk reset returns it to the queue with a fresh budget. Closes #4464.
 - 13F imports no longer delete and reinsert a holding's manager-attribution legs when the re-parsed legs match the stored ones, which was burning the leg table's synthetic key space on every unchanged re-import. PR #4466.
 
+### Security
+
+- Decode uploaded and fetched images as PNG, JPEG, GIF or WebP only. `ImageManager.SaveImage` used every ImageSharp format, so a TIFF reached the TIFF decoder and encoders that ImageSharp 3.1.12 has advisories against, and a small BMP could declare an ICC profile size that the BMP decoder allocates up front (up to 2 GiB). Other formats now throw `UnknownImageFormatException`, and `IImageManager.AcceptedExtensions` no longer lists `tiff` or `bmp`. ImageSharp stays on 3.1.12 because its fixed releases require a Six Labors license key for Release builds; the five advisories are suppressed in `Directory.Build.props` with the reason.
+
 ## [1.6.1] — 2026-08-22
 
 ### Fixed
