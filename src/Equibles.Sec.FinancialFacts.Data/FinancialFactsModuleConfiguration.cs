@@ -25,6 +25,11 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
                 .HasForeignKey(row => row.EquityIssuerId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(e => e.Form).HasConversion(docTypeConversion);
+            // The consolidated filing-XBRL rows the Company Facts import supersedes; the import's
+            // nothing-new check probes it for every issuer every cycle.
+            b.HasIndex(f => new { f.EquityIssuerId, f.AccessionNumber })
+                .HasDatabaseName("IX_FinancialFact_FilingXbrlFill")
+                .HasFilter("\"Source\" = 1 AND \"DimensionsKey\" = ''");
         });
 
         builder.Entity<FinancialFactDimension>();
