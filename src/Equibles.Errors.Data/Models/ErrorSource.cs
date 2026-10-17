@@ -26,6 +26,7 @@ public sealed class ErrorSource
     public static readonly ErrorSource InsiderTradingReprocess = new("InsiderTradingReprocess");
     public static readonly ErrorSource NportReprocess = new("NportReprocess");
     public static readonly ErrorSource NportSweep = new("NportSweep");
+    public static readonly ErrorSource NCenDataSets = new("NCenDataSets");
     public static readonly ErrorSource WebsiteDiscovery = new("WebsiteDiscovery");
     public static readonly ErrorSource FdaCatalystScraper = new("FdaCatalystScraper");
     public static readonly ErrorSource EquityMarketsScraper = new("EquityMarketsScraper");
@@ -68,6 +69,7 @@ public sealed class ErrorSource
             InsiderTradingReprocess,
             NportReprocess,
             NportSweep,
+            NCenDataSets,
             WebsiteDiscovery,
             FdaCatalystScraper,
             EquityMarketsScraper,
