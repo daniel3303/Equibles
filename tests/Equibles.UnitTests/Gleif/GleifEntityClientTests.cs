@@ -70,6 +70,106 @@ public class GleifEntityClientTests
         handler.Requests.Should().BeEmpty();
     }
 
+    // Two of the five suggestions carry no LEI, and GLEIF answers the batch in reverse order.
+    [Fact]
+    public async Task Suggest_ReadsEachSuggestedEntityInSuggestionOrder_SkippingNamesWithoutAnLei()
+    {
+        var handler = new ReplyHandler([
+            (HttpStatusCode.OK, await Fixture("samsung-electronics-autocomplete.json")),
+            (HttpStatusCode.OK, await Fixture("samsung-electronics-lei-records.json")),
+        ]);
+        using var http = new HttpClient(handler);
+
+        var entities = await Client(http).Suggest("Samsung Electronics Co., Ltd.");
+
+        handler
+            .Requests.Should()
+            .Equal(
+                new Uri(
+                    "https://api.gleif.org/api/v1/autocompletions?field=fulltext&q=Samsung%20Electronics%20Co.%20Ltd."
+                ),
+                new Uri(
+                    "https://api.gleif.org/api/v1/lei-records?filter%5Blei%5D=254900SHHC9DE6P8N928,2549000PB5BA9MOMBQ96,254900UDOY5DHMH56386&page%5Bsize%5D=3"
+                )
+            );
+        entities
+            .Select(entity => entity.LegalEntityIdentifier)
+            .Should()
+            .Equal("254900SHHC9DE6P8N928", "2549000PB5BA9MOMBQ96", "254900UDOY5DHMH56386");
+        entities[1].LegalName.Should().Be("台灣三星電子股份有限公司");
+        entities[1].EntityStatus.Should().Be("ACTIVE");
+    }
+
+    [Fact]
+    public async Task Suggest_ReadsNoRecords_WhenNoSuggestionCarriesAnLei()
+    {
+        var body = JsonNode.Parse(await Fixture("samsung-electronics-autocomplete.json"));
+        var suggestions = body["data"].AsArray();
+        foreach (var suggestion in suggestions.ToList())
+        {
+            if (suggestion["relationships"] != null)
+                suggestions.Remove(suggestion);
+        }
+        var handler = new ReplyHandler([(HttpStatusCode.OK, body.ToJsonString())]);
+        using var http = new HttpClient(handler);
+
+        var entities = await Client(http).Suggest("Samsung Electronics Co., Ltd.");
+
+        entities.Should().BeEmpty();
+        handler.Requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Suggest_RefusesASuggestionWithAMalformedLei()
+    {
+        var body = JsonNode.Parse(await Fixture("samsung-electronics-autocomplete.json"));
+        body["data"][1]["relationships"]["lei-records"]["data"]["id"] = "254900SHHC9DE6P8N92";
+        using var http = new HttpClient(
+            new ReplyHandler([(HttpStatusCode.OK, body.ToJsonString())])
+        );
+
+        var suggest = () => Client(http).Suggest("Samsung Electronics");
+
+        await suggest.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Fact]
+    public async Task GetEntities_RefusesARecordThatWasNotRequested()
+    {
+        using var http = new HttpClient(
+            new ReplyHandler([
+                (HttpStatusCode.OK, await Fixture("samsung-electronics-lei-records.json")),
+            ])
+        );
+
+        var entities = () =>
+            Client(http).GetEntities(["254900SHHC9DE6P8N928", "2549000PB5BA9MOMBQ96"]);
+
+        await entities.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(21)]
+    [InlineData(-1)]
+    public async Task GetEntities_RefusesAnEmptyOversizedOrInvalidList_WithoutARequest(int count)
+    {
+        var leis =
+            count < 0
+                ? ["254900SHHC9DE6P8N92"]
+                : Enumerable
+                    .Range(0, count)
+                    .Select(i => "254900SHHC9DE6P8N" + i.ToString("D3"))
+                    .ToList();
+        var handler = new ReplyHandler([]);
+        using var http = new HttpClient(handler);
+
+        var entities = () => Client(http).GetEntities(leis);
+
+        await entities.Should().ThrowAsync<ArgumentException>();
+        handler.Requests.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task GetUltimateParent_ReadsTheTopOfTheChain()
     {
