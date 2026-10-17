@@ -30,11 +30,12 @@ public static class ReportingPersonTypeCodes
     {
         var types = ReportingPersonTypes.None;
         var unknown = new List<string>();
-        foreach (var raw in codes ?? [])
+        foreach (
+            var code in (codes ?? [])
+                .Select(raw => raw?.Trim())
+                .Where(code => !string.IsNullOrEmpty(code))
+        )
         {
-            var code = raw?.Trim();
-            if (string.IsNullOrEmpty(code))
-                continue;
             if (ByCode.TryGetValue(code, out var type))
                 types |= type;
             else if (!unknown.Contains(code, StringComparer.OrdinalIgnoreCase))
