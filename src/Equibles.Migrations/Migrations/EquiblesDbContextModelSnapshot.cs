@@ -4116,6 +4116,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<bool?>("AdvisesPrivateFunds")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("ChargesCommissions")
                         .HasColumnType("boolean");
 
@@ -4137,6 +4140,13 @@ namespace Equibles.Migrations.Migrations
                     b.Property<bool>("ChargesSubscription")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Cik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("CikCount")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Crd")
                         .HasColumnType("integer");
 
@@ -4146,9 +4156,25 @@ namespace Equibles.Migrations.Migrations
                     b.Property<long?>("DiscretionaryAum")
                         .HasColumnType("bigint");
 
+                    b.Property<int>("ExemptionBasis")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HedgeFundCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("LatestFilingDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("LegalName")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Lei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("LiquidityFundCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("MainOfficeCity")
                         .HasMaxLength(128)
@@ -4168,9 +4194,39 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int?>("NumberOfEmployees")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("OrganizationForm")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OtherBusinesses")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OtherPrivateFundCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PrimaryBusinessName")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<int?>("PrivateEquityFundCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PrivateFundCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("PrivateFundGrossAssets")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("RealEstateFundCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Registration")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegistrationBasis")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RelatedPersons")
+                        .HasColumnType("integer");
 
                     b.Property<DateOnly>("ReportDate")
                         .HasColumnType("date");
@@ -4183,11 +4239,17 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int?>("SecuritizedAssetFundCount")
+                        .HasColumnType("integer");
+
                     b.Property<long?>("TotalRegulatoryAum")
                         .HasColumnType("bigint");
 
                     b.Property<DateTime>("UpdateTime")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("VentureCapitalFundCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("WebsiteAddress")
                         .HasMaxLength(512)
@@ -4195,14 +4257,77 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Cik");
+
                     b.HasIndex("Crd")
                         .IsUnique();
 
                     b.HasIndex("LegalName");
 
+                    b.HasIndex("Lei");
+
                     b.HasIndex("TotalRegulatoryAum");
 
                     b.ToTable("FormAdvAdviser");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.FormAdvAdviserClientType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ClientCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ClientType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Crd")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("FewerThanFiveClients")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("RegulatoryAum")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Crd", "ClientType")
+                        .IsUnique();
+
+                    b.ToTable("FormAdvAdviserClientType");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.Data.Models.FormAdvRosterImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AdviserCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ParserVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Registration")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Registration", "ReportDate")
+                        .IsUnique();
+
+                    b.ToTable("FormAdvRosterImport");
                 });
 
             modelBuilder.Entity("Equibles.Sec.Data.Models.FormDFiling", b =>

@@ -15,6 +15,8 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(Crd), IsUnique = true)]
 [Index(nameof(LegalName))]
 [Index(nameof(TotalRegulatoryAum))]
+[Index(nameof(Cik))]
+[Index(nameof(Lei))]
 public class FormAdvAdviser
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
@@ -87,6 +89,64 @@ public class FormAdvAdviser
 
     /// <summary>Charges other types of compensation (Item 5.E(7)).</summary>
     public bool ChargesOther { get; set; }
+
+    /// <summary>
+    /// The roster the adviser was last listed in; null for a row not seen in a roster since the
+    /// column existed.
+    /// </summary>
+    public FormAdvRegistration? Registration { get; set; }
+
+    /// <summary>The adviser's SEC CIK (the roster's <c>CIK#</c>), without leading zeros; null when not reported.</summary>
+    [MaxLength(16)]
+    public string Cik { get; set; }
+
+    /// <summary>How many CIKs the adviser reports; the roster lists only the first.</summary>
+    public int? CikCount { get; set; }
+
+    /// <summary>Legal Entity Identifier (Item 1.P); null unless the filed value passes the ISO 17442 check.</summary>
+    [MaxLength(20)]
+    public string Lei { get; set; }
+
+    /// <summary>Filing date of the adviser's latest Form ADV.</summary>
+    public DateOnly? LatestFilingDate { get; set; }
+
+    /// <summary>How the adviser is organized (Item 3.A); null when not reported or unrecognized.</summary>
+    public FormAdvOrganizationForm? OrganizationForm { get; set; }
+
+    /// <summary>Why a registered adviser may register with the SEC (Item 2.A).</summary>
+    public FormAdvRegistrationBasis RegistrationBasis { get; set; }
+
+    /// <summary>Why an exempt reporting adviser is exempt (Item 2.B).</summary>
+    public FormAdvExemptionBasis ExemptionBasis { get; set; }
+
+    /// <summary>Other businesses the adviser is engaged in (Item 6.A).</summary>
+    public FormAdvOtherBusiness OtherBusinesses { get; set; }
+
+    /// <summary>Kinds of related persons the adviser has (Item 7.A).</summary>
+    public FormAdvRelatedPerson RelatedPersons { get; set; }
+
+    /// <summary>Advises at least one private fund (Item 7.B); null when not reported.</summary>
+    public bool? AdvisesPrivateFunds { get; set; }
+
+    /// <summary>Private funds the adviser reports on Schedule D 7.B.(1).</summary>
+    public int? PrivateFundCount { get; set; }
+
+    public int? HedgeFundCount { get; set; }
+
+    public int? PrivateEquityFundCount { get; set; }
+
+    public int? VentureCapitalFundCount { get; set; }
+
+    public int? RealEstateFundCount { get; set; }
+
+    public int? LiquidityFundCount { get; set; }
+
+    public int? SecuritizedAssetFundCount { get; set; }
+
+    public int? OtherPrivateFundCount { get; set; }
+
+    /// <summary>Gross assets of the private funds reported on Schedule D 7.B.(1), in US dollars.</summary>
+    public long? PrivateFundGrossAssets { get; set; }
 
     /// <summary>The snapshot date of the bulk file this record was last imported from.</summary>
     public DateOnly ReportDate { get; set; }
