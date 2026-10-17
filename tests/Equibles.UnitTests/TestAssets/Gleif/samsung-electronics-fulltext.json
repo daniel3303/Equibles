@@ -1,0 +1,501 @@
+{
+ "meta": {
+  "goldenCopy": {
+   "publishDate": "2026-10-17T08:00:00Z"
+  },
+  "pagination": {
+   "currentPage": 1,
+   "perPage": 3,
+   "from": 1,
+   "to": 3,
+   "total": 3,
+   "lastPage": 1
+  }
+ },
+ "links": {
+  "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bfulltext%5D=Samsung+Electronics+Co.+Ltd.&page%5Bnumber%5D=1&page%5Bsize%5D=10",
+  "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bfulltext%5D=Samsung+Electronics+Co.+Ltd.&page%5Bnumber%5D=1&page%5Bsize%5D=10"
+ },
+ "data": [
+  {
+   "type": "lei-records",
+   "id": "9884007ER46L6N7EI764",
+   "attributes": {
+    "lei": "9884007ER46L6N7EI764",
+    "entity": {
+     "legalName": {
+      "name": "삼성전자(주)",
+      "language": "ko"
+     },
+     "otherNames": [
+      {
+       "name": "SAMSUNG ELECTRONICS CO., LTD",
+       "language": "en",
+       "type": "ALTERNATIVE_LANGUAGE_LEGAL_NAME"
+      }
+     ],
+     "transliteratedOtherNames": [],
+     "legalAddress": {
+      "language": "ko",
+      "addressLines": [
+       "경기도 수원시 영통구 삼성로 129 (매탄동)",
+       "삼성전자"
+      ],
+      "addressNumber": null,
+      "addressNumberWithinBuilding": null,
+      "mailRouting": null,
+      "city": "Suwon",
+      "region": "KR-41",
+      "country": "KR",
+      "postalCode": "16677"
+     },
+     "headquartersAddress": {
+      "language": "ko",
+      "addressLines": [
+       "경기도 수원시 영통구 삼성로 129 (매탄동)",
+       "삼성전자"
+      ],
+      "addressNumber": null,
+      "addressNumberWithinBuilding": null,
+      "mailRouting": null,
+      "city": "Suwon",
+      "region": "KR-41",
+      "country": "KR",
+      "postalCode": "16677"
+     },
+     "registeredAt": {
+      "id": "RA000657",
+      "other": null
+     },
+     "registeredAs": "124-81-00998",
+     "jurisdiction": "KR",
+     "category": "GENERAL",
+     "legalForm": {
+      "id": "5RCH",
+      "other": null
+     },
+     "associatedEntity": {
+      "lei": null,
+      "name": null
+     },
+     "status": "ACTIVE",
+     "expiration": {
+      "date": null,
+      "reason": null
+     },
+     "successorEntity": {
+      "lei": null,
+      "name": null
+     },
+     "successorEntities": [],
+     "creationDate": "1969-01-13T00:00:00Z",
+     "subCategory": null,
+     "otherAddresses": [
+      {
+       "fieldType": "OtherAddress",
+       "language": "en",
+       "type": "ALTERNATIVE_LANGUAGE_LEGAL_ADDRESS",
+       "addressLines": [
+        "129, Samsung-ro, Yeongtong-gu, Suwon-si, Gyeonggi-do",
+        "SAMSUNG ELECTRONICS"
+       ],
+       "city": "Suwon",
+       "region": "KR-41",
+       "country": "KR",
+       "postalCode": "16677"
+      },
+      {
+       "fieldType": "OtherAddress",
+       "language": "en",
+       "type": "ALTERNATIVE_LANGUAGE_HEADQUARTERS_ADDRESS",
+       "addressLines": [
+        "129, Samsung-ro, Yeongtong-gu, Suwon-si, Gyeonggi-do",
+        "SAMSUNG ELECTRONICS"
+       ],
+       "city": "Suwon",
+       "region": "KR-41",
+       "country": "KR",
+       "postalCode": "16677"
+      }
+     ],
+     "eventGroups": []
+    },
+    "registration": {
+     "initialRegistrationDate": "2017-09-27T00:00:00Z",
+     "lastUpdateDate": "2025-10-31T09:40:29Z",
+     "status": "ISSUED",
+     "nextRenewalDate": "2026-10-31T00:00:00Z",
+     "managingLou": "9884008RRMX1X5HV6625",
+     "corroborationLevel": "FULLY_CORROBORATED",
+     "validatedAt": {
+      "id": "RA000657",
+      "other": null
+     },
+     "validatedAs": "124-81-00998",
+     "otherValidationAuthorities": []
+    },
+    "bic": [
+     "SECTKRSEXXX"
+    ],
+    "mic": null,
+    "ocid": null,
+    "qcc": null,
+    "gem": null,
+    "spglobal": [
+     "91868"
+    ],
+    "conformityFlag": "CONFORMING"
+   },
+   "relationships": {
+    "managing-lou": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/managing-lou"
+     }
+    },
+    "lei-issuer": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/lei-issuer"
+     }
+    },
+    "field-modifications": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/field-modifications"
+     }
+    },
+    "direct-parent": {
+     "links": {
+      "reporting-exception": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/direct-parent-reporting-exception"
+     }
+    },
+    "ultimate-parent": {
+     "links": {
+      "reporting-exception": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/ultimate-parent-reporting-exception"
+     }
+    },
+    "direct-children": {
+     "links": {
+      "relationship-records": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/direct-child-relationships",
+      "related": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/direct-children"
+     }
+    },
+    "ultimate-children": {
+     "links": {
+      "relationship-records": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/ultimate-child-relationships",
+      "related": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/ultimate-children"
+     }
+    },
+    "branches": {
+     "links": {
+      "relationship-records": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/branch-relationships",
+      "related": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/branches"
+     }
+    },
+    "isins": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764/isins"
+     }
+    }
+   },
+   "links": {
+    "self": "https://api.gleif.org/api/v1/lei-records/9884007ER46L6N7EI764"
+   }
+  },
+  {
+   "type": "lei-records",
+   "id": "988400SM6BU7Q5ZQRV92",
+   "attributes": {
+    "lei": "988400SM6BU7Q5ZQRV92",
+    "entity": {
+     "legalName": {
+      "name": "삼성액티브자산운용(주)",
+      "language": "ko"
+     },
+     "otherNames": [
+      {
+       "name": "Samsung Active Asset Management Co., Ltd.",
+       "language": "en",
+       "type": "ALTERNATIVE_LANGUAGE_LEGAL_NAME"
+      }
+     ],
+     "transliteratedOtherNames": [],
+     "legalAddress": {
+      "language": "ko",
+      "addressLines": [
+       "서울특별시 서초구 서초대로74길 11(서초동)",
+       "삼성전자빌딩"
+      ],
+      "addressNumber": null,
+      "addressNumberWithinBuilding": null,
+      "mailRouting": null,
+      "city": "Seoul",
+      "region": "KR-11",
+      "country": "KR",
+      "postalCode": "06620"
+     },
+     "headquartersAddress": {
+      "language": "ko",
+      "addressLines": [
+       "서울특별시 서초구 서초대로74길 11(서초동)",
+       "삼성전자빌딩"
+      ],
+      "addressNumber": null,
+      "addressNumberWithinBuilding": null,
+      "mailRouting": null,
+      "city": "Seoul",
+      "region": "KR-11",
+      "country": "KR",
+      "postalCode": "06620"
+     },
+     "registeredAt": {
+      "id": "RA000657",
+      "other": null
+     },
+     "registeredAs": "704-88-00624",
+     "jurisdiction": "KR",
+     "category": "GENERAL",
+     "legalForm": {
+      "id": "5RCH",
+      "other": null
+     },
+     "associatedEntity": {
+      "lei": null,
+      "name": null
+     },
+     "status": "ACTIVE",
+     "expiration": {
+      "date": null,
+      "reason": null
+     },
+     "successorEntity": {
+      "lei": null,
+      "name": null
+     },
+     "successorEntities": [],
+     "creationDate": "2017-01-02T00:00:00Z",
+     "subCategory": null,
+     "otherAddresses": [
+      {
+       "fieldType": "OtherAddress",
+       "language": "en",
+       "type": "ALTERNATIVE_LANGUAGE_LEGAL_ADDRESS",
+       "addressLines": [
+        "11, Seocho-daero 74-gil, Seocho-gu, Seoul",
+        "Samsung Electronics Bldg"
+       ],
+       "city": "Seoul",
+       "region": "KR-11",
+       "country": "KR",
+       "postalCode": "06620"
+      },
+      {
+       "fieldType": "OtherAddress",
+       "language": "en",
+       "type": "ALTERNATIVE_LANGUAGE_HEADQUARTERS_ADDRESS",
+       "addressLines": [
+        "11, Seocho-daero 74-gil, Seocho-gu, Seoul",
+        "Samsung Electronics Bldg"
+       ],
+       "city": "Seoul",
+       "region": "KR-11",
+       "country": "KR",
+       "postalCode": "06620"
+      }
+     ],
+     "eventGroups": []
+    },
+    "registration": {
+     "initialRegistrationDate": "2021-09-15T00:00:00Z",
+     "lastUpdateDate": "2026-09-22T16:39:48Z",
+     "status": "ISSUED",
+     "nextRenewalDate": "2027-09-30T00:00:00Z",
+     "managingLou": "9884008RRMX1X5HV6625",
+     "corroborationLevel": "FULLY_CORROBORATED",
+     "validatedAt": {
+      "id": "RA000657",
+      "other": null
+     },
+     "validatedAs": "704-88-00624",
+     "otherValidationAuthorities": []
+    },
+    "bic": [
+     "SECTKRS2XXX"
+    ],
+    "mic": null,
+    "ocid": null,
+    "qcc": null,
+    "gem": null,
+    "spglobal": [
+     "416911834"
+    ],
+    "conformityFlag": "CONFORMING"
+   },
+   "relationships": {
+    "managing-lou": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92/managing-lou"
+     }
+    },
+    "lei-issuer": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92/lei-issuer"
+     }
+    },
+    "field-modifications": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92/field-modifications"
+     }
+    },
+    "direct-parent": {
+     "links": {
+      "relationship-record": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92/direct-parent-relationship",
+      "lei-record": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92/direct-parent"
+     }
+    },
+    "ultimate-parent": {
+     "links": {
+      "relationship-record": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92/ultimate-parent-relationship",
+      "lei-record": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92/ultimate-parent"
+     }
+    }
+   },
+   "links": {
+    "self": "https://api.gleif.org/api/v1/lei-records/988400SM6BU7Q5ZQRV92"
+   }
+  },
+  {
+   "type": "lei-records",
+   "id": "2549000PB5BA9MOMBQ96",
+   "attributes": {
+    "lei": "2549000PB5BA9MOMBQ96",
+    "entity": {
+     "legalName": {
+      "name": "台灣三星電子股份有限公司",
+      "language": "zh"
+     },
+     "otherNames": [],
+     "transliteratedOtherNames": [
+      {
+       "name": "SAMSUNG ELECTRONICS TAIWAN CO., LTD.",
+       "language": "zh",
+       "type": "PREFERRED_ASCII_TRANSLITERATED_LEGAL_NAME"
+      }
+     ],
+     "legalAddress": {
+      "language": "en",
+      "addressLines": [
+       "10 F.-1",
+       "No. 399, Ruiguang Rd.",
+       "Neihu District"
+      ],
+      "addressNumber": null,
+      "addressNumberWithinBuilding": null,
+      "mailRouting": null,
+      "city": "Taipei",
+      "region": null,
+      "country": "TW",
+      "postalCode": "114675"
+     },
+     "headquartersAddress": {
+      "language": "en",
+      "addressLines": [
+       "10 F.-1",
+       "No. 399, Ruiguang Rd.",
+       "Neihu District"
+      ],
+      "addressNumber": null,
+      "addressNumberWithinBuilding": null,
+      "mailRouting": null,
+      "city": "Taipei",
+      "region": null,
+      "country": "TW",
+      "postalCode": "114675"
+     },
+     "registeredAt": {
+      "id": "RA000551",
+      "other": null
+     },
+     "registeredAs": "84899112",
+     "jurisdiction": "TW",
+     "category": "GENERAL",
+     "legalForm": {
+      "id": "TD8P",
+      "other": null
+     },
+     "associatedEntity": {
+      "lei": null,
+      "name": null
+     },
+     "status": "ACTIVE",
+     "expiration": {
+      "date": null,
+      "reason": null
+     },
+     "successorEntity": {
+      "lei": null,
+      "name": null
+     },
+     "successorEntities": [],
+     "creationDate": "1994-11-17T00:00:00Z",
+     "subCategory": null,
+     "otherAddresses": [],
+     "eventGroups": []
+    },
+    "registration": {
+     "initialRegistrationDate": "2018-04-18T12:49:04Z",
+     "lastUpdateDate": "2026-03-12T18:40:51Z",
+     "status": "ISSUED",
+     "nextRenewalDate": "2027-03-18T12:49:04Z",
+     "managingLou": "5493001KJTIIGC8Y1R12",
+     "corroborationLevel": "FULLY_CORROBORATED",
+     "validatedAt": {
+      "id": "RA000551",
+      "other": null
+     },
+     "validatedAs": "84899112",
+     "otherValidationAuthorities": []
+    },
+    "bic": [
+     "SECTTWT1XXX"
+    ],
+    "mic": null,
+    "ocid": null,
+    "qcc": "QTW77TYK2K",
+    "gem": null,
+    "spglobal": [
+     "30915409"
+    ],
+    "conformityFlag": "NON_CONFORMING"
+   },
+   "relationships": {
+    "managing-lou": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/2549000PB5BA9MOMBQ96/managing-lou"
+     }
+    },
+    "lei-issuer": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/2549000PB5BA9MOMBQ96/lei-issuer"
+     }
+    },
+    "field-modifications": {
+     "links": {
+      "related": "https://api.gleif.org/api/v1/lei-records/2549000PB5BA9MOMBQ96/field-modifications"
+     }
+    },
+    "direct-parent": {
+     "links": {
+      "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2549000PB5BA9MOMBQ96/direct-parent-reporting-exception"
+     }
+    },
+    "ultimate-parent": {
+     "links": {
+      "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2549000PB5BA9MOMBQ96/ultimate-parent-reporting-exception"
+     }
+    }
+   },
+   "links": {
+    "self": "https://api.gleif.org/api/v1/lei-records/2549000PB5BA9MOMBQ96"
+   }
+  }
+ ]
+}
