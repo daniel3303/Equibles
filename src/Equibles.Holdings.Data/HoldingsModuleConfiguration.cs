@@ -299,6 +299,9 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<UnmappedCusip>();
         builder.Entity<FilingOtherManager>();
+        builder.Entity<Form13FNotice>();
+        builder.Entity<Form13FNoticeReporter>();
+        builder.Entity<Form13FNoticeDataSet>();
         builder.Entity<ProcessedDataSet>();
         builder.Entity<HoldingsCusipRescan>();
         builder.Entity<ProcessedFiling>();
