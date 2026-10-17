@@ -1,6 +1,6 @@
 # Browse investment advisers (SEC Form ADV)
 
-This guide shows you how to use the Investment Advisers page to look up SEC-registered investment advisers and read their Form ADV profiles — assets under management, location, employee count, and fee structure.
+This guide shows you how to use the Investment Advisers page to look up SEC-registered and exempt reporting investment advisers and read their Form ADV profiles — assets under management, location, employee count, and fee structure. Exempt reporting advisers do not file Item 5, so the AUM, employee and fee figures appear for registered advisers only.
 
 ## Open the advisers page
 
@@ -36,4 +36,4 @@ The list shows 50 advisers per page, with these columns:
 
 ## What is a CRD number?
 
-A CRD (Central Registration Depository) number is the unique identifier the SEC and FINRA assign to each registered firm. Equibles uses it in the profile URL (`/advisers/<crd>`) and shows it under each firm's name so you can tell apart firms with similar names.
+A CRD (Central Registration Depository) number is the unique identifier the SEC and FINRA assign to each firm. Equibles uses it in the profile URL (`/advisers/<crd>`) and shows it under each firm's name so you can tell apart firms with similar names.

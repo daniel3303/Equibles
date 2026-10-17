@@ -202,7 +202,7 @@ The web portal at `http://localhost:8080` provides a browser-based interface for
 
 - **Stocks** — Browse and search all tracked companies, view price charts with technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands), golden/death-cross and price-streak badges, performance versus SPY, plus per-stock tabs for institutional holdings, short data, SEC filings, financial statements, insider trading, proposed (Form 144) sales, fund holdings (NPORT), fund operations (N-CEN), exempt offerings (Form D), and congressional trades
 - **Institutions** — Browse institutional holders (hedge funds, asset managers), view detailed profiles with portfolio breakdowns, industry allocation, quarterly activity, backtesting, and side-by-side comparisons. Filers are scored on risk-adjusted performance (alpha vs. a benchmark) and a Smart Money Index page aggregates the highest-scoring funds into a consensus signal. Includes a holdings screener with filters (filer count, value, float %, location, AUM/position-count, industry) and CSV export
-- **Advisers** — Browse SEC-registered investment advisers (`/advisers`), ranked by assets under management, with per-firm profiles (regulatory AUM, main office, employee count, fee structure)
+- **Advisers** — Browse SEC-registered and exempt reporting investment advisers (`/advisers`), ranked by assets under management, with per-firm profiles (regulatory AUM, main office, employee count, fee structure)
 - **Insider Trading** — Dashboard showing the top insider buys, sells, and biggest transactions over the last 90 days
 - **Short Activity** — Most-shorted leaderboard (`/most-shorted`, ranked by FINRA short interest) and largest daily short volume (`/short-volume`), each with a date selector, server-side sort, and pagination
 - **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
@@ -220,7 +220,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Congressional Trading** — Trades for a ticker, trades by one member, member search
 - **SEC Documents** — Full-text search, semantic search, document browsing, keyword search within filings
 - **Financial Statements** — XBRL fact time series per ticker, cross-ticker fact comparison, full income statement / balance sheet / cash flow per fiscal period
-- **Fund & Adviser Filings** — Fund portfolio holdings (NPORT), registered-fund operations (N-CEN), exempt offerings (Form D), and SEC-registered investment-adviser lookup and search (Form ADV)
+- **Fund & Adviser Filings** — Fund portfolio holdings (NPORT), registered-fund operations (N-CEN), exempt offerings (Form D), and SEC-registered and exempt reporting investment-adviser lookup and search (Form ADV)
 - **Short Data** — Daily short volume, market-wide largest daily short volume, bi-monthly short interest, and the latest short-interest snapshot across tickers
 - **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
 - **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume, Bollinger Bands)
