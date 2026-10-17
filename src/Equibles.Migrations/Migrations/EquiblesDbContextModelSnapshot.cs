@@ -5109,6 +5109,56 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("ProcessedNportFiling");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.Data.Models.SecFilerProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Cik")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Found")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Sic")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("SicDescription")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("StateOfIncorporation")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Cik")
+                        .IsUnique();
+
+                    b.HasIndex("Sic");
+
+                    b.ToTable("SecFilerProfile");
+                });
+
             modelBuilder.Entity("Equibles.Sec.Data.Models.SecFilingArtifact", b =>
                 {
                     b.Property<Guid>("Id")
