@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:com="http://www.sec.gov/edgar/common">
+  <headerData>
+    <submissionType>SCHEDULE 13D/A</submissionType>
+    <previousAccessionNumber>0000902664-24-004604</previousAccessionNumber>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <!-- Field: Pseudo-Tag; ID: Name; Data: AyurMaya Capital Management Company, LP -->
+          <cik>0001975990</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <amendmentNo>2</amendmentNo>
+      <securitiesClassTitle>Common Stock, par value $0.0001 per share</securitiesClassTitle>
+      <dateOfEvent>05/21/2025</dateOfEvent>
+      <previouslyFiledFlag>false</previouslyFiledFlag>
+      <issuerInfo>
+        <issuerCIK>0001847367</issuerCIK>
+        <issuerCUSIP>022307102</issuerCUSIP>
+        <issuerName>Alumis Inc.</issuerName>
+        <address>
+          <com:street1>280 EAST GRAND AVENUE</com:street1>
+          <com:city>SOUTH SAN FRANCISCO</com:city>
+          <com:stateOrCountry>CA</com:stateOrCountry>
+          <com:zipCode>94080</com:zipCode>
+        </address>
+      </issuerInfo>
+      <authorizedPersons>
+        <notificationInfo>
+          <personName>Gregory A. Brown</personName>
+          <personPhoneNum>781-522-4007</personPhoneNum>
+          <personAddress>
+            <com:street1>AyurMaya Capital Management Company. LP</com:street1>
+            <com:street2>3 Pleasant Street, Suite 400</com:street2>
+            <com:city>Portsmouth</com:city>
+            <com:stateOrCountry>NH</com:stateOrCountry>
+            <com:zipCode>03801</com:zipCode>
+          </personAddress>
+        </notificationInfo>
+        <notificationInfo>
+          <personName>Ele Klein &amp; Adriana Schwartz</personName>
+          <personPhoneNum>212-756-2000</personPhoneNum>
+          <personAddress>
+            <com:street1>Schulte Roth &amp; Zabel LLP</com:street1>
+            <com:street2>919 Third Avenue</com:street2>
+            <com:city>New York</com:city>
+            <com:stateOrCountry>NY</com:stateOrCountry>
+            <com:zipCode>10022</com:zipCode>
+          </personAddress>
+        </notificationInfo>
+      </authorizedPersons>
+    </coverPageHeader>
+    <reportingPersons>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001975990</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>AyurMaya Capital Management Company, LP</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>15139707.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>15139707.00</sharedDispositivePower>
+        <aggregateAmountOwned>15139707.00</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>15.8</percentOfClass>
+        <typeOfReportingPerson>IA</typeOfReportingPerson>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001548144</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>David E. Goel</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+        <soleVotingPower>0.00</soleVotingPower>
+        <sharedVotingPower>15139707.00</sharedVotingPower>
+        <soleDispositivePower>0.00</soleDispositivePower>
+        <sharedDispositivePower>15139707.00</sharedDispositivePower>
+        <aggregateAmountOwned>15139707.00</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>15.8</percentOfClass>
+        <typeOfReportingPerson>IN</typeOfReportingPerson>
+        <typeOfReportingPerson>HC</typeOfReportingPerson>
+      </reportingPersonInfo>
+    </reportingPersons>
+    <items1To7>
+      <item1>
+        <securityTitle>Common Stock, par value $0.0001 per share</securityTitle>
+        <issuerName>Alumis Inc.</issuerName>
+        <issuerPrincipalAddress>
+          <com:street1>280 EAST GRAND AVENUE</com:street1>
+          <com:city>SOUTH SAN FRANCISCO</com:city>
+          <com:stateOrCountry>CA</com:stateOrCountry>
+          <com:zipCode>94080</com:zipCode>
+        </issuerPrincipalAddress>
+        <commentText>This Amendment No. 2 ("Amendment No. 2") amends and supplements the statement on Schedule 13D filed with the Securities and Exchange Commission on July 3, 2024 (the "Original Schedule 13D", and the Original Schedule 13D as amended, the "Schedule 13D"). This Amendment No. 2 supplements Item 4 and amends and restates Items 5(a)-(c) as set forth below. Capitalized terms used herein and not otherwise defined in this Amendment No. 2 have the meanings set forth in the Schedule 13D.</commentText>
+      </item1>
+      <item4>
+        <transactionPurpose>The Merger closed on May 21, 2025. Pursuant to the Merger Agreement, at the effective time of the Merger (the "Effective Time"), each issued and outstanding share of common stock of ACELYRIN, par value $0.00001 per share (collectively, the "ACELYRIN Shares"), was cancelled and converted into the right to receive 0.4814 shares of Common Stock of the Issuer, without interest and, if applicable, cash in lieu of fractional shares, without interest, subject to any applicable withholding. Accordingly, at the Effective Time of the Merger, the AyurMaya Fund received, in exchange for its 9,334,735 ACELRYIN Shares, approximately 4,493,741 shares of Common Stock, as disclosed to the Reporting Persons by the Issuer.  The Reporting Persons will file an amendment to the Schedule 13D to the extent the actual number of shares of Common Stock received differs materially from the foregoing.
+
+The foregoing summary of the transaction that was consummated pursuant to the Merger Agreement does not purport to be complete and is qualified in its entirety by, the full text of the Current Report on Form 8-K filed by the Issuer with the Securities and Exchange Commission on May 21, 2025, and is incorporated herein by reference.</transactionPurpose>
+      </item4>
+      <item5>
+        <percentageOfClassSecurities>See rows (11) and (13) of the cover pages to this Schedule 13D for the aggregate number of shares of Common Stock and percentages of the shares of Common Stock beneficially owned by each Reporting Person.  The percentages used in this Schedule 13D as of the date hereof are calculated based upon approximately 95,819,723 shares of Common Stock outstanding following the Effective Time of the Merger, as disclosed to the Reporting Persons by the Issuer.</percentageOfClassSecurities>
+        <numberOfShares>See rows (7) through (10) of the cover pages to this Schedule 13D for the number of shares of Common Stock as to which each Reporting Person has the sole or shared power to vote or direct the vote and sole or shared power to dispose or to direct the disposition.</numberOfShares>
+        <transactionDesc>Other than as described in Item 4 of this Amendment No. 2, no transactions in the shares of Common Stock have been effected by the Reporting Persons during the past sixty (60) days.</transactionDesc>
+      </item5>
+    </items1To7>
+    <signatureInfo>
+      <signaturePerson>
+        <signatureReportingPerson>AyurMaya Capital Management Company, LP</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ David E. Goel</signature>
+          <title>By: AyurMaya Capital Management Company GP, LLC, General Partner, By: David E. Goel, Managing Member</title>
+          <date>05/23/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>David E. Goel</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ David E. Goel</signature>
+          <title>David E. Goel, Individually</title>
+          <date>05/23/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+    </signatureInfo>
+  </formData>
+</edgarSubmission>

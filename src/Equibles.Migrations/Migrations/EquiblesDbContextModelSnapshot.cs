@@ -2375,6 +2375,131 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("AumQuarterlySnapshot");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.BeneficialOwnershipFiling", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccessionNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly?>("DateOfEvent")
+                        .HasColumnType("date");
+
+                    b.Property<string>("FilerCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateOnly>("FilingDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("FilingPersonTypes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FilingType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsAmendment")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsUnreadable")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IssuerCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("IssuerCusip")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Rules")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UnrecognizedFilingPersonTypeCodes")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("FilerCik");
+
+                    b.HasIndex("IssuerCik");
+
+                    b.ToTable("BeneficialOwnershipFiling");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.BeneficialOwnershipReportingPerson", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AggregateAmountOwned")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("BeneficialOwnershipFilingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Cik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("CitizenshipOrOrganization")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsLead")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("PercentOfClass")
+                        .HasColumnType("numeric(7,4)");
+
+                    b.Property<long>("SharedDispositivePower")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SharedVotingPower")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SoleDispositivePower")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SoleVotingPower")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Types")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UnrecognizedTypeCodes")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Cik");
+
+                    b.HasIndex("BeneficialOwnershipFilingId", "Ordinal")
+                        .IsUnique();
+
+                    b.ToTable("BeneficialOwnershipReportingPerson");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.FilingOtherManager", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5899,6 +6024,17 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Issuer");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.BeneficialOwnershipReportingPerson", b =>
+                {
+                    b.HasOne("Equibles.Holdings.Data.Models.BeneficialOwnershipFiling", "Filing")
+                        .WithMany("ReportingPersons")
+                        .HasForeignKey("BeneficialOwnershipFilingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Filing");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.FundScore", b =>
                 {
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
@@ -6476,6 +6612,11 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Fred.Data.Models.FredSeries", b =>
                 {
                     b.Navigation("Observations");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.BeneficialOwnershipFiling", b =>
+                {
+                    b.Navigation("ReportingPersons");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolder", b =>

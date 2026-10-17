@@ -55,7 +55,7 @@ public class Filing13DGXmlParserParse13DTests
         person.SharedDispositivePower.Should().Be(164310);
         person.AggregateAmountOwned.Should().Be(164310);
         person.PercentOfClass.Should().Be(0.03m);
-        person.TypeOfReportingPerson.Should().Be("PN");
+        person.TypeCodes.Should().Equal("PN");
         person.CitizenshipOrOrganization.Should().Be("DE");
     }
 

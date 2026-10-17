@@ -28,6 +28,7 @@ public class Realtime13DGIngestionService
     private readonly Filing13DGXmlParser _parser;
     private readonly Realtime13DGArchiveBuilder _archiveBuilder;
     private readonly HoldingsImportService _importService;
+    private readonly BeneficialOwnershipDetailWriter _detailWriter;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<Realtime13DGIngestionService> _logger;
 
@@ -36,10 +37,12 @@ public class Realtime13DGIngestionService
         Filing13DGXmlParser parser,
         Realtime13DGArchiveBuilder archiveBuilder,
         HoldingsImportService importService,
+        BeneficialOwnershipDetailWriter detailWriter,
         IServiceScopeFactory scopeFactory,
         ILogger<Realtime13DGIngestionService> logger
     )
     {
+        _detailWriter = detailWriter;
         _edgarClient = edgarClient;
         _parser = parser;
         _archiveBuilder = archiveBuilder;
@@ -97,6 +100,8 @@ public class Realtime13DGIngestionService
             var filing = await TryParseAndValidateEntry(entry, minReportDate, cancellationToken);
             if (filing == null)
                 continue;
+
+            await _detailWriter.TryWrite(filing, cancellationToken);
 
             _logger.LogInformation(
                 "Importing {Form} {Accession} (CIK {Cik}, event {Event})",
