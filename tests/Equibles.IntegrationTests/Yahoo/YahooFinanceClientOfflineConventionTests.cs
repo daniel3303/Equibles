@@ -10,9 +10,12 @@ namespace Equibles.IntegrationTests.Yahoo;
 /// </summary>
 public class YahooFinanceClientOfflineConventionTests
 {
-    // Direct construction of the plain client, fully qualified or target-typed.
+    // Direct construction of the plain client: explicit, fully qualified, or target-typed in a
+    // declaration, an expression-bodied member or a bare return.
     private static readonly Regex PlainConstruction = new(
-        @"new\s+(?:[\w.]+\.)?YahooFinanceClient\s*\(|YahooFinanceClient\s+\w+\s*=\s*new\s*\(",
+        @"new\s+(?:[\w.]+\.)?YahooFinanceClient\s*\("
+            + @"|YahooFinanceClient\s+\w+\s*=\s*new\s*\("
+            + @"|YahooFinanceClient\s+\w+\s*\([^)]*\)\s*(?:=>|\{\s*return)\s*new\s*\(",
         RegexOptions.CultureInvariant
     );
 
