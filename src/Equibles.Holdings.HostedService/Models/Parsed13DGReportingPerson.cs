@@ -29,8 +29,11 @@ public class Parsed13DGReportingPerson
     /// <summary>Percent of the class beneficially owned, or null when omitted.</summary>
     public decimal? PercentOfClass { get; set; }
 
-    /// <summary>SEC <c>typeOfReportingPerson</c> code (e.g. <c>PN</c>, <c>IA</c>, <c>OO</c>).</summary>
-    public string TypeOfReportingPerson { get; set; }
+    /// <summary>
+    /// Every SEC <c>typeOfReportingPerson</c> code the person states (e.g. <c>HC</c> and <c>CO</c>),
+    /// in filed order.
+    /// </summary>
+    public List<string> TypeCodes { get; set; } = [];
 
     /// <summary>SEC <c>citizenshipOrOrganization</c> code (e.g. <c>DE</c>, <c>E9</c>).</summary>
     public string CitizenshipOrOrganization { get; set; }

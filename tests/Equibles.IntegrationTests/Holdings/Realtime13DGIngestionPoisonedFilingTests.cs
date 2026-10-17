@@ -232,6 +232,10 @@ public class Realtime13DGIngestionPoisonedFilingTests : IAsyncLifetime
             new Filing13DGXmlParser(),
             new Realtime13DGArchiveBuilder(),
             importService,
+            new BeneficialOwnershipDetailWriter(
+                scopeFactory,
+                Substitute.For<ILogger<BeneficialOwnershipDetailWriter>>()
+            ),
             scopeFactory,
             Substitute.For<ILogger<Realtime13DGIngestionService>>()
         );
