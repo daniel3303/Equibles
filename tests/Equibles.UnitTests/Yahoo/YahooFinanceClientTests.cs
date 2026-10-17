@@ -1,5 +1,6 @@
 using System.Reflection;
 using Equibles.Integrations.Yahoo;
+using Equibles.UnitTests.Helpers;
 
 namespace Equibles.UnitTests.Yahoo;
 
@@ -174,7 +175,7 @@ public class YahooFinanceClientTests
 
     private static YahooFinanceClient CreateClient()
     {
-        return new YahooFinanceClient(
+        return new OfflineYahooFinanceClient(
             new HttpClient(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<YahooFinanceClient>.Instance
         );

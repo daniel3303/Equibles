@@ -145,6 +145,80 @@ public class NCenFilingProcessorTests
     }
 
     [Fact]
+    public async Task Process_FamilyMemberWithUsProviders_ReadsTheAttributeForms()
+    {
+        var (processor, repo, secClient) = CreateProcessorWithDeps();
+        secClient
+            .GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(NCenSubmissionFixtures.VanguardWindsor);
+
+        (await processor.Process(MakeFiling(), MakeCompany())).Should().BeTrue();
+
+        var filing = await repo.GetAll().Include(f => f.ServiceProviders).SingleAsync();
+        filing.IsFamilyInvestmentCompany.Should().BeTrue();
+        filing.ParserVersion.Should().Be(NCenFiling.CurrentParserVersion);
+        filing
+            .ServiceProviders.Select(p => (p.ProviderType, p.Name, p.Country))
+            .Should()
+            .BeEquivalentTo([
+                (NCenServiceProviderType.PrincipalUnderwriter, "VANGUARD MARKETING CORP.", "US"),
+                (NCenServiceProviderType.PublicAccountant, "PRICEWATERHOUSECOOPERS LLP", "US"),
+                (
+                    NCenServiceProviderType.InvestmentAdviser,
+                    "Wellington Management Company LLP",
+                    "US"
+                ),
+                (NCenServiceProviderType.TransferAgent, "THE VANGUARD GROUP, INC.", "US"),
+                (NCenServiceProviderType.PricingService, "Bloomberg Finance LP", "US"),
+                (NCenServiceProviderType.PricingService, "S&P Global Limited", "GB"),
+                (NCenServiceProviderType.Custodian, "Mizuho Bank, Limited", "JP"),
+                (NCenServiceProviderType.Custodian, "State Street Bank and Trust Company", "US"),
+                (
+                    NCenServiceProviderType.ShareholderServicingAgent,
+                    "The Vanguard Group, Inc.",
+                    "US"
+                ),
+                (NCenServiceProviderType.Administrator, "The Vanguard Group, Inc.", "US"),
+            ]);
+    }
+
+    [Fact]
+    public async Task Process_NonFamilyRegistrant_ReadsTheElementFlagAndAUsSubAdviser()
+    {
+        var (processor, repo, secClient) = CreateProcessorWithDeps();
+        secClient
+            .GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(NCenSubmissionFixtures.EtfSeriesSolutions);
+
+        (await processor.Process(MakeFiling(), MakeCompany())).Should().BeTrue();
+
+        var filing = await repo.GetAll().Include(f => f.ServiceProviders).SingleAsync();
+        filing.IsFamilyInvestmentCompany.Should().BeFalse();
+        filing
+            .ServiceProviders.Should()
+            .ContainSingle(p => p.ProviderType == NCenServiceProviderType.SubAdviser)
+            .Which.Should()
+            .Match<NCenServiceProvider>(p =>
+                p.Name == "Penserra Capital Management LLC" && p.Country == "US"
+            );
+    }
+
+    [Theory]
+    [InlineData("<custodian><custodianCountry>JP</custodianCountry></custodian>", "JP")]
+    [InlineData(
+        "<custodian><custodianStateCountry custodianState=\"US-MA\" custodianCountry=\"US\"/></custodian>",
+        "US"
+    )]
+    [InlineData("<custodian><custodianName>N/A</custodianName></custodian>", null)]
+    public void ProviderCountry_ReadsEitherForm(string xml, string expected)
+    {
+        NCenFilingProcessor
+            .ProviderCountry(System.Xml.Linq.XElement.Parse(xml), "custodian")
+            .Should()
+            .Be(expected);
+    }
+
+    [Fact]
     public async Task Process_MultiSeries_DeDuplicatesRepeatedProviders()
     {
         var (processor, repo, secClient) = CreateProcessorWithDeps();
