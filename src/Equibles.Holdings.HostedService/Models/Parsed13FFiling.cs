@@ -21,6 +21,7 @@ public class Parsed13FFiling
     public string StateOrCountry { get; set; }
     public string Form13FFileNumber { get; set; }
     public string CrdNumber { get; set; }
+    public string SecFileNumber { get; set; }
 
     /// <summary>Summary-page <c>tableEntryTotal</c> — the filer's own position count. Null when
     /// the cover page carries no summary page (13F-NT).</summary>

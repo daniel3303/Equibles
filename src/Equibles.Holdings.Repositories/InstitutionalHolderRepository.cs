@@ -43,6 +43,98 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .ToDictionaryAsync(r => r.HolderId, r => r.ReportDate, cancellationToken);
     }
 
+    // Holders whose identity numbers were never read from a cover page since IdentityAccession
+    // existed, each with its newest 13F filings (latest report, then filing date, then accession).
+    public async Task<List<HolderIdentityBackfillCandidate>> GetIdentityBackfillCandidates(
+        int take,
+        int filingsPerHolder,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var filings = DbContext
+            .Set<InstitutionalFiling>()
+            .Where(f => f.FilingType == FilingType.Form13F);
+        var holders = await GetAll()
+            .Where(h =>
+                h.IdentityAccession == null && filings.Any(f => f.InstitutionalHolderId == h.Id)
+            )
+            .OrderBy(h => h.Id)
+            .Take(take)
+            .Select(h => new
+            {
+                h.Id,
+                h.Cik,
+                h.Form13FFileNumber,
+                h.CrdNumber,
+                h.SecFileNumber,
+            })
+            .ToListAsync(cancellationToken);
+        if (holders.Count == 0)
+            return [];
+
+        var holderIds = holders.Select(h => h.Id).ToList();
+        var rows = await filings
+            .Where(f => holderIds.Contains(f.InstitutionalHolderId))
+            .Select(f => new
+            {
+                f.InstitutionalHolderId,
+                f.AccessionNumber,
+                f.ReportDate,
+                f.FilingDate,
+            })
+            .ToListAsync(cancellationToken);
+        var filingsByHolder = rows.GroupBy(r => r.InstitutionalHolderId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                    (IReadOnlyList<HolderIdentityBackfillFiling>)
+                        g.OrderByDescending(r => r.ReportDate)
+                            .ThenByDescending(r => r.FilingDate)
+                            .ThenByDescending(r => r.AccessionNumber, StringComparer.Ordinal)
+                            .Take(filingsPerHolder)
+                            .Select(r => new HolderIdentityBackfillFiling(
+                                r.AccessionNumber,
+                                r.FilingDate
+                            ))
+                            .ToList()
+            );
+
+        return holders
+            .Where(h => filingsByHolder.ContainsKey(h.Id))
+            .Select(h => new HolderIdentityBackfillCandidate(
+                h.Id,
+                h.Cik,
+                h.Form13FFileNumber,
+                h.CrdNumber,
+                h.SecFileNumber,
+                filingsByHolder[h.Id]
+            ))
+            .ToList();
+    }
+
+    // Writes a cover page's resolved identity numbers, unless an import stamped the holder first:
+    // an import always reads a cover at least as new, so the backfill never overwrites it.
+    public Task<int> ApplyBackfilledIdentity(
+        Guid holderId,
+        string accessionNumber,
+        string form13FFileNumber,
+        string crdNumber,
+        string secFileNumber,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return GetAll()
+            .Where(h => h.Id == holderId && h.IdentityAccession == null)
+            .ExecuteUpdateAsync(
+                set =>
+                    set.SetProperty(h => h.Form13FFileNumber, form13FFileNumber)
+                        .SetProperty(h => h.CrdNumber, crdNumber)
+                        .SetProperty(h => h.SecFileNumber, secFileNumber)
+                        .SetProperty(h => h.IdentityAccession, accessionNumber),
+                cancellationToken
+            );
+    }
+
     public async Task<List<InstitutionalHolder>> GetByCiks(
         IEnumerable<string> ciks,
         CancellationToken cancellationToken = default

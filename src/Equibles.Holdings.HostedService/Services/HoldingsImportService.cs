@@ -540,8 +540,9 @@ public class HoldingsImportService
             CompanyName = Get("FILINGMANAGER_NAME"),
             City = Get("FILINGMANAGER_CITY"),
             StateOrCountry = Get("FILINGMANAGER_STATEORCOUNTRY"),
-            Form13FFileNumber = Get("FORM13FFILENUMBER"),
-            CrdNumber = Get("CRDNUMBER"),
+            Form13FFileNumber = NormalizeIdentifier(Get("FORM13FFILENUMBER")),
+            CrdNumber = NormalizeIdentifier(Get("CRDNUMBER")),
+            SecFileNumber = NormalizeIdentifier(Get("SECFILENUMBER")),
         };
         return true;
     }
@@ -1039,6 +1040,8 @@ public class HoldingsImportService
             latestStoredReportDates
         );
         CreateMissingHolders(context, existingHolders, holderRepo, cikToHolderId);
+        // After creation, so a new holder's numbers come from its newest report, not the first row seen.
+        RefreshHolderIdentityNumbers(context, existingHolders, latestStoredReportDates);
 
         await holderRepo.SaveChanges();
 
@@ -1046,8 +1049,68 @@ public class HoldingsImportService
         context.CikToHolderId = cikToHolderId;
     }
 
+    // Refresh the identity numbers (13F file number, CRD, SEC file number) from each filer's newest
+    // 13F report in this import, unless a stored 13F covers a later quarter, so an oldest-first replay
+    // never moves them backward. A blank keeps a known number (HolderIdentityNumbers).
+    internal static void RefreshHolderIdentityNumbers(
+        ImportContext context,
+        List<InstitutionalHolder> holders,
+        IReadOnlyDictionary<Guid, DateOnly> latestStoredReportDates
+    )
+    {
+        var latestByCik = BuildLatestReportByCanonicalCik(context);
+
+        foreach (var holder in holders)
+        {
+            var canonicalCik = CikNormalizer.Canonicalize(holder.Cik);
+            if (canonicalCik == null || !latestByCik.TryGetValue(canonicalCik, out var submission))
+                continue;
+            if (submission.FormType.ToHoldingsFilingType() != FilingType.Form13F)
+                continue;
+            if (!context.CoverPages.TryGetValue(submission.AccessionNumber, out var coverPage))
+                continue;
+            TryParseDateOnly(submission.PeriodOfReport, out var period);
+            if (
+                latestStoredReportDates.TryGetValue(holder.Id, out var storedPeriod)
+                && storedPeriod > period
+            )
+                continue;
+
+            context.CoverPageOtherManagers.TryGetValue(
+                submission.AccessionNumber,
+                out var coverManagers
+            );
+            coverManagers ??= [];
+            holder.Form13FFileNumber = ClampLength(
+                HolderIdentityNumbers.Resolve(
+                    coverPage.Form13FFileNumber,
+                    holder.Form13FFileNumber,
+                    coverManagers.Select(manager => manager.Form13FFileNumber)
+                ),
+                32
+            );
+            holder.CrdNumber = ClampLength(
+                HolderIdentityNumbers.Resolve(
+                    coverPage.CrdNumber,
+                    holder.CrdNumber,
+                    coverManagers.Select(manager => manager.CrdNumber)
+                ),
+                32
+            );
+            holder.SecFileNumber = ClampLength(
+                HolderIdentityNumbers.Resolve(
+                    coverPage.SecFileNumber,
+                    holder.SecFileNumber,
+                    coverManagers.Select(manager => manager.SecFileNumber)
+                ),
+                32
+            );
+            holder.IdentityAccession = submission.AccessionNumber;
+        }
+    }
+
     // Refresh the confidential-treatment flag on holders we already track from their newest report
-    // in this import, unless a stored 13F covers a later quarter; identity columns stay as first seen.
+    // in this import, unless a stored 13F covers a later quarter.
     internal void RefreshExistingHolderConfidentialTreatment(
         ImportContext context,
         List<InstitutionalHolder> existingHolders,
@@ -1080,20 +1143,7 @@ public class HoldingsImportService
         (DateOnly Period, bool Omitted)
     > BuildLatestReportConfidentialOmission(ImportContext context)
     {
-        var latestByCik = new Dictionary<string, SubmissionRow>(StringComparer.Ordinal);
-        foreach (var submission in context.Submissions.Values)
-        {
-            var canonicalCik = CikNormalizer.Canonicalize(submission.Cik);
-            if (canonicalCik == null || IsNewHoldingsAmendment(submission.AccessionNumber, context))
-                continue;
-            if (
-                !latestByCik.TryGetValue(canonicalCik, out var current)
-                || CompareByPeriodThenFilingDate(submission, current) > 0
-            )
-            {
-                latestByCik[canonicalCik] = submission;
-            }
-        }
+        var latestByCik = BuildLatestReportByCanonicalCik(context);
 
         var omittedByCik = new Dictionary<string, (DateOnly Period, bool Omitted)>(
             StringComparer.Ordinal
@@ -1113,6 +1163,29 @@ public class HoldingsImportService
         }
 
         return omittedByCik;
+    }
+
+    // Each filer's newest report by canonical CIK: the latest original or RESTATEMENT for the newest
+    // period; a NEW HOLDINGS amendment only adds what it discloses, so it never speaks for the book.
+    internal static Dictionary<string, SubmissionRow> BuildLatestReportByCanonicalCik(
+        ImportContext context
+    )
+    {
+        var latestByCik = new Dictionary<string, SubmissionRow>(StringComparer.Ordinal);
+        foreach (var submission in context.Submissions.Values)
+        {
+            var canonicalCik = CikNormalizer.Canonicalize(submission.Cik);
+            if (canonicalCik == null || IsNewHoldingsAmendment(submission.AccessionNumber, context))
+                continue;
+            if (
+                !latestByCik.TryGetValue(canonicalCik, out var current)
+                || CompareByPeriodThenFilingDate(submission, current) > 0
+            )
+            {
+                latestByCik[canonicalCik] = submission;
+            }
+        }
+        return latestByCik;
     }
 
     internal static int CompareByPeriodThenFilingDate(SubmissionRow left, SubmissionRow right)
@@ -1208,6 +1281,7 @@ public class HoldingsImportService
                 StateOrCountry = ClampLength(coverPage?.StateOrCountry, 64),
                 Form13FFileNumber = ClampLength(coverPage?.Form13FFileNumber, 32),
                 CrdNumber = ClampLength(coverPage?.CrdNumber, 32),
+                SecFileNumber = ClampLength(coverPage?.SecFileNumber, 32),
                 Classification = FundClassifierService.Classify(coverPage?.CompanyName),
                 ConfidentialTreatmentRequested = confidentialOmitted,
             };

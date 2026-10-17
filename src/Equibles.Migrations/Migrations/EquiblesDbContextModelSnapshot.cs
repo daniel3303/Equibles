@@ -2802,9 +2802,17 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("IdentityAccession")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("Name")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<string>("SecFileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("StateOrCountry")
                         .HasMaxLength(64)
