@@ -1,3 +1,4 @@
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
@@ -10,7 +11,7 @@ public class FormAdvSnapshotCatalogTests
         var html = File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Sec", "form-adv-catalog.html")
         );
-        var result = FormAdvSnapshotCatalog.Latest(html);
+        var result = FormAdvSnapshotCatalog.Latest(html, FormAdvRegistration.Registered);
 
         result.ReportDate.Should().Be(new DateOnly(2026, 9, 1));
         result
@@ -29,10 +30,53 @@ public class FormAdvSnapshotCatalogTests
             <a href="/files/ia08032026_1.zip">Registered Investment Advisers, August 2026</a>
             <a href="/foia/docs/older.xls">Registered Investment Advisers, July 2006</a>
             """;
-        var result = FormAdvSnapshotCatalog.Latest(html);
+        var result = FormAdvSnapshotCatalog.Latest(html, FormAdvRegistration.Registered);
 
         result.ReportDate.Should().Be(new DateOnly(2026, 8, 1));
         result.Url.Should().Be("https://www.sec.gov/files/ia08032026_1.zip");
+    }
+
+    [Fact]
+    public void Latest_OfficialCatalogue_UsesPublishedExemptUrlAndMonth()
+    {
+        var html = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Sec", "form-adv-catalog.html")
+        );
+        var result = FormAdvSnapshotCatalog.Latest(html, FormAdvRegistration.ExemptReporting);
+
+        result.ReportDate.Should().Be(new DateOnly(2026, 9, 1));
+        result
+            .Url.Should()
+            .Be(
+                "https://www.sec.gov/files/investment/data/other/information-about-registered-investment-advisers-exempt-reporting-advisers/ia09012026-exempt.zip"
+            );
+    }
+
+    [Fact]
+    public void Latest_NoDataNoticeMonth_FallsBackToThePreviousRoster()
+    {
+        // SEC published October and November 2025 as "no data" PDF notices instead of rosters.
+        var html = """
+            <a href="/files/ia-no-data-110125.pdf">Registered Investment Advisers, November 2025</a>
+            <a href="/files/ia-no-data-100125.pdf">Registered Investment Advisers, October 2025</a>
+            <a href="/files/ia090225.zip">Registered Investment Advisers, September 2025</a>
+            """;
+
+        var result = FormAdvSnapshotCatalog.Latest(html, FormAdvRegistration.Registered);
+
+        result.ReportDate.Should().Be(new DateOnly(2025, 9, 1));
+        result.Url.Should().Be("https://www.sec.gov/files/ia090225.zip");
+    }
+
+    [Fact]
+    public void Latest_OnlyNoDataNotices_Refuses()
+    {
+        var html =
+            "<a href=\"/files/ia-no-data-110125-exempt.pdf\">Exempt Investment Advisers, November 2025</a>";
+
+        var act = () => FormAdvSnapshotCatalog.Latest(html, FormAdvRegistration.ExemptReporting);
+
+        act.Should().Throw<InvalidDataException>();
     }
 
     [Theory]
@@ -48,7 +92,7 @@ public class FormAdvSnapshotCatalogTests
             $"<a href=\"{href}\">Registered Investment Advisers, September 2026</a>"
             + "<a href=\"/files/older.zip\">Registered Investment Advisers, August 2026</a>";
 
-        var act = () => FormAdvSnapshotCatalog.Latest(html);
+        var act = () => FormAdvSnapshotCatalog.Latest(html, FormAdvRegistration.Registered);
 
         act.Should().Throw<InvalidDataException>();
     }
@@ -61,7 +105,7 @@ public class FormAdvSnapshotCatalogTests
     )]
     public void Latest_MissingOrAmbiguousCatalogue_Refuses(string html)
     {
-        var act = () => FormAdvSnapshotCatalog.Latest(html);
+        var act = () => FormAdvSnapshotCatalog.Latest(html, FormAdvRegistration.Registered);
 
         act.Should().Throw<InvalidDataException>();
     }
