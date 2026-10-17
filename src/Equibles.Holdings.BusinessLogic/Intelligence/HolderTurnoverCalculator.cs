@@ -96,7 +96,7 @@ public static class HolderTurnoverCalculator
     /// </summary>
     public static decimal? TrailingAnnual(IReadOnlyList<decimal?> lastFourQuarters) =>
         lastFourQuarters is { Count: 4 } && lastFourQuarters.All(turnover => turnover != null)
-            ? lastFourQuarters.Sum(turnover => turnover.Value)
+            ? lastFourQuarters.Sum(turnover => turnover.GetValueOrDefault())
             : null;
 
     // Rows of one security are summed; a value pending on any of them leaves the security unvalued.
@@ -112,16 +112,18 @@ public static class HolderTurnoverCalculator
                     group.Key,
                     group.Sum(position => position.Shares),
                     group.All(position => position.Value != null)
-                        ? group.Sum(position => position.Value.Value)
+                        ? group.Sum(position => position.Value.GetValueOrDefault())
                         : null
                 )
             );
 
     private static long PricedValue(IEnumerable<HolderEquityPosition> positions) =>
-        positions.Where(position => position.Value > 0).Sum(position => position.Value.Value);
+        positions
+            .Where(position => position.Value > 0)
+            .Sum(position => position.Value.GetValueOrDefault());
 
     private static decimal? PerShare(HolderEquityPosition position) =>
-        position is { Value: > 0, Shares: > 0 }
-            ? (decimal)position.Value.Value / position.Shares
+        position is { Value: long value and > 0, Shares: > 0 }
+            ? (decimal)value / position.Shares
             : null;
 }

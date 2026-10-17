@@ -44,5 +44,8 @@ public static class HolderConcentrationCalculator
         positions
             .Where(position => position is { Shares: > 0, Value: > 0 })
             .GroupBy(position => position.Security.IssuerId)
-            .ToDictionary(group => group.Key, group => (decimal)group.Sum(p => p.Value.Value));
+            .ToDictionary(
+                group => group.Key,
+                group => (decimal)group.Sum(p => p.Value.GetValueOrDefault())
+            );
 }
