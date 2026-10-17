@@ -74,6 +74,20 @@ public class FormAdvCsvParserRosterDetailTests
         quint.RegistrationBasisItems.Should().Be(Items(1, 10));
     }
 
+    [Theory]
+    [InlineData("", null)]
+    [InlineData("0", null)]
+    [InlineData("2", 2)]
+    public void FewerThanFiveClients_KeepsOnlyAPositiveFiledCount(string filed, int? expected)
+    {
+        var csv =
+            "Organization CRD#,5D(a)(1),5D(a)(2),5D(a)(3)\n" + $"1,{filed},Fewer than 5 clients,\n";
+
+        var adviser = FormAdvCsvParser.Parse(new StringReader(csv)).Single();
+
+        adviser.ClientTypes.Should().ContainSingle().Which.ClientCount.Should().Be(expected);
+    }
+
     [Fact]
     public void FreeTextItems_AreReturnedAsFiled()
     {

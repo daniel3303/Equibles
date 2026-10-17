@@ -225,69 +225,82 @@ public class FormAdvImportService : IImporter
             )
             .ToList();
         var crds = advisers.Select(adviser => adviser.Crd).ToList();
-
-        // An adviser's client types always come from its latest roster, so a type it stopped
-        // reporting (or a move to the exempt roster, which has no Item 5) leaves no stale row.
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
-        await dbContext
-            .Set<FormAdvAdviser>()
-            .UpsertRange(advisers)
-            .On(a => a.Crd)
-            .WhenMatched(
-                (existing, incoming) =>
-                    new FormAdvAdviser
-                    {
-                        SecNumber = incoming.SecNumber,
-                        LegalName = incoming.LegalName,
-                        PrimaryBusinessName = incoming.PrimaryBusinessName,
-                        MainOfficeCity = incoming.MainOfficeCity,
-                        MainOfficeState = incoming.MainOfficeState,
-                        MainOfficeCountry = incoming.MainOfficeCountry,
-                        WebsiteAddress = incoming.WebsiteAddress,
-                        SecStatus = incoming.SecStatus,
-                        NumberOfEmployees = incoming.NumberOfEmployees,
-                        TotalRegulatoryAum = incoming.TotalRegulatoryAum,
-                        DiscretionaryAum = incoming.DiscretionaryAum,
-                        NonDiscretionaryAum = incoming.NonDiscretionaryAum,
-                        ChargesPercentageOfAum = incoming.ChargesPercentageOfAum,
-                        ChargesHourly = incoming.ChargesHourly,
-                        ChargesSubscription = incoming.ChargesSubscription,
-                        ChargesFixed = incoming.ChargesFixed,
-                        ChargesCommissions = incoming.ChargesCommissions,
-                        ChargesPerformanceBased = incoming.ChargesPerformanceBased,
-                        ChargesOther = incoming.ChargesOther,
-                        Registration = incoming.Registration,
-                        Cik = incoming.Cik,
-                        CikCount = incoming.CikCount,
-                        Lei = incoming.Lei,
-                        LatestFilingDate = incoming.LatestFilingDate,
-                        OrganizationForm = incoming.OrganizationForm,
-                        RegistrationBasis = incoming.RegistrationBasis,
-                        ExemptionBasis = incoming.ExemptionBasis,
-                        OtherBusinesses = incoming.OtherBusinesses,
-                        RelatedPersons = incoming.RelatedPersons,
-                        AdvisesPrivateFunds = incoming.AdvisesPrivateFunds,
-                        PrivateFundCount = incoming.PrivateFundCount,
-                        HedgeFundCount = incoming.HedgeFundCount,
-                        PrivateEquityFundCount = incoming.PrivateEquityFundCount,
-                        VentureCapitalFundCount = incoming.VentureCapitalFundCount,
-                        RealEstateFundCount = incoming.RealEstateFundCount,
-                        LiquidityFundCount = incoming.LiquidityFundCount,
-                        SecuritizedAssetFundCount = incoming.SecuritizedAssetFundCount,
-                        OtherPrivateFundCount = incoming.OtherPrivateFundCount,
-                        PrivateFundGrossAssets = incoming.PrivateFundGrossAssets,
-                        ReportDate = incoming.ReportDate,
-                        UpdateTime = incoming.UpdateTime,
-                    }
-            )
-            .RunAsync();
-        await dbContext
-            .Set<FormAdvAdviserClientType>()
-            .Where(clientType => crds.Contains(clientType.Crd))
-            .ExecuteDeleteAsync();
-        dbContext.Set<FormAdvAdviserClientType>().AddRange(clientTypes);
-        await dbContext.SaveChangesAsync();
-        await transaction.CommitAsync();
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            // A roster never overwrites an adviser a newer roster already listed (the exempt
+            // roster can lag the registered one), and client types follow the row that won, so
+            // a type the adviser stopped reporting leaves no stale row.
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            await dbContext
+                .Set<FormAdvAdviser>()
+                .UpsertRange(advisers)
+                .On(a => a.Crd)
+                .WhenMatched(
+                    (existing, incoming) =>
+                        new FormAdvAdviser
+                        {
+                            SecNumber = incoming.SecNumber,
+                            LegalName = incoming.LegalName,
+                            PrimaryBusinessName = incoming.PrimaryBusinessName,
+                            MainOfficeCity = incoming.MainOfficeCity,
+                            MainOfficeState = incoming.MainOfficeState,
+                            MainOfficeCountry = incoming.MainOfficeCountry,
+                            WebsiteAddress = incoming.WebsiteAddress,
+                            SecStatus = incoming.SecStatus,
+                            NumberOfEmployees = incoming.NumberOfEmployees,
+                            TotalRegulatoryAum = incoming.TotalRegulatoryAum,
+                            DiscretionaryAum = incoming.DiscretionaryAum,
+                            NonDiscretionaryAum = incoming.NonDiscretionaryAum,
+                            ChargesPercentageOfAum = incoming.ChargesPercentageOfAum,
+                            ChargesHourly = incoming.ChargesHourly,
+                            ChargesSubscription = incoming.ChargesSubscription,
+                            ChargesFixed = incoming.ChargesFixed,
+                            ChargesCommissions = incoming.ChargesCommissions,
+                            ChargesPerformanceBased = incoming.ChargesPerformanceBased,
+                            ChargesOther = incoming.ChargesOther,
+                            Registration = incoming.Registration,
+                            Cik = incoming.Cik,
+                            CikCount = incoming.CikCount,
+                            Lei = incoming.Lei,
+                            LatestFilingDate = incoming.LatestFilingDate,
+                            OrganizationForm = incoming.OrganizationForm,
+                            RegistrationBasis = incoming.RegistrationBasis,
+                            ExemptionBasis = incoming.ExemptionBasis,
+                            OtherBusinesses = incoming.OtherBusinesses,
+                            RelatedPersons = incoming.RelatedPersons,
+                            AdvisesPrivateFunds = incoming.AdvisesPrivateFunds,
+                            PrivateFundCount = incoming.PrivateFundCount,
+                            HedgeFundCount = incoming.HedgeFundCount,
+                            PrivateEquityFundCount = incoming.PrivateEquityFundCount,
+                            VentureCapitalFundCount = incoming.VentureCapitalFundCount,
+                            RealEstateFundCount = incoming.RealEstateFundCount,
+                            LiquidityFundCount = incoming.LiquidityFundCount,
+                            SecuritizedAssetFundCount = incoming.SecuritizedAssetFundCount,
+                            OtherPrivateFundCount = incoming.OtherPrivateFundCount,
+                            PrivateFundGrossAssets = incoming.PrivateFundGrossAssets,
+                            ReportDate = incoming.ReportDate,
+                            UpdateTime = incoming.UpdateTime,
+                        }
+                )
+                .UpdateIf((existing, incoming) => existing.ReportDate <= incoming.ReportDate)
+                .RunAsync();
+            var current = await dbContext
+                .Set<FormAdvAdviser>()
+                .Where(adviser => crds.Contains(adviser.Crd) && adviser.ReportDate == fileDate)
+                .Select(adviser => adviser.Crd)
+                .ToListAsync();
+            await dbContext
+                .Set<FormAdvAdviserClientType>()
+                .Where(clientType => current.Contains(clientType.Crd))
+                .ExecuteDeleteAsync();
+            var currentCrds = current.ToHashSet();
+            dbContext
+                .Set<FormAdvAdviserClientType>()
+                .AddRange(clientTypes.Where(clientType => currentCrds.Contains(clientType.Crd)));
+            await dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+        });
     }
 
     private static FormAdvAdviser ToEntity(

@@ -17,11 +17,9 @@ namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
 /// End-to-end pipeline test for <see cref="FormAdvImportService"/> against the shared ParadeDB
-/// fixture: a mocked SEC download returns a zipped CSV, and the importer must unzip, parse, and
-/// upsert advisers keyed by CRD. The DB-touching phases — the latest-snapshot lookup that drives
-/// the up-to-date guard and the per-batch UpsertRange with its On(Crd)/WhenMatched update — are
-/// not reachable from the unit tests, so a regression in the import wiring would silently drop
-/// adviser data on every worker tick.
+/// fixture: a mocked SEC catalogue and downloads return zipped rosters, and the importer must
+/// unzip, parse and upsert advisers keyed by CRD with their client types, record each snapshot in
+/// the import ledger, and skip a snapshot the current parser already imported.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
@@ -97,6 +95,11 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
             .DownloadStream(ExemptUrl)
             .Returns(_ => Task.FromResult<Stream>(BuildZipStream(exemptCsv)));
 
+        return CreateService(secEdgarClient);
+    }
+
+    private FormAdvImportService CreateService(ISecEdgarClient secEdgarClient)
+    {
         return new FormAdvImportService(
             CreateScopeFactory(),
             secEdgarClient,
@@ -318,6 +321,42 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
         )
             .Should()
             .BeFalse("a roster that imported nothing is retried");
+    }
+
+    [Fact]
+    public async Task Import_ExemptRosterLaggingTheRegisteredOne_KeepsTheNewerRegisteredRow()
+    {
+        // SEC published November's exempt roster as a "no data" notice, so it falls back to
+        // October, which still lists an adviser November's registered roster already moved.
+        var client = Substitute.For<ISecEdgarClient>();
+        var catalogue = Encoding.UTF8.GetBytes(
+            "<a href='/files/ria-nov.zip'>Registered Investment Advisers, November 2026</a>"
+                + "<a href='/files/era-nov.pdf'>Exempt Investment Advisers, November 2026</a>"
+                + "<a href='/files/era-oct.zip'>Exempt Investment Advisers, October 2026</a>"
+        );
+        client
+            .DownloadStream(FormAdvSnapshotCatalog.PageUrl)
+            .Returns(_ => Task.FromResult<Stream>(new MemoryStream(catalogue)));
+        client
+            .DownloadStream("https://www.sec.gov/files/ria-nov.zip")
+            .Returns(_ => Task.FromResult<Stream>(BuildZipStream(SampleCsv)));
+        client
+            .DownloadStream("https://www.sec.gov/files/era-oct.zip")
+            .Returns(_ =>
+                Task.FromResult<Stream>(BuildZipStream(ExemptCsv.Replace("\n222,", "\n111,")))
+            );
+
+        await CreateService(client).Import(CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        var adviser = await verify.Set<FormAdvAdviser>().SingleAsync(a => a.Crd == 111);
+        adviser.Registration.Should().Be(FormAdvRegistration.Registered);
+        adviser.ReportDate.Should().Be(new DateOnly(2026, 11, 1));
+        adviser.LegalName.Should().Be("ACME ADVISORS");
+        adviser.TotalRegulatoryAum.Should().Be(1_000_000L);
+        (await verify.Set<FormAdvAdviserClientType>().CountAsync(c => c.Crd == 111))
+            .Should()
+            .Be(2, "the older roster must not delete the newer roster's client types");
     }
 
     private async Task SeedLedger(FormAdvRegistration registration, int parserVersion)

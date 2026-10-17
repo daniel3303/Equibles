@@ -172,9 +172,11 @@ public static class FormAdvCsvParser
         for (var index = 0; index < ClientTypeLetters.Length; index++)
         {
             var letter = ClientTypeLetters[index];
-            // SEC writes 0 in (1) when "fewer than 5 clients" is checked instead of a count.
+            // With "fewer than 5 clients" checked, (1) is often blank or 0; a zero there is no count.
             var fewerThanFive = Field(row, columns, $"5D({letter})(2)") != null;
-            var count = fewerThanFive ? null : ParseInt(Field(row, columns, $"5D({letter})(1)"));
+            var count = ParseInt(Field(row, columns, $"5D({letter})(1)"));
+            if (fewerThanFive && count == 0)
+                count = null;
             var aum = ParseAum(Field(row, columns, $"5D({letter})(3)"));
             if ((count is null or 0) && !fewerThanFive && (aum is null or 0))
                 continue;

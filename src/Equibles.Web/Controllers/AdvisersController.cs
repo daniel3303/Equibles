@@ -27,7 +27,7 @@ public class AdvisersController : BaseController
     {
         ViewData["Title"] = "Investment Advisers";
         ViewData["Description"] =
-            "Browse SEC-registered investment advisers from Form ADV — assets under management, location and fee structure.";
+            "Browse SEC-registered and exempt reporting investment advisers from Form ADV — assets under management, location and fee structure.";
 
         page = Pagination.ClampPage(page);
 

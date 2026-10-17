@@ -19,7 +19,7 @@ public class FormAdvAdviserClientType
 
     public FormAdvClientType ClientType { get; set; }
 
-    /// <summary>Number of clients (Item 5.D.(1)); null when not reported, including when fewer than 5 is checked instead.</summary>
+    /// <summary>Number of clients (Item 5.D.(1)); null when not reported, or reported as 0 beside "fewer than 5".</summary>
     public int? ClientCount { get; set; }
 
     /// <summary>The adviser checked "fewer than 5 clients" (Item 5.D.(2)) instead of a count.</summary>
