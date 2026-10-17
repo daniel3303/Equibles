@@ -1,0 +1,148 @@
+{
+ "meta": {
+  "goldenCopy": {
+   "publishDate": "2026-10-17T08:00:00Z"
+  }
+ },
+ "data": {
+  "type": "lei-records",
+  "id": "5493006MHB84DD0ZWV18",
+  "attributes": {
+   "lei": "5493006MHB84DD0ZWV18",
+   "entity": {
+    "legalName": {
+     "name": "ALPHABET INC.",
+     "language": "en"
+    },
+    "otherNames": [],
+    "transliteratedOtherNames": [],
+    "legalAddress": {
+     "language": "en",
+     "addressLines": [
+      "C/O CORPORATION SERVICE COMPANY",
+      "251 LITTLE FALLS DRIVE"
+     ],
+     "addressNumber": null,
+     "addressNumberWithinBuilding": null,
+     "mailRouting": null,
+     "city": "WILMINGTON",
+     "region": "US-DE",
+     "country": "US",
+     "postalCode": "19808"
+    },
+    "headquartersAddress": {
+     "language": "en",
+     "addressLines": [
+      "1600 Amphitheatre Parkway"
+     ],
+     "addressNumber": null,
+     "addressNumberWithinBuilding": null,
+     "mailRouting": null,
+     "city": "Mountain View",
+     "region": "US-CA",
+     "country": "US",
+     "postalCode": "94043"
+    },
+    "registeredAt": {
+     "id": "RA000602",
+     "other": null
+    },
+    "registeredAs": "5786925",
+    "jurisdiction": "US-DE",
+    "category": "GENERAL",
+    "legalForm": {
+     "id": "XTIQ",
+     "other": null
+    },
+    "associatedEntity": {
+     "lei": null,
+     "name": null
+    },
+    "status": "ACTIVE",
+    "expiration": {
+     "date": null,
+     "reason": null
+    },
+    "successorEntity": {
+     "lei": null,
+     "name": null
+    },
+    "successorEntities": [],
+    "creationDate": "2015-07-23T00:00:00Z",
+    "subCategory": null,
+    "otherAddresses": [],
+    "eventGroups": []
+   },
+   "registration": {
+    "initialRegistrationDate": "2015-08-31T16:16:00Z",
+    "lastUpdateDate": "2026-09-17T12:59:53Z",
+    "status": "ISSUED",
+    "nextRenewalDate": "2027-09-17T15:55:34Z",
+    "managingLou": "5493001KJTIIGC8Y1R12",
+    "corroborationLevel": "FULLY_CORROBORATED",
+    "validatedAt": {
+     "id": "RA000602",
+     "other": null
+    },
+    "validatedAs": "5786925",
+    "otherValidationAuthorities": []
+   },
+   "bic": null,
+   "mic": null,
+   "ocid": "us_de/5786925",
+   "qcc": null,
+   "gem": "E100000001137",
+   "spglobal": [
+    "29096"
+   ],
+   "conformityFlag": "CONFORMING"
+  },
+  "relationships": {
+   "managing-lou": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/managing-lou"
+    }
+   },
+   "lei-issuer": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/lei-issuer"
+    }
+   },
+   "field-modifications": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/field-modifications"
+    }
+   },
+   "direct-parent": {
+    "links": {
+     "reporting-exception": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/direct-parent-reporting-exception"
+    }
+   },
+   "ultimate-parent": {
+    "links": {
+     "reporting-exception": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/ultimate-parent-reporting-exception"
+    }
+   },
+   "direct-children": {
+    "links": {
+     "relationship-records": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/direct-child-relationships",
+     "related": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/direct-children"
+    }
+   },
+   "ultimate-children": {
+    "links": {
+     "relationship-records": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/ultimate-child-relationships",
+     "related": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/ultimate-children"
+    }
+   },
+   "isins": {
+    "links": {
+     "related": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18/isins"
+    }
+   }
+  },
+  "links": {
+   "self": "https://api.gleif.org/api/v1/lei-records/5493006MHB84DD0ZWV18"
+  }
+ }
+}
