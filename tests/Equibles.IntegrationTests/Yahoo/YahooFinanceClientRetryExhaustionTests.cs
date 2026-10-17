@@ -1,6 +1,7 @@
 using System.Net;
 using System.Reflection;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -59,7 +60,7 @@ public class YahooFinanceClientRetryExhaustionTests
         await WithSeededSession(async () =>
         {
             var handler = new AlwaysFailHandler(HttpStatusCode.InternalServerError);
-            var sut = new YahooFinanceClient(
+            var sut = new OfflineYahooFinanceClient(
                 new HttpClient(handler),
                 Substitute.For<ILogger<YahooFinanceClient>>()
             );

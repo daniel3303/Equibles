@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -61,7 +62,7 @@ public class YahooFinanceClientRetryBackoffTests
         await WithSeededSession(async () =>
         {
             var handler = new SequenceHandler(HttpStatusCode.TooManyRequests);
-            var sut = new YahooFinanceClient(
+            var sut = new OfflineYahooFinanceClient(
                 new HttpClient(handler),
                 Substitute.For<ILogger<YahooFinanceClient>>()
             );
@@ -85,7 +86,7 @@ public class YahooFinanceClientRetryBackoffTests
         await WithSeededSession(async () =>
         {
             var handler = new SequenceHandler(HttpStatusCode.InternalServerError);
-            var sut = new YahooFinanceClient(
+            var sut = new OfflineYahooFinanceClient(
                 new HttpClient(handler),
                 Substitute.For<ILogger<YahooFinanceClient>>()
             );

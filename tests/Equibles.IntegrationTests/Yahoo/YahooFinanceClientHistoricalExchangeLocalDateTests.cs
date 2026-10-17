@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -77,7 +78,7 @@ public class YahooFinanceClientHistoricalExchangeLocalDateTests
                 + "\"close\":[101.00],\"volume\":[1500000]}],"
                 + "\"adjclose\":[{\"adjclose\":[100.90]}]}}]}}";
 
-            var sut = new YahooFinanceClient(
+            var sut = new OfflineYahooFinanceClient(
                 new HttpClient(new StubHandler(json)),
                 Substitute.For<ILogger<YahooFinanceClient>>()
             );

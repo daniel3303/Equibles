@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using Equibles.Integrations.Yahoo;
+using Equibles.IntegrationTests.Helpers;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -79,7 +80,7 @@ public class YahooFinanceClientHistoricalAdjCloseNullHoleTests
                 + "\"close\":[101.00],\"volume\":[1500000]}],"
                 + "\"adjclose\":[{\"adjclose\":[null]}]}}]}}";
 
-            var sut = new YahooFinanceClient(
+            var sut = new OfflineYahooFinanceClient(
                 new HttpClient(new StubHandler(json)),
                 Substitute.For<ILogger<YahooFinanceClient>>()
             );
