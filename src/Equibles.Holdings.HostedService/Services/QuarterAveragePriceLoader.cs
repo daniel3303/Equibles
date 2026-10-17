@@ -23,32 +23,12 @@ internal static class QuarterAveragePriceLoader
         CancellationToken cancellationToken
     )
     {
-        var filed = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(holding =>
-                holding.ReportDate == reportDate
-                && holding.FilingType == FilingType.Form13F
-                && holding.ShareType == ShareType.Shares
-                && holding.OptionType == null
-                && !holding.ValuePending
-                && !holding.ValueUnavailable
-                && holding.Value > 0
-                && holding.Shares > 0
-            )
-            .GroupBy(holding => new { holding.EquityIssuerId, holding.ListedTicker })
-            .Select(group => new
-            {
-                group.Key.EquityIssuerId,
-                group.Key.ListedTicker,
-                Value = group.Sum(holding => holding.Value),
-                Shares = group.Sum(holding => holding.Shares),
-            })
-            .ToListAsync(cancellationToken);
+        var filed = await LoadFiledPrices(dbContext, reportDate, cancellationToken);
         if (filed.Count == 0)
             return [];
         var filedPrices = filed.ToDictionary(
             row => new HolderSecurityKey(row.EquityIssuerId, row.ListedTicker),
-            row => (decimal)row.Value / row.Shares
+            row => (decimal)row.FiledPricePerShare
         );
         // Listing tickers are matched to stored labels without regard to case.
         var storedKeys = filedPrices
@@ -140,11 +120,12 @@ internal static class QuarterAveragePriceLoader
                 .ToListAsync(cancellationToken)
         ).GroupBy(bar => bar.EquityListingId).ToDictionary(group => group.Key, group => group.MaxBy(bar => bar.Date));
 
+        // The whole effective history, since the basis rules also read splits before the quarter.
         var splits = (
             await StockSplitQueries
                 .ForIssuers(dbContext, issuerIds)
                 .AsNoTracking()
-                .Where(split => split.EffectiveDate > previous && split.EffectiveDate <= today)
+                .Where(split => split.EffectiveDate <= today)
                 .ToListAsync(cancellationToken)
         ).ToLookup(split => split.EquityIssuerId);
 
@@ -173,7 +154,7 @@ internal static class QuarterAveragePriceLoader
                     ShareCountFactor = factorResolved ? factor : null,
                     // Bars inside a split quarter may sit on either basis, so any issuer split refuses.
                     SplitInsideQuarter = issuerSplits.Any(split =>
-                        split.EffectiveDate <= reportDate
+                        split.EffectiveDate > previous && split.EffectiveDate <= reportDate
                     ),
                     FiledPricePerShare = filedPrices[key],
                 },
@@ -184,4 +165,31 @@ internal static class QuarterAveragePriceLoader
         }
         return prices;
     }
+
+    // Each filer's own mark, not the value derived from stored closes, so the check is independent;
+    // the median keeps one filer's units error from moving it.
+    private static Task<List<QuarterFiledPriceRow>> LoadFiledPrices(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    ) =>
+        dbContext
+            .Database.SqlQuery<QuarterFiledPriceRow>(
+                $"""
+                SELECT "EquityIssuerId",
+                       "ListedTicker",
+                       percentile_cont(0.5) WITHIN GROUP (
+                           ORDER BY "FiledValue"::float8 / "Shares"
+                       ) AS "FiledPricePerShare"
+                FROM "InstitutionalHolding"
+                WHERE "ReportDate" = {reportDate}
+                  AND "FilingType" = {(int)FilingType.Form13F}
+                  AND "ShareType" = {(int)ShareType.Shares}
+                  AND "OptionType" IS NULL
+                  AND "FiledValue" > 0
+                  AND "Shares" > 0
+                GROUP BY "EquityIssuerId", "ListedTicker"
+                """
+            )
+            .ToListAsync(cancellationToken);
 }

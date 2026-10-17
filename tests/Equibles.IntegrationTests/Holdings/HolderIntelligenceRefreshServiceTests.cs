@@ -637,6 +637,91 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .Be(2_000m, "200 post-split shares bought at the 10 quarter-end value per share");
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RebuildQuarter_PricesEachShareClassFromItsOwnListing(bool siblingTraded)
+    {
+        var berkshire = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BRKA",
+            Name: "Berkshire",
+            SecondaryTickers: ["BRKB"]
+        );
+        var classB = berkshire
+            .Securities.SelectMany(security => security.Listings)
+            .Single(listing => listing.Ticker == "BRKB");
+        await Seed(seed => seed.Add(berkshire));
+        await Seed(seed =>
+        {
+            seed.AddRange(Bars(berkshire, 800m, 1_000m));
+            if (siblingTraded)
+                seed.AddRange(Bars(classB, 8m, 10m));
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(berkshire, _holder, Q1, 10, 10_000),
+                Holding(berkshire, _holder, Q1, 100, 1_000, listedTicker: "BRKB"),
+                Filing(_holder, Q2),
+                Holding(berkshire, _holder, Q2, 20, 20_000),
+                Holding(berkshire, _holder, Q2, 200, 2_000, listedTicker: "BRKB")
+            );
+        });
+
+        await Rebuild(Q2);
+
+        var classA = 10m * 21_000m / 26m;
+        (await Metrics(Q2))
+            .BuyValue.Should()
+            .BeApproximately(
+                classA + (siblingTraded ? 100m * 210m / 26m : 1_000m),
+                0.01m,
+                "class B is priced from its own bars, or at its quarter-end value without them"
+            );
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_ChecksTheAverageAgainstTheMedianFilerMark()
+    {
+        var second = new InstitutionalHolder { Cik = "0000000002", Name = "Filer Two" };
+        var third = new InstitutionalHolder { Cik = "0000000003", Name = "Filer Three" };
+        await Seed(seed => seed.AddRange(second, third));
+        await SeedAppleBoughtAndMicrosoftSold(Bars(_apple, 8m, 10m));
+        var outlier = Holding(_apple, third, Q2, 10, 100);
+        outlier.FiledValue = 100_000;
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(second, Q2),
+                Holding(_apple, second, Q2, 50, 500),
+                Filing(third, Q2),
+                outlier
+            )
+        );
+
+        await Rebuild(Q2);
+
+        (await Metrics(Q2))
+            .BuyValue.Should()
+            .BeApproximately(
+                100m * 210m / 26m,
+                0.01m,
+                "one filer's thousandfold units error does not move the median mark of 10"
+            );
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_AnEarlierQuartersSplitStillAllowsTheAverage()
+    {
+        var split = Split(_apple, new DateOnly(2024, 2, 15), "AAPL");
+        split.PriceAdjustmentAppliedTime = new DateTime(2024, 2, 16, 0, 0, 0, DateTimeKind.Utc);
+        await Seed(seed => seed.Add(split));
+        await SeedAppleBoughtAndMicrosoftSold(Bars(_apple, 8m, 10m));
+
+        await Rebuild(Q2);
+
+        (await Metrics(Q2))
+            .BuyValue.Should()
+            .BeApproximately(100m * 210m / 26m, 0.01m, "the February split is not inside Q2");
+    }
+
     private Task SeedAppleBoughtAndMicrosoftSold(List<EquityDailyStockPrice> bars) =>
         Seed(seed =>
         {
@@ -650,9 +735,16 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             );
         });
 
-    // 25 weekday sessions from April 1 at one close, then the quarter's last session at another.
     private static List<EquityDailyStockPrice> Bars(
         EquityIssuer issuer,
+        decimal close,
+        decimal lastClose
+    ) => Bars(issuer.Presentation.Listing, close, lastClose);
+
+    // 25 weekday sessions from April 1 at one close, then the quarter's last session at another,
+    // plus a later untraded bar whose close must be ignored.
+    private static List<EquityDailyStockPrice> Bars(
+        EquityListing listing,
         decimal close,
         decimal lastClose
     ) =>
@@ -663,17 +755,19 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .Take(25)
             .Select(date => (Date: date, Close: close))
             .Append((Date: new DateOnly(2024, 6, 28), Close: lastClose))
+            .Select(bar => (bar.Date, bar.Close, Volume: 1_000L))
+            .Append((Date: new DateOnly(2024, 6, 29), Close: lastClose * 10, Volume: 0L))
             .Select(bar => new EquityDailyStockPrice
             {
-                EquityListingId = issuer.Presentation.EquityListingId,
-                SourceTicker = issuer.Presentation.Listing.Ticker,
+                EquityListingId = listing.Id,
+                SourceTicker = listing.Ticker,
                 Date = bar.Date,
                 Open = bar.Close,
                 High = bar.Close,
                 Low = bar.Close,
                 Close = bar.Close,
                 AdjustedClose = bar.Close,
-                Volume = 1_000,
+                Volume = bar.Volume,
             })
             .ToList();
 
@@ -755,6 +849,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             ShareType = ShareType.Shares,
             OptionType = optionType,
             FilingType = type,
+            FiledValue = value,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = $"{holder.Cik}-{reportDate:yyyyMMdd}-{type}",
             Cusip = (listedTicker ?? issuer.Presentation.Listing.Ticker).PadRight(9, '0'),

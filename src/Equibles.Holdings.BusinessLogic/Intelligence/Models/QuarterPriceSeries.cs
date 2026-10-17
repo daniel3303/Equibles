@@ -25,8 +25,8 @@ public sealed record QuarterPriceSeries
     public bool SplitInsideQuarter { get; init; }
 
     /// <summary>
-    /// Every 13F filer's reported value divided by reported shares at the quarter end; null when
-    /// no filer valued the security.
+    /// The median of 13F filers' own reported value per share at the quarter end; null when no
+    /// filer reported a value.
     /// </summary>
     public decimal? FiledPricePerShare { get; init; }
 }
