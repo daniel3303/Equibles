@@ -37,4 +37,43 @@ public class HttpRetrySendNonRetryableStatusTests
         sendCount.Should().Be(1);
         limiter.DidNotReceive().PauseFor(Arg.Any<TimeSpan>());
     }
+
+    // A caller that reads a status as an answer (GLEIF's 404 "no parent") must not leave the response,
+    // and with it a pooled connection, open.
+    [Fact]
+    public async Task Send_NonRetryableStatus_DisposesTheResponseBeforeThrowing()
+    {
+        var content = new TrackingContent();
+        Func<Task<HttpResponseMessage>> send = () =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound) { Content = content });
+
+        var act = () =>
+            HttpRetry.Send(
+                send,
+                Substitute.For<IRateLimiter>(),
+                maxRetries: 3,
+                "exhausted",
+                (_, _) => { },
+                (_, _, _) => { }
+            );
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.NotFound);
+        content.Disposed.Should().BeTrue();
+    }
+
+    private sealed class TrackingContent : StringContent
+    {
+        public TrackingContent()
+            : base("") { }
+
+        public bool Disposed { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
+        }
+    }
 }
