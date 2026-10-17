@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Xml;
 using Equibles.Core.AutoWiring;
@@ -128,12 +129,26 @@ public class HolderIdentityBackfillService(
         for (var index = 0; index < candidate.Filings.Count; index++)
         {
             var filing = candidate.Filings[index];
-            var bytes = await edgarClient.GetDocumentFileBytes(
-                candidate.Cik,
-                filing.AccessionNumber,
-                CoverPageFileName,
-                cancellationToken
-            );
+            byte[] bytes;
+            try
+            {
+                bytes = await edgarClient.GetDocumentFileBytes(
+                    candidate.Cik,
+                    filing.AccessionNumber,
+                    CoverPageFileName,
+                    cancellationToken
+                );
+            }
+            catch (HttpRequestException exception) when (!IsTransient(exception))
+            {
+                logger.LogWarning(
+                    exception,
+                    "Cover page of {Accession} is refused ({Status}); keeping the stored identity numbers",
+                    filing.AccessionNumber,
+                    exception.StatusCode
+                );
+                return new CoverRead(filing.AccessionNumber, null);
+            }
             if (bytes.Length == 0)
                 return new CoverRead(filing.AccessionNumber, null);
 
@@ -168,6 +183,15 @@ public class HolderIdentityBackfillService(
 
         return new CoverRead(newest.AccessionNumber, null);
     }
+
+    // A missing status, a server error, a throttle or a 403 (SEC's rate-limit answer) is an
+    // outage; any other refusal is final for that document, like a 404.
+    private static bool IsTransient(HttpRequestException exception) =>
+        exception.StatusCode
+            is null
+                or >= HttpStatusCode.InternalServerError
+                or HttpStatusCode.TooManyRequests
+                or HttpStatusCode.Forbidden;
 
     private sealed record CoverRead(string AccessionNumber, Parsed13FFiling Filing);
 }

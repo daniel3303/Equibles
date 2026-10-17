@@ -279,6 +279,52 @@ public class HolderIdentityBackfillServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task PermanentRefusal_StampsThatHolderAndTheRunContinues()
+    {
+        var gone = await SeedHolder("1374170", crd: "000314159");
+        var next = await SeedHolder("1374171", crd: null);
+        await SeedFiling(gone, "0001374170-26-000001", new DateOnly(2026, 6, 30));
+        await SeedFiling(next, "0001374171-26-000001", new DateOnly(2026, 6, 30));
+        _edgar
+            .GetDocumentFileBytes(
+                "1374170",
+                "0001374170-26-000001",
+                "primary_doc.xml",
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(new HttpRequestException("Gone", null, HttpStatusCode.Gone));
+        CoverPage("1374171", "0001374171-26-000001", crd: "000271828", secFileNumber: null);
+
+        await Sut().Run(100, CancellationToken.None);
+
+        var refused = await Reload(gone.Id);
+        refused.CrdNumber.Should().Be("000314159");
+        refused.IdentityAccession.Should().Be("0001374170-26-000001");
+        (await Reload(next.Id)).CrdNumber.Should().Be("000271828");
+    }
+
+    [Fact]
+    public async Task ServerError_StopsTheRunAndStampsNothing()
+    {
+        var holder = await SeedHolder("1374170", crd: null);
+        await SeedFiling(holder, "0001374170-26-000001", new DateOnly(2026, 6, 30));
+        _edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(
+                new HttpRequestException("Unavailable", null, HttpStatusCode.ServiceUnavailable)
+            );
+
+        (await Sut().Run(100, CancellationToken.None)).Should().Be(0);
+
+        (await Reload(holder.Id)).IdentityAccession.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ImportStampingTheHolderMidRun_IsNotOverwritten()
     {
         var holder = await SeedHolder("102909", crd: null);
