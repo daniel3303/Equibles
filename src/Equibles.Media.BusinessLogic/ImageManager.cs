@@ -18,7 +18,8 @@ namespace Equibles.Media.BusinessLogic;
 public class ImageManager : IImageManager
 {
     // Uploaded and fetched images are untrusted bytes: decode only the web raster formats, so
-    // ImageSharp 3.1's unpatched TIFF code and the BMP decoder's unbounded ICC allocation are never reached.
+    // ImageSharp 3.1's unpatched TIFF code and the BMP decoder's unbounded ICC allocation are
+    // never reached.
     private static readonly DecoderOptions UntrustedDecoderOptions = new()
     {
         Configuration = new SixLabors.ImageSharp.Configuration(
