@@ -326,7 +326,7 @@ public class NCenDataSetImportServiceTests : IAsyncLifetime
     [Fact]
     public async Task RepostDroppingARegistrant_RemarksItsReportsInOtherQuarters()
     {
-        List("2026q2_ncen.zip", Archive("2026q3", without: MasonAmendment));
+        List("2026q2_ncen.zip", Archive("2026q3", only: MasonOriginal));
         List("2026q3_ncen.zip", Archive("2026q3", only: MasonAmendment));
         await Sut().ImportPending(4, CancellationToken.None);
 
