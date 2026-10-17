@@ -10,12 +10,15 @@ public static class HolderTurnoverCalculator
 {
     /// <summary>
     /// <paramref name="previous"/> is null when the filer filed no 13F the quarter before; its shares
-    /// must already be restated onto the current quarter's basis.
+    /// must already be restated onto the current quarter's basis. A security held on both sides whose
+    /// split basis could not be resolved (<paramref name="unresolvedBasis"/>) is an unpriced trade of
+    /// unknown direction.
     /// </summary>
     public static HolderTradeSummary Trades(
         IReadOnlyList<HolderEquityPosition> current,
         IReadOnlyList<HolderEquityPosition> previous,
-        IReadOnlyDictionary<HolderSecurityKey, decimal> averagePrices = null
+        IReadOnlyDictionary<HolderSecurityKey, decimal> averagePrices = null,
+        IReadOnlySet<HolderSecurityKey> unresolvedBasis = null
     )
     {
         var currentBySecurity = BySecurity(current);
@@ -36,6 +39,11 @@ public static class HolderTurnoverCalculator
         {
             currentBySecurity.TryGetValue(security, out var now);
             previousBySecurity.TryGetValue(security, out var before);
+            if (now != null && before != null && unresolvedBasis?.Contains(security) == true)
+            {
+                unpriced++;
+                continue;
+            }
             var traded = (now?.Shares ?? 0) - (before?.Shares ?? 0);
             if (traded == 0)
                 continue;
