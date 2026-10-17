@@ -564,7 +564,9 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
 
     // The same statement and the same typed parameters the scan sent, planned the way Npgsql
     // plans them (at Bind, with the values), with sequential and bitmap heap scans disabled so
-    // only an index the planner cannot use for the statement leaves it unused.
+    // only an index the planner cannot use for the statement leaves it unused. Parallel plans
+    // are off too: on the small seed a parallel skip scan of another index ties on cost and
+    // the planner picked it in some CI runs.
     private async Task<List<string>> Explain(IEnumerable<CapturedCommand> commands)
     {
         var plans = new List<string>();
@@ -572,7 +574,8 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
         await connection.OpenAsync();
         await using (
             var seqScanOff = new NpgsqlCommand(
-                "SET enable_seqscan = off; SET enable_bitmapscan = off;",
+                "SET enable_seqscan = off; SET enable_bitmapscan = off; "
+                    + "SET max_parallel_workers_per_gather = 0;",
                 connection
             )
         )

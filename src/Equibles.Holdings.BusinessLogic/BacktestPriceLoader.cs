@@ -350,8 +350,10 @@ public class BacktestPriceLoader
             }
             else
             {
-                // Yesterday's generation would otherwise hold its capacity until it expires.
-                _seriesCache.Remove(listingId, priceWindowFrom.AddDays(-1));
+                // Yesterday's generation would otherwise hold its capacity until it expires; a
+                // window clamped to the first representable day has no earlier generation.
+                if (priceWindowFrom > DateOnly.MinValue)
+                    _seriesCache.Remove(listingId, priceWindowFrom.AddDays(-1));
                 misses.Add(listingId);
             }
         }
