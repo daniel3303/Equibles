@@ -19,6 +19,10 @@ public sealed record HoldingsComparisonStatus(
     // rows as the exclusions. Only History computes it; null means no like-for-like change.
     public (long Current, long Previous)? LikeForLike { get; init; }
 
+    // Filers that continue under other CIKs across this comparison. Comparable groups are
+    // already present on both sides; the others stay among the missing filers.
+    public IReadOnlyList<HoldingsSuccessionGroup> Successions { get; init; } = [];
+
     public bool ConsecutiveQuarters =>
         PreviousReportDate == HoldingsCorpusCoverage.PreviousQuarterEnd(ReportDate);
 
@@ -26,10 +30,45 @@ public sealed record HoldingsComparisonStatus(
     // compare like-for-like instead of withholding the change.
     public bool ComparisonAvailable => ConsecutiveQuarters;
 
+    // A predecessor is compared through its successor, and a group split across several
+    // successors is compared only in the totals, since its prior position cannot be divided.
     public bool CanCompareHolder(Guid holderId) =>
         ConsecutiveQuarters
         && !MissingPreviousFilers.Contains(holderId)
-        && !MissingCurrentFilers.Contains(holderId);
+        && !MissingCurrentFilers.Contains(holderId)
+        && !Successions.Any(group =>
+            group.Comparable
+            && (
+                group.Predecessors.ContainsKey(holderId)
+                || (!group.SingleSuccessor && group.Contains(holderId))
+            )
+        );
+
+    // The holder a filer's rows are compared under: the successor that alone continues it, or
+    // the filer itself. Per-holder rankings group rows by this key before comparing them.
+    public Guid ComparisonKey(Guid holderId) =>
+        Successions
+            .Where(group =>
+                group.Comparable
+                && group.SingleSuccessor
+                && group.Predecessors.ContainsKey(holderId)
+            )
+            .Select(group => group.Successors.Keys.Single())
+            .DefaultIfEmpty(holderId)
+            .First();
+
+    // The filers a successor alone continues, for its ranking row; null for any other holder.
+    public string ContinuedFrom(Guid holderId) =>
+        Successions
+            .Where(group =>
+                group.Comparable && group.SingleSuccessor && group.Successors.ContainsKey(holderId)
+            )
+            .Select(group =>
+                group.Predecessors.Count == 1
+                    ? group.Predecessors.Values.Single() ?? "Unknown filer"
+                    : $"{Number(group.Predecessors.Count)} filers"
+            )
+            .FirstOrDefault();
 
     public long ExcludedCurrentShares => SharesOf(MissingPreviousFilers);
 
@@ -48,8 +87,17 @@ public sealed record HoldingsComparisonStatus(
         {
             if (!ConsecutiveQuarters)
                 return "Comparison unavailable: the stored report dates are not consecutive quarters.";
+            var continued = Successions
+                .Where(group => group.Comparable)
+                .Select(Continued)
+                .Order(StringComparer.Ordinal)
+                .ToList();
+            var successions =
+                continued.Count > 0
+                    ? $"Compared across CIK changes: {string.Join("; ", continued)}."
+                    : null;
             if (MissingPreviousFilers.Count == 0 && MissingCurrentFilers.Count == 0)
-                return null;
+                return successions;
 
             var withShares = ExcludedFilers.Count > 0;
             var parts = new List<string>();
@@ -69,13 +117,32 @@ public sealed record HoldingsComparisonStatus(
                 );
             var largest = LargestExcludedFilers
                 .Select(filer =>
-                    $"{filer.Name ?? "Unknown filer"} {Number(filer.Shares)} (no {Date(MissingPreviousFilers.Contains(filer.InstitutionalHolderId) ? PreviousReportDate : ReportDate)} 13F)"
+                    $"{filer.Name ?? "Unknown filer"} {Number(filer.Shares)} ({Reason(filer.InstitutionalHolderId)})"
                 )
                 .ToList();
             return $"Excluded {string.Join(" and ", parts)}"
                 + (largest.Count > 0 ? $"; largest: {string.Join(", ", largest)}" : "")
-                + ".";
+                + "."
+                + (successions == null ? "" : $" {successions}");
         }
+    }
+
+    private string Reason(Guid holderId) =>
+        Successions.Any(group => !group.Comparable && group.Contains(holderId))
+            ? "CIK change, books not comparable"
+            : $"no {Date(MissingPreviousFilers.Contains(holderId) ? PreviousReportDate : ReportDate)} 13F";
+
+    private static string Continued(HoldingsSuccessionGroup group)
+    {
+        var from =
+            group.Predecessors.Count == 1
+                ? group.Predecessors.Values.Single() ?? "Unknown filer"
+                : $"{Number(group.Predecessors.Count)} filers";
+        var to =
+            group.Successors.Count == 1
+                ? group.Successors.Values.Single() ?? "Unknown filer"
+                : $"{Number(group.Successors.Count)} filers, not ranked one by one";
+        return $"{from} {(group.Predecessors.Count == 1 ? "continues" : "continue")} as {to}";
     }
 
     private long SharesOf(IReadOnlySet<Guid> holders) =>

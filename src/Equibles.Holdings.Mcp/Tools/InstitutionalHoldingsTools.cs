@@ -1004,8 +1004,12 @@ public class InstitutionalHoldingsTools
                     return SplitAdjustment.AdjustShareCount(shares, asOf, scoped);
                 }
 
+                // A filer continued by one successor under a new CIK is compared through it.
                 var movers = activity
-                    .GroupBy(row => row.InstitutionalHolderId)
+                    .GroupBy(row =>
+                        comparison?.ComparisonKey(row.InstitutionalHolderId)
+                        ?? row.InstitutionalHolderId
+                    )
                     .Where(g => comparison != null && comparison.CanCompareHolder(g.Key))
                     .Select(g =>
                     {
@@ -1124,12 +1128,18 @@ public class InstitutionalHoldingsTools
                         .ToHashSet();
                 }
 
+                // A successor compared with the filers it continues is named with them.
+                string RowName(Guid id) =>
+                    comparison?.ContinuedFrom(id) is { } predecessors
+                        ? $"{HolderName(id)} (continues {predecessors})"
+                        : HolderName(id);
                 var buyerRows = topBuyers
                     .Select(m =>
                         (
-                            firstTimeFilerIds.Contains(m.Id)
+                            comparison?.ContinuedFrom(m.Id) == null
+                            && firstTimeFilerIds.Contains(m.Id)
                                 ? $"{HolderName(m.Id)} (first 13F this quarter)"
-                                : HolderName(m.Id),
+                                : RowName(m.Id),
                             m.CurrentShares,
                             m.PreviousShares,
                             m.DeltaShares,
@@ -1140,7 +1150,7 @@ public class InstitutionalHoldingsTools
                 var sellerRows = topSellers
                     .Select(m =>
                         (
-                            HolderName(m.Id),
+                            RowName(m.Id),
                             m.CurrentShares,
                             m.PreviousShares,
                             m.DeltaShares,
@@ -1155,7 +1165,7 @@ public class InstitutionalHoldingsTools
                             + "movement requires observed filings in both compared quarters."
                     : previousDate.HasValue
                         ? $"Note: buyers and sellers require observed 13F filings in both compared quarters — "
-                            + "funds that stopped filing under this CIK (migrations, deregistrations) are excluded."
+                            + "funds that stopped filing under this CIK are excluded unless their filings tie them to a successor whose 13F book matches theirs."
                     : null;
 
                 return RenderBuyersSellersTable(

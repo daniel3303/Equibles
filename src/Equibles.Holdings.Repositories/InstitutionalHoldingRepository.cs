@@ -2220,6 +2220,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     // Distinct holder ids among the given set that filed ANY 13F at reportDate — the "has this
     // fund reported yet?" test behind the combined view's reported-so-far counts.
+    // Successions whose successor's first 13F is one of these quarters.
+    public IQueryable<HolderSuccession> GetSuccessionsFirstReportedOn(
+        IReadOnlyCollection<DateOnly> reportDates
+    ) =>
+        DbContext
+            .Set<HolderSuccession>()
+            .Where(succession => reportDates.Contains(succession.SuccessorFirstReportDate));
+
     public IQueryable<Guid> GetFiledHolderIdsAmong(
         DateOnly reportDate,
         IReadOnlyCollection<Guid> holderIds
