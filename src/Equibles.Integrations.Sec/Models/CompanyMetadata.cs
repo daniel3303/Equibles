@@ -19,6 +19,16 @@ public class CompanyMetadata
     /// </summary>
     public string Sic { get; set; }
 
+    /// <summary>The CIK EDGAR's reply names, which a caller can compare with the one it asked for.</summary>
+    public string FilerCik { get; set; }
+
+    public string SicDescription { get; set; }
+
+    /// <summary>SEC's filer status, e.g. "Large accelerated filer"; blank for filers without one.</summary>
+    public string Category { get; set; }
+
+    public string StateOfIncorporation { get; set; }
+
     public List<string> Exchanges { get; set; } = [];
 
     /// <summary>
