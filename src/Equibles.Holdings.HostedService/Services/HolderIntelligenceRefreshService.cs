@@ -490,11 +490,10 @@ public class HolderIntelligenceRefreshService
         _dbContext.ChangeTracker.Clear();
     }
 
-    // The stored turnover is rounded to the column's six decimals.
-    private static bool TurnoverChanged(decimal? stored, decimal? current) =>
-        stored == null || current == null
-            ? stored != current
-            : Math.Abs(stored.Value - current.Value) >= 0.000001m;
+    // Postgres rounds the turnover half away from zero to the column's six decimals.
+    internal static bool TurnoverChanged(decimal? stored, decimal? current) =>
+        stored
+        != (current == null ? null : Math.Round(current.Value, 6, MidpointRounding.AwayFromZero));
 
     // The quarters after this one whose trailing annual turnover sums its turnover.
     private const int TrailingQuarters = 3;
