@@ -65,6 +65,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<Form144FilerCikBackfillWorker>();
         services.AddHostedService<NportFilingReprocessWorker>();
         services.AddHostedService<NportRealtimeWorker>();
+        services.AddHostedService<NCenDataSetWorker>();
         services.AddHostedService<FundSeriesRefreshWorker>();
         services.AddHostedService<EsefReportScraperWorker>();
 
