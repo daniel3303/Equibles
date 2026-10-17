@@ -50,6 +50,11 @@
       Link="TestAssets/EquityMarkets/Firds/%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="../Equibles.UnitTests/TestAssets/NCen/**/*.tsv"
+      Link="TestAssets/NCen/%(RecursiveDir)%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <Content Include="TestAssets\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -95,6 +95,12 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
             .HasForeignKey(row => row.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<NCenServiceProvider>();
+        builder.Entity<NCenDataSetImport>();
+        builder.Entity<NCenRegistrantReport>();
+        builder.Entity<NCenFundReport>();
+        builder.Entity<NCenFundAdviser>();
+        builder.Entity<NCenFundShareClass>();
+        builder.Entity<NCenFundExchangeListing>();
         builder.Entity<NportFiling>(b =>
         {
             b.HasOne(row => row.Issuer)
