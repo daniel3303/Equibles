@@ -2,6 +2,7 @@ using System.Net;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.Data.Models;
@@ -79,10 +80,18 @@ public class NCenFilingReprocessManager
                 }
                 catch (HttpRequestException exception) when (IsOutage(exception))
                 {
+                    // Reported, not just logged: a filing that keeps failing this way stops every
+                    // pass at the same row, and only the error dashboard would show it.
                     _logger.LogWarning(
                         exception,
                         "N-CEN reprocess stopped: EDGAR is unavailable ({Status})",
                         exception.StatusCode
+                    );
+                    await _errorReporter.Report(
+                        ErrorSource.NCenReprocess,
+                        "NCenReprocess.Outage",
+                        $"N-CEN reprocess stopped at filing {filingId}: {exception.StatusCode?.ToString() ?? "no response"}",
+                        null
                     );
                     result.StoppedByOutage = true;
                     return Finish(result);

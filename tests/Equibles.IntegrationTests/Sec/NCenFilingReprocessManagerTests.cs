@@ -1,6 +1,7 @@
 using System.Net;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.IntegrationTests.Helpers;
@@ -27,7 +28,7 @@ public class NCenFilingReprocessManagerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Run_StaleFiling_RereadsItAndReplacesItsProviders()
     {
-        var filingId = await SeedStaleWindsor();
+        var filingId = await SeedStaleWindsor(reprocessAttempts: 2);
         Returns(WindsorAccession, NCenSubmissionFixtures.VanguardWindsor);
 
         var result = await Manager().Run();
@@ -37,11 +38,27 @@ public class NCenFilingReprocessManagerTests : ParadeDbMcpTestBase
         result.Failed.Should().Be(0);
         await using var verify = Fixture.CreateDbContext();
         var filing = await verify.Set<NCenFiling>().SingleAsync(f => f.Id == filingId);
-        filing.IsFamilyInvestmentCompany.Should().BeTrue();
-        filing.ParserVersion.Should().Be(NCenFiling.CurrentParserVersion);
-        filing.ReprocessAttempts.Should().Be(0);
-        filing.RegistrantName.Should().Be("VANGUARD WINDSOR FUNDS");
-        filing.IsAmendment.Should().BeFalse();
+        filing
+            .Should()
+            .BeEquivalentTo(
+                new
+                {
+                    IsFamilyInvestmentCompany = true,
+                    ParserVersion = NCenFiling.CurrentParserVersion,
+                    ReprocessAttempts = 0,
+                    RegistrantName = "VANGUARD WINDSOR FUNDS",
+                    InvestmentCompanyType = "N-1A",
+                    InvestmentCompanyFileNumber = "811-00834",
+                    RegistrantLei = "5493006MMNJGHJDZOD60",
+                    State = "US-PA",
+                    Country = "US",
+                    ReportEndingPeriod = new DateOnly(2025, 10, 31),
+                    IsReportPeriodLessThan12Months = false,
+                    IsFirstFiling = false,
+                    IsLastFiling = false,
+                    IsAmendment = false,
+                }
+            );
         var providers = await verify
             .Set<NCenServiceProvider>()
             .Where(p => p.NCenFilingId == filingId)
@@ -68,28 +85,35 @@ public class NCenFilingReprocessManagerTests : ParadeDbMcpTestBase
             .GetDocumentContent(default(string), default, default);
     }
 
-    [Fact]
-    public async Task Run_EdgarOutage_StopsWithoutBurningAnAttempt()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(HttpStatusCode.TooManyRequests, true)]
+    [InlineData(HttpStatusCode.Forbidden, true)]
+    [InlineData(HttpStatusCode.InternalServerError, true)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, true)]
+    [InlineData(HttpStatusCode.NotFound, false)]
+    [InlineData(HttpStatusCode.BadRequest, false)]
+    public async Task Run_EdgarError_StopsOnAnOutageAndBurnsAnAttemptOtherwise(
+        HttpStatusCode? status,
+        bool outage
+    )
     {
         var filingId = await SeedStaleWindsor();
         _secClient
             .GetDocumentContent(WindsorAccession, Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(
-                new HttpRequestException(
-                    "Service Unavailable",
-                    null,
-                    HttpStatusCode.ServiceUnavailable
-                )
-            );
+            .ThrowsAsync(new HttpRequestException("EDGAR error", null, status));
 
         var result = await Manager().Run();
 
-        result.StoppedByOutage.Should().BeTrue();
-        result.Failed.Should().Be(0);
+        result.StoppedByOutage.Should().Be(outage);
+        result.Failed.Should().Be(outage ? 0 : 1);
         await using var verify = Fixture.CreateDbContext();
         var filing = await verify.Set<NCenFiling>().SingleAsync(f => f.Id == filingId);
         filing.ParserVersion.Should().Be(0);
-        filing.ReprocessAttempts.Should().Be(0);
+        filing.ReprocessAttempts.Should().Be(outage ? 0 : 1);
+        (await verify.Set<Error>().CountAsync(e => e.Context == "NCenReprocess.Outage"))
+            .Should()
+            .Be(outage ? 1 : 0);
     }
 
     [Fact]
@@ -156,8 +180,15 @@ public class NCenFilingReprocessManagerTests : ParadeDbMcpTestBase
             .GetDocumentContent(accession, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(content);
 
-    private Task<Guid> SeedStaleWindsor(int parserVersion = 0) =>
-        SeedStale(WindsorAccession, WindsorCik, "VWNDX", new DateOnly(2026, 1, 9), parserVersion);
+    private Task<Guid> SeedStaleWindsor(int parserVersion = 0, int reprocessAttempts = 0) =>
+        SeedStale(
+            WindsorAccession,
+            WindsorCik,
+            "VWNDX",
+            new DateOnly(2026, 1, 9),
+            parserVersion,
+            reprocessAttempts
+        );
 
     // A filing as the old parser stored it: no family flag, one adviser without a country.
     private async Task<Guid> SeedStale(
@@ -165,7 +196,8 @@ public class NCenFilingReprocessManagerTests : ParadeDbMcpTestBase
         string cik,
         string ticker,
         DateOnly filingDate,
-        int parserVersion = 0
+        int parserVersion = 0,
+        int reprocessAttempts = 0
     )
     {
         EquityIssuer issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -182,6 +214,7 @@ public class NCenFilingReprocessManagerTests : ParadeDbMcpTestBase
             RegistrantName = "stale name",
             ReportEndingPeriod = new DateOnly(2025, 10, 31),
             ParserVersion = parserVersion,
+            ReprocessAttempts = reprocessAttempts,
         };
         DbContext.Add(issuer);
         DbContext.Add(filing);
