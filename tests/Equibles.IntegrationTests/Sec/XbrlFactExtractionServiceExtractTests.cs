@@ -26,7 +26,8 @@ namespace Equibles.IntegrationTests.Sec;
 /// End-to-end pin of the dimensional-fact extraction path (#877): a captured
 /// gzipped inline-XBRL envelope goes in, dimensional FinancialFact rows with
 /// FinancialFactDimension children come out, and the consolidated fact in the
-/// same envelope is left to the Company Facts API (not persisted). Also pins
+/// same envelope is left to the Company Facts API (not persisted) once the API
+/// carries the accession; until then a 10-Q fills it. Also pins
 /// idempotency — re-extracting the same document must not duplicate rows,
 /// which exercises the DimensionsKey conflict target end to end against real
 /// Postgres.
@@ -42,7 +43,10 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Extract_CapturedInlineEnvelope_PersistsDimensionalFactWithChildAndSkipsConsolidated()
     {
-        var document = await SeedDocument(InlineEnvelope());
+        var document = await SeedDocument(
+            InlineEnvelope().Replace("scheme=\"cik\"", "scheme=\"http://www.sec.gov/CIK\"")
+        );
+        await SeedCompanyFactsCoverage(document);
         var sut = BuildSut();
 
         var persisted = await sut.Extract(document, CancellationToken.None);
@@ -125,6 +129,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
                 """
             );
         var document = await SeedDocument(envelope);
+        await SeedCompanyFactsCoverage(document);
         await BuildSut().Extract(document, CancellationToken.None);
         var fact = await DbContext
             .Set<FinancialFact>()
@@ -541,6 +546,176 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
                 .Should()
                 .Be(0);
         }
+    }
+
+    [Fact]
+    public async Task Extract_TenQCompanyFactsLacks_FillsResolvedConsolidatedFactsAsFilingXbrl()
+    {
+        var document = await SeedChefQuarter();
+
+        (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(5);
+        // Idempotent: a replay keeps one row per natural key.
+        (await BuildSut().Extract(document, CancellationToken.None))
+            .Should()
+            .Be(5);
+
+        var facts = await DbContext
+            .Set<FinancialFact>()
+            .AsNoTracking()
+            .Include(f => f.FinancialConcept)
+            .Where(f => f.DocumentId == document.Id)
+            .ToListAsync();
+        facts.Should().HaveCount(5);
+        facts
+            .Should()
+            .OnlyContain(f =>
+                f.Source == FinancialFactSource.FilingXbrl
+                && f.DimensionsKey == ""
+                && f.Form == DocumentType.TenQ
+                && f.FiledDate == new DateOnly(2026, 7, 29)
+                && f.AccessionNumber == ChefAccession
+                && f.Frame == null
+            );
+        var quarterEps = facts.Single(f =>
+            f.FinancialConcept.Tag == "EarningsPerShareDiluted"
+            && f.PeriodStart == new DateOnly(2026, 3, 28)
+        );
+        quarterEps.Value.Should().Be(0.76m);
+        quarterEps.Unit.Should().Be("USD/shares");
+        (quarterEps.FiscalYear, quarterEps.FiscalPeriod).Should().Be((2026, SecFiscalPeriod.Q2));
+        var revenue = facts.Single(f =>
+            f.FinancialConcept.Tag == "RevenueFromContractWithCustomerExcludingAssessedTax"
+            && f.PeriodEnd == new DateOnly(2026, 6, 26)
+        );
+        revenue.Value.Should().Be(1_168_613_000m);
+        (revenue.FiscalYear, revenue.FiscalPeriod).Should().Be((2026, SecFiscalPeriod.Q2));
+        var comparative = facts.Single(f => f.PeriodEnd == new DateOnly(2025, 6, 27));
+        (comparative.FiscalYear, comparative.FiscalPeriod).Should().Be((2025, SecFiscalPeriod.Q2));
+        // A span the fiscal calendar cannot place is left to Company Facts, never guessed.
+        facts.Should().NotContain(f => f.PeriodStart == new DateOnly(2026, 5, 28));
+    }
+
+    [Fact]
+    public async Task Extract_TenQCompanyFactsCovers_LeavesConsolidatedFactsToTheApi()
+    {
+        var document = await SeedChefQuarter();
+        await SeedCompanyFactsCoverage(document);
+
+        (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(0);
+        (await DbContext.Set<FinancialFact>().CountAsync(f => f.DocumentId == document.Id))
+            .Should()
+            .Be(0);
+    }
+
+    [Theory]
+    [InlineData("EightK", "0001517175")]
+    [InlineData("TenQ", "0000320193")]
+    public async Task Extract_EightKOrAnotherIssuersContext_IsNeverFilled(string form, string cik)
+    {
+        var document = await SeedChefQuarter();
+        document.DocumentType = DocumentType.FromValue(form);
+        document.Issuer.Cik = cik;
+        await DbContext.SaveChangesAsync();
+
+        (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Extract_TenQFiledUnderSecondaryCik_Fills()
+    {
+        var document = await SeedChefQuarter();
+        document.Issuer.Cik = "0000320193";
+        document.Issuer.SecondaryCiks = ["1517175"];
+        await DbContext.SaveChangesAsync();
+
+        (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(5);
+    }
+
+    private const string ChefAccession = "0001517175-26-000028";
+
+    // The Chefs' Warehouse Q2 FY2026 10-Q that SEC Company Facts never processed: a 52/53-week year
+    // ending in late December, the discrete quarter, the half-year, a prior-year comparative, a
+    // balance-sheet instant, and a 30-day span the calendar cannot place.
+    private async Task<Document> SeedChefQuarter()
+    {
+        var context = (string id, string period) =>
+            $"<xbrli:context id=\"{id}\"><xbrli:entity><xbrli:identifier scheme=\"http://www.sec.gov/CIK\">0001517175</xbrli:identifier></xbrli:entity><xbrli:period>{period}</xbrli:period></xbrli:context>";
+        var duration = (string start, string end) =>
+            $"<xbrli:startDate>{start}</xbrli:startDate><xbrli:endDate>{end}</xbrli:endDate>";
+        var fact = (string tag, string contextRef, string unit, string value, string scale) =>
+            $"<ix:nonFraction name=\"us-gaap:{tag}\" contextRef=\"{contextRef}\" unitRef=\"{unit}\" decimals=\"-3\" scale=\"{scale}\">{value}</ix:nonFraction>";
+        var envelope =
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\" "
+            + "xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\" "
+            + "xmlns:xbrli=\"http://www.xbrl.org/2003/instance\" "
+            + "xmlns:iso4217=\"http://www.xbrl.org/2003/iso4217\" "
+            + "xmlns:us-gaap=\"http://fasb.org/us-gaap/2025\">"
+            + "<body><div style=\"display:none\"><ix:header><ix:resources>"
+            + context("Q2", duration("2026-03-28", "2026-06-26"))
+            + context("H1", duration("2025-12-27", "2026-06-26"))
+            + context("PriorQ2", duration("2025-03-29", "2025-06-27"))
+            + context("Odd", duration("2026-05-28", "2026-06-26"))
+            + context("End", "<xbrli:instant>2026-06-26</xbrli:instant>")
+            + "<xbrli:unit id=\"usd\"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>"
+            + "<xbrli:unit id=\"usdPerShare\"><xbrli:divide><xbrli:unitNumerator><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unitNumerator>"
+            + "<xbrli:unitDenominator><xbrli:measure>xbrli:shares</xbrli:measure></xbrli:unitDenominator></xbrli:divide></xbrli:unit>"
+            + "</ix:resources></ix:header></div>"
+            + fact(
+                "RevenueFromContractWithCustomerExcludingAssessedTax",
+                "Q2",
+                "usd",
+                "1,168,613",
+                "3"
+            )
+            + fact(
+                "RevenueFromContractWithCustomerExcludingAssessedTax",
+                "PriorQ2",
+                "usd",
+                "1,034,906",
+                "3"
+            )
+            + fact("RevenueFromContractWithCustomerExcludingAssessedTax", "Odd", "usd", "123", "3")
+            + fact("EarningsPerShareDiluted", "Q2", "usdPerShare", "0.76", "0")
+            + fact("EarningsPerShareDiluted", "H1", "usdPerShare", "1.16", "0")
+            + fact("Assets", "End", "usd", "2,500,000", "3")
+            + "</body></html>";
+        var document = await SeedDocument(envelope);
+        document.Issuer.Name = "Chefs' Warehouse";
+        document.Issuer.Cik = "0001517175";
+        document.Issuer.FiscalYearEndMonth = 12;
+        document.Issuer.FiscalYearEndDay = 26;
+        document.AccessionNumber = ChefAccession;
+        document.ReportingDate = new DateOnly(2026, 7, 29);
+        document.ReportingForDate = new DateOnly(2026, 6, 26);
+        await DbContext.SaveChangesAsync();
+        return document;
+    }
+
+    // A consolidated standard fact Company Facts wrote under the document's accession: the API
+    // processed this filing, so it stays authoritative for the consolidated context.
+    private async Task SeedCompanyFactsCoverage(Document document)
+    {
+        DbContext.Add(
+            new FinancialFact
+            {
+                EquityIssuerId = document.EquityIssuerId,
+                FinancialConcept = new FinancialConcept
+                {
+                    Taxonomy = FactTaxonomy.UsGaap,
+                    Tag = "CompanyFactsCoverageProbe",
+                },
+                Unit = "USD",
+                PeriodType = FactPeriodType.Instant,
+                PeriodStart = document.ReportingForDate,
+                PeriodEnd = document.ReportingForDate,
+                Value = 1m,
+                Form = document.DocumentType,
+                FiledDate = document.ReportingDate,
+                AccessionNumber = document.AccessionNumber,
+                Source = FinancialFactSource.CompanyFacts,
+            }
+        );
+        await DbContext.SaveChangesAsync();
     }
 
     private async Task<Document> SeedDocument(string envelope)

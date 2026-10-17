@@ -33,7 +33,11 @@ namespace Equibles.Sec.FinancialFacts.HostedService.Services;
 /// The API stays authoritative for the consolidated (no-dimension) context of
 /// <em>standard-taxonomy</em> concepts. Foreign annual and interim filings may
 /// fill missing consolidated facts only from an unqualified matching-CIK
-/// context; conflicts never update the existing API row.
+/// context; conflicts never update the existing API row. A 10-Q/10-K fills the
+/// same way only while the API carries none of its accession (SEC sometimes
+/// never processes a filing into Company Facts), and only for periods the
+/// fiscal calendar resolves; the next API import that emits the accession
+/// supersedes those rows (<see cref="FinancialFactSource.FilingXbrl"/>).
 /// <em>Filer-extension</em> concepts (<see cref="FactTaxonomy.Custom"/> — the
 /// company's own KPI tags like subscriber counts or ARR) never appear in the
 /// API at all, so they are persisted at every dimensionality, consolidated
@@ -55,8 +59,8 @@ public class XbrlFactExtractionService
 {
     /// <summary>
     /// Stamped onto <c>Document.XbrlFactsVersion</c> after a successful
-    /// extraction. Bump to reprocess the whole captured corpus after an
-    /// extractor behavior change.
+    /// extraction. Bump it together with <see cref="TargetedReplayFloor"/> to
+    /// reprocess the whole captured corpus after an extractor behavior change.
     /// </summary>
     // Version 2: TR2/TR3 zerodash + TR4/TR5 num-comma-decimal(-apos) format
     // coverage in InlineXbrlParser.
@@ -67,7 +71,30 @@ public class XbrlFactExtractionService
     // Version 5: preserve every cover-page symbol observation as dated issuer evidence.
     // Version 6: fill absent standard consolidated facts in foreign financial reports.
     // Version 7 replays derived fiscal identities for interim instants and existing rows.
-    public const int CurrentVersion = 8;
+    // Version 8: labels resolve through the historical fiscal calendar across year-end changes.
+    // Version 9: fill consolidated facts of 10-Q/10-K filings Company Facts lacks. The replay is
+    // targeted (XbrlFactsExtractionWorker.SelectDueDocuments), not the whole corpus.
+    public const int CurrentVersion = 9;
+
+    /// <summary>
+    /// Documents stamped below this version always rerun. Those stamped between it and
+    /// <see cref="CurrentVersion"/> rerun only when they are recent or lagging 10-Q/10-K filings.
+    /// The next full-corpus bump sets this equal to <see cref="CurrentVersion"/>, which retires the
+    /// targeted replay.
+    /// </summary>
+    public const int TargetedReplayFloor = 8;
+
+    /// <summary>Filing date from which every captured 10-Q/10-K joins the version-9 replay.</summary>
+    internal static readonly DateOnly TargetedReplayFiledSince = new(2026, 1, 1);
+
+    /// <summary>Domestic periodic forms whose consolidated facts may fill a Company Facts gap.</summary>
+    internal static readonly DocumentType[] DomesticPeriodicForms =
+    [
+        DocumentType.TenQ,
+        DocumentType.TenQa,
+        DocumentType.TenK,
+        DocumentType.TenKa,
+    ];
 
     /// <summary>
     /// Envelopes above this uncompressed size are skipped instead of parsed.
@@ -210,7 +237,14 @@ public class XbrlFactExtractionService
             throw new InvalidOperationException("Unsupported captured XBRL representation.");
         }
 
-        var persistable = CollapseToNaturalKey(SelectPersistable(parsed, document));
+        // Ask whether Company Facts covers the accession only when the filing has a consolidated
+        // standard fact it could fill; most documents have none to offer.
+        var periodicFill =
+            DomesticPeriodicForms.Contains(document.DocumentType)
+            && SelectPersistable(parsed, document, periodicFill: true)
+                .Any(c => c.Taxonomy != FactTaxonomy.Custom && c.DimensionsKey == "")
+            && !await HasCompanyFactsCoverage(document, cancellationToken);
+        var persistable = CollapseToNaturalKey(SelectPersistable(parsed, document, periodicFill));
         if (persistable.Count == 0)
             return 0;
 
@@ -250,8 +284,18 @@ public class XbrlFactExtractionService
             }
             if (!conceptIds.TryGetValue((candidate.Taxonomy, candidate.Tag), out var conceptId))
                 continue;
+            var consolidatedFill =
+                candidate.Taxonomy != FactTaxonomy.Custom && candidate.DimensionsKey == "";
+            // The calendar-quarter guess mislabels every non-December filer; a domestic fill
+            // states no fiscal period of its own, so an unresolved one is left to Company Facts.
+            if (
+                consolidatedFill
+                && periodicFill
+                && calendar.Resolve(candidate.Fact.PeriodStart, candidate.Fact.PeriodEnd) == null
+            )
+                continue;
             var fact = BuildFact(document, stock, candidate, conceptId, calendar);
-            if (candidate.Taxonomy != FactTaxonomy.Custom && candidate.DimensionsKey == "")
+            if (consolidatedFill)
                 consolidatedFills.Add(fact);
             else
                 facts.Add(fact);
@@ -280,14 +324,40 @@ public class XbrlFactExtractionService
     }
 
     /// <summary>
+    /// True when Company Facts has written a consolidated standard-taxonomy fact under the
+    /// document's accession, i.e. the API processed this filing and stays authoritative for it.
+    /// </summary>
+    private async Task<bool> HasCompanyFactsCoverage(
+        Document document,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        return await dbContext
+            .Set<FinancialFact>()
+            .AnyAsync(
+                f =>
+                    f.EquityIssuerId == document.EquityIssuerId
+                    && f.AccessionNumber == document.AccessionNumber
+                    && f.DimensionsKey == ""
+                    && f.Source == FinancialFactSource.CompanyFacts
+                    && f.FinancialConcept.Taxonomy != FactTaxonomy.Custom,
+                cancellationToken
+            );
+    }
+
+    /// <summary>
     /// Keeps the facts this extractor is allowed to persist: a concept in a
     /// standard taxonomy with explicit dimensions, a filer-extension concept,
-    /// or a source-identified foreign consolidated context used only to fill
-    /// absent API facts. Values must fit their columns.
+    /// or a source-identified consolidated context used only to fill absent API
+    /// facts (foreign reports always, a 10-Q/10-K when <paramref name="periodicFill"/>).
+    /// Values must fit their columns.
     /// </summary>
     internal static List<PersistableXbrlFact> SelectPersistable(
         List<ParsedXbrlFact> parsed,
-        Document document = null
+        Document document = null,
+        bool periodicFill = false
     )
     {
         var selected = new List<PersistableXbrlFact>();
@@ -298,7 +368,7 @@ public class XbrlFactExtractionService
             if (
                 taxonomy != FactTaxonomy.Custom
                 && fact.Dimensions.Count == 0
-                && !CanFillConsolidated(fact, document)
+                && !CanFillConsolidated(fact, document, periodicFill)
             )
                 continue;
             if (string.IsNullOrEmpty(fact.Unit) || fact.Unit.Length > UnitMaxLength)
@@ -328,7 +398,11 @@ public class XbrlFactExtractionService
         return selected;
     }
 
-    private static bool CanFillConsolidated(ParsedXbrlFact fact, Document document)
+    private static bool CanFillConsolidated(
+        ParsedXbrlFact fact,
+        Document document,
+        bool periodicFill
+    )
     {
         if (document == null)
             return false;
@@ -342,6 +416,7 @@ public class XbrlFactExtractionService
             && form != DocumentType.TwentyFa
             && form != DocumentType.FortyF
             && form != DocumentType.FortyFa
+            && !(periodicFill && DomesticPeriodicForms.Contains(form))
         )
             return false;
 
@@ -364,14 +439,23 @@ public class XbrlFactExtractionService
                 && string.Equals(sourceLei, issuerLei, StringComparison.OrdinalIgnoreCase);
         }
 
+        // Every attached CIK files for the issuer (holdco reorganisations, co-registrants), the same
+        // set the Company Facts import reads.
         var sourceCik = fact.ConsolidatedCik;
-        var issuerCik = document.Issuer?.Cik;
-        return !string.IsNullOrEmpty(sourceCik)
-            && !string.IsNullOrEmpty(issuerCik)
-            && sourceCik.All(char.IsAsciiDigit)
-            && issuerCik.All(char.IsAsciiDigit)
-            && sourceCik.TrimStart('0').Length > 0
-            && sourceCik.TrimStart('0') == issuerCik.TrimStart('0');
+        if (
+            string.IsNullOrEmpty(sourceCik)
+            || !sourceCik.All(char.IsAsciiDigit)
+            || sourceCik.TrimStart('0').Length == 0
+            || document.Issuer == null
+        )
+            return false;
+        return new[] { document.Issuer.Cik }
+            .Concat(document.Issuer.SecondaryCiks)
+            .Any(issuerCik =>
+                !string.IsNullOrEmpty(issuerCik)
+                && issuerCik.All(char.IsAsciiDigit)
+                && sourceCik.TrimStart('0') == issuerCik.TrimStart('0')
+            );
     }
 
     private static string FinancialTaxonomyHost(string taxonomy) =>
@@ -568,6 +652,7 @@ public class XbrlFactExtractionService
             FiledDate = document.ReportingDate,
             AccessionNumber = document.AccessionNumber,
             DimensionsKey = candidate.DimensionsKey,
+            Source = FinancialFactSource.FilingXbrl,
         };
     }
 

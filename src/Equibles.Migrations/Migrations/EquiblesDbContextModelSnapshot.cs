@@ -5598,6 +5598,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("PeriodType")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(32)

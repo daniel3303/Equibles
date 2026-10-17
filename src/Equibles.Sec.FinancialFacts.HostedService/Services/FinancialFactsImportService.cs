@@ -377,6 +377,11 @@ public class FinancialFactsImportService
             _insertBatchSize,
             items => FlushFacts(items, cancellationToken)
         );
+        await DeleteSupersededFilingFills(
+            stock,
+            parsed.Select(p => p.Accession).Distinct().ToList(),
+            cancellationToken
+        );
 
         _logger.LogInformation(
             "Imported {Count} financial facts for {Ticker} (CIK {Cik})",
@@ -647,6 +652,7 @@ public class FinancialFactsImportService
             FiledDate = p.Filed,
             AccessionNumber = p.Accession,
             Frame = p.Frame,
+            Source = FinancialFactSource.CompanyFacts,
         };
     }
 
@@ -741,11 +747,13 @@ public class FinancialFactsImportService
                         Frame = incoming.Frame,
                         FiledDate = incoming.FiledDate,
                         DocumentId = incoming.DocumentId,
+                        Source = incoming.Source,
                     }
             )
             .UpdateIf(
                 (existing, incoming) =>
                     existing.Value != incoming.Value
+                    || existing.Source != incoming.Source
                     || existing.PeriodType != incoming.PeriodType
                     || existing.FiscalYear != incoming.FiscalYear
                     || existing.FiscalPeriod != incoming.FiscalPeriod
@@ -798,6 +806,43 @@ public class FinancialFactsImportService
 
         dbContext.RemoveRange(rows);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    // A 10-Q/10-K consolidated fill stands in for Company Facts only until the API carries its
+    // accession. The upsert above re-stamped every fill the API re-emitted, so a fill still on an
+    // emitted accession is one the API does not state, and goes. Extension concepts and dimensional
+    // rows never reach the API, and foreign-form fills keep filling what it omits.
+    private async Task DeleteSupersededFilingFills(
+        EquityIssuer stock,
+        List<string> emittedAccessions,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var deleted = await dbContext
+            .Set<FinancialFact>()
+            .Where(f =>
+                f.EquityIssuerId == stock.Id
+                && f.Source == FinancialFactSource.FilingXbrl
+                && f.DimensionsKey == ""
+                && f.FinancialConcept.Taxonomy != FactTaxonomy.Custom
+                && (
+                    f.Form == DocumentType.TenQ
+                    || f.Form == DocumentType.TenQa
+                    || f.Form == DocumentType.TenK
+                    || f.Form == DocumentType.TenKa
+                )
+                && emittedAccessions.Contains(f.AccessionNumber)
+            )
+            .ExecuteDeleteAsync(cancellationToken);
+        if (deleted > 0)
+            _logger.LogInformation(
+                "Removed {Count} filing-XBRL fills superseded by Company Facts for {Ticker} (CIK {Cik})",
+                deleted,
+                stock.Presentation?.Listing?.Ticker,
+                stock.Cik
+            );
     }
 
     private static FactNaturalKey NaturalKey(FinancialFact fact) =>
