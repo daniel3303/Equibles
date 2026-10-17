@@ -57,12 +57,12 @@ internal static class FormAdvSnapshotCatalog
             );
 
         foreach (
-            var month in snapshots
+            var links in snapshots
                 .GroupBy(snapshot => snapshot.ReportDate)
                 .OrderByDescending(group => group.Key)
+                .Select(month => month.Distinct().ToArray())
         )
         {
-            var links = month.Distinct().ToArray();
             if (links.Length != 1)
                 throw new InvalidDataException(
                     "The newest SEC Form ADV snapshot is ambiguous or is not a ZIP archive."
