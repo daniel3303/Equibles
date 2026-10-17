@@ -14,6 +14,11 @@ public class ActiveShareCalculatorTests
             var benchmark = RandomBook(random, 30, 90);
 
             var closedForm = ActiveShareCalculator.ActiveShare(portfolio, benchmark);
+            if (portfolio.Values.Sum() == 0 || benchmark.Values.Sum() == 0)
+            {
+                closedForm.Should().BeNull();
+                continue;
+            }
 
             closedForm.Should().BeApproximately(BruteForce(portfolio, benchmark), 0.000000001m);
         }

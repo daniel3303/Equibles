@@ -14,6 +14,9 @@ public sealed record HolderStyleInputs
     public decimal? EffectivePositions { get; init; }
     public decimal? ValueWeightedTenureQuarters { get; init; }
 
+    /// <summary>The value share whose tenure runs back to where coverage starts.</summary>
+    public decimal? CensoredValueShare { get; init; }
+
     /// <summary>Net assets of the index series the filer advises, by their latest N-CEN.</summary>
     public decimal? IndexSeriesNetAssets { get; init; }
 

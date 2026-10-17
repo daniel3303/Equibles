@@ -16,6 +16,7 @@ public class HolderStyleBandClassifierTests
         TopTenWeight = 0.35m,
         EffectivePositions = 60m,
         ValueWeightedTenureQuarters = 8m,
+        CensoredValueShare = 0m,
     };
 
     [Fact]
@@ -201,6 +202,30 @@ public class HolderStyleBandClassifierTests
     public void HorizonBand_Thresholds(double? quarters, HolderHorizonBand band)
     {
         HolderStyleBandClassifier.HorizonBand((decimal?)quarters).Should().Be(band);
+    }
+
+    [Theory]
+    [InlineData(3.0, 0.0, HolderHorizonBand.Short)]
+    [InlineData(3.0, 0.01, HolderHorizonBand.Unknown)]
+    [InlineData(8.0, 0.5, HolderHorizonBand.Unknown)]
+    [InlineData(12.0, 0.5, HolderHorizonBand.Long)]
+    [InlineData(8.0, null, HolderHorizonBand.Unknown)]
+    public void HorizonBand_ACensoredTenureCanOnlyReadLong(
+        double quarters,
+        double? censoredShare,
+        HolderHorizonBand band
+    )
+    {
+        HolderStyleBandClassifier
+            .Classify(
+                Diversified with
+                {
+                    ValueWeightedTenureQuarters = (decimal)quarters,
+                    CensoredValueShare = (decimal?)censoredShare,
+                }
+            )
+            .HorizonBand.Should()
+            .Be(band);
     }
 
     private static HolderStyleBand Style(HolderStyleInputs inputs) =>

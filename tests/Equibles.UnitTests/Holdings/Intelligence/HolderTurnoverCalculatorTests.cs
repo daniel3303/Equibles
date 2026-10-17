@@ -138,6 +138,58 @@ public class HolderTurnoverCalculatorTests
     }
 
     [Fact]
+    public void Trades_AnIncreaseWithAPendingValueIsUnpriced()
+    {
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Increased, 150, null)],
+            [new(Increased, 100, 1_000)]
+        );
+
+        trades.IncreasedCount.Should().Be(1);
+        trades.UnpricedTradeCount.Should().Be(1);
+        trades.BuyValue.Should().Be(0m);
+    }
+
+    [Fact]
+    public void Trades_AnAveragePriceAlsoPricesAnExit()
+    {
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Increased, 100, 1_000)],
+            [new(Increased, 100, 1_000), new(Exited, 40, 400)],
+            new Dictionary<HolderSecurityKey, decimal> { [Exited] = 12m }
+        );
+
+        trades.ExitCount.Should().Be(1);
+        trades.SellValue.Should().Be(480m);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void Trades_AnAveragePriceOfZeroOrLessIsMissing(double average)
+    {
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Increased, 150, 1_800)],
+            [new(Increased, 100, 1_000)],
+            new Dictionary<HolderSecurityKey, decimal> { [Increased] = (decimal)average }
+        );
+
+        trades.BuyValue.Should().Be(600m);
+        trades.UnpricedTradeCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Trades_ANegativeFiledValueCarriesNoWeight()
+    {
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Increased, 100, 1_000), new(Opened, 10, -50)],
+            [new(Increased, 100, 1_000)]
+        );
+
+        trades.EquityAum.Should().Be(1_000);
+    }
+
+    [Fact]
     public void TrailingAnnual_NeedsFourKnownQuarters()
     {
         HolderTurnoverCalculator.TrailingAnnual([0.1m, 0.2m, 0.3m, 0.4m]).Should().Be(1.0m);

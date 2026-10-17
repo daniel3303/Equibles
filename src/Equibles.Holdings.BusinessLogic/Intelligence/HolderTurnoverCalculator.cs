@@ -12,7 +12,9 @@ public static class HolderTurnoverCalculator
     /// <paramref name="previous"/> is null when the filer filed no 13F the quarter before; its shares
     /// must already be restated onto the current quarter's basis. A security held on both sides whose
     /// split basis could not be resolved (<paramref name="unresolvedBasis"/>) is an unpriced trade of
-    /// unknown direction.
+    /// unknown direction. <paramref name="averagePrices"/> are per share on the current quarter's
+    /// basis, so a stored close series restated for a later split must be put back on it first; a
+    /// price of zero or less counts as missing.
     /// </summary>
     public static HolderTradeSummary Trades(
         IReadOnlyList<HolderEquityPosition> current,
@@ -56,10 +58,14 @@ public static class HolderTurnoverCalculator
             else
                 reductions++;
 
+            // Only an exit, which has no row this quarter, falls back to the quarter before.
             var price =
-                averagePrices != null && averagePrices.TryGetValue(security, out var average)
+                averagePrices != null
+                && averagePrices.TryGetValue(security, out var average)
+                && average > 0
                     ? average
-                    : PerShare(now) ?? PerShare(before);
+                : now == null ? PerShare(before)
+                : PerShare(now);
             if (price == null)
             {
                 unpriced++;
@@ -114,7 +120,7 @@ public static class HolderTurnoverCalculator
             );
 
     private static long PricedValue(IEnumerable<HolderEquityPosition> positions) =>
-        positions.Sum(position => position.Value ?? 0);
+        positions.Where(position => position.Value > 0).Sum(position => position.Value.Value);
 
     private static decimal? PerShare(HolderEquityPosition position) =>
         position is { Value: > 0, Shares: > 0 }
