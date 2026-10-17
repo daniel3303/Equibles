@@ -3,6 +3,11 @@ using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Media.Repositories;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Bmp;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Tiff;
+using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace Equibles.IntegrationTests.Media;
@@ -158,5 +163,45 @@ public class ImageManagerTests
         await _repository.SaveChanges();
 
         _repository.GetAll().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("gif")]
+    [InlineData("webp")]
+    [InlineData("bmp")]
+    public async Task SaveImage_WebRasterFormat_IsDecoded(string extension)
+    {
+        var content = Encode(extension);
+
+        var image = await _sut.SaveImage(content, $"logo.{extension}", null, null);
+
+        image.Width.Should().Be(6);
+        image.Height.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task SaveImage_Tiff_IsNotDecoded()
+    {
+        var content = Encode("tiff");
+
+        var act = () => _sut.SaveImage(content, "scan.tiff", null, null);
+
+        await act.Should().ThrowAsync<UnknownImageFormatException>();
+    }
+
+    private static byte[] Encode(string extension)
+    {
+        IImageEncoder encoder = extension switch
+        {
+            "gif" => new GifEncoder(),
+            "webp" => new WebpEncoder(),
+            "bmp" => new BmpEncoder(),
+            "tiff" => new TiffEncoder(),
+            _ => throw new ArgumentOutOfRangeException(nameof(extension)),
+        };
+        using var image = new Image<Rgba32>(6, 4);
+        using var stream = new MemoryStream();
+        image.Save(stream, encoder);
+        return stream.ToArray();
     }
 }

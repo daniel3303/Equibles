@@ -12,7 +12,6 @@ public interface IImageManager
         "gif",
         "bmp",
         "webp",
-        "tiff",
         "svg",
     ];
 

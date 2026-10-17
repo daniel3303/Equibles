@@ -18,6 +18,6 @@ public class IImageManagerTests
         // user-reported "wrong file type accepted" tickets.
         var result = IImageManager.AcceptedExtensionsString();
 
-        result.Should().Be(".png,.jpg,.jpeg,.gif,.bmp,.webp,.tiff,.svg");
+        result.Should().Be(".png,.jpg,.jpeg,.gif,.bmp,.webp,.svg");
     }
 }
