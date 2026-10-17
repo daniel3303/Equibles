@@ -18,8 +18,9 @@ namespace Equibles.Sec.FinancialFacts.HostedService;
 /// Sweeps documents with a captured raw XBRL envelope and extracts their
 /// dimensional financial facts (see <see cref="XbrlFactExtractionService"/>).
 /// Selection is version-stamped: a document qualifies while its
-/// <c>XbrlFactsVersion</c> is below <see cref="XbrlFactExtractionService.CurrentVersion"/>,
-/// so bumping the extractor version reprocesses the corpus. Per-document
+/// <c>XbrlFactsVersion</c> is below <see cref="XbrlFactExtractionService.TargetedReplayFloor"/>,
+/// or below <see cref="XbrlFactExtractionService.CurrentVersion"/> for the targeted
+/// replay in <see cref="SelectDueDocuments"/>. Per-document
 /// failures bump <c>XbrlFactsAttempts</c> and are retried until the ceiling
 /// (a persistently-failing backlog can burn several attempts within one
 /// drain), so one unparseable envelope can't starve the queue. Purely local
@@ -162,14 +163,38 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
         }
     }
 
+    // Below TargetedReplayFloor everything reruns. Between the floor and CurrentVersion only 10-Q/10-K
+    // filings rerun, when filed since TargetedReplayFiledSince or newer than their issuer's Company
+    // Facts watermark: the documents a Company Facts gap can still affect. A whole-corpus re-drain
+    // would re-parse every captured filing for nothing.
     internal static IQueryable<Document> SelectDueDocuments(
         IQueryable<Document> documents,
         IQueryable<FinancialFactsSyncStatus> checkpoints
-    ) =>
-        documents.Where(d =>
+    )
+    {
+        var filedSince = XbrlFactExtractionService.TargetedReplayFiledSince;
+        return documents.Where(d =>
             (
+                d.XbrlFactsVersion < XbrlFactExtractionService.TargetedReplayFloor
+                && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
+            )
+            || (
                 d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
                 && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
+                // XbrlFactExtractionService.DomesticPeriodicForms, spelled out for EF.
+                && (
+                    d.DocumentType == DocumentType.TenQ
+                    || d.DocumentType == DocumentType.TenQa
+                    || d.DocumentType == DocumentType.TenK
+                    || d.DocumentType == DocumentType.TenKa
+                )
+                && (
+                    d.ReportingDate >= filedSince
+                    || !checkpoints.Any(s =>
+                        s.EquityIssuerId == d.EquityIssuerId
+                        && s.LastFiledDateSeen >= d.ReportingDate
+                    )
+                )
             )
             || checkpoints.Any(s =>
                 s.EquityIssuerId == d.EquityIssuerId
@@ -177,4 +202,5 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                 && s.CalendarEvidenceFingerprint != d.XbrlCalendarEvidenceFingerprint
             )
         );
+    }
 }

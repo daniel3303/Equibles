@@ -1,3 +1,5 @@
+using Equibles.CommonStocks.Data.Models;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
@@ -58,6 +60,81 @@ public class XbrlFactExtractionServiceSelectPersistableTests
     public void SelectPersistable_ConsolidatedStandardTaxonomyFact_IsDropped()
     {
         XbrlFactExtractionService.SelectPersistable([Fact(dimensions: [])]).Should().BeEmpty();
+    }
+
+    // A 10-Q/10-K fills a consolidated standard fact only while Company Facts lacks its accession
+    // (periodicFill), and only from an unqualified context of one of the issuer's own CIKs.
+    [Theory]
+    [InlineData("TenQ", true, "0001517175", null, true)]
+    [InlineData("TenQa", true, "1517175", null, true)]
+    [InlineData("TenK", true, "0001517175", null, true)]
+    [InlineData("TenKa", true, "0001517175", null, true)]
+    [InlineData("TenQ", true, "0000320193", "0001517175", true)]
+    [InlineData("TenQ", false, "0001517175", null, false)]
+    [InlineData("TenQ", true, "0000320193", null, false)]
+    [InlineData("EightK", true, "0001517175", null, false)]
+    public void SelectPersistable_DomesticPeriodicConsolidatedFact_IsKeptOnlyForAnIssuerCikWhileFilling(
+        string form,
+        bool periodicFill,
+        string cik,
+        string secondaryCik,
+        bool kept
+    )
+    {
+        var fact = new ParsedXbrlFact
+        {
+            Taxonomy = "us-gaap",
+            Tag = "EarningsPerShareDiluted",
+            Namespace = "http://fasb.org/us-gaap/2025",
+            Unit = "USD/shares",
+            Value = 0.76m,
+            PeriodStart = new DateOnly(2026, 3, 28),
+            PeriodEnd = new DateOnly(2026, 6, 26),
+            ConsolidatedCik = "0001517175",
+        };
+        var document = new Document
+        {
+            DocumentType = DocumentType.FromValue(form),
+            Issuer = new EquityIssuer
+            {
+                Cik = cik,
+                SecondaryCiks = secondaryCik == null ? [] : [secondaryCik],
+            },
+        };
+
+        XbrlFactExtractionService
+            .SelectPersistable([fact], document, periodicFill)
+            .Should()
+            .HaveCount(kept ? 1 : 0);
+    }
+
+    [Theory]
+    [InlineData("dei", "http://xbrl.sec.gov/dei/2025")]
+    [InlineData("us-gaap", "https://example.org/us-gaap")]
+    public void SelectPersistable_DomesticFillOutsideAFinancialTaxonomy_IsDropped(
+        string taxonomy,
+        string ns
+    )
+    {
+        var fact = new ParsedXbrlFact
+        {
+            Taxonomy = taxonomy,
+            Tag = "EntityCommonStockSharesOutstanding",
+            Namespace = ns,
+            Unit = "shares",
+            Value = 40_796_083m,
+            IsInstant = true,
+            PeriodStart = new DateOnly(2026, 7, 24),
+            PeriodEnd = new DateOnly(2026, 7, 24),
+            ConsolidatedCik = "0001517175",
+        };
+        var document = new Document
+        {
+            DocumentType = DocumentType.TenQ,
+            Issuer = new EquityIssuer { Cik = "0001517175" },
+        };
+
+        XbrlFactExtractionService.SelectPersistable([fact], document, true).Should().BeEmpty();
     }
 
     [Fact]
