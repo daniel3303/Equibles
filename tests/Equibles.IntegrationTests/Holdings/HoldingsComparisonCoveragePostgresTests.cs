@@ -113,7 +113,7 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
     [Fact]
     public async Task History_ComparesAFilerSplitAcrossNewCiksAsOneHolder()
     {
-        // Shaped on Vanguard Group: its last 13F is 2025-09-30 and two new filers continue it.
+        // Shaped on Vanguard Group, which several new filers continue.
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "COVER",
             Name: "Coverage subject"

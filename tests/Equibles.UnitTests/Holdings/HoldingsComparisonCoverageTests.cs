@@ -369,7 +369,7 @@ public class HoldingsComparisonCoverageTests
     public async Task Succession_OneSuccessor_IsComparedWithTheFilerItContinues()
     {
         await using var db = NewDb();
-        var (stock, stable) = SeedStable(db);
+        var (stock, _) = SeedStable(db);
         var old = Holder(db, "Old filer", "200");
         var renamed = Holder(db, "Renamed filer", "300");
         db.AddRange(
@@ -397,7 +397,6 @@ public class HoldingsComparisonCoverageTests
             .And.Contain("| 900 → 950 |")
             .And.NotContain("| Old filer |")
             .And.NotContain("first 13F this quarter");
-        _ = stable;
     }
 
     [Fact]
@@ -513,6 +512,135 @@ public class HoldingsComparisonCoverageTests
             .Should()
             .Contain("| Renamed filer (continues Old filer) | +950 |")
             .And.NotContain("first 13F this quarter");
+    }
+
+    [Fact]
+    public async Task Succession_SuccessorWithoutTheStock_SellsThePredecessorsPosition()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(Holding(stock, old, Prior, 900), Succession(old, renamed, 1_000, 1_100));
+        await db.SaveChangesAsync();
+
+        (await History(db, stock))[Current].LikeForLike.Should().Be((110L, 1000L));
+        var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
+        movers.Should().Contain("| Renamed filer (continues Old filer) | -900 |");
+    }
+
+    [Fact]
+    public async Task Succession_SeveralToSeveral_IsComparedOnlyInTheTotals()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var first = Holder(db, "First filer", "200");
+        var second = Holder(db, "Second filer", "300");
+        var east = Holder(db, "East filer", "400");
+        var west = Holder(db, "West filer", "500");
+        db.AddRange(
+            Holding(stock, first, Prior, 400),
+            Holding(stock, second, Prior, 500),
+            Holding(stock, east, Current, 450),
+            Holding(stock, west, Current, 500),
+            Succession(first, east, 1_000, 1_000),
+            Succession(second, east, 1_000, 1_000),
+            Succession(second, west, 1_000, 1_000)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.LikeForLike.Should().Be((1060L, 1000L));
+        new[] { first.Id, second.Id, east.Id, west.Id }
+            .Should()
+            .OnlyContain(id => !status.CanCompareHolder(id) && status.ComparisonKey(id) == id);
+        status
+            .Note.Should()
+            .Be(
+                "Compared across CIK changes: 2 filers continue as 2 filers, not ranked one by one."
+            );
+    }
+
+    [Fact]
+    public async Task Succession_ComparableAndNotComparableGroups_ShareOneNote()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        var parent = Holder(db, "Parent filer", "400");
+        var slice = Holder(db, "Slice filer", "500");
+        db.AddRange(
+            Holding(stock, old, Prior, 900),
+            Holding(stock, renamed, Current, 950),
+            Holding(stock, parent, Prior, 50),
+            Holding(stock, slice, Current, 5),
+            Succession(old, renamed, 1_000, 1_100),
+            Succession(parent, slice, 1_000, 10)
+        );
+        await db.SaveChangesAsync();
+
+        (await History(db, stock))[Current]
+            .Note.Should()
+            .Be(
+                "Excluded 1 holder with no observed 2025-09-30 13F (5 shares) and 1 holder with no observed 2025-12-31 13F (50 shares as of 2025-09-30); largest: Parent filer 50 (CIK change, books not comparable), Slice filer 5 (CIK change, books not comparable). Compared across CIK changes: Old filer continues as Renamed filer."
+            );
+    }
+
+    [Fact]
+    public async Task Succession_PredecessorThatFiledAgain_IsNotMerged()
+    {
+        // The pair is stale until the next refresh drops it.
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(
+            Holding(stock, old, Prior, 900),
+            Holding(stock, old, Current, 900),
+            Holding(stock, renamed, Current, 950),
+            Succession(old, renamed, 1_000, 1_100),
+            new InstitutionalFiling
+            {
+                AccessionNumber = "old-current",
+                InstitutionalHolderId = old.Id,
+                ReportDate = Current,
+                FilingDate = Current.AddDays(45),
+                FilingType = FilingType.Form13F,
+                PositionCount = 1,
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.Successions.Should().BeEmpty();
+        status.MissingPreviousFilers.Should().Contain(renamed.Id);
+        status.LikeForLike.Should().Be((1010L, 1000L));
+    }
+
+    [Fact]
+    public async Task Succession_NonconsecutiveQuarters_AreNotMerged()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var older = new DateOnly(2025, 6, 30);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(
+            Holding(stock, old, older, 900),
+            Holding(stock, renamed, Current, 950),
+            Succession(old, renamed, 1_000, 1_100)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (
+            await HoldingsComparisonCoverage.History(new(db), stock, [older, Current], [])
+        )[Current];
+
+        status.Successions.Should().BeEmpty();
+        status.Note.Should().StartWith("Comparison unavailable");
     }
 
     [Fact]
