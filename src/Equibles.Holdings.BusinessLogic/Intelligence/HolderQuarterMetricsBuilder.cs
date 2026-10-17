@@ -52,13 +52,17 @@ public static class HolderQuarterMetricsBuilder
             var mask = input.Presence.GetValueOrDefault(security);
             if ((mask & bit) == 0)
                 toSet.Add(security);
-            var run = HolderTenureCalculator.Tenure(
-                mask | bit,
-                filed,
-                quarter,
-                input.FirstCoveredQuarter
-            );
-            tenures.Add((value, run.Value));
+            // The quarter's own bit is set, so a held security always has a tenure.
+            if (
+                HolderTenureCalculator.Tenure(
+                    mask | bit,
+                    filed,
+                    quarter,
+                    input.FirstCoveredQuarter
+                ) is
+                { } run
+            )
+                tenures.Add((value, run));
         }
         var toClear = input
             .Presence.Where(pair => (pair.Value & bit) != 0 && !held.ContainsKey(pair.Key))
