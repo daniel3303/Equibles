@@ -58,7 +58,14 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
         );
     }
 
-    protected override NCenFiling ParseFiling(XElement root, Guid companyId, FilingData filing)
+    protected override NCenFiling ParseFiling(XElement root, Guid companyId, FilingData filing) =>
+        ParseEntity(root, companyId, filing);
+
+    /// <summary>
+    /// Reads one submission into an unsaved filing with its providers, or null when it has no
+    /// <c>registrantInfo</c>. Shared with <see cref="NCenFilingReprocessManager"/>.
+    /// </summary>
+    internal static NCenFiling ParseEntity(XElement root, Guid companyId, FilingData filing)
     {
         var headerData = El(root, "headerData");
         var filerInfo = El(headerData, "filerInfo");
@@ -86,7 +93,13 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
             IsReportPeriodLessThan12Months = ParseYesNo(Attr(generalInfo, "isReportPeriodLt12")),
             IsFirstFiling = ParseYesNo(Val(registrant, "isRegistrantFirstFiling")),
             IsLastFiling = ParseYesNo(Val(registrant, "isRegistrantLastFiling")),
-            IsFamilyInvestmentCompany = ParseYesNo(Val(registrant, "isRegistrantFamilyInvComp")),
+            // A "Y" answer is an attribute of <registrantFamilyInvComp>, beside the family's name;
+            // a "N" answer is a plain <isRegistrantFamilyInvComp> element.
+            IsFamilyInvestmentCompany = ParseYesNo(
+                Attr(El(registrant, "registrantFamilyInvComp"), "isRegistrantFamilyInvComp")
+                    ?? Val(registrant, "isRegistrantFamilyInvComp")
+            ),
+            ParserVersion = NCenFiling.CurrentParserVersion,
         };
 
         AddServiceProviders(entity, registrant, formData);
@@ -108,7 +121,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
             Els(El(registrant, "publicAccountants"), "publicAccountant"),
             NCenServiceProviderType.PublicAccountant,
             a => Val(a, "publicAccountantName"),
-            a => Attr(El(a, "publicAccountantStateCountry"), "publicAccountantCountry"),
+            a => ProviderCountry(a, "publicAccountant"),
             _ => false
         );
 
@@ -117,7 +130,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
             Els(El(registrant, "principalUnderwriters"), "principalUnderwriter"),
             NCenServiceProviderType.PrincipalUnderwriter,
             u => Val(u, "principalUnderwriterName"),
-            u => Val(u, "principalUnderWriterCountry"),
+            u => ProviderCountry(u, "principalUnderWriter"),
             u => ParseYesNo(Val(u, "isPrincipalUnderwriterAffiliatedWithRegistrant"))
         );
 
@@ -131,7 +144,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
                 Els(El(question, "investmentAdvisers"), "investmentAdviser"),
                 NCenServiceProviderType.InvestmentAdviser,
                 a => Val(a, "investmentAdviserName"),
-                a => Val(a, "investmentAdviserCountry"),
+                a => ProviderCountry(a, "investmentAdviser"),
                 _ => false
             );
 
@@ -140,7 +153,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
                 Els(El(question, "subAdvisers"), "subAdviser"),
                 NCenServiceProviderType.SubAdviser,
                 a => Val(a, "subAdviserName"),
-                a => Val(a, "subAdviserCountry"),
+                a => ProviderCountry(a, "subAdviser"),
                 a => ParseYesNo(Val(a, "isSubAdviserAffiliated"))
             );
 
@@ -149,7 +162,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
                 Els(El(question, "custodians"), "custodian"),
                 NCenServiceProviderType.Custodian,
                 c => Val(c, "custodianName"),
-                c => Val(c, "custodianCountry"),
+                c => ProviderCountry(c, "custodian"),
                 c => ParseYesNo(Val(c, "isCustodianAffiliated"))
             );
 
@@ -158,7 +171,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
                 Els(El(question, "transferAgents"), "transferAgent"),
                 NCenServiceProviderType.TransferAgent,
                 a => Val(a, "transferAgentName"),
-                a => Attr(El(a, "transferAgentStateCountry"), "transferAgentCountry"),
+                a => ProviderCountry(a, "transferAgent"),
                 a => ParseYesNo(Val(a, "isTransferAgentAffiliated"))
             );
 
@@ -167,7 +180,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
                 Els(El(question, "admins"), "admin"),
                 NCenServiceProviderType.Administrator,
                 a => Val(a, "adminName"),
-                a => Attr(El(a, "adminStateCountry"), "adminCountry"),
+                a => ProviderCountry(a, "admin"),
                 a => ParseYesNo(Val(a, "isAdminAffiliated"))
             );
 
@@ -176,7 +189,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
                 Els(El(question, "pricingServices"), "pricingService"),
                 NCenServiceProviderType.PricingService,
                 p => Val(p, "pricingServiceName"),
-                p => Val(p, "pricingServiceCountry"),
+                p => ProviderCountry(p, "pricingService"),
                 p => ParseYesNo(Val(p, "isPricingServiceAffiliated"))
             );
 
@@ -185,11 +198,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
                 Els(El(question, "shareholderServicingAgents"), "shareholderServicingAgent"),
                 NCenServiceProviderType.ShareholderServicingAgent,
                 s => Val(s, "shareholderServiceAgentName"),
-                s =>
-                    Attr(
-                        El(s, "shareholderServiceAgentStateCountry"),
-                        "shareholderServiceAgentCountry"
-                    ),
+                s => ProviderCountry(s, "shareholderServiceAgent"),
                 s => ParseYesNo(Val(s, "isShareholderServiceAgentAffiliated"))
             );
         }
@@ -220,6 +229,12 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
         foreach (var item in items)
             providers.Add(MakeProvider(type, name(item), country(item), affiliated(item)));
     }
+
+    // N-CEN states a US firm's country as an attribute of <roleStateCountry> beside its state, and a
+    // foreign firm's as a plain <roleCountry> element.
+    internal static string ProviderCountry(XElement provider, string role) =>
+        Val(provider, role + "Country")
+        ?? Attr(El(provider, role + "StateCountry"), role + "Country");
 
     // Returns null when the firm has no usable name (blank or the literal "N/A"), so the caller
     // skips it — N-CEN pads unused provider slots with "N/A" placeholders.

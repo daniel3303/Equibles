@@ -21,6 +21,16 @@ internal class SecApiResponse
     [JsonProperty("sic")]
     public string Sic { get; set; }
 
+    [JsonProperty("sicDescription")]
+    public string SicDescription { get; set; }
+
+    /// <summary>SEC's filer status, e.g. "Large accelerated filer"; blank for filers without one.</summary>
+    [JsonProperty("category")]
+    public string Category { get; set; }
+
+    [JsonProperty("stateOfIncorporation")]
+    public string StateOfIncorporation { get; set; }
+
     [JsonProperty("exchanges")]
     public List<string> Exchanges { get; set; } = [];
 
