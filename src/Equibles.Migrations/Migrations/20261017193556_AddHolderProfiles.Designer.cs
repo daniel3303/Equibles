@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261017161809_AddHolderProfiles")]
+    [Migration("20261017193556_AddHolderProfiles")]
     partial class AddHolderProfiles
     {
         /// <inheritdoc />
@@ -4877,6 +4877,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<bool>("IsReportPeriodLessThan12Months")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("ParserVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("RegistrantLei")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -4887,6 +4890,9 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<DateOnly>("ReportEndingPeriod")
                         .HasColumnType("date");
+
+                    b.Property<int>("ReprocessAttempts")
+                        .HasColumnType("integer");
 
                     b.Property<string>("State")
                         .HasMaxLength(16)
