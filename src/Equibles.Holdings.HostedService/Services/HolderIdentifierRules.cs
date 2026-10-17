@@ -15,7 +15,7 @@ internal static class HolderIdentifierRules
     /// <summary>A CRD as filed ("000160108") as the roster's integer, or null when it is not a number.</summary>
     internal static int? ParseCrd(string crd)
     {
-        var digits = crd?.Trim();
+        var digits = crd?.Trim().TrimStart('0');
         return
             !string.IsNullOrEmpty(digits)
             && digits.All(char.IsAsciiDigit)
@@ -102,31 +102,35 @@ internal static class HolderIdentifierRules
     }
 
     /// <summary>
-    /// Each adviser's registered fund series as primary adviser, counting every series once at its
-    /// latest report.
+    /// Each adviser's registered fund series as primary adviser by the series' latest report, so a
+    /// series that changed adviser counts only for its current one.
     /// </summary>
     internal static Dictionary<int, AdvisedSeriesSummary> SummarizeAdvisedSeries(
         IEnumerable<AdvisedSeriesRow> rows
     ) =>
-        rows.GroupBy(row => row.Crd)
+        rows.GroupBy(row => row.SeriesKey, StringComparer.Ordinal)
+            .SelectMany(series =>
+            {
+                // Every primary adviser of the latest report counts the series once.
+                var latest = series.Max(row => row.ReportEndingPeriod);
+                return series
+                    .Where(row => row.ReportEndingPeriod == latest)
+                    .DistinctBy(row => row.Crd);
+            })
+            .GroupBy(row => row.Crd)
             .ToDictionary(
                 group => group.Key,
                 group =>
                 {
-                    var latest = group
-                        .GroupBy(row => row.SeriesKey, StringComparer.Ordinal)
-                        .Select(series =>
-                            series.OrderByDescending(row => row.ReportEndingPeriod).First()
-                        )
-                        .ToList();
-                    var index = latest.Where(row => IsIndex(row.FundTypes)).ToList();
+                    var current = group.ToList();
+                    var index = current.Where(row => IsIndex(row.FundTypes)).ToList();
                     return new AdvisedSeriesSummary(
-                        latest.Count,
+                        current.Count,
                         index.Count,
-                        latest.Count(row => IsEtf(row.FundTypes)),
-                        Sum(latest),
+                        current.Count(row => IsEtf(row.FundTypes)),
+                        Sum(current),
                         Sum(index),
-                        latest.Max(row => row.ReportEndingPeriod)
+                        current.Max(row => row.ReportEndingPeriod)
                     );
                 }
             );
@@ -137,6 +141,7 @@ internal static class HolderIdentifierRules
     private static bool IsEtf(NCenFundTypes types) =>
         (types & (NCenFundTypes.ExchangeTradedFund | NCenFundTypes.ExchangeTradedManagedFund)) != 0;
 
+    // The sum of the reported figures; null only when no series reports one.
     private static decimal? Sum(IReadOnlyCollection<AdvisedSeriesRow> rows) =>
         rows.Any(row => row.NetAssets != null) ? rows.Sum(row => row.NetAssets ?? 0) : null;
 

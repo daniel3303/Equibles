@@ -94,7 +94,12 @@ internal sealed class HolderProfileSources
             var registrant in registrants
                 .Where(row => CikNormalizer.Canonicalize(row.Cik) != null)
                 .GroupBy(row => CikNormalizer.Canonicalize(row.Cik))
-                .Select(group => group.OrderByDescending(row => row.ReportEndingPeriod).First())
+                .Select(group =>
+                    group
+                        .OrderByDescending(row => row.ReportEndingPeriod)
+                        .ThenByDescending(row => row.AccessionNumber, StringComparer.Ordinal)
+                        .First()
+                )
         )
             sources.RegistrantsByCik[CikNormalizer.Canonicalize(registrant.Cik)] = registrant;
 

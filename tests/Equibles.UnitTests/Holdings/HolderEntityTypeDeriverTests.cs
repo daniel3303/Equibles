@@ -40,11 +40,12 @@ public class HolderEntityTypeDeriverTests
     [InlineData("6022", HolderEntityType.Bank)]
     [InlineData("6712", HolderEntityType.Bank)]
     [InlineData("6311", HolderEntityType.InsuranceCompany)]
-    [InlineData("6411", HolderEntityType.InsuranceCompany)]
     [InlineData("6722", HolderEntityType.RegisteredFund)]
     [InlineData("6282", HolderEntityType.InvestmentAdviser)]
     // Bank and insurance holding companies file under 6211 too, so it decides nothing.
     [InlineData("6211", HolderEntityType.Unknown)]
+    // Insurance agents and brokers, not insurers.
+    [InlineData("6411", HolderEntityType.Unknown)]
     [InlineData("6199", HolderEntityType.Unknown)]
     [InlineData("7372", HolderEntityType.Unknown)]
     public void SicCode_DecidesOnlyUnambiguousInstitutionTypes(

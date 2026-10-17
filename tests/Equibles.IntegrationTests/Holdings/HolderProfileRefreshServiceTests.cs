@@ -150,8 +150,10 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
             NCenAdviserRole.SubAdviser
         );
         AddFundReport("1", "a-3", new DateOnly(2026, 6, 30), "S3", 105958, superseded: true);
-        // Older than the 15-month window: the series is no longer reported as advised.
-        AddFundReport("1", "a-4", new DateOnly(2025, 6, 30), "S4", 105958);
+        // Older than the 21-month window: the series is no longer reported as advised.
+        AddFundReport("1", "a-4", new DateOnly(2024, 12, 31), "S4", 105958);
+        // A yearly report that reaches SEC's data sets late is still current at 18 months.
+        AddFundReport("1", "a-7", new DateOnly(2025, 4, 30), "S5", 105958);
         // A registrant without series is one fund across its reports.
         AddFundReport("2", "a-5", new DateOnly(2025, 12, 31), null, 105958);
         AddFundReport("2", "a-6", new DateOnly(2026, 6, 30), null, 105958);
@@ -160,9 +162,40 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
         await Sut().Run(Today, CancellationToken.None);
 
         var profile = (await Profiles())[holder];
-        profile.AdvisedSeriesCount.Should().Be(2);
-        profile.AdvisedNetAssets.Should().Be(200m);
+        profile.AdvisedSeriesCount.Should().Be(3);
+        profile.AdvisedNetAssets.Should().Be(300m);
         profile.AdvisedSeriesAsOf.Should().Be(new DateOnly(2026, 6, 30));
+    }
+
+    [Fact]
+    public async Task Run_MoneyMarketSeries_CountsItsDailyAverageNetAssets()
+    {
+        var holder = Holder("102909", crd: "105958");
+        AddFundReport("1", "a-1", new DateOnly(2026, 6, 30), "S1", 105958, dailyAverage: true);
+        await DbContext.SaveChangesAsync();
+
+        await Sut().Run(Today, CancellationToken.None);
+
+        (await Profiles())[holder].AdvisedNetAssets.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task Run_WithoutARosterLedger_JudgesListingsAgainstTheNewestStoredRow()
+    {
+        var current = Holder("1", crd: "11");
+        var former = Holder("2", crd: "22");
+        var exempt = Adviser(11, Roster, aum: 0);
+        exempt.Registration = FormAdvRegistration.ExemptReporting;
+        var older = Adviser(22, Roster.AddMonths(-4), aum: 0);
+        older.Registration = FormAdvRegistration.ExemptReporting;
+        DbContext.AddRange(exempt, older);
+        await DbContext.SaveChangesAsync();
+
+        await Sut().Run(Today, CancellationToken.None);
+
+        var profiles = await Profiles();
+        profiles[current].EntityType.Should().Be(HolderEntityType.ExemptReportingAdviser);
+        profiles[former].EntityType.Should().Be(HolderEntityType.Unknown);
     }
 
     private Guid Holder(string cik, string crd = null)
@@ -235,7 +268,8 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
         string seriesId,
         int crd,
         NCenAdviserRole role = NCenAdviserRole.InvestmentAdviser,
-        bool superseded = false
+        bool superseded = false,
+        bool dailyAverage = false
     )
     {
         var report = new NCenRegistrantReport
@@ -258,7 +292,8 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
             FilingDate = report.FilingDate,
             ReportEndingPeriod = period,
             FundTypes = NCenFundTypes.IndexFund,
-            MonthlyAverageNetAssets = 100m,
+            MonthlyAverageNetAssets = dailyAverage ? null : 100m,
+            DailyAverageNetAssets = dailyAverage ? 100m : null,
             IsSuperseded = superseded,
         };
         fund.Advisers.Add(

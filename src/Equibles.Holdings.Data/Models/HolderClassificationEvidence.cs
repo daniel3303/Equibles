@@ -5,8 +5,8 @@ namespace Equibles.Holdings.Data.Models;
 
 /// <summary>
 /// One regulatory fact about a holder, stored as filed (a Form ADV registration, a SIC code, a
-/// 13D/13G type code) and tied to it by a filed identifier. The type has no name field, so a
-/// classification can never be read from a holder's name.
+/// 13D/13G type code) and tied to it by a filed identifier. It stores no name; the deriver reads
+/// only these facts.
 /// </summary>
 [Index(nameof(InstitutionalHolderId))]
 public class HolderClassificationEvidence

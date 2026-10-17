@@ -9,6 +9,7 @@ public class HolderIdentifierRulesTests
     [Theory]
     [InlineData("000160108", 160108)]
     [InlineData(" 105958 ", 105958)]
+    [InlineData("0000000160108", 160108)]
     [InlineData("", null)]
     [InlineData(null, null)]
     [InlineData("0", null)]
@@ -71,5 +72,22 @@ public class HolderIdentifierRulesTests
         // No reported net assets is unknown, never zero.
         summaries[2].NetAssets.Should().BeNull();
         summaries[2].IndexNetAssets.Should().BeNull();
+    }
+
+    [Fact]
+    public void SummarizeAdvisedSeries_SeriesThatChangedAdviser_CountsOnlyForTheCurrentOne()
+    {
+        var summaries = HolderIdentifierRules.SummarizeAdvisedSeries([
+            new AdvisedSeriesRow(100, "S1", new DateOnly(2025, 9, 30), NCenFundTypes.None, 50m),
+            new AdvisedSeriesRow(200, "S1", new DateOnly(2026, 9, 30), NCenFundTypes.None, 60m),
+            // Co-advisers named on one report both count it.
+            new AdvisedSeriesRow(200, "S2", new DateOnly(2026, 6, 30), NCenFundTypes.None, 10m),
+            new AdvisedSeriesRow(300, "S2", new DateOnly(2026, 6, 30), NCenFundTypes.None, 10m),
+        ]);
+
+        summaries.Keys.Should().BeEquivalentTo([200, 300]);
+        summaries[200].SeriesCount.Should().Be(2);
+        summaries[200].NetAssets.Should().Be(70m);
+        summaries[300].SeriesCount.Should().Be(1);
     }
 }

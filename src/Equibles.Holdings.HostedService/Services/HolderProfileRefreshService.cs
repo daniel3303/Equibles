@@ -17,8 +17,12 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class HolderProfileRefreshService
 {
-    // N-CEN is filed yearly; a series without a report in this window is no longer advised.
-    internal const int AdvisedSeriesLookbackMonths = 15;
+    // N-CEN is yearly and reaches SEC's quarterly data sets up to about six months after the
+    // period ends, so a current series' latest report can be 18 months old.
+    internal const int AdvisedSeriesLookbackMonths = 21;
+
+    // Each save is bounded so the change tracker never holds the whole generation.
+    private const int WriteBatchSize = 5_000;
 
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ILogger<HolderProfileRefreshService> _logger;
@@ -109,11 +113,20 @@ public class HolderProfileRefreshService
             await _dbContext
                 .Set<InstitutionalHolderProfile>()
                 .ExecuteDeleteAsync(cancellationToken);
-            _dbContext.AddRange(profiles);
-            _dbContext.AddRange(evidence);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            foreach (var batch in profiles.Chunk(WriteBatchSize))
+                await Insert(batch, cancellationToken);
+            foreach (var batch in evidence.Chunk(WriteBatchSize))
+                await Insert(batch, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         });
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    private async Task Insert<T>(T[] batch, CancellationToken cancellationToken)
+        where T : class
+    {
+        _dbContext.AddRange(batch);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         _dbContext.ChangeTracker.Clear();
     }
 
@@ -207,7 +220,9 @@ public class HolderProfileRefreshService
                     ?? adviser.FundReport.RegistrantCik,
                 adviser.FundReport.ReportEndingPeriod,
                 adviser.FundReport.FundTypes,
+                // Money market funds report daily average net assets instead (Item C.19.b).
                 adviser.FundReport.MonthlyAverageNetAssets
+                    ?? adviser.FundReport.DailyAverageNetAssets
             ))
             .ToListAsync(cancellationToken);
     }

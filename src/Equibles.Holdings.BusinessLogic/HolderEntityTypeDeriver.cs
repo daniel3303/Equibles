@@ -10,14 +10,15 @@ namespace Equibles.Holdings.BusinessLogic;
 /// </summary>
 public static class HolderEntityTypeDeriver
 {
-    /// <summary>Bump to recompute every stored profile under changed rules.</summary>
+    /// <summary>Stamped on every profile; bump when the rules change so readers can tell them apart.</summary>
     public const int Version = 1;
 
     public const int BeneficialOwnershipLookbackMonths = 36;
     public const int NCenLookbackMonths = 24;
 
     // SIC codes that name an institution type on their own. 6211 (security brokers and dealers)
-    // is left out on purpose: bank and insurance holding companies are filed under it too.
+    // is left out because bank and insurance holding companies file under it, and 6411 because it
+    // is insurance agents and brokers, not insurers.
     private static readonly IReadOnlyDictionary<string, HolderEntityType> SicTypes = new Dictionary<
         string,
         HolderEntityType
@@ -36,7 +37,6 @@ public static class HolderEntityTypeDeriver
         ["6351"] = HolderEntityType.InsuranceCompany,
         ["6361"] = HolderEntityType.InsuranceCompany,
         ["6399"] = HolderEntityType.InsuranceCompany,
-        ["6411"] = HolderEntityType.InsuranceCompany,
         ["6722"] = HolderEntityType.RegisteredFund,
         ["6726"] = HolderEntityType.RegisteredFund,
         ["6282"] = HolderEntityType.InvestmentAdviser,

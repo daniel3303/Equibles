@@ -388,13 +388,14 @@ public class HolderProfileBuilderTests
         while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Equibles.sln")))
             directory = directory.Parent;
         var source = File.ReadAllText(
-            Path.Combine(
-                directory.FullName,
-                "src",
-                "Equibles.Holdings.HostedService",
-                "HoldingsScraperWorker.cs"
+                Path.Combine(
+                    directory.FullName,
+                    "src",
+                    "Equibles.Holdings.HostedService",
+                    "HoldingsScraperWorker.cs"
+                )
             )
-        );
+            .Replace("\r\n", "\n");
         var doWork = source[source.IndexOf("protected override async Task DoWork(")..];
         doWork = doWork[..doWork.IndexOf("\n    }\n")];
 
