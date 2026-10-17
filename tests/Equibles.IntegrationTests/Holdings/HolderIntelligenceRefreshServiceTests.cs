@@ -8,6 +8,7 @@ using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -559,6 +560,119 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         states.Keys.Should().BeEquivalentTo([Q1, Q2]);
         states.Values.Should().OnlyContain(stamp => stamp > before);
     }
+
+    [Fact]
+    public async Task RebuildQuarter_PricesTradesAtTheQuarterAveragePrice()
+    {
+        await SeedAppleBoughtAndMicrosoftSold(Bars(_apple, 8m, 10m));
+
+        await Rebuild(Q2);
+
+        var metrics = await Metrics(Q2);
+        metrics
+            .BuyValue.Should()
+            .BeApproximately(100m * 210m / 26m, 0.01m, "25 sessions at 8 and one at 10");
+        metrics.SellValue.Should().Be(1_000m, "Microsoft has no bars, so its exit keeps 10");
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_IgnoresAQuarterAverageOffTheFiledBasis()
+    {
+        await SeedAppleBoughtAndMicrosoftSold(Bars(_apple, 4m, 5m));
+
+        await Rebuild(Q2);
+
+        (await Metrics(Q2))
+            .BuyValue.Should()
+            .Be(1_000m, "a quarter-end close of 5 disagrees with the 10 filers valued it at");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RebuildQuarter_RestatesTheQuarterAverageAcrossAnAppliedLaterSplit(
+        bool applied
+    )
+    {
+        var split = Split(_apple, new DateOnly(2024, 8, 15), "AAPL");
+        split.PriceAdjustmentAppliedTime = applied
+            ? new DateTime(2024, 8, 16, 0, 0, 0, DateTimeKind.Utc)
+            : null;
+        await Seed(seed => seed.Add(split));
+        await SeedAppleBoughtAndMicrosoftSold(Bars(_apple, 4m, 5m));
+
+        await Rebuild(Q2);
+
+        var buyValue = (await Metrics(Q2)).BuyValue;
+        if (applied)
+            buyValue
+                .Should()
+                .BeApproximately(100m * 210m / 26m, 0.01m, "the closes are on the 2-for-1 basis");
+        else
+            buyValue.Should().Be(1_000m, "until the split is applied the closes' basis is unknown");
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_DoesNotAverageAQuarterWithASplitInside()
+    {
+        await Seed(seed =>
+        {
+            seed.AddRange(Bars(_apple, 8m, 10m));
+            seed.AddRange(
+                Split(_apple, new DateOnly(2024, 5, 15), "AAPL"),
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 2_000),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 400, 4_000)
+            );
+        });
+
+        await Rebuild(Q2);
+
+        (await Metrics(Q2))
+            .BuyValue.Should()
+            .Be(2_000m, "200 post-split shares bought at the 10 quarter-end value per share");
+    }
+
+    private Task SeedAppleBoughtAndMicrosoftSold(List<EquityDailyStockPrice> bars) =>
+        Seed(seed =>
+        {
+            seed.AddRange(bars);
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 1_000),
+                Holding(_microsoft, _holder, Q1, 100, 1_000),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 200, 2_000)
+            );
+        });
+
+    // 25 weekday sessions from April 1 at one close, then the quarter's last session at another.
+    private static List<EquityDailyStockPrice> Bars(
+        EquityIssuer issuer,
+        decimal close,
+        decimal lastClose
+    ) =>
+        Enumerable
+            .Range(0, 60)
+            .Select(day => new DateOnly(2024, 4, 1).AddDays(day))
+            .Where(date => date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            .Take(25)
+            .Select(date => (Date: date, Close: close))
+            .Append((Date: new DateOnly(2024, 6, 28), Close: lastClose))
+            .Select(bar => new EquityDailyStockPrice
+            {
+                EquityListingId = issuer.Presentation.EquityListingId,
+                SourceTicker = issuer.Presentation.Listing.Ticker,
+                Date = bar.Date,
+                Open = bar.Close,
+                High = bar.Close,
+                Low = bar.Close,
+                Close = bar.Close,
+                AdjustedClose = bar.Close,
+                Volume = 1_000,
+            })
+            .ToList();
 
     private async Task<bool> Rebuild(DateOnly reportDate)
     {

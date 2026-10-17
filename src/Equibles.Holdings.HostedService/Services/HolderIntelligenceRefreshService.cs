@@ -21,8 +21,11 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class HolderIntelligenceRefreshService
 {
-    /// <summary>Bump when the metrics change meaning, so the drain recomputes every quarter.</summary>
-    public const int CalculationVersion = 1;
+    /// <summary>
+    /// Bump when the metrics change meaning, so the drain recomputes every quarter. 2: trades are
+    /// priced at the quarter average price.
+    /// </summary>
+    public const int CalculationVersion = 2;
 
     /// <summary>A stamp this old is past the drain's cooldown and is picked up on its next tick.</summary>
     public static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
@@ -90,6 +93,18 @@ public class HolderIntelligenceRefreshService
                 ? (await LoadFilers(previous, cancellationToken)).ToHashSet()
                 : [];
 
+        // Only a quarter with a baseline has trades to price.
+        var averagePrices =
+            previousFilers.Count > 0
+                ? await QuarterAveragePriceLoader.Load(
+                    _dbContext,
+                    reportDate,
+                    previous,
+                    today,
+                    cancellationToken
+                )
+                : [];
+
         var presenceChanged = await ClearNonFilers(reportDate, bit, cancellationToken);
 
         var metrics = new List<HolderQuarterlyMetrics>(filers.Count);
@@ -102,6 +117,7 @@ public class HolderIntelligenceRefreshService
                 previousFilers,
                 priorDates,
                 benchmark,
+                averagePrices,
                 cancellationToken
             );
             metrics.AddRange(results.Select(result => result.Result.Metrics));
@@ -118,9 +134,10 @@ public class HolderIntelligenceRefreshService
         await Publish(reportDate, metrics, cancellationToken);
 
         _logger.LogInformation(
-            "Holder intelligence for {ReportDate}: {Count} filers, presence changed: {Changed}",
+            "Holder intelligence for {ReportDate}: {Count} filers, {Priced} securities at their quarter average price, presence changed: {Changed}",
             reportDate,
             metrics.Count,
+            averagePrices.Count,
             presenceChanged
         );
         return true;
@@ -136,6 +153,7 @@ public class HolderIntelligenceRefreshService
         HashSet<Guid> previousFilers,
         List<DateOnly> priorDates,
         Dictionary<Guid, decimal> benchmark,
+        Dictionary<HolderSecurityKey, decimal> averagePrices,
         CancellationToken cancellationToken
     )
     {
@@ -226,6 +244,7 @@ public class HolderIntelligenceRefreshService
                         ),
                     FirstCoveredQuarter = HolderTenureCalculator.QuarterIndex(firstQuarter).Value,
                     AggregateBenchmark = benchmark,
+                    AveragePrices = averagePrices,
                     PriorTurnovers = priorDates
                         .Select(date =>
                             turnoverByHolder[holderId]

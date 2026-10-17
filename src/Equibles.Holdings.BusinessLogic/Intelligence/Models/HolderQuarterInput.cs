@@ -17,6 +17,13 @@ public sealed record HolderQuarterInput
     public IReadOnlyDictionary<HolderSecurityKey, decimal?> PreviousShareFactors { get; init; } =
         new Dictionary<HolderSecurityKey, decimal?>();
 
+    /// <summary>
+    /// Each security's quarter average price on this quarter's share basis; a missing key prices
+    /// its trades at the quarter-end value per share.
+    /// </summary>
+    public IReadOnlyDictionary<HolderSecurityKey, decimal> AveragePrices { get; init; } =
+        new Dictionary<HolderSecurityKey, decimal>();
+
     /// <summary>The filer's stored presence masks, per security.</summary>
     public IReadOnlyDictionary<HolderSecurityKey, long> Presence { get; init; } =
         new Dictionary<HolderSecurityKey, long>();

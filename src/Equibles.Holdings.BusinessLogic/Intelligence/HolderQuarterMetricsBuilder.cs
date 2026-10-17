@@ -26,7 +26,12 @@ public static class HolderQuarterMetricsBuilder
                 ? null
                 : Restate(EquityPositions(input.Previous), input.PreviousShareFactors, unresolved);
 
-        var trades = HolderTurnoverCalculator.Trades(current, previous, null, unresolved);
+        var trades = HolderTurnoverCalculator.Trades(
+            current,
+            previous,
+            input.AveragePrices,
+            unresolved
+        );
         var concentration = HolderConcentrationCalculator.Measure(current);
         var activeShare = ActiveShareCalculator.ActiveShare(
             HolderConcentrationCalculator.IssuerValues(current),
