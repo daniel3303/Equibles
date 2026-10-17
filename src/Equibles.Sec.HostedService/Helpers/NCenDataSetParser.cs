@@ -177,10 +177,16 @@ public static partial class NCenDataSetParser
             report.Funds.Add(fund);
         }
 
-        foreach (var row in advisers.Rows)
+        // Rows of funds the report tables do not list are skipped.
+        IEnumerable<(string[] Row, NCenFundData Fund)> OfKnownFunds(NCenTsvTable table) =>
+            table
+                .Rows.Select(row =>
+                    (row, fundById.GetValueOrDefault(table.Value(row, "FUND_ID") ?? ""))
+                )
+                .Where(pair => pair.Item2 != null);
+
+        foreach (var (row, fund) in OfKnownFunds(advisers))
         {
-            if (!fundById.TryGetValue(advisers.Value(row, "FUND_ID") ?? "", out var fund))
-                continue;
             fund.Advisers.Add(
                 new NCenAdviserData
                 {
@@ -202,10 +208,8 @@ public static partial class NCenDataSetParser
             );
         }
 
-        foreach (var row in classes.Rows)
+        foreach (var (row, fund) in OfKnownFunds(classes))
         {
-            if (!fundById.TryGetValue(classes.Value(row, "FUND_ID") ?? "", out var fund))
-                continue;
             fund.ShareClasses.Add(
                 new NCenShareClassData
                 {
@@ -216,14 +220,17 @@ public static partial class NCenDataSetParser
             );
         }
 
-        foreach (var row in listings.Rows)
+        var namedListings = OfKnownFunds(listings)
+            .Select(pair =>
+                (
+                    pair.Fund,
+                    Ticker: Text(listings, pair.Row, "FUND_TICKER_SYMBOL"),
+                    Exchange: Text(listings, pair.Row, "FUND_EXCHANGE")
+                )
+            )
+            .Where(listing => listing.Ticker != null || listing.Exchange != null);
+        foreach (var (fund, ticker, exchange) in namedListings)
         {
-            if (!fundById.TryGetValue(listings.Value(row, "FUND_ID") ?? "", out var fund))
-                continue;
-            var ticker = Text(listings, row, "FUND_TICKER_SYMBOL");
-            var exchange = Text(listings, row, "FUND_EXCHANGE");
-            if (ticker == null && exchange == null)
-                continue;
             fund.ExchangeListings.Add(
                 new NCenExchangeListingData { Exchange = exchange, Ticker = ticker }
             );
