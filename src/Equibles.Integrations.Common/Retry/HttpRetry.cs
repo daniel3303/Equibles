@@ -48,7 +48,13 @@ public static class HttpRetry
                 continue;
             }
 
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                // Disposed before it throws, so a caller that reads a status as an answer (a GLEIF 404 "no
+                // parent") never leaves the connection checked out.
+                using (response)
+                    response.EnsureSuccessStatusCode();
+            }
             return response;
         }
 

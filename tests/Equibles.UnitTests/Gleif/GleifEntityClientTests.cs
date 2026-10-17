@@ -118,6 +118,18 @@ public class GleifEntityClientTests
     }
 
     [Fact]
+    public async Task GetUltimateParent_ThrowsOnAFailureOtherThanNotFound()
+    {
+        using var http = new HttpClient(new ReplyHandler([(HttpStatusCode.Forbidden, "")]));
+
+        var parent = () => Client(http).GetUltimateParent("5493006MHB84DD0ZWV18");
+
+        (await parent.Should().ThrowAsync<HttpRequestException>())
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task GetUltimateParent_RefusesAnEntityNamedAsItsOwnParent()
     {
         using var http = new HttpClient(

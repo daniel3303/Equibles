@@ -87,13 +87,15 @@ public partial class GleifEntityClient
         return entity;
     }
 
-    // The entity's direct accounting parent, or null when GLEIF records none.
+    // The entity's direct accounting parent, or null when GLEIF records none. The LEI must come from a GLEIF
+    // record: GLEIF answers 404 both for an entity without a parent and for an LEI it does not hold.
     public virtual Task<GleifEntity> GetDirectParent(
         string lei,
         CancellationToken cancellationToken = default
     ) => GetParent(lei, "direct-parent", cancellationToken);
 
-    // The top of the entity's consolidation chain, or null when GLEIF records none (Alphabet has no parent).
+    // The top of the entity's consolidation chain, or null when GLEIF records none (Alphabet has no parent);
+    // the same LEI rule as GetDirectParent applies.
     public virtual Task<GleifEntity> GetUltimateParent(
         string lei,
         CancellationToken cancellationToken = default
