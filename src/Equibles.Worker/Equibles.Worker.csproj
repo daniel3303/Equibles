@@ -2,6 +2,8 @@
   <ItemGroup>
     <PackageReference Include="Equibles.Core.AutoWiring" />
     <PackageReference Include="MassTransit" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
 
