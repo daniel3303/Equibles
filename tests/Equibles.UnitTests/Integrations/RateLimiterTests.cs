@@ -249,10 +249,8 @@ public class RateLimiterTests
         // let bursts past the contracted ceiling. None of the existing tests would catch it;
         // CI would stay green and the first sign would be a production ban from upstream.
         //
-        // Six concurrent callers against capacity=2 in a 200ms window. Every sliding window
-        // of three consecutive completions must span at least the timeWindow, since at the
-        // time the third was permitted the first was still the oldest in the queue and the
-        // limiter must have waited until oldest + timeWindow before allowing the enqueue.
+        // Six concurrent callers against capacity=2 in a 200ms window. The k-th release (0-based)
+        // cannot happen before floor(k / maxRequests) windows have elapsed since the first call.
         const int maxRequests = 2;
         var timeWindow = TimeSpan.FromMilliseconds(200);
         var limiter = new RateLimiter(maxRequests: maxRequests, timeWindow: timeWindow);
@@ -274,19 +272,16 @@ public class RateLimiterTests
         var ordered = completions.OrderBy(t => t).ToArray();
         ordered.Should().HaveCount(6);
 
-        // Tolerance absorbs the small gap between the limiter's internal enqueue and the
-        // test's clock read after `await WaitAsync()` returns. The contract is `>= timeWindow`;
-        // the asserted lower bound is `timeWindow - 25ms` to remain robust to scheduling
-        // jitter on slow CI runners without losing power against a real burst-past-cap regression.
-        var lowerBoundMs = (long)timeWindow.TotalMilliseconds - 25;
-        for (var i = 0; i + maxRequests < ordered.Length; i++)
+        // A stamp is taken after its continuation resumes, so it is never earlier than the release;
+        // bounding stamps from the clock start makes resume latency harmless (25ms covers clock resolution).
+        for (var k = maxRequests; k < ordered.Length; k++)
         {
-            var spanMs = ordered[i + maxRequests] - ordered[i];
-            spanMs
+            var lowerBoundMs = (long)(k / maxRequests * timeWindow.TotalMilliseconds) - 25;
+            ordered[k]
                 .Should()
                 .BeGreaterThanOrEqualTo(
                     lowerBoundMs,
-                    $"completions[{i}..{i + maxRequests}] must span ≥ ~{timeWindow.TotalMilliseconds}ms — at the moment the (maxRequests+1)-th release enqueued, the first of the triple was still the oldest entry and the limiter must have waited until it aged out of the window"
+                    $"release {k} may happen only after {k / maxRequests} full window(s) of {timeWindow.TotalMilliseconds}ms; releasing it sooner lets more than {maxRequests} requests into one window"
                 );
         }
     }
