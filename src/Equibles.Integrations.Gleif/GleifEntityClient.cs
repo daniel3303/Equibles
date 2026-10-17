@@ -24,19 +24,14 @@ public partial class GleifEntityClient
         _logger = logger;
     }
 
-    // Full-text search over legal, other and transliterated names. Commas go first: GLEIF reads one inside a
-    // filter value as a list separator, so "Co., Ltd." returned every entity named "Ltd".
+    // Full-text search over legal, other and transliterated names.
     public virtual async Task<GleifEntitySearch> Search(
         string name,
         int maxResults = 10,
         CancellationToken cancellationToken = default
     )
     {
-        var query = Spaces().Replace((name ?? "").Replace(',', ' '), " ").Trim();
-        if (query.Length == 0 || query.Length > MaxQueryLength)
-            throw new ArgumentException("A name of 1 to 200 characters is required.", nameof(name));
-        if (maxResults is < 1 or > MaxSearchResults)
-            throw new ArgumentOutOfRangeException(nameof(maxResults));
+        var query = Query(name, maxResults);
         var source = new Uri(
             GleifHttp.Origin,
             "/api/v1/lei-records?filter%5Bfulltext%5D="
@@ -64,6 +59,90 @@ public partial class GleifEntityClient
                 };
                 foreach (var record in data.EnumerateArray().Take(maxResults))
                     result.Entities.Add(Entity(record, null));
+                return result;
+            }
+        );
+    }
+
+    // GLEIF's autocomplete over the same names, which puts a brand's own entity first where full-text does not
+    // ("Google" reads GOOGLE LLC first). A suggestion without an LEI is skipped; entities keep the suggestions' order.
+    public virtual async Task<List<GleifEntity>> Suggest(
+        string name,
+        int maxResults = 10,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var query = Query(name, maxResults);
+        var source = new Uri(
+            GleifHttp.Origin,
+            "/api/v1/autocompletions?field=fulltext&q=" + Uri.EscapeDataString(query)
+        );
+        var body = await GleifHttp.Read(_httpClient, source, _logger, cancellationToken);
+        var leis = Parse(
+            body,
+            "GLEIF autocompletion response has an invalid structure.",
+            root =>
+            {
+                var data = root.GetProperty("data");
+                if (data.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("GLEIF data must be an array.");
+                var result = new List<string>();
+                foreach (var suggestion in data.EnumerateArray())
+                {
+                    var lei = SuggestedLei(suggestion);
+                    if (lei != null && !result.Contains(lei))
+                        result.Add(lei);
+                }
+                return result;
+            }
+        );
+        leis = leis.Take(maxResults).ToList();
+        if (leis.Count == 0)
+            return [];
+        var entities = (await GetEntities(leis, cancellationToken)).ToDictionary(entity =>
+            entity.LegalEntityIdentifier
+        );
+        return leis.Where(entities.ContainsKey).Select(lei => entities[lei]).ToList();
+    }
+
+    // Several LEI records in one request. GLEIF returns them in its own order and leaves out an LEI it does not hold.
+    public virtual async Task<List<GleifEntity>> GetEntities(
+        IReadOnlyCollection<string> leis,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var requested = (leis ?? []).Distinct(StringComparer.Ordinal).ToList();
+        if (requested.Count is < 1 or > MaxSearchResults)
+            throw new ArgumentOutOfRangeException(nameof(leis));
+        foreach (var lei in requested)
+            RequireLei(lei);
+        var source = new Uri(
+            GleifHttp.Origin,
+            "/api/v1/lei-records?filter%5Blei%5D="
+                + string.Join(",", requested)
+                + "&page%5Bsize%5D="
+                + requested.Count
+        );
+        var body = await GleifHttp.Read(_httpClient, source, _logger, cancellationToken);
+        return Parse(
+            body,
+            "GLEIF legal entity list has an invalid structure.",
+            root =>
+            {
+                var data = root.GetProperty("data");
+                if (data.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("GLEIF data must be an array.");
+                var pending = requested.ToHashSet(StringComparer.Ordinal);
+                var result = new List<GleifEntity>();
+                foreach (var record in data.EnumerateArray())
+                {
+                    var entity = Entity(record, null);
+                    if (!pending.Remove(entity.LegalEntityIdentifier))
+                        throw new InvalidDataException(
+                            "GLEIF returned an LEI record that was not requested."
+                        );
+                    result.Add(entity);
+                }
                 return result;
             }
         );
@@ -196,6 +275,38 @@ public partial class GleifEntityClient
                 }
             );
         }
+    }
+
+    // Commas go first: GLEIF reads one inside a filter value as a list separator, so "Co., Ltd." returned every
+    // entity named "Ltd".
+    private static string Query(string name, int maxResults)
+    {
+        var query = Spaces().Replace((name ?? "").Replace(',', ' '), " ").Trim();
+        if (query.Length == 0 || query.Length > MaxQueryLength)
+            throw new ArgumentException("A name of 1 to 200 characters is required.", nameof(name));
+        if (maxResults is < 1 or > MaxSearchResults)
+            throw new ArgumentOutOfRangeException(nameof(maxResults));
+        return query;
+    }
+
+    // The LEI a suggestion links to, or null for a suggested name GLEIF ties to no single record.
+    private static string SuggestedLei(JsonElement suggestion)
+    {
+        if (
+            !suggestion.TryGetProperty("relationships", out var relationships)
+            || relationships.ValueKind != JsonValueKind.Object
+            || !relationships.TryGetProperty("lei-records", out var records)
+            || !records.TryGetProperty("data", out var record)
+            || record.ValueKind != JsonValueKind.Object
+        )
+            return null;
+        var lei = Text(record, "id");
+        if (
+            Text(record, "type") != "lei-records"
+            || !InternationalSecurityIdentifiers.IsValidLei(lei)
+        )
+            throw new InvalidDataException("GLEIF suggestion names an invalid LEI.");
+        return lei;
     }
 
     private static void RequireLei(string lei)

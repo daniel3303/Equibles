@@ -185,6 +185,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
 
         await BackfillHolderIdentity(stoppingToken);
         await RefreshHolderFilerProfiles(stoppingToken);
+        // After the filer profiles, so the holder profiles read fresh SIC codes.
+        await RefreshHolderProfiles(stoppingToken);
 
         await SyncForm13FNotices(fileNames, stoppingToken);
 
@@ -795,6 +797,21 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "Holder EDGAR profile refresh failed; retrying next cycle");
+        }
+    }
+
+    private async Task RefreshHolderProfiles(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<HolderProfileRefreshService>()
+                .Run(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogError(exception, "Holder profile refresh failed; retrying next cycle");
         }
     }
 

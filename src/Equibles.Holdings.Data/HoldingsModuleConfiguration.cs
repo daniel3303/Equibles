@@ -310,9 +310,26 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<InstitutionalFiling>();
         builder.Entity<RealtimeSweepState>();
         builder.Entity<BeneficialOwnershipFiling>();
+        builder.Entity<HolderClassificationEvidence>();
+        builder.Entity<InstitutionalHolderProfile>();
         builder.Entity<BeneficialOwnershipReportingPerson>();
         builder.Entity<FundScore>();
         builder.Entity<FundScoreAttempt>();
+
+        // Holder-intelligence engine: per-quarter drain state, per-holder metrics and the
+        // presence bitmask tenure reads, unique per exact listing with a null primary.
+        builder.Entity<HolderIntelligenceQuarterState>();
+        builder.Entity<HolderQuarterlyMetrics>();
+        builder
+            .Entity<HolderStockPresence>()
+            .HasIndex(p => new
+            {
+                p.InstitutionalHolderId,
+                p.EquityIssuerId,
+                p.ListedTicker,
+            })
+            .IsUnique()
+            .AreNullsDistinct(false);
 
         // Audit trail for on-demand 13F reconciliation runs; its CreationTime and
         // InstitutionalHolderId indexes are declared as attributes on the entity.

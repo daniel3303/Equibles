@@ -1,0 +1,75 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace Equibles.Holdings.Data.Models;
+
+/// <summary>
+/// A 13F filer's book measured for one closed quarter from its common-share positions, with the
+/// style bands read from those measurements. Put, call and principal legs are kept apart in their
+/// own value columns and never weigh in the equity measurements.
+/// </summary>
+[Index(nameof(InstitutionalHolderId), nameof(ReportDate), IsUnique = true)]
+[Index(nameof(ReportDate), nameof(StyleBand))]
+public class HolderQuarterlyMetrics
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid InstitutionalHolderId { get; set; }
+    public virtual InstitutionalHolder InstitutionalHolder { get; set; }
+    public DateOnly ReportDate { get; set; }
+
+    /// <summary>Valued common-share positions; a pending or unavailable value adds nothing.</summary>
+    public long EquityAum { get; set; }
+
+    /// <summary>Null when the filer filed no 13F the quarter before.</summary>
+    public long? PreviousEquityAum { get; set; }
+
+    public int StockCount { get; set; }
+
+    [Precision(20, 2)]
+    public decimal? BuyValue { get; set; }
+
+    [Precision(20, 2)]
+    public decimal? SellValue { get; set; }
+
+    [Precision(12, 6)]
+    public decimal? Turnover { get; set; }
+
+    [Precision(12, 6)]
+    public decimal? TrailingAnnualTurnover { get; set; }
+
+    public int? NewCount { get; set; }
+    public int? ExitCount { get; set; }
+    public int? IncreasedCount { get; set; }
+    public int? ReducedCount { get; set; }
+    public int? UnpricedTradeCount { get; set; }
+
+    [Precision(12, 6)]
+    public decimal? TopTenWeight { get; set; }
+
+    [Precision(12, 6)]
+    public decimal? Herfindahl { get; set; }
+
+    [Precision(14, 4)]
+    public decimal? EffectivePositions { get; set; }
+
+    [Precision(10, 4)]
+    public decimal? ValueWeightedTenureQuarters { get; set; }
+
+    [Precision(12, 6)]
+    public decimal? CensoredValueShare { get; set; }
+
+    /// <summary>Active share against every 13F filer's combined common-share book that quarter.</summary>
+    [Precision(12, 6)]
+    public decimal? AggregateActiveShare { get; set; }
+
+    public long CallValue { get; set; }
+    public long PutValue { get; set; }
+    public long PrincipalValue { get; set; }
+
+    public HolderStyleBand StyleBand { get; set; }
+    public HolderIndexLikeEvidence IndexLikeEvidence { get; set; }
+    public HolderTurnoverBand TurnoverBand { get; set; }
+    public HolderHorizonBand HorizonBand { get; set; }
+    public int BandVersion { get; set; }
+    public int CalculationVersion { get; set; }
+    public DateTime ComputedAt { get; set; } = DateTime.UtcNow;
+}
