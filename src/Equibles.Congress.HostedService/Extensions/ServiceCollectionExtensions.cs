@@ -12,6 +12,7 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<CongressionalTradeScraperWorker>();
         services.AddHostedService<CongressionalAnnualDisclosureScraperWorker>();
+        services.AddHostedService<CongressLegislatorSyncWorker>();
 
         return services;
     }

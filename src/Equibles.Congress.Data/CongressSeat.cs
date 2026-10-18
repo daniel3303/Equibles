@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Equibles.Congress.Data;
 
 /// <summary>
-/// Renders the seat stored on <see cref="Models.CongressMember.StateDistrict"/>.
+/// Reads and renders the seat stored on <see cref="Models.CongressMember.StateDistrict"/>.
 /// The House Clerk publishes it as a postal code with a zero-padded district
 /// ("SC05"), which is a key, not a label — district 00 means the state elects a
 /// single at-large representative rather than a district numbered zero. A value
@@ -18,16 +18,35 @@ public static partial class CongressSeat
         if (string.IsNullOrWhiteSpace(stateDistrict))
             return null;
 
-        var value = stateDistrict.Trim();
-        var match = SeatRegex().Match(value);
-        if (!match.Success)
-            return value;
+        if (!TryParse(stateDistrict, out var state, out var district))
+            return stateDistrict.Trim();
 
-        var state = match.Groups["state"].Value.ToUpperInvariant();
-        var district = int.Parse(match.Groups["district"].Value, CultureInfo.InvariantCulture);
         return district == 0 ? $"{state} At-Large" : $"{state}-{district}";
     }
 
-    [GeneratedRegex(@"^(?<state>[A-Za-z]{2})(?<district>\d{1,2})$")]
+    /// <summary>
+    /// Splits a seat key into its upper-case postal code and district number. A one- or two-digit
+    /// district parses as written, and "AL" (at-large) reads as district 0.
+    /// </summary>
+    public static bool TryParse(string stateDistrict, out string state, out short district)
+    {
+        state = null;
+        district = 0;
+        if (string.IsNullOrWhiteSpace(stateDistrict))
+            return false;
+
+        var match = SeatRegex().Match(stateDistrict.Trim());
+        if (!match.Success)
+            return false;
+
+        state = match.Groups["state"].Value.ToUpperInvariant();
+        var districtText = match.Groups["district"].Value;
+        district = string.Equals(districtText, "AL", StringComparison.OrdinalIgnoreCase)
+            ? (short)0
+            : short.Parse(districtText, CultureInfo.InvariantCulture);
+        return true;
+    }
+
+    [GeneratedRegex(@"^(?<state>[A-Za-z]{2})(?<district>\d{1,2}|[Aa][Ll])$")]
     private static partial Regex SeatRegex();
 }

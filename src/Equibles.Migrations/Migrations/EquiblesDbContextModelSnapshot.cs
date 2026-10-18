@@ -949,6 +949,38 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("Sector");
                 });
 
+            modelBuilder.Entity("Equibles.Congress.Data.Models.CongressLegislator", b =>
+                {
+                    b.Property<string>("BioguideId")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("OfficialFullName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Suffix")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("BioguideId");
+
+                    b.ToTable("CongressLegislator");
+                });
+
             modelBuilder.Entity("Equibles.Congress.Data.Models.CongressMember", b =>
                 {
                     b.Property<Guid>("Id")
@@ -957,6 +989,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<string>("BioguideId")
                         .HasMaxLength(7)
                         .HasColumnType("character varying(7)");
+
+                    b.Property<int?>("BioguideIdSource")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
@@ -999,6 +1034,54 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("MergedIntoId");
 
                     b.ToTable("CongressMemberRedirect");
+                });
+
+            modelBuilder.Entity("Equibles.Congress.Data.Models.CongressMemberTerm", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BioguideId")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<string>("Caucus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Chamber")
+                        .HasColumnType("integer");
+
+                    b.Property<short?>("District")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Party")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("character(2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BioguideId", "Chamber", "StartDate")
+                        .IsUnique();
+
+                    b.HasIndex("Chamber", "State", "District", "StartDate");
+
+                    b.ToTable("CongressMemberTerm", t =>
+                        {
+                            t.HasCheckConstraint("CK_CongressMemberTerm_EndAfterStart", "\"EndDate\" > \"StartDate\"");
+                        });
                 });
 
             modelBuilder.Entity("Equibles.Congress.Data.Models.CongressionalAnnualDisclosure", b =>
@@ -6535,6 +6618,17 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("MergedInto");
                 });
 
+            modelBuilder.Entity("Equibles.Congress.Data.Models.CongressMemberTerm", b =>
+                {
+                    b.HasOne("Equibles.Congress.Data.Models.CongressLegislator", "Legislator")
+                        .WithMany("Terms")
+                        .HasForeignKey("BioguideId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Legislator");
+                });
+
             modelBuilder.Entity("Equibles.Congress.Data.Models.CongressionalAnnualDisclosure", b =>
                 {
                     b.HasOne("Equibles.Congress.Data.Models.CongressMember", "CongressMember")
@@ -7345,6 +7439,11 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Listings");
 
                     b.Navigation("SourceIdentifiers");
+                });
+
+            modelBuilder.Entity("Equibles.Congress.Data.Models.CongressLegislator", b =>
+                {
+                    b.Navigation("Terms");
                 });
 
             modelBuilder.Entity("Equibles.Congress.Data.Models.CongressMember", b =>

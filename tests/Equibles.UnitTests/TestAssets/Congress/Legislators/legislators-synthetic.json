@@ -1,0 +1,59 @@
+[
+  {
+    "id": {
+      "bioguide": "Z999901"
+    },
+    "name": {
+      "first": "Gap",
+      "last": "Mismatch"
+    },
+    "terms": [
+      {
+        "type": "rep",
+        "start": "2019-01-03",
+        "end": "2021-01-03",
+        "state": "OH",
+        "district": 3,
+        "party": "Independent",
+        "party_affiliations": [
+          {
+            "start": "2019-01-03",
+            "end": "2019-06-01",
+            "party": "Democrat"
+          },
+          {
+            "start": "2019-06-10",
+            "end": "2021-01-03",
+            "party": "Independent"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": {
+      "bioguide": "Z999902"
+    },
+    "name": {
+      "first": "Overlap",
+      "last": "Switcher"
+    },
+    "terms": [
+      {
+        "type": "rep",
+        "start": "2021-01-03",
+        "end": "2023-01-03",
+        "state": "OH",
+        "district": 4,
+        "party": "Republican"
+      },
+      {
+        "type": "sen",
+        "start": "2022-11-08",
+        "end": "2029-01-03",
+        "state": "OH",
+        "party": "Republican"
+      }
+    ]
+  }
+]
