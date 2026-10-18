@@ -15,6 +15,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.BusinessLogic.Intelligence;
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -84,6 +85,7 @@ public class InstitutionalHoldingsTools
     private readonly IMemoryCache _memoryCache;
     private readonly MarketActivityShareRestater _marketActivityShareRestater;
     private readonly InstitutionPortfolioSummaryProvider _summaryProvider;
+    private readonly HolderMixReader _holderMixReader;
     private readonly McpToolRunner _runner;
 
     public InstitutionalHoldingsTools(
@@ -97,7 +99,8 @@ public class InstitutionalHoldingsTools
         HoldingsCorpusCoverage corpusCoverage = null,
         IMemoryCache memoryCache = null,
         InstitutionPortfolioSummaryProvider summaryProvider = null,
-        MarketActivityShareRestater marketActivityShareRestater = null
+        MarketActivityShareRestater marketActivityShareRestater = null,
+        HolderMixReader holderMixReader = null
     )
     {
         _holdingRepository = holdingRepository;
@@ -113,6 +116,8 @@ public class InstitutionalHoldingsTools
         _summaryProvider =
             summaryProvider
             ?? new InstitutionPortfolioSummaryProvider(_holdingRepository, _memoryCache);
+        _holderMixReader =
+            holderMixReader ?? new HolderMixReader(_holdingRepository, _holderRepository);
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -678,6 +683,240 @@ public class InstitutionalHoldingsTools
         previousShares > 0
             ? $"{McpFormat.Invariant((double)(totalShares - previousShares) / previousShares * 100, "+0.0;-0.0;0.0")}%"
             : "—";
+
+    private const int DefaultMixPeriods = 4;
+    private const int MaxMixPeriods = 12;
+
+    // The style buckets of books measured as actively managed: index-like, Unknown and
+    // unmeasured books are left out of the active holders' change.
+    private static readonly string[] ActiveStyleTokens =
+    [
+        HolderBucketTokens.StyleToken(HolderStyleBand.SystematicLike),
+        HolderBucketTokens.StyleToken(HolderStyleBand.Concentrated),
+        HolderBucketTokens.StyleToken(HolderStyleBand.DiversifiedActive),
+    ];
+
+    [McpServerTool(Name = "GetHolderMix", Title = "13F Holder Mix", ReadOnly = true)]
+    [Description(
+        "Who holds a stock or ETF listing, by kind of 13F filer, quarter by quarter: each bucket's share of 13F common shares, its like-for-like change, and new and exited filers. Split by holder type (regulatory records, never names), measured style, turnover, horizon, 13F book size, client base, private funds or location. Also gives the active holders' like-for-like change, which leaves index-like books out."
+    )]
+    public Task<string> GetHolderMix(
+        [Description("Listed security ticker (e.g., NVDA, VOO)")] string ticker,
+        [Description(
+            "How to split the holders: type (holder type, default), style, turnover, horizon, aum (13F book size), client (client base), pf (private funds), country (filer location)"
+        )]
+            string dimension = "type",
+        [Description("Quarters to show, newest last (default 4, clamped to 1-12)")]
+            int maxPeriods = DefaultMixPeriods
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var (parsed, dimensionError) = HolderBucketTokens.ParseMixDimension(dimension);
+                if (dimensionError != null)
+                    return dimensionError;
+                var mixDimension = parsed ?? HolderMixDimension.EntityType;
+
+                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                if (stockError != null)
+                    return stockError;
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                var exactListingScope = SecondaryTickerPolicy.RequiresExactListingScope(
+                    stock,
+                    listedTicker
+                );
+                var reportDates = exactListingScope
+                    ? await _holdingRepository.Get13FReportDatesByListingSnapshotBacked(
+                        stock,
+                        listedTicker
+                    )
+                    : await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
+                if (reportDates.Count == 0)
+                    return $"No institutional holdings data available for {ticker}.";
+
+                var isPrimaryListing = string.Equals(
+                    listedTicker,
+                    stock.Presentation.Listing.Ticker,
+                    StringComparison.OrdinalIgnoreCase
+                );
+                var anchor =
+                    isPrimaryListing && !exactListingScope
+                        ? await _combinedQuarterService.Resolve(stock)
+                        : null;
+                var newest = reportDates.Max();
+                var combinedDate =
+                    anchor is { IsCombined: true } && anchor.ReportDate == newest
+                        ? anchor.ReportDate
+                        : (DateOnly?)null;
+
+                // Consecutive quarter ends from the comparison base to the newest report date, so
+                // every shown quarter compares with the calendar quarter before it.
+                var periods = Math.Clamp(maxPeriods, 1, MaxMixPeriods);
+                var dates = new List<DateOnly> { newest };
+                while (
+                    dates.Count <= periods
+                    && HoldingsCorpusCoverage.PreviousQuarterEnd(dates[^1])
+                        >= _corpusCoverage.CoverageStartDate
+                )
+                    dates.Add(HoldingsCorpusCoverage.PreviousQuarterEnd(dates[^1]));
+                if (dates.Count < 2)
+                    return $"No quarter of {ticker} before {FormatDate(newest)} is covered, so its holder mix has no comparison yet.";
+
+                var quarters = await _holderMixReader.Read(
+                    stock,
+                    dates,
+                    await _marketActivityShareRestater.EffectiveSplits(stock),
+                    exactListingScope ? listedTicker : null,
+                    combinedDate
+                );
+                return RenderHolderMix(stock, ticker, mixDimension, quarters, anchor);
+            },
+            "GetHolderMix",
+            $"ticker: {ticker}, dimension: {dimension}, maxPeriods: {maxPeriods}"
+        );
+    }
+
+    private static string RenderHolderMix(
+        EquityIssuer stock,
+        string ticker,
+        HolderMixDimension dimension,
+        IReadOnlyList<HolderMixQuarter> quarters,
+        StockQuarterAnchor anchor
+    )
+    {
+        var latest = quarters[^1];
+        var buckets = quarters
+            .SelectMany(quarter => quarter.Dimensions[dimension])
+            .Select(bucket => (bucket.Token, bucket.Label))
+            .Distinct()
+            .ToList();
+        // Keep the latest quarter's bucket order, then any bucket only an earlier quarter has.
+        var order = latest
+            .Dimensions[dimension]
+            .Select((bucket, index) => (bucket.Token, index))
+            .ToDictionary(entry => entry.Token, entry => entry.index);
+        buckets = buckets
+            .OrderBy(bucket => order.GetValueOrDefault(bucket.Token, int.MaxValue))
+            .ToList();
+
+        string Column(HolderMixQuarter quarter) =>
+            $"{FormatDate(quarter.ReportDate)}{(quarter.IsCombined ? " \\*" : "")}";
+        var header =
+            $"| {HolderBucketTokens.Label(dimension)} | {string.Join(" | ", quarters.Select(Column))} | Chg (like-for-like) | New | Exited | Filers |";
+        var separator = $"|---|{string.Join("|", quarters.Select(_ => "---"))}|---|---|---|---|";
+        var result = MarkdownTable.Start(
+            $"Holder mix of {StockListingLabel(stock, ticker)} by {HolderBucketTokens.Label(dimension).ToLowerInvariant()}: each bucket's share of 13F common shares",
+            header,
+            separator
+        );
+
+        string Share(HolderMixQuarter quarter, string token)
+        {
+            var bucket = quarter.Dimensions[dimension].FirstOrDefault(b => b.Token == token);
+            return quarter.Total.Shares > 0
+                ? $"{FormatPercent((double)(bucket?.Shares ?? 0) / quarter.Total.Shares * 100)}%"
+                : "—";
+        }
+        string Row(string label, Func<HolderMixQuarter, string> share, HolderMixBucket current) =>
+            $"| {MarkdownTable.EscapeCell(label, "—")} | {string.Join(" | ", quarters.Select(share))} | {LikeForLikeChange(current)} | {McpFormat.WholeNumber(current?.NewFilers ?? 0)} | {McpFormat.WholeNumber(current?.ExitedFilers ?? 0)} | {McpFormat.WholeNumber(current?.Filers ?? 0)} |";
+
+        foreach (var (token, label) in buckets)
+            result.AppendLine(
+                Row(
+                    label,
+                    quarter => Share(quarter, token),
+                    latest.Dimensions[dimension].FirstOrDefault(bucket => bucket.Token == token)
+                )
+            );
+        result.AppendLine(
+            Row(
+                latest.Total.Label,
+                quarter => quarter.Total.Shares > 0 ? "100.0%" : "—",
+                latest.Total
+            )
+        );
+
+        result.AppendLine();
+        result.AppendLine(
+            $"{FormatDate(latest.ReportDate)}: {McpFormat.WholeNumber(latest.Total.Shares)} common shares worth ${FormatMillions(latest.Total.Value)}M across {McpFormat.WholeNumber(latest.Total.Filers)} filers; options are left out of the mix (calls on {McpFormat.WholeNumber(latest.Total.CallShares)} and puts on {McpFormat.WholeNumber(latest.Total.PutShares)} underlying shares)."
+        );
+        var active = ActiveChange(latest);
+        if (active != null)
+            result.AppendLine(active);
+
+        if (
+            dimension
+            is HolderMixDimension.Style
+                or HolderMixDimension.Turnover
+                or HolderMixDimension.Horizon
+                or HolderMixDimension.BookSize
+        )
+            result.AppendLine(
+                "Measured quarter per column: "
+                    + string.Join(
+                        ", ",
+                        quarters.Select(quarter =>
+                            $"{FormatDate(quarter.ReportDate)} reads {(quarter.MeasuredQuarter is { } measured ? FormatDate(measured) : "none")}"
+                        )
+                    )
+                    + "."
+            );
+
+        foreach (var quarter in quarters)
+        {
+            var notes = new List<string>();
+            if (quarter.Comparison?.Note is { } note)
+                notes.Add(note);
+            if (quarter.Total.ExcludedCurrentShares > 0 || quarter.Total.ExcludedPreviousShares > 0)
+                notes.Add(
+                    $"Common shares left out of the change: {McpFormat.WholeNumber(quarter.Total.ExcludedCurrentShares)} this quarter, {McpFormat.WholeNumber(quarter.Total.ExcludedPreviousShares)} the quarter before."
+                );
+            if (notes.Count > 0)
+                result.AppendLine($"{FormatDate(quarter.ReportDate)}: {string.Join(" ", notes)}");
+        }
+
+        if (latest.IsCombined && anchor != null)
+        {
+            result.AppendLine();
+            result.AppendLine($"\\* {CombinedViewNote(latest.ReportDate, anchor)}");
+        }
+
+        result.AppendLine();
+        result.AppendLine(
+            $"_Shares are 13F common shares restated to today's split basis; options and principal amounts are left out. The change compares only filers with an observed 13F in both quarters and keeps each filer in its bucket of the later quarter on both sides; a filer that continues under a new CIK is compared through its successor. Holder type, client base and private funds are each filer's current regulatory profile, never its name; style, turnover, horizon and book size are measured from each filer's 13F book in the newest measured quarter on or before the column, and Not measured means none was. Other dimensions: {HolderBucketTokens.MixDimensionTokenList}._"
+        );
+        return result.ToString();
+    }
+
+    // Like-for-like change of the latest quarter's bucket; a dash without a comparison.
+    private static string LikeForLikeChange(HolderMixBucket bucket) =>
+        bucket is { LikeForLikeCurrent: { } current, LikeForLikePrevious: { } previous }
+            ? previous > 0
+                ? FormatShareChange(current, previous)
+                : current > 0
+                    ? "new"
+                    : "—"
+            : "—";
+
+    // The like-for-like change of the books measured as actively managed, beside the index-like
+    // books', from the latest quarter's style buckets.
+    private static string ActiveChange(HolderMixQuarter quarter)
+    {
+        if (quarter.MeasuredQuarter is not { } measured || quarter.Total.LikeForLikeCurrent == null)
+            return null;
+        var styles = quarter.Dimensions[HolderMixDimension.Style];
+        var active = styles.Where(bucket => ActiveStyleTokens.Contains(bucket.Token)).ToList();
+        var activeCurrent = active.Sum(bucket => bucket.LikeForLikeCurrent ?? 0);
+        var activePrevious = active.Sum(bucket => bucket.LikeForLikePrevious ?? 0);
+        var index = styles.FirstOrDefault(bucket =>
+            bucket.Token == HolderBucketTokens.StyleToken(HolderStyleBand.IndexLike)
+        );
+        var indexPart = index is { LikeForLikePrevious: > 0 }
+            ? $"; index-like books {FormatShareChange(index.LikeForLikeCurrent ?? 0, index.LikeForLikePrevious.Value)}"
+            : "";
+        return $"Active holders (books measured systematic-like, concentrated or diversified active in {FormatDate(measured)}): {FormatShareChange(activeCurrent, activePrevious)} like-for-like, {McpFormat.WholeNumber(activePrevious)} to {McpFormat.WholeNumber(activeCurrent)} shares{indexPart}.";
+    }
 
     [McpServerTool(
         Name = "GetInstitutionPortfolio",

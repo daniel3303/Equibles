@@ -70,21 +70,7 @@ public static class HoldingsComparisonCoverage
         var byDate = shares
             .Keys.GroupBy(key => key.ReportDate)
             .ToDictionary(g => g.Key, g => g.Select(key => key.InstitutionalHolderId).ToHashSet());
-        var pending = new List<HoldingsComparisonStatus>();
-        for (var index = 1; index < ordered.Length; index++)
-        {
-            var current = ordered[index];
-            var previous = ordered[index - 1];
-            pending.Add(
-                Compare(
-                    current,
-                    previous,
-                    byDate.GetValueOrDefault(current) ?? [],
-                    byDate.GetValueOrDefault(previous) ?? []
-                )
-            );
-        }
-        var resolved = await Resolve(repository, pending, cancellationToken);
+        var resolved = await CompareQuarters(repository, ordered, byDate, cancellationToken);
         var compared = resolved.ToDictionary(
             entry => entry.Key,
             entry =>
@@ -97,6 +83,35 @@ public static class HoldingsComparisonCoverage
                 )
         );
         return await WithNames(holdings, ordered, compared, cancellationToken);
+    }
+
+    /// <summary>
+    /// Compares each quarter with the one before it in <paramref name="ordered"/> (oldest first):
+    /// the holders of the stock on either side with no observed 13F on the other side, and the
+    /// succession groups compared across a CIK change. Keyed by the later quarter.
+    /// </summary>
+    public static async Task<Dictionary<DateOnly, HoldingsComparisonStatus>> CompareQuarters(
+        InstitutionalHoldingRepository repository,
+        IReadOnlyList<DateOnly> ordered,
+        IReadOnlyDictionary<DateOnly, HashSet<Guid>> holdersByDate,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var pending = new List<HoldingsComparisonStatus>();
+        for (var index = 1; index < ordered.Count; index++)
+        {
+            var current = ordered[index];
+            var previous = ordered[index - 1];
+            pending.Add(
+                Compare(
+                    current,
+                    previous,
+                    holdersByDate.GetValueOrDefault(current) ?? [],
+                    holdersByDate.GetValueOrDefault(previous) ?? []
+                )
+            );
+        }
+        return await Resolve(repository, pending, cancellationToken);
     }
 
     // Sums each side over filers with an observed 13F in both quarters. The combined view

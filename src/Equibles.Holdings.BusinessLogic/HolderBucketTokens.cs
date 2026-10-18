@@ -1,3 +1,4 @@
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
 
 namespace Equibles.Holdings.BusinessLogic;
@@ -32,7 +33,47 @@ public static class HolderBucketTokens
         ("unk", HolderStyleBand.Unknown, "Unknown"),
     ];
 
+    private static readonly (
+        string Token,
+        HolderMixDimension Value,
+        string Label
+    )[] MixDimensions =
+    [
+        ("type", HolderMixDimension.EntityType, "Holder type"),
+        ("style", HolderMixDimension.Style, "Style"),
+        ("turnover", HolderMixDimension.Turnover, "Turnover"),
+        ("horizon", HolderMixDimension.Horizon, "Holding horizon"),
+        ("aum", HolderMixDimension.BookSize, "13F book size"),
+        ("client", HolderMixDimension.ClientBase, "Client base"),
+        ("pf", HolderMixDimension.PrivateFunds, "Private funds"),
+        ("country", HolderMixDimension.Location, "Location"),
+    ];
+
     public static string EntityTypeTokenList => TokenList(EntityTypes);
+
+    public static string MixDimensionTokenList => TokenList(MixDimensions);
+
+    public static string Token(HolderMixDimension dimension) =>
+        MixDimensions.Single(entry => entry.Value == dimension).Token;
+
+    public static string Label(HolderMixDimension dimension) =>
+        MixDimensions.Single(entry => entry.Value == dimension).Label;
+
+    /// <summary>
+    /// Parses one holder-mix dimension token, case-insensitively. Blank input means the default
+    /// (null dimension); an unknown token returns an error naming the accepted tokens.
+    /// </summary>
+    public static (HolderMixDimension? Dimension, string Error) ParseMixDimension(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return (null, null);
+        var match = MixDimensions.FirstOrDefault(entry =>
+            string.Equals(entry.Token, token.Trim(), StringComparison.OrdinalIgnoreCase)
+        );
+        return match.Token == null
+            ? (null, $"Unknown dimension '{token.Trim()}'. Use one of: {MixDimensionTokenList}.")
+            : (match.Value, null);
+    }
 
     public static string StyleTokenList => TokenList(StyleBands);
 

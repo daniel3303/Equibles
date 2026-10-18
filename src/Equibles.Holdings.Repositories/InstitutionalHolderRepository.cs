@@ -418,6 +418,26 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .Set<HolderQuarterlyMetrics>()
             .Where(metrics => metrics.InstitutionalHolderId == holder.Id);
 
+    // The listed holders' profiles; a holder not yet profiled has none.
+    public IQueryable<InstitutionalHolderProfile> GetProfiles(
+        IReadOnlyCollection<Guid> holderIds
+    ) =>
+        DbContext
+            .Set<InstitutionalHolderProfile>()
+            .Where(profile => holderIds.Contains(profile.InstitutionalHolderId));
+
+    // The listed holders' measurements in the listed quarters.
+    public IQueryable<HolderQuarterlyMetrics> GetQuarterlyMetrics(
+        IReadOnlyCollection<Guid> holderIds,
+        IReadOnlyCollection<DateOnly> reportDates
+    ) =>
+        DbContext
+            .Set<HolderQuarterlyMetrics>()
+            .Where(metrics =>
+                reportDates.Contains(metrics.ReportDate)
+                && holderIds.Contains(metrics.InstitutionalHolderId)
+            );
+
     // The newest measured quarter on or before the date, null when none is measured yet.
     public Task<DateOnly?> GetLatestMetricsReportDate(
         DateOnly onOrBefore,
