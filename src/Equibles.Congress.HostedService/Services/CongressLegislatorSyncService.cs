@@ -88,11 +88,11 @@ public class CongressLegislatorSyncService
         rejections = [];
         foreach (var file in new[] { current, historical })
         {
-            foreach (var rejection in file.Rejections)
-            {
-                if (rejection.BioguideId == null || claimed.Add(rejection.BioguideId))
-                    rejections.Add(rejection);
-            }
+            rejections.AddRange(
+                file.Rejections.Where(rejection =>
+                    rejection.BioguideId == null || claimed.Add(rejection.BioguideId)
+                )
+            );
 
             legislators.AddRange(file.Legislators.Where(l => claimed.Add(l.BioguideId)));
         }

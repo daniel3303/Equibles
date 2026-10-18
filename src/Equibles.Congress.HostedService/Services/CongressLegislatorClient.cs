@@ -52,12 +52,15 @@ public class CongressLegislatorClient
     private async Task<LegislatorRosterParseResult> Fetch(string url, CancellationToken ct)
     {
         using var response = await HttpRetry.Send(
-            () =>
-                _httpClient.SendAsync(
-                    new HttpRequestMessage(HttpMethod.Get, url),
+            async () =>
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                return await _httpClient.SendAsync(
+                    request,
                     HttpCompletionOption.ResponseHeadersRead,
                     ct
-                ),
+                );
+            },
             RateLimiter,
             MaxRetries,
             $"Legislator roster {url} kept failing",
@@ -139,12 +142,11 @@ public class CongressLegislatorClient
             return Reject("missing or oversized name");
 
         var terms = new List<CongressMemberTerm>();
-        foreach (var term in record.Terms)
-        {
-            var reason = TrySplitTerm(bioguideId, term, terms);
-            if (reason != null)
-                return Reject(reason);
-        }
+        var termRejection = record
+            .Terms.Select(term => TrySplitTerm(bioguideId, term, terms))
+            .FirstOrDefault(reason => reason != null);
+        if (termRejection != null)
+            return Reject(termRejection);
 
         var ordered = terms.OrderBy(term => term.StartDate).ToList();
         for (var i = 0; i < ordered.Count - 1; i++)
