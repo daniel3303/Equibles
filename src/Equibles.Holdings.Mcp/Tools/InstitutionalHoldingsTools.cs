@@ -694,15 +694,6 @@ public class InstitutionalHoldingsTools
             ? $"{McpFormat.Invariant((double)(totalShares - previousShares) / previousShares * 100, "+0.0;-0.0;0.0")}%"
             : "—";
 
-    // The style buckets of books measured as actively managed: index-like, Unknown and
-    // unmeasured books are left out of the active holders' change.
-    private static readonly string[] ActiveStyleTokens =
-    [
-        HolderBucketTokens.StyleToken(HolderStyleBand.SystematicLike),
-        HolderBucketTokens.StyleToken(HolderStyleBand.Concentrated),
-        HolderBucketTokens.StyleToken(HolderStyleBand.DiversifiedActive),
-    ];
-
     [McpServerTool(Name = "GetHolderMix", Title = "13F Holder Mix", ReadOnly = true)]
     [Description(
         "Who holds a stock or ETF listing, by kind of 13F filer, quarter by quarter: each bucket's share of 13F common shares, its like-for-like change, and new and exited filers. Split by holder type (regulatory records, never names), measured style, turnover, horizon, 13F book size, client base, private funds or location. Also gives the active holders' like-for-like change, which leaves index-like books out."
@@ -861,15 +852,20 @@ public class InstitutionalHoldingsTools
     // books', from the latest quarter's style buckets.
     private static string ActiveChange(HolderMixQuarter quarter)
     {
-        if (quarter.MeasuredQuarter is not { } measured || quarter.Total.LikeForLikeCurrent == null)
+        if (
+            HolderMixCalculator.ActiveHolders(quarter)
+            is not {
+                LikeForLikeCurrent: { } activeCurrent,
+                LikeForLikePrevious: { } activePrevious
+            }
+        )
             return null;
-        var styles = quarter.Dimensions[HolderMixDimension.Style];
-        var active = styles.Where(bucket => ActiveStyleTokens.Contains(bucket.Token)).ToList();
-        var activeCurrent = active.Sum(bucket => bucket.LikeForLikeCurrent ?? 0);
-        var activePrevious = active.Sum(bucket => bucket.LikeForLikePrevious ?? 0);
-        var index = styles.FirstOrDefault(bucket =>
-            bucket.Token == HolderBucketTokens.StyleToken(HolderStyleBand.IndexLike)
-        );
+        var measured = quarter.MeasuredQuarter.Value;
+        var index = quarter
+            .Dimensions[HolderMixDimension.Style]
+            .FirstOrDefault(bucket =>
+                bucket.Token == HolderBucketTokens.StyleToken(HolderStyleBand.IndexLike)
+            );
         var indexPart = index is { LikeForLikePrevious: > 0 }
             ? $"; index-like books {FormatShareChange(index.LikeForLikeCurrent ?? 0, index.LikeForLikePrevious.Value)}"
             : "";

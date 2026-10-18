@@ -1,5 +1,6 @@
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
+using Equibles.Holdings.Data.Models;
 
 namespace Equibles.Holdings.BusinessLogic.Intelligence;
 
@@ -55,6 +56,52 @@ public static class HolderMixCalculator
             );
         }
         return quarters;
+    }
+
+    // The style buckets of books measured as actively managed: index-like, Unknown and unmeasured
+    // books are left out of the active holders.
+    public static readonly IReadOnlySet<string> ActiveStyleTokens = new HashSet<string>
+    {
+        HolderBucketTokens.StyleToken(HolderStyleBand.SystematicLike),
+        HolderBucketTokens.StyleToken(HolderStyleBand.Concentrated),
+        HolderBucketTokens.StyleToken(HolderStyleBand.DiversifiedActive),
+    };
+
+    /// <summary>
+    /// The quarter's style buckets measured as actively managed, summed into one bucket; null when
+    /// no quarter is measured on or before it.
+    /// </summary>
+    public static HolderMixBucket ActiveHolders(HolderMixQuarter quarter)
+    {
+        if (quarter.MeasuredQuarter == null)
+            return null;
+        var active = quarter
+            .Dimensions[HolderMixDimension.Style]
+            .Where(bucket => ActiveStyleTokens.Contains(bucket.Token))
+            .ToList();
+        var compared = quarter.Total.LikeForLikeCurrent != null;
+        return new HolderMixBucket
+        {
+            Token = "active",
+            Label = "Active holders",
+            Shares = active.Sum(bucket => bucket.Shares),
+            Value = active.Sum(bucket => bucket.Value),
+            Filers = active.Sum(bucket => bucket.Filers),
+            CallShares = active.Sum(bucket => bucket.CallShares),
+            CallValue = active.Sum(bucket => bucket.CallValue),
+            PutShares = active.Sum(bucket => bucket.PutShares),
+            PutValue = active.Sum(bucket => bucket.PutValue),
+            LikeForLikeCurrent = compared
+                ? active.Sum(bucket => bucket.LikeForLikeCurrent ?? 0)
+                : null,
+            LikeForLikePrevious = compared
+                ? active.Sum(bucket => bucket.LikeForLikePrevious ?? 0)
+                : null,
+            ExcludedCurrentShares = active.Sum(bucket => bucket.ExcludedCurrentShares),
+            ExcludedPreviousShares = active.Sum(bucket => bucket.ExcludedPreviousShares),
+            NewFilers = active.Sum(bucket => bucket.NewFilers),
+            ExitedFilers = active.Sum(bucket => bucket.ExitedFilers),
+        };
     }
 
     private static HolderMixQuarter BuildQuarter(

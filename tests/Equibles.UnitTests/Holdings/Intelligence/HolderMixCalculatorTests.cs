@@ -93,6 +93,29 @@ public class HolderMixCalculatorTests
     }
 
     [Fact]
+    public void ActiveHolders_SumsTheActivelyManagedStyleBucketsOnly()
+    {
+        var quarter = Build(Status(missingPrevious: [FirstFiler], missingCurrent: [LateFiler]));
+
+        var active = HolderMixCalculator.ActiveHolders(quarter);
+
+        // The concentrated picker, buyer and seller plus the diversified late filer; the index
+        // fund and the unmeasured filers are left out.
+        active.Shares.Should().Be(300 + 50);
+        active.LikeForLikeCurrent.Should().Be(300 + 50);
+        active.LikeForLikePrevious.Should().Be(200 + 500);
+        active.ExcludedPreviousShares.Should().Be(900);
+        active.PutShares.Should().Be(40);
+        active.CallShares.Should().Be(0);
+        active.NewFilers.Should().Be(1);
+        active.ExitedFilers.Should().Be(1);
+        HolderMixCalculator
+            .ActiveHolders(new HolderMixQuarter { ReportDate = Current, Total = quarter.Total })
+            .Should()
+            .BeNull("no quarter is measured on or before it");
+    }
+
+    [Fact]
     public void Build_UnprofiledFilerReadsUnknownTypeAndLocationFromItsAddressCode()
     {
         var quarter = Build(Status());
