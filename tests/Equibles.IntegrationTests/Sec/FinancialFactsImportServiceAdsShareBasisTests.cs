@@ -136,7 +136,8 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
     private async Task<EquityIssuer> Seed(
         long sharesOutstanding,
         double marketCapitalization,
-        string ticker
+        string ticker,
+        ListedSecurityType registrationType = ListedSecurityType.Unknown
     )
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -145,7 +146,8 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
             Name: ticker,
             Cik: "0001541157",
             SharesOutStanding: sharesOutstanding,
-            MarketCapitalization: marketCapitalization
+            MarketCapitalization: marketCapitalization,
+            ListedSecurityType: registrationType
         );
         await using var seed = _fixture.CreateDbContext();
         seed.Set<EquityIssuer>().Add(stock);
@@ -205,6 +207,25 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
             .Import(stock, CancellationToken.None);
 
         (await StoredShares(stock.Id)).Should().Be(14_687_356_000L);
+    }
+
+    [Theory]
+    [InlineData(ListedSecurityType.DebtSecurities)]
+    [InlineData(ListedSecurityType.PreferredShares)]
+    [InlineData(ListedSecurityType.Warrants)]
+    [InlineData(ListedSecurityType.Rights)]
+    public async Task Import_NonEquityPresentation_DoesNotTakeTheCommonCoverPageCount(
+        ListedSecurityType registrationType
+    )
+    {
+        // An issuer presented by a note, preferred, warrant or right: the cover page counts the
+        // common, so attaching it would give that listing the common's share count.
+        EquityIssuer stock = await Seed(0, 0d, "TWOD", registrationType);
+
+        await BuildService(DomesticProviderReturning(105_046_333L))
+            .Import(stock, CancellationToken.None);
+
+        (await StoredShares(stock.Id)).Should().Be(0);
     }
 
     [Fact]

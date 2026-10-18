@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Extensions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -267,6 +268,10 @@ public class FinancialFactsImportService
     )
     {
         if (stock.Presentation?.Listing is not { MarketCountryCode: "US", Active: true })
+            return;
+        // The cover-page count is the common's; it never belongs on a listed note, preferred,
+        // warrant or right.
+        if (stock.Presentation.Listing.Security.RegistrationType.IsNonEquity())
             return;
         using var scope = _scopeFactory.CreateScope();
         var sharesProvider = scope.ServiceProvider.GetRequiredService<ISharesOutstandingProvider>();
