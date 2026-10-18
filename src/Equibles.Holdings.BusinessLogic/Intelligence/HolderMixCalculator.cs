@@ -126,9 +126,8 @@ public static class HolderMixCalculator
             compared && !carryForward ? comparison.MissingCurrentFilers : new HashSet<Guid>();
 
         var book = new Dictionary<Guid, HolderMixPosition>(current);
-        foreach (var holderId in carried)
-            if (previous.TryGetValue(holderId, out var position))
-                book.TryAdd(holderId, position);
+        foreach (var holderId in carried.Where(previous.ContainsKey))
+            book.TryAdd(holderId, previous[holderId]);
         foreach (var (holderId, position) in book)
             mix.Add(
                 holderId,

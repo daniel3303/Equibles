@@ -853,21 +853,21 @@ public class InstitutionalHoldingsTools
     private static string ActiveChange(HolderMixQuarter quarter)
     {
         if (
-            HolderMixCalculator.ActiveHolders(quarter)
-            is not {
-                LikeForLikeCurrent: { } activeCurrent,
-                LikeForLikePrevious: { } activePrevious
-            }
+            quarter.MeasuredQuarter is not { } measured
+            || HolderMixCalculator.ActiveHolders(quarter)
+                is not {
+                    LikeForLikeCurrent: { } activeCurrent,
+                    LikeForLikePrevious: { } activePrevious
+                }
         )
             return null;
-        var measured = quarter.MeasuredQuarter.Value;
         var index = quarter
             .Dimensions[HolderMixDimension.Style]
             .FirstOrDefault(bucket =>
                 bucket.Token == HolderBucketTokens.StyleToken(HolderStyleBand.IndexLike)
             );
-        var indexPart = index is { LikeForLikePrevious: > 0 }
-            ? $"; index-like books {FormatShareChange(index.LikeForLikeCurrent ?? 0, index.LikeForLikePrevious.Value)}"
+        var indexPart = index is { LikeForLikePrevious: > 0 and var indexPrevious }
+            ? $"; index-like books {FormatShareChange(index.LikeForLikeCurrent ?? 0, indexPrevious)}"
             : "";
         return $"Active holders (books measured systematic-like, concentrated or diversified active in {FormatDate(measured)}): {FormatShareChange(activeCurrent, activePrevious)} like-for-like, {McpFormat.WholeNumber(activePrevious)} to {McpFormat.WholeNumber(activeCurrent)} shares{indexPart}.";
     }
