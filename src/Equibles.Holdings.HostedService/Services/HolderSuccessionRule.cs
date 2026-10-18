@@ -86,12 +86,14 @@ internal static class HolderSuccessionRule
                     ?.Included
                 ?? [];
             foreach (var included in lastIncluded)
-            foreach (var successor in index.Filers(Keys(included.Manager)))
-                Add(
-                    successor,
-                    HolderSuccessionBasis.IncludedInLastReport,
-                    included.AccessionNumber
-                );
+            {
+                foreach (var successor in index.Filers(Keys(included.Manager)))
+                    Add(
+                        successor,
+                        HolderSuccessionBasis.IncludedInLastReport,
+                        included.AccessionNumber
+                    );
+            }
 
             var ownKeys = Keys(predecessor).ToList();
             foreach (var successor in index.Including(ownKeys))
@@ -103,13 +105,19 @@ internal static class HolderSuccessionRule
 
             var managers = DistinctManagers(lastIncluded);
             if (managers.Count >= MinimumSharedManagers)
-                foreach (var successor in index.Including(managers[0]))
-                    if (managers.All(keys => keys.Any(index.IncludedKeys(successor).ContainsKey)))
-                        Add(
-                            successor,
-                            HolderSuccessionBasis.SameIncludedManagers,
-                            index.Accession(successor, managers[0])
-                        );
+            {
+                var sharingAll = index
+                    .Including(managers[0])
+                    .Where(successor =>
+                        managers.All(keys => keys.Any(index.IncludedKeys(successor).ContainsKey))
+                    );
+                foreach (var successor in sharingAll)
+                    Add(
+                        successor,
+                        HolderSuccessionBasis.SameIncludedManagers,
+                        index.Accession(successor, managers[0])
+                    );
+            }
 
             // A shared CIK is a filer stored under two spellings of it.
             foreach (var successor in index.Filers(ownKeys))
@@ -227,8 +235,10 @@ internal static class HolderSuccessionRule
                     var included in reports.GetValueOrDefault((filer.HolderId, quarter))?.Included
                         ?? []
                 )
-                foreach (var key in Keys(included.Manager))
-                    keys.TryAdd(key, included.AccessionNumber);
+                {
+                    foreach (var key in Keys(included.Manager))
+                        keys.TryAdd(key, included.AccessionNumber);
+                }
                 _includedKeys[filer.HolderId] = keys;
                 foreach (var key in keys.Keys)
                     Append(_byIncludedKey, key, filer);
