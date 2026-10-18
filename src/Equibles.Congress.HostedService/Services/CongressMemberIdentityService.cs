@@ -21,6 +21,7 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
 
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CongressMemberHistoryMerger _historyMerger;
+    private readonly ILogger<CongressMemberIdentityService> _logger;
 
     public CongressMemberIdentityService(
         EquiblesFinancialDbContext dbContext,
@@ -28,6 +29,7 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
     )
     {
         _dbContext = dbContext;
+        _logger = logger;
         _historyMerger = new CongressMemberHistoryMerger(dbContext, logger);
     }
 
@@ -40,6 +42,21 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
         await AcquireReconciliationLock(ct);
         await ReconcileCatalog(ct);
         await transaction.CommitAsync(ct);
+    }
+
+    public async Task<LegislatorIdentityReconciliation> ReconcileLegislatorIdentities(
+        CancellationToken ct
+    )
+    {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted,
+            ct
+        );
+        await AcquireReconciliationLock(ct);
+        await ReconcileCatalog(ct);
+        var result = await MatchLegislators(ct);
+        await transaction.CommitAsync(ct);
+        return result;
     }
 
     public async Task<Dictionary<string, CongressMember>> UpsertMembers(
@@ -182,15 +199,33 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
             if (candidates.Count == 0)
                 continue;
 
-            var conflicting = candidates.FirstOrDefault(member =>
-                member.BioguideId != null && member.BioguideId != identity.BioguideId
+            var conflicting = candidates
+                .Where(member =>
+                    member.BioguideId != null && member.BioguideId != identity.BioguideId
+                )
+                .ToList();
+            var reviewedConflict = conflicting.FirstOrDefault(member =>
+                member.BioguideIdSource != CongressBioguideIdSource.SeatAndSurnameMatch
             );
-            if (conflicting != null)
+            if (reviewedConflict != null)
             {
                 throw new InvalidOperationException(
-                    $"Congress member '{conflicting.Name}' is already assigned BioGuide id "
-                        + $"'{conflicting.BioguideId}', not '{identity.BioguideId}'"
+                    $"Congress member '{reviewedConflict.Name}' is already assigned BioGuide id "
+                        + $"'{reviewedConflict.BioguideId}', not '{identity.BioguideId}'"
                 );
+            }
+
+            // A reviewed alias outranks a seat-and-surname match, so the matched id is replaced.
+            foreach (var matched in conflicting)
+            {
+                _logger.LogWarning(
+                    "Catalog BioGuide id {CatalogId} replaces matched id {MatchedId} on congress member {Name}",
+                    identity.BioguideId,
+                    matched.BioguideId,
+                    matched.Name
+                );
+                matched.BioguideId = null;
+                matched.BioguideIdSource = null;
             }
 
             var survivor =
@@ -213,5 +248,125 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
             survivor.BioguideIdSource = CongressBioguideIdSource.Catalog;
             await _dbContext.SaveChangesAsync(ct);
         }
+    }
+
+    private async Task<LegislatorIdentityReconciliation> MatchLegislators(CancellationToken ct)
+    {
+        var aliasNames = CongressMemberIdentityCatalog
+            .All.SelectMany(identity => identity.Aliases)
+            .Select(alias => alias.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+        var members = await _dbContext
+            .Set<CongressMember>()
+            .Where(member => !aliasNames.Contains(member.Name.ToLower()))
+            .ToListAsync(ct);
+        var filingDates = await LoadFilingDates(ct);
+        var terms = await _dbContext
+            .Set<CongressMemberTerm>()
+            .Select(term => new LegislatorTermCandidate(
+                term.BioguideId,
+                term.Legislator.LastName,
+                term.Chamber,
+                term.State,
+                term.District,
+                term.StartDate,
+                term.EndDate
+            ))
+            .ToListAsync(ct);
+        var holders = await _dbContext
+            .Set<CongressMember>()
+            .Where(member => member.BioguideId != null)
+            .Select(member => new { member.Id, member.BioguideId })
+            .ToDictionaryAsync(member => member.BioguideId, member => member.Id, ct);
+
+        var matcher = new CongressMemberLegislatorMatcher(terms);
+        var derived = members
+            .Select(member =>
+                (
+                    Member: member,
+                    BioguideId: matcher.Match(
+                        new CongressMemberMatchSubject(
+                            member.Name,
+                            member.Position,
+                            member.StateDistrict,
+                            filingDates[member.Id].ToList()
+                        )
+                    )
+                )
+            )
+            .Where(pair => pair.BioguideId != null)
+            .ToList();
+
+        var result = new LegislatorIdentityReconciliation();
+        foreach (var (member, bioguideId) in derived.Where(pair => pair.Member.BioguideId != null))
+        {
+            if (member.BioguideId != bioguideId)
+                AddConflict(result, member, bioguideId, "the member already has another id");
+        }
+
+        foreach (
+            var group in derived
+                .Where(pair => pair.Member.BioguideId == null)
+                .GroupBy(pair => pair.BioguideId, StringComparer.Ordinal)
+        )
+        {
+            var rows = group.Select(pair => pair.Member).ToList();
+            if (rows.Count > 1)
+            {
+                foreach (var member in rows)
+                    AddConflict(result, member, group.Key, "several unresolved members match it");
+                continue;
+            }
+
+            if (holders.ContainsKey(group.Key))
+            {
+                AddConflict(result, rows[0], group.Key, "another member already has it");
+                continue;
+            }
+
+            rows[0].BioguideId = group.Key;
+            rows[0].BioguideIdSource = CongressBioguideIdSource.SeatAndSurnameMatch;
+            result.Assigned++;
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+        return result;
+    }
+
+    // Every distinct filing date per member across trades and annual reports, read in one query.
+    private async Task<ILookup<Guid, DateOnly>> LoadFilingDates(CancellationToken ct)
+    {
+        var tradeDates = _dbContext
+            .Set<CongressionalTrade>()
+            .Select(trade => new { trade.CongressMemberId, Date = trade.FilingDate });
+        var annualDates = _dbContext
+            .Set<CongressionalAnnualDisclosure>()
+            .Select(report => new { report.CongressMemberId, Date = report.FiledDate });
+        var rows = await tradeDates.Union(annualDates).ToListAsync(ct);
+        return rows.ToLookup(row => row.CongressMemberId, row => row.Date);
+    }
+
+    private void AddConflict(
+        LegislatorIdentityReconciliation result,
+        CongressMember member,
+        string derivedBioguideId,
+        string reason
+    )
+    {
+        _logger.LogWarning(
+            "Congress member {Name} matches legislator {Derived} by seat and surname but was not assigned: {Reason}",
+            member.Name,
+            derivedBioguideId,
+            reason
+        );
+        result.Conflicts.Add(
+            new LegislatorIdentityConflict(
+                member.Name,
+                member.BioguideId,
+                derivedBioguideId,
+                reason
+            )
+        );
     }
 }

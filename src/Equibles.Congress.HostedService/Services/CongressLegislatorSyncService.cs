@@ -13,7 +13,8 @@ namespace Equibles.Congress.HostedService.Services;
 /// <summary>
 /// Mirrors the congress-legislators roster into <see cref="CongressLegislator"/> and
 /// <see cref="CongressMemberTerm"/>. Each run replaces the stored terms of every legislator the
-/// roster lists, keeping the row id of a term whose key (legislator, chamber, start) is unchanged.
+/// roster lists, keeping the row id of a term whose key (legislator, chamber, start) is unchanged,
+/// then matches unresolved filing members to legislators by seat, filing date and surname.
 /// </summary>
 [Service]
 public class CongressLegislatorSyncService
@@ -24,20 +25,26 @@ public class CongressLegislatorSyncService
 
     internal const string RejectedLegislatorsErrorContext = "CongressLegislators.Rejected";
 
+    internal const string LegislatorIdentityConflictErrorContext =
+        "CongressMembers.LegislatorIdentityConflict";
+
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CongressLegislatorClient _client;
+    private readonly ICongressMemberIdentityService _identityService;
     private readonly ErrorReporter _errorReporter;
     private readonly ILogger<CongressLegislatorSyncService> _logger;
 
     public CongressLegislatorSyncService(
         EquiblesFinancialDbContext dbContext,
         CongressLegislatorClient client,
+        ICongressMemberIdentityService identityService,
         ErrorReporter errorReporter,
         ILogger<CongressLegislatorSyncService> logger
     )
     {
         _dbContext = dbContext;
         _client = client;
+        _identityService = identityService;
         _errorReporter = errorReporter;
         _logger = logger;
     }
@@ -73,6 +80,37 @@ public class CongressLegislatorSyncService
             counts.Kept,
             counts.Removed,
             rejections.Count
+        );
+
+        var identities = await _identityService.ReconcileLegislatorIdentities(ct);
+        _logger.LogInformation(
+            "Matched {Assigned} congress members to legislators by seat and surname, {Conflicts} conflicts",
+            identities.Assigned,
+            identities.Conflicts.Count
+        );
+        await ReportIdentityConflicts(identities.Conflicts);
+    }
+
+    // One summary row per run: a conflict needs a reviewed catalog entry, which no retry supplies.
+    private async Task ReportIdentityConflicts(
+        IReadOnlyCollection<LegislatorIdentityConflict> conflicts
+    )
+    {
+        if (conflicts.Count == 0)
+            return;
+
+        await _errorReporter.Report(
+            ErrorSource.CongressScraper,
+            LegislatorIdentityConflictErrorContext,
+            $"{conflicts.Count} congress members match a legislator by seat and surname but were "
+                + "left unassigned (catalog merge candidates): "
+                + string.Join(
+                    "; ",
+                    conflicts.Select(c =>
+                        $"{c.MemberName} ({c.ExistingBioguideId ?? "no id"}) -> {c.DerivedBioguideId}: {c.Reason}"
+                    )
+                ),
+            stackTrace: null
         );
     }
 
