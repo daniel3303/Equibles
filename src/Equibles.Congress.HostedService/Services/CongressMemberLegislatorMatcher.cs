@@ -25,7 +25,7 @@ public class CongressMemberLegislatorMatcher
         _houseTerms = all.Where(term =>
                 term.Chamber == CongressPosition.Representative && term.District != null
             )
-            .ToLookup(term => (term.State, term.District.Value));
+            .ToLookup(term => (term.State, term.District.GetValueOrDefault()));
         _senateTerms = all.Where(term => term.Chamber == CongressPosition.Senator).ToList();
     }
 
@@ -90,18 +90,15 @@ public class CongressMemberLegislatorMatcher
         if (string.IsNullOrWhiteSpace(name))
             return [];
 
-        var builder = new StringBuilder(name.Length);
-        foreach (var character in name.Normalize(NormalizationForm.FormD))
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
-                continue;
-            if (character is '.' or '\'' or '’')
-                continue;
-            builder.Append(character == '-' ? ' ' : char.ToLowerInvariant(character));
-        }
+        var characters = name.Normalize(NormalizationForm.FormD)
+            .Where(character =>
+                CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark
+                && character is not ('.' or '\'' or '’')
+            )
+            .Select(character => character == '-' ? ' ' : char.ToLowerInvariant(character))
+            .ToArray();
 
-        return builder
-            .ToString()
+        return new string(characters)
             .Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
             .ToList();
     }
