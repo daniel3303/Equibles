@@ -2991,7 +2991,8 @@ public class YahooPriceImportService
         var presented = stock.Presentation.Listing.Security;
         if (presented.RegistrationType == ListedSecurityType.DebtSecurities)
         {
-            if (presented.SharesOutstanding != 0 || presented.MarketCapitalization != 0)
+            var cleared = presented.SharesOutstanding != 0 || presented.MarketCapitalization > 0;
+            if (cleared)
             {
                 presented.SharesOutstanding = 0;
                 presented.MarketCapitalization = 0;
@@ -3004,12 +3005,13 @@ public class YahooPriceImportService
                     )
                 )
                     return;
+            }
+            await transaction.CommitAsync(cancellationToken);
+            if (cleared)
                 _logger.LogInformation(
                     "Cleared share count and market cap for {Ticker}: its presentation is filed as debt",
                     ticker
                 );
-            }
-            await transaction.CommitAsync(cancellationToken);
             return;
         }
 
