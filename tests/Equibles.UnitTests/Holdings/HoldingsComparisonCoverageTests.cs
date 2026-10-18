@@ -581,11 +581,16 @@ public class HoldingsComparisonCoverageTests
         );
         await db.SaveChangesAsync();
 
-        (await History(db, stock))[Current]
+        var status = (await History(db, stock))[Current];
+        status
             .Note.Should()
             .Be(
                 "Excluded 1 holder with no observed 2025-09-30 13F (5 shares) and 1 holder with no observed 2025-12-31 13F (50 shares as of 2025-09-30); largest: Parent filer 50 (CIK change, books not comparable), Slice filer 5 (CIK change, books not comparable). Compared across CIK changes: Old filer continues as Renamed filer."
             );
+        // The succession sentence alone, for surfaces that keep every other filer as new or sold out.
+        status
+            .SuccessionNote.Should()
+            .Be("Compared across CIK changes: Old filer continues as Renamed filer.");
     }
 
     [Fact]
