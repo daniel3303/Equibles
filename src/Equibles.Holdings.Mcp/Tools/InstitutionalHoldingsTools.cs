@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.Core.Extensions;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
@@ -36,6 +37,12 @@ public class InstitutionalHoldingsTools
     private const string PublishedValueCaveat =
         "_Published values normally use report-date closing prices, may fall back to filer values, "
         + "and can be zero when unavailable._";
+
+    private const string HolderTypeParameter =
+        "Holder types to keep, as an array of tokens: adv (registered investment adviser), era (exempt reporting adviser), ia (other adviser), bank, ins (insurer), bd (broker-dealer), fund (registered fund), plan (benefit plan), nonus (non-US institution), unk (no deciding record yet), e.g. [\"bank\", \"ins\"]. Types come from Form ADV, SEC filer profiles, 13D/13G and N-CEN, never from names. Omit for all.";
+
+    private static string HolderTypeNote(string column) =>
+        $"_{column} comes from regulatory records (Form ADV rosters, the SEC filer profile, 13D/13G type codes, N-CEN), never from the name; Unknown means no record decides it, and a dash means not yet classified._";
 
     private static readonly string[] ValidActivityBuckets =
     [
@@ -104,7 +111,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetTopHolders", Title = "Top Institutional Holders", ReadOnly = true)]
     [Description(
-        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership."
+        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership. Each holder shows its entity type from regulatory records (Form ADV, SEC filer profile, 13D/13G, N-CEN), and holderTypes filters by it."
     )]
     public Task<string> GetTopHolders(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -115,12 +122,19 @@ public class InstitutionalHoldingsTools
         [Description("Maximum number of holding rows to return (default: 20, clamped to 1-500)")]
             int maxResults = 20,
         [Description("Number of ranked holding rows to skip before returning results (default: 0)")]
-            int offset = 0
+            int offset = 0,
+        [Description(HolderTypeParameter)] string[] holderTypes = null
     )
     {
         return _runner.Execute(
             async () =>
             {
+                var (typeFilter, typeFilterError) = HolderBucketTokens.ParseEntityTypes(
+                    holderTypes
+                );
+                if (typeFilterError != null)
+                    return typeFilterError;
+
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
@@ -213,13 +227,21 @@ public class InstitutionalHoldingsTools
                     );
                 }
 
+                // Totals and percentages stay over every institution; a filter only selects rows.
+                var totalShares = holdings.Sum(h => h.Shares);
+                var totalValue = holdings.Sum(h => h.Value);
+                if (typeFilter != null)
+                {
+                    await LoadEntityTypes(holdings);
+                    holdings = holdings
+                        .Where(h => typeFilter.Contains(h.EntityType ?? HolderEntityType.Unknown))
+                        .ToList();
+                }
                 var totalInstitutions = holdings
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
                     .Count();
                 var totalRows = holdings.Count;
-                var totalShares = holdings.Sum(h => h.Shares);
-                var totalValue = holdings.Sum(h => h.Value);
                 maxResults = McpLimit.Clamp(maxResults);
                 offset = McpLimit.ClampOffset(offset);
                 holdings = holdings
@@ -230,6 +252,10 @@ public class InstitutionalHoldingsTools
                     .ToList();
                 if (holdings.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {totalRows} holding rows exist; lower offset.";
+                if (holdings.Count == 0)
+                    return $"No institutional holders of {ticker}{(typeFilter == null ? "" : $" with holder type {HolderBucketTokens.Describe(typeFilter)}")} as of {FormatDate(targetDate)}.";
+                if (typeFilter == null)
+                    await LoadEntityTypes(holdings);
 
                 return RenderAdjustedTopHoldersTable(
                     stock,
@@ -244,13 +270,32 @@ public class InstitutionalHoldingsTools
                     JoinNotes(
                         dateNote,
                         presentCombined ? CombinedViewNote(targetDate, anchor) : null
-                    )
+                    ),
+                    typeFilter == null ? null : HolderBucketTokens.Describe(typeFilter)
                 );
             },
             "GetTopHolders",
-            $"ticker: {ticker}, reportDate: {reportDate}, offset: {offset}"
+            $"ticker: {ticker}, reportDate: {reportDate}, offset: {offset}, holderTypes: {JoinTokens(holderTypes)}"
         );
     }
+
+    // Stamps each row with its holder's entity type, null when the holder is not yet profiled.
+    private async Task LoadEntityTypes(List<TopHolderRow> holdings)
+    {
+        var entityTypes = await _holderRepository.GetEntityTypes(
+            holdings.Select(h => h.InstitutionalHolderId).Distinct().ToList()
+        );
+        foreach (var holding in holdings)
+            holding.EntityType = entityTypes.TryGetValue(
+                holding.InstitutionalHolderId,
+                out var entityType
+            )
+                ? entityType
+                : null;
+    }
+
+    private static string JoinTokens(string[] tokens) =>
+        tokens == null ? "" : string.Join(",", tokens);
 
     // Joins the optional per-call annotation lines (report-date substitution, combined view,
     // name-match diagnostics) into one block, dropping the nulls, so render sites can pass a
@@ -333,22 +378,26 @@ public class InstitutionalHoldingsTools
         List<TopHolderRow> holdings,
         int totalRows,
         int offset,
-        string combinedNote
+        string combinedNote,
+        string holderTypeFilter = null
     )
     {
         var first = holdings.Count == 0 ? 0 : offset + 1;
         var last = offset + holdings.Count;
         var subtitle =
-            $"Showing rows {first}-{last} of {totalRows} across {totalInstitutions} institutions. Total: "
-            + $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
+            holderTypeFilter == null
+                ? $"Showing rows {first}-{last} of {totalRows} across {totalInstitutions} institutions. Total: "
+                : $"Showing rows {first}-{last} of {totalRows} from holder type {holderTypeFilter}, across {totalInstitutions} institutions. All institutions: ";
+        subtitle +=
+            $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
             + $"${FormatMillions(totalValueAll)}M value";
         if (combinedNote != null)
             subtitle = $"{subtitle}\n{combinedNote}";
         var result = MarkdownTable.Start(
             $"Top institutional holders of {StockListingLabel(stock, ticker)} as of {FormatDate(targetDate)}:",
             subtitle,
-            "| # | Institution | Type | Shares | Value ($M) | % of Inst. Total |",
-            "|---|------------|------|--------|-----------|-----------|"
+            "| # | Institution | Type | Shares | Value ($M) | % of Inst. Total | Holder Type |",
+            "|---|------------|------|--------|-----------|-----------|-------------|"
         );
 
         result.AppendNumberedRows(
@@ -366,7 +415,8 @@ public class InstitutionalHoldingsTools
                     + $"{positionType} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
-                    + $"{McpFormat.Invariant(pct, "F2")}% |";
+                    + $"{McpFormat.Invariant(pct, "F2")}% | "
+                    + $"{HolderBucketTokens.Label(h.EntityType)} |";
             }
         );
 
@@ -374,6 +424,7 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             "_% of Inst. Total = the position's share of all institutional 13F shares in the stock, not of shares outstanding._"
         );
+        result.AppendLine(HolderTypeNote("Holder Type"));
         result.AppendLine(
             "_Type: Common = shares held outright; Principal = a principal-denominated security. Put/Call = an option position reported at the "
                 + "underlying's notional value. A PUT IS A BEARISH POSITION, so a large put line is a "
@@ -401,6 +452,7 @@ public class InstitutionalHoldingsTools
         public string ListedTicker { get; set; }
         public OptionType? OptionType { get; set; }
         public ShareType ShareType { get; set; }
+        public HolderEntityType? EntityType { get; set; }
     }
 
     [McpServerTool(
@@ -836,40 +888,56 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Search the tracked 13F filer set by institution name or SEC CIK. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified brand aliases such as Fidelity, Vanguard, and BlackRock include their current flagship CIK. Results are largest within the recently-active filing bucket first and include latest report date, tracked 13F position value, and position count so same-name filers can be compared before calling an institution tool. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Scoped institution tools remain strict and never discard an unmatched word."
+        "Search the tracked 13F filer set by institution name or SEC CIK. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified brand aliases such as Fidelity, Vanguard, and BlackRock include their current flagship CIK. Results are largest within the recently-active filing bucket first and include latest report date, tracked 13F position value, and position count so same-name filers can be compared before calling an institution tool. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Scoped institution tools remain strict and never discard an unmatched word. Each result shows its entity type from regulatory records, and holderTypes filters by it."
     )]
     public Task<string> SearchInstitutions(
         [Description("Search query — institution name, partial name, or CIK")] string query,
         [Description("Maximum number of results to return (default: 10, clamped to 1-500)")]
-            int maxResults = 10
+            int maxResults = 10,
+        [Description(HolderTypeParameter)] string[] holderTypes = null
     )
     {
         return _runner.Execute(
             async () =>
             {
+                var (typeFilter, typeFilterError) = HolderBucketTokens.ParseEntityTypes(
+                    holderTypes
+                );
+                if (typeFilterError != null)
+                    return typeFilterError;
                 maxResults = McpLimit.Clamp(maxResults);
+                var filtered =
+                    typeFilter == null
+                        ? ""
+                        : $" with holder type {HolderBucketTokens.Describe(typeFilter)}";
 
-                var totalMatches = await _holderRepository.SearchNameOrCik(query).CountAsync();
+                var totalMatches = await _holderRepository
+                    .OfEntityTypes(_holderRepository.SearchNameOrCik(query), typeFilter)
+                    .CountAsync();
                 if (totalMatches == 0)
-                    return $"No match for '{query}' in the tracked 13F filer set. This result describes only tracked filers.";
+                    return $"No match for '{query}'{filtered} in the tracked 13F filer set. This result describes only tracked filers.";
 
                 var holders = await _holderRepository.SearchNameOrCikLargestFirstWithStats(
                     query,
+                    typeFilter,
                     maxResults
+                );
+                var entityTypes = await _holderRepository.GetEntityTypes(
+                    holders.Select(h => h.Holder.Id).ToList()
                 );
 
                 var table = MarkdownTable.Render(
                     holders,
                     $"No match for '{query}' in the tracked 13F filer set. This result describes only tracked filers.",
-                    $"Institutions matching '{query}' (largest recently-active 13F filers first):",
-                    "| Institution | CIK | Latest Report | Tracked 13F Value | Positions | City | State/Country |",
-                    "|------------|-----|---------------|--------------|-----------|------|--------------|",
+                    $"Institutions matching '{query}'{filtered} (largest recently-active 13F filers first):",
+                    "| Institution | CIK | Latest Report | Tracked 13F Value | Positions | City | State/Country | Holder Type |",
+                    "|------------|-----|---------------|--------------|-----------|------|--------------|-------------|",
                     h =>
-                        $"| {MarkdownTable.EscapeCell(h.Holder.Name, "—")} | {MarkdownTable.EscapeCell(h.Holder.Cik, "—")} | {FormatOptionalDate(h.LatestReportDate)} | {FormatOptionalDollars(h.ReportedAum)} | {FormatOptionalCount(h.PositionCount)} | {MarkdownTable.EscapeCell(OrDash(h.Holder.City), "—")} | {MarkdownTable.EscapeCell(OrDash(EdgarStateCodes.Decode(h.Holder.StateOrCountry)), "—")} |"
+                        $"| {MarkdownTable.EscapeCell(h.Holder.Name, "—")} | {MarkdownTable.EscapeCell(h.Holder.Cik, "—")} | {FormatOptionalDate(h.LatestReportDate)} | {FormatOptionalDollars(h.ReportedAum)} | {FormatOptionalCount(h.PositionCount)} | {MarkdownTable.EscapeCell(OrDash(h.Holder.City), "—")} | {MarkdownTable.EscapeCell(OrDash(EdgarStateCodes.Decode(h.Holder.StateOrCountry)), "—")} | {HolderBucketTokens.Label(entityTypes.TryGetValue(h.Holder.Id, out var entityType) ? entityType : null)} |"
                 );
 
                 var truncation = McpOutput.TruncationNote(holders.Count, totalMatches);
-                var notes = new List<string>();
+                var notes = new List<string> { HolderTypeNote("Holder Type") };
                 if (truncation.Length > 0)
                     notes.Add(truncation);
                 if (totalMatches > 1)
@@ -882,7 +950,7 @@ public class InstitutionalHoldingsTools
                 return notes.Count == 0 ? table : $"{table}\n{string.Join("\n", notes)}";
             },
             "SearchInstitutions",
-            $"query: {query}"
+            $"query: {query}, holderTypes: {JoinTokens(holderTypes)}"
         );
     }
 
@@ -1844,7 +1912,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
+        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, and earlier or later CIKs its 13F reports continue under. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
     )]
     public Task<string> GetInstitutionSummary(
         [Description(
@@ -1872,8 +1940,34 @@ public class InstitutionalHoldingsTools
                     previousDate,
                     reportDates.Count
                 );
+                var profile = await _holderRepository
+                    .GetProfile(holder)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync();
+                var links = await _holderRepository
+                    .GetSuccessions(holder)
+                    .AsNoTracking()
+                    .Select(succession => new HolderLinkRow
+                    {
+                        ContinuesHere = succession.SuccessorHolderId == holder.Id,
+                        PredecessorName = succession.PredecessorHolder.Name,
+                        PredecessorCik = succession.PredecessorHolder.Cik,
+                        SuccessorName = succession.SuccessorHolder.Name,
+                        SuccessorCik = succession.SuccessorHolder.Cik,
+                        PredecessorLastReportDate = succession.PredecessorLastReportDate,
+                        SuccessorFirstReportDate = succession.SuccessorFirstReportDate,
+                    })
+                    .ToListAsync();
 
-                return RenderInstitutionSummary(holder, targetDate, previousDate, summary, notes);
+                return RenderInstitutionSummary(
+                    holder,
+                    targetDate,
+                    previousDate,
+                    summary,
+                    notes,
+                    profile,
+                    links
+                );
             },
             "GetInstitutionSummary",
             $"institution: {institutionName}"
@@ -1885,7 +1979,9 @@ public class InstitutionalHoldingsTools
         DateOnly targetDate,
         DateOnly? previousDate,
         InstitutionPortfolioSummary summary,
-        string notes = null
+        string notes = null,
+        InstitutionalHolderProfile profile = null,
+        IReadOnlyList<HolderLinkRow> links = null
     )
     {
         var result = new StringBuilder();
@@ -1921,9 +2017,124 @@ public class InstitutionalHoldingsTools
             "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × tracked 13F value), where the per-share price proxy is the current quarter's Value / Shares._"
         );
 
+        AppendHolderProfile(result, profile, links ?? []);
         AppendConfidentialTreatmentWarning(result, holder, "portfolio");
 
         return result.ToString();
+    }
+
+    // The holder's classification and the records behind it, plus the CIKs its 13F reports
+    // continue from or under.
+    private static void AppendHolderProfile(
+        StringBuilder result,
+        InstitutionalHolderProfile profile,
+        IReadOnlyList<HolderLinkRow> links
+    )
+    {
+        result.AppendLine();
+        result.AppendLine("**Holder profile** (regulatory records, never the name):");
+        if (profile == null)
+            result.AppendLine("_Not yet classified; profiles refresh with each 13F import cycle._");
+        if (profile == null && links.Count == 0)
+            return;
+        result.AppendLine();
+        result.AppendLine("| Field | Value |");
+        result.AppendLine("|-------|-------|");
+        if (profile != null)
+            AppendProfileRows(result, profile);
+        foreach (
+            var link in links
+                .OrderBy(link => link.SuccessorFirstReportDate)
+                .ThenBy(link => link.ContinuesHere ? link.PredecessorCik : link.SuccessorCik)
+        )
+            result.AppendLine(
+                link.ContinuesHere
+                    ? $"| Earlier CIK | {link.PredecessorName} ({link.PredecessorCik}), last 13F {FormatDate(link.PredecessorLastReportDate)}, continued here from {FormatDate(link.SuccessorFirstReportDate)} |"
+                    : $"| Later CIK | {link.SuccessorName} ({link.SuccessorCik}) continues these 13F reports from {FormatDate(link.SuccessorFirstReportDate)} |"
+            );
+    }
+
+    private static void AppendProfileRows(StringBuilder result, InstitutionalHolderProfile profile)
+    {
+        result.AppendLine($"| Holder type | {EntityTypeEvidence(profile)} |");
+        if (profile.HasConflictingEvidence)
+            result.AppendLine(
+                "| Conflicting evidence | Current records imply more than one type; the first in precedence decides |"
+            );
+        if (profile.AdviserCrd is { } crd)
+            result.AppendLine(
+                $"| Form ADV adviser | CRD {crd}{AsOf(profile.AdviserAsOf)}{(profile.RegulatoryAum is { } aum ? $", ${McpFormat.WholeNumber(aum)} regulatory assets" : "")} |"
+            );
+        if (profile.ClientBase != HolderClientBase.Unknown)
+            result.AppendLine(
+                $"| Client base | {profile.ClientBase.NameForHumans()}{Share(profile.ClientBaseAumShare)} |"
+            );
+        if (profile.PooledVehicleAumShare is { } pooled)
+            result.AppendLine(
+                $"| Pooled investment vehicles | {McpFormat.Invariant(pooled * 100, "F1")}% of regulatory assets |"
+            );
+        if (profile.AdvisesPrivateFunds is { } advisesPrivateFunds)
+            result.AppendLine(
+                $"| Private funds | {(advisesPrivateFunds ? PrivateFunds(profile) : "None reported")} |"
+            );
+        if (profile.AdvisedSeriesCount > 0)
+            result.AppendLine(
+                $"| Registered funds advised | {McpFormat.WholeNumber(profile.AdvisedSeriesCount)} series ({McpFormat.WholeNumber(profile.IndexSeriesCount)} index, {McpFormat.WholeNumber(profile.EtfSeriesCount)} ETF){(profile.AdvisedNetAssets is { } net ? $", ${McpFormat.WholeNumber((long)net)} net assets" : "")}{AsOf(profile.AdvisedSeriesAsOf, "N-CEN")} |"
+            );
+        if (!string.IsNullOrEmpty(profile.Lei))
+            result.AppendLine($"| LEI | {profile.Lei} |");
+        if (!string.IsNullOrEmpty(profile.Sic))
+            result.AppendLine($"| SIC code | {profile.Sic} |");
+    }
+
+    private static string EntityTypeEvidence(InstitutionalHolderProfile profile)
+    {
+        if (profile.EntityTypeSource is not { } source)
+            return "Unknown (no regulatory record decides a type)";
+        var key = source switch
+        {
+            HolderEvidenceSource.FormAdvRoster => $"CRD {profile.EntityTypeSourceKey}",
+            HolderEvidenceSource.SecFilerProfile =>
+                $"CIK {profile.EntityTypeSourceKey}{(string.IsNullOrEmpty(profile.Sic) ? "" : $", SIC {profile.Sic}")}",
+            _ => $"accession {profile.EntityTypeSourceKey}",
+        };
+        return $"{profile.EntityType.NameForHumans()} ({source.NameForHumans()}, {key}{AsOf(profile.EntityTypeAsOf)})";
+    }
+
+    private static string PrivateFunds(InstitutionalHolderProfile profile)
+    {
+        var parts = new List<string>();
+        if (profile.PrivateFundCount is { } count)
+            parts.Add($"{McpFormat.WholeNumber(count)} funds");
+        if (profile.PrivateFundFocus == PrivateFundFocus.Mixed)
+            parts.Add("no fund type more than half");
+        else if (profile.PrivateFundFocus != PrivateFundFocus.None)
+            parts.Add($"mostly {profile.PrivateFundFocus.NameForHumans().ToLowerInvariant()}");
+        if (profile.PrivateFundGrossAssets is { } gross)
+            parts.Add($"${McpFormat.WholeNumber(gross)} gross assets");
+        return parts.Count == 0 ? "Yes" : string.Join(", ", parts);
+    }
+
+    private static string Share(decimal? share) =>
+        share is { } value
+            ? $" ({McpFormat.Invariant(value * 100, "F1")}% of regulatory assets)"
+            : "";
+
+    private static string AsOf(DateOnly? date, string source = null) =>
+        date is { } value
+            ? $", {(source == null ? "" : $"{source} ")}as of {FormatDate(value)}"
+            : "";
+
+    private sealed class HolderLinkRow
+    {
+        /// <summary>True when the summarised holder is the successor: its reports continue here.</summary>
+        public bool ContinuesHere { get; init; }
+        public string PredecessorName { get; init; }
+        public string PredecessorCik { get; init; }
+        public string SuccessorName { get; init; }
+        public string SuccessorCik { get; init; }
+        public DateOnly PredecessorLastReportDate { get; init; }
+        public DateOnly SuccessorFirstReportDate { get; init; }
     }
 
     private static string RenderSectorAllocationTable(

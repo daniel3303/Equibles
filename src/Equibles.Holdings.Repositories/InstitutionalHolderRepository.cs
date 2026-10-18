@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -344,6 +345,82 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         int maxResults,
         CancellationToken cancellationToken = default
     ) => await RankWithStats(SearchNameOrCik(search), maxResults, cancellationToken);
+
+    public async Task<List<InstitutionalHolderSearchMatch>> SearchNameOrCikLargestFirstWithStats(
+        string search,
+        IReadOnlySet<HolderEntityType> entityTypes,
+        int maxResults,
+        CancellationToken cancellationToken = default
+    ) =>
+        await RankWithStats(
+            OfEntityTypes(SearchNameOrCik(search), entityTypes),
+            maxResults,
+            cancellationToken
+        );
+
+    // Holders whose profile has one of these entity types; Unknown also matches a holder not
+    // yet profiled. Null types leave the source unfiltered.
+    public IQueryable<InstitutionalHolder> OfEntityTypes(
+        IQueryable<InstitutionalHolder> source,
+        IReadOnlySet<HolderEntityType> entityTypes
+    )
+    {
+        if (entityTypes == null)
+            return source;
+        var profiles = DbContext.Set<InstitutionalHolderProfile>();
+        var listed = entityTypes.ToArray();
+        return entityTypes.Contains(HolderEntityType.Unknown)
+            ? source.Where(holder =>
+                profiles.Any(profile =>
+                    profile.InstitutionalHolderId == holder.Id
+                    && listed.Contains(profile.EntityType)
+                ) || !profiles.Any(profile => profile.InstitutionalHolderId == holder.Id)
+            )
+            : source.Where(holder =>
+                profiles.Any(profile =>
+                    profile.InstitutionalHolderId == holder.Id
+                    && listed.Contains(profile.EntityType)
+                )
+            );
+    }
+
+    // Each listed holder's profiled entity type; a holder not yet profiled is absent.
+    public Task<Dictionary<Guid, HolderEntityType>> GetEntityTypes(
+        IReadOnlyCollection<Guid> holderIds,
+        CancellationToken cancellationToken = default
+    ) =>
+        DbContext
+            .Set<InstitutionalHolderProfile>()
+            .Where(profile => holderIds.Contains(profile.InstitutionalHolderId))
+            .ToDictionaryAsync(
+                profile => profile.InstitutionalHolderId,
+                profile => profile.EntityType,
+                cancellationToken
+            );
+
+    // The holder's entity type, null when it is not yet profiled.
+    public Task<HolderEntityType?> GetEntityType(
+        InstitutionalHolder holder,
+        CancellationToken cancellationToken = default
+    ) =>
+        GetProfile(holder)
+            .Select(profile => (HolderEntityType?)profile.EntityType)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public IQueryable<InstitutionalHolderProfile> GetProfile(InstitutionalHolder holder) =>
+        DbContext
+            .Set<InstitutionalHolderProfile>()
+            .Where(profile => profile.InstitutionalHolderId == holder.Id);
+
+    // The holder's current successions, as predecessor or successor.
+    public IQueryable<HolderSuccession> GetSuccessions(InstitutionalHolder holder) =>
+        DbContext
+            .Set<HolderSuccession>()
+            .Where(succession =>
+                succession.PredecessorHolderId == holder.Id
+                || succession.SuccessorHolderId == holder.Id
+            )
+            .StillSucceeded(DbContext);
 
     private async Task<List<InstitutionalHolderSearchMatch>> RankWithStats(
         IQueryable<InstitutionalHolder> source,

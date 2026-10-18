@@ -213,8 +213,16 @@ public class StockTabService
             TotalBuyerCount = HoldingsTopMoversSelector.CountBuyers(grouped),
             TotalSellerCount = HoldingsTopMoversSelector.CountSellers(grouped),
             IsCombinedAvailable = isCombinedAvailable,
+            HolderTypes = await LoadHolderTypes(allChanges),
         };
     }
+
+    private Task<Dictionary<Guid, HolderEntityType>> LoadHolderTypes(
+        IEnumerable<HolderPositionChange> changes
+    ) =>
+        _institutionalHolderRepository.GetEntityTypes(
+            changes.Select(change => change.InstitutionalHolderId).Distinct().ToList()
+        );
 
     public async Task<HoldingsTabViewModel> LoadHoldingsCombinedTab(EquityIssuer stock)
     {
@@ -304,6 +312,7 @@ public class StockTabService
             BucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count),
             IsCombinedView = true,
             IsCombinedAvailable = true,
+            HolderTypes = await LoadHolderTypes(holders),
         };
     }
 
@@ -982,6 +991,7 @@ public class StockTabService
         {
             Stock = stock,
             Holder = holder,
+            HolderType = await _institutionalHolderRepository.GetEntityType(holder),
             Holdings = holdings,
         };
     }

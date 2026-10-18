@@ -111,7 +111,7 @@ public class ProfilesController : BaseController
             {
                 Name = holder.Name,
                 Cik = holder.Cik,
-                Classification = holder.Classification,
+                HolderType = await _institutionalHolderRepository.GetEntityType(holder),
                 ConfidentialTreatmentRequested = holder.ConfidentialTreatmentRequested,
                 Location = ProfileFormatting.JoinLocation(holder.City, holder.StateOrCountry),
                 Holdings = holdings,

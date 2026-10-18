@@ -21,13 +21,13 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `InstitutionalHoldingsTools`:
 
-- `GetTopHolders` — top institutional holders of a given ticker for a `ReportDate`.
+- `GetTopHolders` — top institutional holders of a given ticker for a `ReportDate`, each with its holder type from regulatory records (last column); `holderTypes` keeps only the listed types (`adv`, `era`, `ia`, `bank`, `ins`, `bd`, `fund`, `plan`, `nonus`, `unk`) while percentages stay over all institutions.
 - `GetInstitutionalOwnershipHistory` — historical ownership trend (shares, value, holder count) per quarter.
 - `GetInstitutionPortfolio` — full portfolio of one institution for a `ReportDate`.
-- `SearchInstitutions` — punctuation-independent all-token name/CIK search with a sparse any-token fallback, largest within the recently-active 13F bucket first. Rows include CIK, latest report date, reported 13F AUM, tracked position count, and location. Verified flagship aliases include Fidelity/FMR, Vanguard, and BlackRock; institution-scoped tools stay strict, reject an ambiguous partial name, and return candidate CIKs.
+- `SearchInstitutions` — punctuation-independent all-token name/CIK search with a sparse any-token fallback, largest within the recently-active 13F bucket first. Rows include CIK, latest report date, reported 13F AUM, tracked position count, location, and holder type; `holderTypes` filters by type in the search itself. Verified flagship aliases include Fidelity/FMR, Vanguard, and BlackRock; institution-scoped tools stay strict, reject an ambiguous partial name, and return candidate CIKs.
 - `GetTopInstitutionalBuyersSellers` — biggest absolute share additions and reductions for a ticker vs. the prior `ReportDate`; flags new and sold-out positions.
 - `GetMarketWide13FActivity` — market-wide leaderboard for a quarter, selected by `bucket`: `top-buys`, `top-sells`, `new-positions`, `sold-out-positions`; Δ value includes the quarter's price move on held shares, so Δ shares is the position-change measure.
-- `GetInstitutionSummary` — portfolio header for one filer at a `ReportDate`: AUM, position count, top-10 / top-25 concentration, QoQ turnover, latest / prior dates.
+- `GetInstitutionSummary` — portfolio header for one filer at a `ReportDate`: AUM, position count, top-10 / top-25 concentration, QoQ turnover, latest / prior dates, then its holder profile from regulatory records (entity type and the record that decided it, Form ADV adviser facts, registered funds advised, LEI, SIC) and any earlier or later CIK its 13F reports continue under.
 - `GetInstitutionSectorAllocation` — one filer's portfolio grouped by industry / sector for its latest 13F report; stocks lacking a classification collapse into an "Unclassified" row.
 - `GetInstitutionQuarterlyActivity` — one filer's position changes vs. the prior quarter, bucketed into Initiated / Increased / Reduced / Exited; optional `bucket` filter to a single bucket.
 - `CompareInstitutionPortfolios` — 13F portfolio overlap between two filers at their latest common `ReportDate`: Jaccard similarity, dollar-weighted overlap, and a side-by-side stock table with per-fund shares + percent of portfolio.
