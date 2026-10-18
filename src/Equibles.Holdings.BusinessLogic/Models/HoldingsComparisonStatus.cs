@@ -82,7 +82,8 @@ public sealed record HoldingsComparisonStatus(
             .Take(NamedExclusions);
 
     // The sentence naming the filers compared across a CIK change, or null when none are. A
-    // surface that shows every missing filer as new or sold out, rather than excluding them, uses it alone.
+    // surface that shows every missing filer as new or sold out, rather than excluding them,
+    // uses it alone.
     public string SuccessionNote
     {
         get
