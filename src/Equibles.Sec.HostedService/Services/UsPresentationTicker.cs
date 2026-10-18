@@ -11,9 +11,11 @@ namespace Equibles.Sec.HostedService.Services;
 public static class UsPresentationTicker
 {
     /// <summary>
-    /// Returns SEC's first eligible ticker unless the issuer's filing positively classifies that
-    /// ticker as a non-common security AND positively classifies a listed sibling as common
-    /// stock; then the first such sibling in SEC order wins. Unclassified tickers never override.
+    /// Returns SEC's first eligible ticker unless the issuer's filing positively classifies it as
+    /// a non-common security. Then the first sibling filed as common stock wins; failing that, a
+    /// debt, preferred, warrant or rights first ticker yields to the first sibling not filed as
+    /// one of those kinds, since surfaces treat an unclassified listing as equity. An
+    /// unclassified first ticker always keeps SEC order.
     /// </summary>
     public static string Choose(
         IReadOnlyList<string> tickers,
@@ -27,11 +29,16 @@ public static class UsPresentationTicker
             return null;
         if (filedTypes == null || filedTypes.Count == 0)
             return eligible[0];
-        if (!IsNonCommon(FiledType(eligible[0], filedTypes)))
+        var firstType = FiledType(eligible[0], filedTypes);
+        if (!IsNonCommon(firstType))
             return eligible[0];
-        return eligible.FirstOrDefault(ticker =>
-                FiledType(ticker, filedTypes) == ListedSecurityType.CommonShares
-            ) ?? eligible[0];
+        var common = eligible.FirstOrDefault(ticker =>
+            FiledType(ticker, filedTypes) == ListedSecurityType.CommonShares
+        );
+        if (common != null || firstType == ListedSecurityType.Units)
+            return common ?? eligible[0];
+        return eligible.FirstOrDefault(ticker => !IsNonEquity(FiledType(ticker, filedTypes)))
+            ?? eligible[0];
     }
 
     private static ListedSecurityType FiledType(
@@ -48,10 +55,13 @@ public static class UsPresentationTicker
     // Units stay demotable here even though equity surfaces keep them: an MLP files no common
     // sibling, so only a SPAC unit with separately listed shares is ever overridden.
     private static bool IsNonCommon(ListedSecurityType type) =>
+        type == ListedSecurityType.Units || IsNonEquity(type);
+
+    // The kinds equity surfaces exclude; any other sibling can present the issuer's equity.
+    private static bool IsNonEquity(ListedSecurityType type) =>
         type
             is ListedSecurityType.Warrants
                 or ListedSecurityType.Rights
-                or ListedSecurityType.Units
                 or ListedSecurityType.PreferredShares
                 or ListedSecurityType.DebtSecurities;
 }
