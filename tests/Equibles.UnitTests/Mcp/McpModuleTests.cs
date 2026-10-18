@@ -272,6 +272,7 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetMarketWide13FActivity");
         toolNames.Should().Contain("GetMostHeldStocks");
         toolNames.Should().Contain("GetInstitutionSummary");
+        toolNames.Should().Contain("GetInstitutionStyleHistory");
         toolNames.Should().Contain("GetInstitutionSectorAllocation");
         toolNames.Should().Contain("GetInstitutionQuarterlyActivity");
         toolNames.Should().Contain("CompareInstitutionPortfolios");
@@ -375,6 +376,7 @@ public class McpModuleToolDiscoveryTests
                     "GetMarketWide13FActivity",
                     "GetMostHeldStocks",
                     "GetInstitutionSummary",
+                    "GetInstitutionStyleHistory",
                     "GetInstitutionSectorAllocation",
                     "GetInstitutionQuarterlyActivity",
                     "CompareInstitutionPortfolios",

@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **62 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **63 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -344,19 +344,20 @@ Build first: a plain `dotnet run` restores and prints build output on stdout, wh
 
 ## Tools
 
-This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 63 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
 - GetInstitutionCloneBacktest — backtest cloning a filer's 13F portfolio vs a benchmark
-- GetTopHolders — top institutional holders of a stock (13F-HR), with each holder's type and a holder-type filter
+- GetTopHolders — top institutional holders of a stock (13F-HR), with each holder's type and measured style, filterable by both
 - GetInstitutionalOwnershipHistory — institutional ownership trend across quarters
 - GetInstitutionPortfolio — an institution's 13F portfolio
 - SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, position count, and holder type
 - GetTopInstitutionalBuyersSellers — biggest adds/reductions on a stock this quarter
 - GetMarketWide13FActivity — market-wide 13F leaderboards
 - GetMostHeldStocks — stocks by institutional breadth
-- GetInstitutionSummary — filer summary (value, concentration, turnover, holder profile)
+- GetInstitutionSummary — filer summary (value, concentration, turnover, holder profile, style bands)
+- GetInstitutionStyleHistory — a filer's measured style, turnover and horizon bands quarter by quarter
 - GetInstitutionSectorAllocation — allocation by sector
 - GetInstitutionQuarterlyActivity — initiated/increased/reduced/exited vs prior quarter
 - CompareInstitutionPortfolios — portfolio overlap between two institutions
