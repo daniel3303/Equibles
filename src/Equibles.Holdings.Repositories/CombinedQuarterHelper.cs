@@ -5,10 +5,9 @@ namespace Equibles.Holdings.Repositories;
 // The one 13F filing-calendar rule (SEC rule 13f-1: filings are due 45 calendar days after each
 // quarter end, moved to the next business day when that falls on a weekend or holiday). Every
 // surface that decides how to present the newest quarter must go through this helper so "the
-// current quarter" resolves identically everywhere: while the window is
-// open the quarter only holds the funds that filed early, so it must be shown as the COMBINED
-// view (current filings + prior-quarter carry-forward for funds yet to file) — never as a
-// complete quarter.
+// current quarter" resolves identically everywhere: while the window is open the quarter only
+// holds the funds that filed early, so it must be shown as the COMBINED view (current filings +
+// prior-quarter carry-forward for funds yet to file) — never as a complete quarter.
 public static class CombinedQuarterHelper
 {
     public const int FilingDeadlineDays = 45;
