@@ -1,7 +1,9 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
@@ -17,16 +19,114 @@ namespace Equibles.Holdings.BusinessLogic;
 [Service]
 public class HolderMixReader
 {
+    public const int DefaultPeriods = 4;
+    public const int MaxPeriods = 12;
+
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
+    private readonly StockCombinedQuarterService _combinedQuarterService;
+    private readonly HoldingsCorpusCoverage _corpusCoverage;
 
     public HolderMixReader(
         InstitutionalHoldingRepository holdingRepository,
-        InstitutionalHolderRepository holderRepository
+        InstitutionalHolderRepository holderRepository,
+        StockSplitRepository stockSplitRepository,
+        StockCombinedQuarterService combinedQuarterService,
+        HoldingsCorpusCoverage corpusCoverage
     )
     {
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
+        _stockSplitRepository = stockSplitRepository;
+        _combinedQuarterService = combinedQuarterService;
+        _corpusCoverage = corpusCoverage;
+    }
+
+    /// <summary>
+    /// The mix of the listing's last <paramref name="periods"/> calendar quarters ending at its
+    /// newest 13F report date, each compared with the quarter before. An ETF series or sibling
+    /// class reads its exact listing; a primary stock's open quarter reads as the combined view.
+    /// </summary>
+    public async Task<HolderMixHistory> ReadRecent(
+        EquityIssuer stock,
+        string requestedTicker,
+        int periods = DefaultPeriods,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, requestedTicker);
+        var exactListing = SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker);
+        var reportDates = exactListing
+            ? await _holdingRepository.Get13FReportDatesByListingSnapshotBacked(
+                stock,
+                listedTicker,
+                cancellationToken
+            )
+            : await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(
+                stock,
+                cancellationToken
+            );
+        if (reportDates.Count == 0)
+            return new HolderMixHistory
+            {
+                ListedTicker = listedTicker,
+                ExactListing = exactListing,
+                Unavailable = $"No institutional holdings data available for {requestedTicker}.",
+            };
+
+        var newest = reportDates.Max();
+        var dates = new List<DateOnly> { newest };
+        while (
+            dates.Count <= Math.Clamp(periods, 1, MaxPeriods)
+            && HoldingsCorpusCoverage.PreviousQuarterEnd(dates[^1])
+                >= _corpusCoverage.CoverageStartDate
+        )
+            dates.Add(HoldingsCorpusCoverage.PreviousQuarterEnd(dates[^1]));
+        if (dates.Count < 2)
+            return new HolderMixHistory
+            {
+                ListedTicker = listedTicker,
+                ExactListing = exactListing,
+                Unavailable =
+                    $"No quarter of {requestedTicker} before {newest:yyyy-MM-dd} is covered, so its holder mix has no comparison yet.",
+            };
+
+        // Carry-forward is filer-wide, so only a company's primary stock reads the combined view.
+        var isPrimary = string.Equals(
+            listedTicker,
+            stock.Presentation.Listing.Ticker,
+            StringComparison.OrdinalIgnoreCase
+        );
+        var anchor =
+            isPrimary && !exactListing
+                ? await _combinedQuarterService.Resolve(stock, cancellationToken)
+                : null;
+        var combinedDate =
+            anchor is { IsCombined: true } && anchor.ReportDate == newest
+                ? anchor.ReportDate
+                : (DateOnly?)null;
+        var splits = await _stockSplitRepository
+            .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var quarters = await Read(
+            stock,
+            dates,
+            splits,
+            exactListing ? listedTicker : null,
+            combinedDate,
+            cancellationToken
+        );
+        return new HolderMixHistory
+        {
+            ListedTicker = listedTicker,
+            ExactListing = exactListing,
+            Quarters = quarters,
+            CarriedFrom = quarters.LastOrDefault() is { IsCombined: true } latest
+                ? HoldingsCorpusCoverage.PreviousQuarterEnd(latest.ReportDate)
+                : null,
+        };
     }
 
     /// <summary>
@@ -124,14 +224,33 @@ public class HolderMixReader
             })
             .ToList();
 
-        var measuredQuarters = new Dictionary<DateOnly, DateOnly?>();
-        foreach (var date in ordered.Skip(1))
-            measuredQuarters[date] = await _holderRepository.GetLatestMetricsReportDate(
-                date,
-                cancellationToken
+        var measured = await _holderRepository
+            .GetMetricsReportDates(ordered[^1])
+            .ToListAsync(cancellationToken);
+        var measuredQuarters = ordered
+            .Skip(1)
+            .ToDictionary(
+                date => date,
+                date =>
+                    measured
+                        .Where(quarter => quarter <= date)
+                        .Select(quarter => (DateOnly?)quarter)
+                        .Max()
             );
+        // A successor across a CIK change can hold none of the stock and still take its
+        // predecessor's position, so every succession member needs its profile too.
+        var holderIds = rows.Select(row => row.InstitutionalHolderId)
+            .Concat(
+                comparisons.Values.SelectMany(comparison =>
+                    comparison.Successions.SelectMany(group =>
+                        group.Predecessors.Keys.Concat(group.Successors.Keys)
+                    )
+                )
+            )
+            .Distinct()
+            .ToList();
         var holderAt = await LoadHolders(
-            rows.Select(row => row.InstitutionalHolderId).Distinct().ToList(),
+            holderIds,
             measuredQuarters.Values.OfType<DateOnly>().Distinct().ToList(),
             cancellationToken
         );

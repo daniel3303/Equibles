@@ -79,7 +79,13 @@ public class HolderMixReaderPostgresTests(ParadeDbFixture fixture) : IAsyncLifet
 
         await using var db = fixture.CreateDbContext();
         var mix = (
-            await new HolderMixReader(new(db), new(db)).Read(stock, [Prior, Current], [])
+            await new HolderMixReader(
+                new(db),
+                new(db),
+                new(db),
+                new StockCombinedQuarterService(new(db), new(db)),
+                HoldingsCorpusCoverage.Default
+            ).Read(stock, [Prior, Current], [])
         ).Single();
         var history = await HoldingsComparisonCoverage.History(
             new InstitutionalHoldingRepository(db),

@@ -18,7 +18,7 @@ public sealed class HolderMixQuarter
     // ReportDate, null when none is.
     public DateOnly? MeasuredQuarter { get; init; }
 
-    // Null for the oldest quarter read, which only serves as the first comparison.
+    // The comparison with the quarter before; its Note names the filers left out of the change.
     public HoldingsComparisonStatus Comparison { get; init; }
 
     public HolderMixBucket Total { get; init; }

@@ -126,7 +126,9 @@ public static class HolderMixBuckets
     private static Bucket EntityType(HolderMixHolder holder)
     {
         var type = holder.Profiled ? holder.EntityType : HolderEntityType.Unknown;
-        return new(HolderBucketTokens.Token(type), HolderBucketTokens.Label(type), (int)type);
+        // Unknown sorts last, as it does in every other dimension.
+        var order = type == HolderEntityType.Unknown ? int.MaxValue : (int)type;
+        return new(HolderBucketTokens.Token(type), HolderBucketTokens.Label(type), order);
     }
 
     // The computed Unknown band stays apart from a filer not measured that quarter.
@@ -154,10 +156,18 @@ public static class HolderMixBuckets
         : holder.AdvisesPrivateFunds == false ? NoPrivateFunds
         : PrivateFundFocuses[holder.PrivateFundFocus];
 
-    // EDGAR gives US states and territories as letter codes and every other location a code
-    // with a digit ("X0" is the United Kingdom).
+    // EDGAR gives US states and territories as letter codes and other countries a code with a
+    // digit ("X0" is the United Kingdom); "X1" is the United States given as a country.
+    private const string UnitedStatesCountryCode = "X1";
+
     private static Bucket Location(string stateOrCountry) =>
         string.IsNullOrWhiteSpace(stateOrCountry) ? LocationUnknown
+        : string.Equals(
+            stateOrCountry.Trim(),
+            UnitedStatesCountryCode,
+            StringComparison.OrdinalIgnoreCase
+        )
+            ? UnitedStates
         : stateOrCountry.Any(char.IsDigit) ? OutsideUs
         : UnitedStates;
 }

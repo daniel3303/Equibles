@@ -158,6 +158,95 @@ public class HolderMixReaderTests
     }
 
     [Fact]
+    public async Task Read_PutsAPredecessorsPositionInItsSuccessorsBucketWhenTheSuccessorSoldOut()
+    {
+        await using var db = NewDb();
+        var (stock, other) = Stocks();
+        var predecessor = Holder("Old CIK", "100");
+        var successor = Holder("New CIK", "200");
+        db.AddRange(stock, other, predecessor, successor);
+        db.AddRange(
+            new InstitutionalHolderProfile
+            {
+                InstitutionalHolderId = successor.Id,
+                EntityType = HolderEntityType.Bank,
+            },
+            Metrics(successor, Current, HolderStyleBand.Concentrated),
+            Holding(stock, predecessor, Prior, 1_000),
+            // The successor files its first 13F without this stock.
+            Holding(other, successor, Current, 1_050),
+            new HolderSuccession
+            {
+                PredecessorHolderId = predecessor.Id,
+                SuccessorHolderId = successor.Id,
+                PredecessorLastReportDate = Prior,
+                SuccessorFirstReportDate = Current,
+                Basis = HolderSuccessionBasis.NoticeReportedBy,
+                PredecessorGroupValue = 1_000,
+                SuccessorGroupValue = 1_050,
+                DerivationVersion = 1,
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var mix = (await Reader(db).Read(stock, [Prior, Current], [])).Single();
+
+        var types = mix.Dimensions[HolderMixDimension.EntityType].ToDictionary(b => b.Token);
+        types["bank"].LikeForLikePrevious.Should().Be(1_000);
+        types["bank"].ExitedFilers.Should().Be(1);
+        types.Should().NotContainKey("unk");
+        mix.Dimensions[HolderMixDimension.Style].Single().Token.Should().Be("conc");
+        mix.Total.ExcludedPreviousShares.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Read_LeavesSchedule13DAnd13GStakesOut()
+    {
+        await using var db = NewDb();
+        var (stock, other) = Stocks();
+        var holder = Holder("Activist", "100");
+        db.AddRange(stock, other, holder);
+        var stake = Holding(stock, holder, Current, 9_000);
+        stake.FilingType = FilingType.Schedule13D;
+        db.AddRange(
+            Holding(stock, holder, Prior, 100),
+            Holding(stock, holder, Current, 100),
+            stake
+        );
+        await db.SaveChangesAsync();
+
+        var mix = (await Reader(db).Read(stock, [Prior, Current], [])).Single();
+
+        mix.Total.Shares.Should().Be(100);
+        mix.Total.LikeForLikeCurrent.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task GetHolderMix_ShowsOneColumnPerQuarterOldestFirst()
+    {
+        await using var db = NewDb();
+        var (stock, other) = Stocks();
+        var holder = Holder("Steady", "100");
+        db.AddRange(stock, other, holder);
+        db.AddRange(
+            Holding(stock, holder, new DateOnly(2025, 6, 30), 100),
+            Holding(stock, holder, Prior, 100),
+            Holding(stock, holder, Current, 150)
+        );
+        await db.SaveChangesAsync();
+
+        var output = await Tools(db).GetHolderMix("AAPL", maxPeriods: 2);
+
+        output
+            .Should()
+            .Contain(
+                "| Holder type | 2025-09-30 | 2025-12-31 | Chg (like-for-like) | New | Exited | Filers |"
+            );
+        output.Should().Contain("| Unknown | 100.0% | 100.0% | +50.0% | 0 | 0 | 1 |");
+        output.Should().Contain("_Published values normally use report-date closing prices");
+    }
+
+    [Fact]
     public async Task GetHolderMix_RendersEachBucketsShareChangeAndTheActiveHolders()
     {
         await using var db = NewDb();
@@ -238,7 +327,14 @@ public class HolderMixReaderTests
             StyleBand = band,
         };
 
-    private static HolderMixReader Reader(EquiblesFinancialDbContext db) => new(new(db), new(db));
+    private static HolderMixReader Reader(EquiblesFinancialDbContext db) =>
+        new(
+            new(db),
+            new(db),
+            new(db),
+            new StockCombinedQuarterService(new(db), new(db)),
+            HoldingsCorpusCoverage.Default
+        );
 
     private static EquiblesFinancialDbContext NewDb()
     {

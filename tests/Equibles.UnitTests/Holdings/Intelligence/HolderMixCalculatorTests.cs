@@ -100,7 +100,9 @@ public class HolderMixCalculatorTests
         var types = quarter.Dimensions[HolderMixDimension.EntityType].ToDictionary(b => b.Token);
         types["unk"].Shares.Should().Be(70);
         types["adv"].Shares.Should().Be(1_100 + 300 + 50 + 400);
+        quarter.Dimensions[HolderMixDimension.EntityType].Last().Token.Should().Be("unk");
         var locations = quarter.Dimensions[HolderMixDimension.Location].ToDictionary(b => b.Token);
+        // X0 is the United Kingdom; X1 is the United States given as a country.
         locations["nonus"].Shares.Should().Be(1_100);
         locations["us"].Shares.Should().Be(300 + 50 + 400);
         locations["unk"].Shares.Should().Be(70);
@@ -254,9 +256,10 @@ public class HolderMixCalculatorTests
     [Fact]
     public void Build_SplitSuccessionThatSoldEverythingExitsInTheLargestSuccessorsBucket()
     {
+        // The larger book has the larger id, so only the book size can pick it.
         var predecessor = Id(40);
-        var large = Id(41);
-        var small = Id(42);
+        var large = Id(42);
+        var small = Id(41);
         var holders = new Dictionary<Guid, HolderMixHolder>
         {
             [predecessor] = Holder(HolderEntityType.Unknown, style: null),
@@ -342,7 +345,7 @@ public class HolderMixCalculatorTests
             [FirstFiler] = Holder(
                 HolderEntityType.RegisteredAdviser,
                 style: null,
-                location: "NY",
+                location: "X1",
                 privateFunds: false
             ),
             [LateFiler] = Holder(

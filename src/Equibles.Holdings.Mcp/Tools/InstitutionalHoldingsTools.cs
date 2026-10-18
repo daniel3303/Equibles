@@ -117,7 +117,14 @@ public class InstitutionalHoldingsTools
             summaryProvider
             ?? new InstitutionPortfolioSummaryProvider(_holdingRepository, _memoryCache);
         _holderMixReader =
-            holderMixReader ?? new HolderMixReader(_holdingRepository, _holderRepository);
+            holderMixReader
+            ?? new HolderMixReader(
+                _holdingRepository,
+                _holderRepository,
+                _stockSplitRepository,
+                _combinedQuarterService,
+                _corpusCoverage
+            );
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -684,9 +691,6 @@ public class InstitutionalHoldingsTools
             ? $"{McpFormat.Invariant((double)(totalShares - previousShares) / previousShares * 100, "+0.0;-0.0;0.0")}%"
             : "—";
 
-    private const int DefaultMixPeriods = 4;
-    private const int MaxMixPeriods = 12;
-
     // The style buckets of books measured as actively managed: index-like, Unknown and
     // unmeasured books are left out of the active holders' change.
     private static readonly string[] ActiveStyleTokens =
@@ -707,7 +711,7 @@ public class InstitutionalHoldingsTools
         )]
             string dimension = "type",
         [Description("Quarters to show, newest last (default 4, clamped to 1-12)")]
-            int maxPeriods = DefaultMixPeriods
+            int maxPeriods = HolderMixReader.DefaultPeriods
     )
     {
         return _runner.Execute(
@@ -721,56 +725,8 @@ public class InstitutionalHoldingsTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
-                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
-                var exactListingScope = SecondaryTickerPolicy.RequiresExactListingScope(
-                    stock,
-                    listedTicker
-                );
-                var reportDates = exactListingScope
-                    ? await _holdingRepository.Get13FReportDatesByListingSnapshotBacked(
-                        stock,
-                        listedTicker
-                    )
-                    : await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
-                if (reportDates.Count == 0)
-                    return $"No institutional holdings data available for {ticker}.";
-
-                var isPrimaryListing = string.Equals(
-                    listedTicker,
-                    stock.Presentation.Listing.Ticker,
-                    StringComparison.OrdinalIgnoreCase
-                );
-                var anchor =
-                    isPrimaryListing && !exactListingScope
-                        ? await _combinedQuarterService.Resolve(stock)
-                        : null;
-                var newest = reportDates.Max();
-                var combinedDate =
-                    anchor is { IsCombined: true } && anchor.ReportDate == newest
-                        ? anchor.ReportDate
-                        : (DateOnly?)null;
-
-                // Consecutive quarter ends from the comparison base to the newest report date, so
-                // every shown quarter compares with the calendar quarter before it.
-                var periods = Math.Clamp(maxPeriods, 1, MaxMixPeriods);
-                var dates = new List<DateOnly> { newest };
-                while (
-                    dates.Count <= periods
-                    && HoldingsCorpusCoverage.PreviousQuarterEnd(dates[^1])
-                        >= _corpusCoverage.CoverageStartDate
-                )
-                    dates.Add(HoldingsCorpusCoverage.PreviousQuarterEnd(dates[^1]));
-                if (dates.Count < 2)
-                    return $"No quarter of {ticker} before {FormatDate(newest)} is covered, so its holder mix has no comparison yet.";
-
-                var quarters = await _holderMixReader.Read(
-                    stock,
-                    dates,
-                    await _marketActivityShareRestater.EffectiveSplits(stock),
-                    exactListingScope ? listedTicker : null,
-                    combinedDate
-                );
-                return RenderHolderMix(stock, ticker, mixDimension, quarters, anchor);
+                var history = await _holderMixReader.ReadRecent(stock, ticker, maxPeriods);
+                return history.Unavailable ?? RenderHolderMix(stock, ticker, mixDimension, history);
             },
             "GetHolderMix",
             $"ticker: {ticker}, dimension: {dimension}, maxPeriods: {maxPeriods}"
@@ -781,10 +737,10 @@ public class InstitutionalHoldingsTools
         EquityIssuer stock,
         string ticker,
         HolderMixDimension dimension,
-        IReadOnlyList<HolderMixQuarter> quarters,
-        StockQuarterAnchor anchor
+        HolderMixHistory history
     )
     {
+        var quarters = history.Quarters;
         var latest = quarters[^1];
         var buckets = quarters
             .SelectMany(quarter => quarter.Dimensions[dimension])
@@ -841,6 +797,7 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             $"{FormatDate(latest.ReportDate)}: {McpFormat.WholeNumber(latest.Total.Shares)} common shares worth ${FormatMillions(latest.Total.Value)}M across {McpFormat.WholeNumber(latest.Total.Filers)} filers; options are left out of the mix (calls on {McpFormat.WholeNumber(latest.Total.CallShares)} and puts on {McpFormat.WholeNumber(latest.Total.PutShares)} underlying shares)."
         );
+        result.AppendLine(PublishedValueCaveat);
         var active = ActiveChange(latest);
         if (active != null)
             result.AppendLine(active);
@@ -863,23 +820,23 @@ public class InstitutionalHoldingsTools
                     + "."
             );
 
-        foreach (var quarter in quarters)
-        {
-            var notes = new List<string>();
-            if (quarter.Comparison?.Note is { } note)
-                notes.Add(note);
-            if (quarter.Total.ExcludedCurrentShares > 0 || quarter.Total.ExcludedPreviousShares > 0)
-                notes.Add(
-                    $"Common shares left out of the change: {McpFormat.WholeNumber(quarter.Total.ExcludedCurrentShares)} this quarter, {McpFormat.WholeNumber(quarter.Total.ExcludedPreviousShares)} the quarter before."
-                );
-            if (notes.Count > 0)
-                result.AppendLine($"{FormatDate(quarter.ReportDate)}: {string.Join(" ", notes)}");
-        }
+        // Only the latest quarter's change is shown, so only its exclusions are noted.
+        var notes = new List<string>();
+        if (latest.Comparison?.Note is { } note)
+            notes.Add(note);
+        if (latest.Total.ExcludedCurrentShares > 0 || latest.Total.ExcludedPreviousShares > 0)
+            notes.Add(
+                $"Common shares left out of the change: {McpFormat.WholeNumber(latest.Total.ExcludedCurrentShares)} this quarter, {McpFormat.WholeNumber(latest.Total.ExcludedPreviousShares)} the quarter before."
+            );
+        if (notes.Count > 0)
+            result.AppendLine($"{FormatDate(latest.ReportDate)}: {string.Join(" ", notes)}");
 
-        if (latest.IsCombined && anchor != null)
+        if (history.CarriedFrom is { } carriedFrom)
         {
             result.AppendLine();
-            result.AppendLine($"\\* {CombinedViewNote(latest.ReportDate, anchor)}");
+            result.AppendLine(
+                $"\\* Note: the {FormatDate(latest.ReportDate)} filing window is still open (13Fs are due 45 days after quarter end, or the next business day). Combined view: funds that have not filed yet carry their {FormatDate(carriedFrom)} positions."
+            );
         }
 
         result.AppendLine();
