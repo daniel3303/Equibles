@@ -338,4 +338,80 @@ public class SecDocumentServiceTests
 
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task GetRecentDocuments_SummaryReader_FillsSummariesItKnows()
+    {
+        EquityIssuer stock = CreateStock("AAPL");
+        var summarized = CreateDocument(
+            stock,
+            DocumentType.EightK,
+            new DateOnly(2024, 2, 1),
+            new DateOnly(2024, 2, 1)
+        );
+        var unsummarized = CreateDocument(
+            stock,
+            DocumentType.TenK,
+            new DateOnly(2024, 1, 1),
+            new DateOnly(2023, 12, 31)
+        );
+        var reader = Substitute.For<IDocumentSummaryReader>();
+        reader
+            .Read(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new Dictionary<Guid, string> { [summarized.Id] = "Apple raised its dividend." }
+            );
+        var sut = new SecDocumentService(
+            _documentRepository,
+            Substitute.For<ILogger<SecDocumentService>>(),
+            reader
+        );
+
+        var result = await sut.GetRecentDocuments("AAPL");
+
+        result.Single(d => d.Id == summarized.Id).Summary.Should().Be("Apple raised its dividend.");
+        result.Single(d => d.Id == unsummarized.Id).Summary.Should().BeNull();
+        await reader
+            .Received(1)
+            .Read(
+                Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                    ids.Count == 2 && ids.Contains(summarized.Id) && ids.Contains(unsummarized.Id)
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task GetRecentDocuments_NoSummaryReader_LeavesSummariesEmpty()
+    {
+        EquityIssuer stock = CreateStock("AAPL");
+        CreateDocument(
+            stock,
+            DocumentType.EightK,
+            new DateOnly(2024, 2, 1),
+            new DateOnly(2024, 2, 1)
+        );
+
+        var result = await _sut.GetRecentDocuments("AAPL");
+
+        result.Should().ContainSingle().Which.Summary.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetRecentDocuments_EmptyPage_DoesNotAskTheSummaryReader()
+    {
+        var reader = Substitute.For<IDocumentSummaryReader>();
+        var sut = new SecDocumentService(
+            _documentRepository,
+            Substitute.For<ILogger<SecDocumentService>>(),
+            reader
+        );
+
+        var result = await sut.GetRecentDocuments();
+
+        result.Should().BeEmpty();
+        await reader
+            .DidNotReceive()
+            .Read(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+    }
 }

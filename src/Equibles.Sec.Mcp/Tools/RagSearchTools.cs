@@ -259,7 +259,7 @@ public class RagSearchTools
 
     [McpServerTool(Name = "ListFilings", Title = "List Filings", ReadOnly = true)]
     [Description(
-        "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, EDGAR accession numbers and acceptance times (UTC; blank for filings stored before October 2026), and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. Pass a returned ID to SearchDocument or ReadDocumentLines."
+        "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, EDGAR accession numbers and acceptance times (UTC; blank for filings stored before October 2026), and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. When the deployment summarizes documents, each row adds a one- or two-sentence summary of what the document says. Pass a returned ID to SearchDocument or ReadDocumentLines."
     )]
     public Task<string> ListFilings(
         [Description(
@@ -360,12 +360,17 @@ public class RagSearchTools
                 if (documents.Count == 0)
                     return $"Page {page} is out of range — {McpFormat.WholeNumber(totalCount)} matching document(s) fill only {McpFormat.WholeNumber(totalPages)} page(s) of {maxItems}.";
 
+                // The Summary column appears only when a row on this page has one, so deployments
+                // without summaries keep the original table.
+                var withSummary = documents.Any(d => !string.IsNullOrWhiteSpace(d.Summary));
                 var result = MarkdownTable.Start(
                     stock == null
                         ? $"Market-wide filings — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):"
                         : $"Financial documents for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(filer)}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
-                    "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC)",
+                    "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC)"
+                        + (withSummary ? " | Summary" : ""),
                     "-------|---------|----|------|-------|---------------|-------|-------|-----------|---------------"
+                        + (withSummary ? "|--------" : "")
                 );
 
                 result.AppendRows(
@@ -379,7 +384,11 @@ public class RagSearchTools
                         var period = doc.ReportingForDate is { } date
                             ? McpFormat.Invariant(date, "yyyy-MM-dd")
                             : "—";
-                        return $"{MarkdownTable.EscapeCell(doc.Ticker)} | {MarkdownTable.EscapeCell(doc.CompanyName)} | {doc.Id} | {doc.DocumentType} | {McpFormat.Invariant(doc.ReportingDate, "yyyy-MM-dd")} | {period} | {MarkdownTable.EscapeCell(items, "—")} | {McpFormat.WholeNumber(doc.LineCount)} | {MarkdownTable.EscapeCell(doc.AccessionNumber, "—")} | {accepted}";
+                        var row =
+                            $"{MarkdownTable.EscapeCell(doc.Ticker)} | {MarkdownTable.EscapeCell(doc.CompanyName)} | {doc.Id} | {doc.DocumentType} | {McpFormat.Invariant(doc.ReportingDate, "yyyy-MM-dd")} | {period} | {MarkdownTable.EscapeCell(items, "—")} | {McpFormat.WholeNumber(doc.LineCount)} | {MarkdownTable.EscapeCell(doc.AccessionNumber, "—")} | {accepted}";
+                        return withSummary
+                            ? $"{row} | {MarkdownTable.EscapeCell(doc.Summary, "—")}"
+                            : row;
                     }
                 );
 

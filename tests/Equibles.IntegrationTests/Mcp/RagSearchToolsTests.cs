@@ -34,7 +34,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     public RagSearchToolsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private RagSearchTools Sut()
+    private RagSearchTools Sut(IDocumentSummaryReader summaryReader = null)
     {
         var ragManager = new RagManager(
             HybridChunkSearcherFactory.Bm25Only(DbContext),
@@ -43,7 +43,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         );
         var secDocumentService = new SecDocumentService(
             new DocumentRepository(DbContext),
-            NullLogger<SecDocumentService>()
+            NullLogger<SecDocumentService>(),
+            summaryReader
         );
         // Exact mode reads the document text through IFileManager; serve the seeded
         // FileContent bytes so searchMode "exact" scans the same content the DB holds.
@@ -670,6 +671,62 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             .Contain(
                 "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC)"
             );
+    }
+
+    [Fact]
+    public async Task ListFilings_SummaryOnThePage_AddsAnEscapedSummaryColumn()
+    {
+        var (_, summarized, _) = await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.EightK,
+            reportingDate: new DateOnly(2026, 4, 30),
+            chunkContents: new[] { "Current report content." }
+        );
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual report content." }
+        );
+        var reader = Substitute.For<IDocumentSummaryReader>();
+        reader
+            .Read(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new Dictionary<Guid, string>
+                {
+                    [summarized.Id] = "Apple named a new CFO | effective May 1.",
+                }
+            );
+
+        var result = await Sut(reader).ListFilings("AAPL");
+
+        result
+            .Should()
+            .Contain(
+                "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC) | Summary"
+            );
+        result.Should().Contain("| Apple named a new CFO \\| effective May 1.");
+        // The unsummarized 10-K row keeps the column with a dash, so the table stays aligned.
+        result.Split('\n').Single(line => line.Contains("10-K")).Should().EndWith("| —");
+    }
+
+    [Fact]
+    public async Task ListFilings_NoSummaryOnThePage_KeepsTheOriginalColumns()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual report content." }
+        );
+        var reader = Substitute.For<IDocumentSummaryReader>();
+        reader
+            .Read(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, string>());
+
+        var result = await Sut(reader).ListFilings("AAPL");
+
+        result.Should().NotContain("| Summary");
     }
 
     // EDGAR states no period for a registration statement; the row must not print the stored sentinel.
