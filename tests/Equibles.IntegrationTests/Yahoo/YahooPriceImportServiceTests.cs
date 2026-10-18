@@ -2525,6 +2525,84 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_DebtPresentedIssuer_ClearsShareCountAndMarketCap()
+    {
+        // Two Harbors after its common delisted: the issuer is presented by its senior notes, which
+        // carried the common's 105M shares and $2.72B cap. A note has neither, so both are cleared.
+        EquityIssuer stock = CreateStock("NOTE", "Notes Only Co.");
+        stock.Presentation.Listing.Security.RegistrationType = ListedSecurityType.DebtSecurities;
+        stock.Presentation.Listing.Security.SharesOutstanding = 105_046_333;
+        stock.Presentation.Listing.Security.MarketCapitalization = 2_722_800_951.36d;
+        await SeedStocks(stock);
+
+        _sharesProvider
+            .GetCurrentSharesOutstanding(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
+            .Returns(105_046_333L);
+        _sharesProvider
+            .IsForeignPrivateIssuer(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        _yahooClient
+            .GetChart("NOTE", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("NOTE")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 105_046_333,
+                    MarketCapitalization = 2_722_800_951d,
+                }
+            );
+
+        await AttributeFixtureActions();
+        await _service.Import(CancellationToken.None);
+
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "NOTE");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(0);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Import_PreferredPresentedIssuer_KeepsFeedFiguresOffTheCommonCount()
+    {
+        // The cover-page count is the common's; rescaling a preferred series' cap onto it would
+        // price the preferred as if it were the common. The feed's own per-ticker pair stands.
+        EquityIssuer stock = CreateStock("PFD", "Preferred Only Co.");
+        stock.Presentation.Listing.Security.RegistrationType = ListedSecurityType.PreferredShares;
+        await SeedStocks(stock);
+
+        _sharesProvider
+            .GetCurrentSharesOutstanding(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
+            .Returns(20_490_501L);
+        _sharesProvider
+            .IsForeignPrivateIssuer(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        _yahooClient
+            .GetChart("PFD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("PFD")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 4_000_000,
+                    MarketCapitalization = 80_000_000d,
+                }
+            );
+
+        await AttributeFixtureActions();
+        await _service.Import(CancellationToken.None);
+
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "PFD");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(4_000_000);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(80_000_000d);
+    }
+
+    [Fact]
     public async Task Import_YahooHasNoKeyStatistics_FallsBackToEdgarSharesTimesLatestClose()
     {
         // A listing Yahoo carries prices for but no statistics at all (closed-end funds like
