@@ -482,6 +482,7 @@ public class HoldingsComparisonCoverageTests
             .Be(
                 "Excluded 1 holder with no observed 2025-09-30 13F (950 shares) and 1 holder with no observed 2025-12-31 13F (900 shares as of 2025-09-30); largest: Slice filer 950 (CIK change, books not comparable), Old filer 900 (CIK change, books not comparable)."
             );
+        status.SuccessionNote.Should().BeNull();
     }
 
     [Fact]
@@ -646,6 +647,33 @@ public class HoldingsComparisonCoverageTests
 
         status.Successions.Should().BeEmpty();
         status.Note.Should().StartWith("Comparison unavailable");
+        status.SuccessionNote.Should().BeNull();
+    }
+
+    [Fact]
+    public void SuccessionNote_NonconsecutiveQuarters_IsNullEvenWithAComparableGroup()
+    {
+        var old = Guid.NewGuid();
+        var renamed = Guid.NewGuid();
+        var status = new HoldingsComparisonStatus(
+            Current,
+            new DateOnly(2025, 6, 30),
+            new HashSet<Guid>(),
+            new HashSet<Guid>()
+        )
+        {
+            Successions =
+            [
+                new(
+                    Current,
+                    new Dictionary<Guid, string> { [old] = "Old filer" },
+                    new Dictionary<Guid, string> { [renamed] = "Renamed filer" },
+                    Comparable: true
+                ),
+            ],
+        };
+
+        status.SuccessionNote.Should().BeNull();
     }
 
     [Fact]
