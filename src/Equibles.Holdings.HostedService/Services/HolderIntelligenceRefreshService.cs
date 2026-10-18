@@ -298,9 +298,11 @@ public class HolderIntelligenceRefreshService
             .Where(holder => holderIds.Contains(holder.Id) && holder.CrdNumber != null)
             .Select(holder => new { holder.Id, holder.CrdNumber })
             .ToListAsync(cancellationToken);
-        foreach (var cover in covers)
-            if (HolderIdentifierRules.ParseCrd(cover.CrdNumber) is { } crd)
-                profiles.TryAdd(cover.Id, crd);
+        var coverCrds = covers
+            .Select(cover => (cover.Id, Crd: HolderIdentifierRules.ParseCrd(cover.CrdNumber)))
+            .Where(cover => cover.Crd != null);
+        foreach (var (holderId, crd) in coverCrds)
+            profiles.TryAdd(holderId, crd.GetValueOrDefault());
         return profiles;
     }
 
