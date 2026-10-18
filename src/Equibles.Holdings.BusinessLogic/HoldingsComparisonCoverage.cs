@@ -255,9 +255,8 @@ public static class HoldingsComparisonCoverage
         var query = EvidenceQuery(repository, requested);
         var observed = query == null ? [] : await query.ToListAsync(cancellationToken);
         var byDate = observed.ToLookup(p => p.ReportDate, p => p.InstitutionalHolderId);
-        return pending.ToDictionary(
-            p => p.ReportDate,
-            p =>
+        var resolved = pending
+            .Select(p =>
                 p with
                 {
                     MissingPreviousFilers = p
@@ -267,7 +266,77 @@ public static class HoldingsComparisonCoverage
                         .MissingCurrentFilers.Except(byDate[p.ReportDate])
                         .ToHashSet(),
                 }
+            )
+            .ToList();
+        var successions = await Successions(repository, resolved, cancellationToken);
+        return resolved.ToDictionary(
+            p => p.ReportDate,
+            p => WithSuccessions(p, successions[p.ReportDate])
         );
+    }
+
+    // The succession groups whose successors first filed in a compared quarter that still
+    // misses a filer; only such a quarter can hold a CIK change.
+    private static async Task<ILookup<DateOnly, HoldingsSuccessionGroup>> Successions(
+        InstitutionalHoldingRepository repository,
+        IReadOnlyList<HoldingsComparisonStatus> resolved,
+        CancellationToken cancellationToken
+    )
+    {
+        var quarters = resolved
+            .Where(p =>
+                p.ConsecutiveQuarters
+                && (p.MissingPreviousFilers.Count > 0 || p.MissingCurrentFilers.Count > 0)
+            )
+            .Select(p => p.ReportDate)
+            .Distinct()
+            .ToArray();
+        if (quarters.Length == 0)
+            return Array.Empty<HoldingsSuccessionGroup>().ToLookup(group => group.ReportDate);
+        var pairs = await repository
+            .GetSuccessionsFirstReportedOn(quarters)
+            .Select(succession => new HoldingsSuccessionPair
+            {
+                PredecessorHolderId = succession.PredecessorHolderId,
+                PredecessorName = succession.PredecessorHolder.Name,
+                SuccessorHolderId = succession.SuccessorHolderId,
+                SuccessorName = succession.SuccessorHolder.Name,
+                SuccessorFirstReportDate = succession.SuccessorFirstReportDate,
+                PredecessorGroupValue = succession.PredecessorGroupValue,
+                SuccessorGroupValue = succession.SuccessorGroupValue,
+            })
+            .ToListAsync(cancellationToken);
+        return HoldingsSuccessionGroups.Build(pairs).ToLookup(group => group.ReportDate);
+    }
+
+    // A comparable group filed on both sides: its predecessors' last 13F is the previous quarter
+    // and its successors' first is this one, so none of them is missing from the comparison.
+    private static HoldingsComparisonStatus WithSuccessions(
+        HoldingsComparisonStatus status,
+        IEnumerable<HoldingsSuccessionGroup> groups
+    )
+    {
+        var relevant = groups
+            .Where(group =>
+                group.Predecessors.Keys.Any(status.MissingCurrentFilers.Contains)
+                || group.Successors.Keys.Any(status.MissingPreviousFilers.Contains)
+            )
+            .ToList();
+        if (relevant.Count == 0)
+            return status;
+        var comparable = relevant.Where(group => group.Comparable).ToList();
+        return status with
+        {
+            MissingPreviousFilers = status
+                .MissingPreviousFilers.Except(comparable.SelectMany(group => group.Successors.Keys))
+                .ToHashSet(),
+            MissingCurrentFilers = status
+                .MissingCurrentFilers.Except(
+                    comparable.SelectMany(group => group.Predecessors.Keys)
+                )
+                .ToHashSet(),
+            Successions = relevant,
+        };
     }
 
     internal static IQueryable<HoldingsFilingPresence> EvidenceQuery(

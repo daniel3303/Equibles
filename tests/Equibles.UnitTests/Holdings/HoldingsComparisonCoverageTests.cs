@@ -365,6 +365,411 @@ public class HoldingsComparisonCoverageTests
             .And.NotContain("Comparison unavailable");
     }
 
+    [Fact]
+    public async Task Succession_OneSuccessor_IsComparedWithTheFilerItContinues()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(
+            Holding(stock, old, Prior, 900),
+            Holding(stock, renamed, Current, 950),
+            Succession(old, renamed, 1_000, 1_100)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.MissingPreviousFilers.Should().BeEmpty();
+        status.MissingCurrentFilers.Should().BeEmpty();
+        status.LikeForLike.Should().Be((1060L, 1000L));
+        status.ComparisonKey(old.Id).Should().Be(renamed.Id);
+        status.CanCompareHolder(old.Id).Should().BeFalse();
+        status.CanCompareHolder(renamed.Id).Should().BeTrue();
+        status
+            .Note.Should()
+            .Be("Compared across CIK changes: Old filer continues as Renamed filer.");
+        var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
+        movers
+            .Should()
+            .Contain("| Renamed filer (continues Old filer) | +50 |")
+            .And.Contain("| 900 → 950 |")
+            .And.NotContain("| Old filer |")
+            .And.NotContain("first 13F this quarter");
+    }
+
+    [Fact]
+    public async Task Succession_SeveralSuccessors_CountOnlyInTheTotals()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var group = Holder(db, "Group filer", "200");
+        var fiduciary = Holder(db, "Fiduciary filer", "300");
+        var advisers = Holder(db, "Advisers filer", "400");
+        db.AddRange(
+            Holding(stock, group, Prior, 900),
+            Holding(stock, fiduciary, Current, 500),
+            Holding(stock, advisers, Current, 450),
+            Succession(group, fiduciary, 1_000, 1_050),
+            Succession(group, advisers, 1_000, 1_050)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.LikeForLike.Should().Be((1060L, 1000L));
+        new[] { group.Id, fiduciary.Id, advisers.Id }
+            .Should()
+            .OnlyContain(id => !status.CanCompareHolder(id) && status.ComparisonKey(id) == id);
+        var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
+        movers
+            .Should()
+            .Contain("| Stable |")
+            .And.Contain("Group filer continues as 2 filers, not ranked one by one.")
+            .And.NotContain("| Fiduciary filer")
+            .And.NotContain("| Advisers filer")
+            .And.NotContain("| Group filer");
+    }
+
+    [Fact]
+    public async Task Succession_SeveralPredecessors_SumIntoTheSuccessorsPriorPosition()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var first = Holder(db, "First filer", "200");
+        var second = Holder(db, "Second filer", "300");
+        var parent = Holder(db, "Parent filer", "400");
+        db.AddRange(
+            Holding(stock, first, Prior, 400),
+            Holding(stock, second, Prior, 500),
+            Holding(stock, parent, Current, 950),
+            Succession(first, parent, 1_000, 1_200),
+            Succession(second, parent, 1_000, 1_200)
+        );
+        await db.SaveChangesAsync();
+
+        (await History(db, stock))[Current].LikeForLike.Should().Be((1060L, 1000L));
+        var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
+        movers
+            .Should()
+            .Contain("| Parent filer (continues 2 filers) | +50 |")
+            .And.Contain("| 900 → 950 |")
+            .And.Contain("Compared across CIK changes: 2 filers continue as Parent filer.");
+    }
+
+    [Fact]
+    public async Task Succession_BooksTooFarApart_StaysExcluded()
+    {
+        // A successor that took a slice of the book would read as the group selling the rest.
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var slice = Holder(db, "Slice filer", "300");
+        db.AddRange(
+            Holding(stock, old, Prior, 900),
+            Holding(stock, slice, Current, 950),
+            Succession(old, slice, 1_000, 666)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.LikeForLike.Should().Be((110L, 100L));
+        status.CanCompareHolder(slice.Id).Should().BeFalse();
+        status
+            .Note.Should()
+            .Be(
+                "Excluded 1 holder with no observed 2025-09-30 13F (950 shares) and 1 holder with no observed 2025-12-31 13F (900 shares as of 2025-09-30); largest: Slice filer 950 (CIK change, books not comparable), Old filer 900 (CIK change, books not comparable)."
+            );
+    }
+
+    [Fact]
+    public async Task Succession_NewPositionOfASuccessor_IsNamedAsTheContinuation()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        var other = Holder(db, "Other filer", "400");
+        var otherSuccessor = Holder(db, "Other successor", "500");
+        db.AddRange(
+            Holding(stock, renamed, Current, 950),
+            Succession(old, renamed, 1_000, 1_100),
+            // Neither filer of this group holds the stock, so its notes leave it out.
+            Succession(other, otherSuccessor, 1_000, 1_100)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.LikeForLike.Should().Be((1060L, 100L));
+        status
+            .Note.Should()
+            .Be("Compared across CIK changes: Old filer continues as Renamed filer.");
+        var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
+        movers
+            .Should()
+            .Contain("| Renamed filer (continues Old filer) | +950 |")
+            .And.NotContain("first 13F this quarter");
+    }
+
+    [Fact]
+    public async Task Succession_SuccessorWithoutTheStock_SellsThePredecessorsPosition()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(Holding(stock, old, Prior, 900), Succession(old, renamed, 1_000, 1_100));
+        await db.SaveChangesAsync();
+
+        (await History(db, stock))[Current].LikeForLike.Should().Be((110L, 1000L));
+        var movers = await Tools(db).GetTopInstitutionalBuyersSellers("AAPL", "2025-12-31");
+        movers.Should().Contain("| Renamed filer (continues Old filer) | -900 |");
+    }
+
+    [Fact]
+    public async Task Succession_SeveralToSeveral_IsComparedOnlyInTheTotals()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var first = Holder(db, "First filer", "200");
+        var second = Holder(db, "Second filer", "300");
+        var east = Holder(db, "East filer", "400");
+        var west = Holder(db, "West filer", "500");
+        db.AddRange(
+            Holding(stock, first, Prior, 400),
+            Holding(stock, second, Prior, 500),
+            Holding(stock, east, Current, 450),
+            Holding(stock, west, Current, 500),
+            Succession(first, east, 1_000, 1_000),
+            Succession(second, east, 1_000, 1_000),
+            Succession(second, west, 1_000, 1_000)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.LikeForLike.Should().Be((1060L, 1000L));
+        new[] { first.Id, second.Id, east.Id, west.Id }
+            .Should()
+            .OnlyContain(id => !status.CanCompareHolder(id) && status.ComparisonKey(id) == id);
+        status
+            .Note.Should()
+            .Be(
+                "Compared across CIK changes: 2 filers continue as 2 filers, not ranked one by one."
+            );
+    }
+
+    [Fact]
+    public async Task Succession_ComparableAndNotComparableGroups_ShareOneNote()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        var parent = Holder(db, "Parent filer", "400");
+        var slice = Holder(db, "Slice filer", "500");
+        db.AddRange(
+            Holding(stock, old, Prior, 900),
+            Holding(stock, renamed, Current, 950),
+            Holding(stock, parent, Prior, 50),
+            Holding(stock, slice, Current, 5),
+            Succession(old, renamed, 1_000, 1_100),
+            Succession(parent, slice, 1_000, 10)
+        );
+        await db.SaveChangesAsync();
+
+        (await History(db, stock))[Current]
+            .Note.Should()
+            .Be(
+                "Excluded 1 holder with no observed 2025-09-30 13F (5 shares) and 1 holder with no observed 2025-12-31 13F (50 shares as of 2025-09-30); largest: Parent filer 50 (CIK change, books not comparable), Slice filer 5 (CIK change, books not comparable). Compared across CIK changes: Old filer continues as Renamed filer."
+            );
+    }
+
+    [Fact]
+    public async Task Succession_PredecessorThatFiledAgain_IsNotMerged()
+    {
+        // The pair is stale until the next refresh drops it.
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(
+            Holding(stock, old, Prior, 900),
+            Holding(stock, old, Current, 900),
+            Holding(stock, renamed, Current, 950),
+            Succession(old, renamed, 1_000, 1_100),
+            new InstitutionalFiling
+            {
+                AccessionNumber = "old-current",
+                InstitutionalHolderId = old.Id,
+                ReportDate = Current,
+                FilingDate = Current.AddDays(45),
+                FilingType = FilingType.Form13F,
+                PositionCount = 1,
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var status = (await History(db, stock))[Current];
+
+        status.Successions.Should().BeEmpty();
+        status.MissingPreviousFilers.Should().Contain(renamed.Id);
+        status.LikeForLike.Should().Be((1010L, 1000L));
+    }
+
+    [Fact]
+    public async Task Succession_NonconsecutiveQuarters_AreNotMerged()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var older = new DateOnly(2025, 6, 30);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(
+            Holding(stock, old, older, 900),
+            Holding(stock, renamed, Current, 950),
+            Succession(old, renamed, 1_000, 1_100)
+        );
+        await db.SaveChangesAsync();
+
+        var status = (
+            await HoldingsComparisonCoverage.History(new(db), stock, [older, Current], [])
+        )[Current];
+
+        status.Successions.Should().BeEmpty();
+        status.Note.Should().StartWith("Comparison unavailable");
+    }
+
+    [Fact]
+    public async Task Succession_CombinedQuarter_DoesNotCarryTheContinuedFiler()
+    {
+        await using var db = NewDb();
+        var (stock, _) = SeedStable(db);
+        var old = Holder(db, "Old filer", "200");
+        var renamed = Holder(db, "Renamed filer", "300");
+        db.AddRange(
+            Holding(stock, old, Prior, 900),
+            Holding(stock, renamed, Current, 950),
+            Succession(old, renamed, 1_000, 1_100)
+        );
+        await db.SaveChangesAsync();
+
+        var combined = await HoldingsComparisonCoverage.History(
+            new(db),
+            stock,
+            [Prior, Current],
+            [],
+            combinedReportDate: Current
+        );
+
+        combined[Current].LikeForLike.Should().Be((1060L, 1000L));
+    }
+
+    [Theory]
+    [InlineData(1_000, 1_500, true)]
+    [InlineData(1_500, 1_000, true)]
+    [InlineData(1_000, 1_501, false)]
+    [InlineData(1_501, 1_000, false)]
+    [InlineData(0, 0, false)]
+    [InlineData(0, 1_000, false)]
+    public void IsComparable_KeepsBooksWithinTheRatio(
+        long predecessor,
+        long successor,
+        bool comparable
+    )
+    {
+        HoldingsSuccessionGroups.IsComparable(predecessor, successor).Should().Be(comparable);
+    }
+
+    [Fact]
+    public void Build_JoinsPairsSharingAFilerWithinOneQuarter()
+    {
+        var ids = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
+        HoldingsSuccessionPair Pair(
+            int from,
+            int to,
+            DateOnly quarter,
+            long successorValue = 1_000
+        ) =>
+            new()
+            {
+                PredecessorHolderId = ids[from],
+                PredecessorName = $"P{from}",
+                SuccessorHolderId = ids[to],
+                SuccessorName = $"S{to}",
+                SuccessorFirstReportDate = quarter,
+                PredecessorGroupValue = 1_000,
+                SuccessorGroupValue = successorValue,
+            };
+
+        var groups = HoldingsSuccessionGroups.Build([
+            Pair(0, 1, Current),
+            Pair(2, 3, Current),
+            // Joins the first pair through its successor.
+            Pair(2, 1, Current),
+            Pair(4, 5, Prior, successorValue: 10),
+        ]);
+
+        groups.Should().HaveCount(2);
+        var joined = groups.Single(group => group.ReportDate == Current);
+        joined.Predecessors.Keys.Should().BeEquivalentTo([ids[0], ids[2]]);
+        joined.Successors.Keys.Should().BeEquivalentTo([ids[1], ids[3]]);
+        joined.Comparable.Should().BeTrue();
+        groups.Single(group => group.ReportDate == Prior).Comparable.Should().BeFalse();
+    }
+
+    private static (EquityIssuer Stock, InstitutionalHolder Stable) SeedStable(
+        EquiblesFinancialDbContext db
+    )
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
+        var stable = new InstitutionalHolder { Name = "Stable", Cik = "100" };
+        db.AddRange(stock, stable);
+        db.AddRange(Holding(stock, stable, Prior, 100), Holding(stock, stable, Current, 110));
+        return (stock, stable);
+    }
+
+    private static InstitutionalHolder Holder(
+        EquiblesFinancialDbContext db,
+        string name,
+        string cik
+    )
+    {
+        var holder = new InstitutionalHolder { Name = name, Cik = cik };
+        db.Add(holder);
+        return holder;
+    }
+
+    private static HolderSuccession Succession(
+        InstitutionalHolder predecessor,
+        InstitutionalHolder successor,
+        long predecessorValue,
+        long successorValue
+    ) =>
+        new()
+        {
+            PredecessorHolderId = predecessor.Id,
+            SuccessorHolderId = successor.Id,
+            PredecessorLastReportDate = Prior,
+            SuccessorFirstReportDate = Current,
+            Basis = HolderSuccessionBasis.NoticeReportedBy,
+            PredecessorGroupValue = predecessorValue,
+            SuccessorGroupValue = successorValue,
+            DerivationVersion = 1,
+        };
+
+    private static Task<Dictionary<DateOnly, HoldingsComparisonStatus>> History(
+        EquiblesFinancialDbContext db,
+        EquityIssuer stock
+    ) => HoldingsComparisonCoverage.History(new(db), stock, [Prior, Current], []);
+
     private static EquiblesFinancialDbContext NewDb()
     {
         var db = new EquiblesFinancialDbContext(

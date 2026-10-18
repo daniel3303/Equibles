@@ -111,6 +111,71 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
     }
 
     [Fact]
+    public async Task History_ComparesAFilerSplitAcrossNewCiksAsOneHolder()
+    {
+        // Shaped on Vanguard Group, which several new filers continue.
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COVER",
+            Name: "Coverage subject"
+        );
+        var stable = new InstitutionalHolder { Cik = "1", Name = "Stable filer" };
+        var group = new InstitutionalHolder { Cik = "102909", Name = "Group filer" };
+        var fiduciary = new InstitutionalHolder { Cik = "933478", Name = "Fiduciary filer" };
+        var advisers = new InstitutionalHolder { Cik = "947529", Name = "Advisers filer" };
+        var prior = new DateOnly(2025, 9, 30);
+        var current = new DateOnly(2025, 12, 31);
+        await using (var seed = fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, stable, group, fiduciary, advisers);
+            seed.Add(Holding(stock, stable, prior));
+            seed.Add(Holding(stock, stable, current, shares: 110));
+            seed.Add(Holding(stock, group, prior, shares: 900));
+            seed.Add(Holding(stock, fiduciary, current, shares: 500));
+            seed.Add(Holding(stock, advisers, current, shares: 450));
+            seed.AddRange(
+                Succession(group, fiduciary, prior, current),
+                Succession(group, advisers, prior, current)
+            );
+            await seed.SaveChangesAsync();
+        }
+        await using var db = fixture.CreateDbContext();
+
+        var result = await HoldingsComparisonCoverage.History(
+            new InstitutionalHoldingRepository(db),
+            stock,
+            [prior, current],
+            []
+        );
+
+        result[current].MissingPreviousFilers.Should().BeEmpty();
+        result[current].MissingCurrentFilers.Should().BeEmpty();
+        result[current].LikeForLike.Should().Be((1060L, 1000L));
+        result[current]
+            .Note.Should()
+            .Be(
+                "Compared across CIK changes: Group filer continues as 2 filers, not ranked one by one."
+            );
+    }
+
+    private static HolderSuccession Succession(
+        InstitutionalHolder predecessor,
+        InstitutionalHolder successor,
+        DateOnly last,
+        DateOnly first
+    ) =>
+        new()
+        {
+            PredecessorHolderId = predecessor.Id,
+            SuccessorHolderId = successor.Id,
+            PredecessorLastReportDate = last,
+            SuccessorFirstReportDate = first,
+            Basis = HolderSuccessionBasis.NoticeReportedBy,
+            PredecessorGroupValue = 1_000_000,
+            SuccessorGroupValue = 1_050_000,
+            DerivationVersion = 1,
+        };
+
+    [Fact]
     public async Task History_SumsEveryListedRowOfAFilerOnItsSide()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(

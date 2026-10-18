@@ -30,7 +30,14 @@ internal static class HolderIdentifierRules
     /// An adviser's SEC file number ("801-117266", "802-01234") with both parts' leading zeros
     /// dropped, or null for any other prefix.
     /// </summary>
-    internal static string NormalizeSecFileNumber(string fileNumber)
+    internal static string NormalizeSecFileNumber(string fileNumber) =>
+        NormalizeFileNumber(fileNumber, prefix => prefix is 801 or 802);
+
+    /// <summary>A 13F file number ("028-12019") with both parts' leading zeros dropped, or null.</summary>
+    internal static string NormalizeForm13FFileNumber(string fileNumber) =>
+        NormalizeFileNumber(fileNumber, prefix => prefix == 28);
+
+    private static string NormalizeFileNumber(string fileNumber, Func<int, bool> acceptsPrefix)
     {
         var parts = fileNumber?.Trim().Split('-');
         if (
@@ -38,7 +45,7 @@ internal static class HolderIdentifierRules
             || !int.TryParse(parts[0], out var prefix)
             || !int.TryParse(parts[1], out var number)
             || number <= 0
-            || prefix is not (801 or 802)
+            || !acceptsPrefix(prefix)
         )
             return null;
         return $"{prefix}-{number}";
