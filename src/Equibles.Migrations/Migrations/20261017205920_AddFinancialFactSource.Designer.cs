@@ -14,8 +14,8 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261017194951_AddHolderSuccessions")]
-    partial class AddHolderSuccessions
+    [Migration("20261017205920_AddFinancialFactSource")]
+    partial class AddFinancialFactSource
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2772,45 +2772,6 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FundScoreAttempt");
                 });
 
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderClassificationEvidence", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("AsOf")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Field")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<Guid>("InstitutionalHolderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("MatchedOn")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SourceKey")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Value")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InstitutionalHolderId");
-
-                    b.ToTable("HolderClassificationEvidence");
-                });
-
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlySnapshot", b =>
                 {
                     b.Property<Guid>("InstitutionalHolderId")
@@ -2839,53 +2800,6 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("ReportDate");
 
                     b.ToTable("HolderQuarterlySnapshot");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderSuccession", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Basis")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("ComputedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DerivationVersion")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("EvidenceAccession")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<long>("PredecessorGroupValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("PredecessorHolderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("PredecessorLastReportDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("SuccessorFirstReportDate")
-                        .HasColumnType("date");
-
-                    b.Property<long>("SuccessorGroupValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("SuccessorHolderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SuccessorHolderId");
-
-                    b.HasIndex("PredecessorHolderId", "SuccessorHolderId")
-                        .IsUnique();
-
-                    b.ToTable("HolderSuccession");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HoldingLabelConvergenceState", b =>
@@ -3170,103 +3084,6 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("Name");
 
                     b.ToTable("InstitutionalHolder");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolderProfile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("AdvisedNetAssets")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateOnly?>("AdvisedSeriesAsOf")
-                        .HasColumnType("date");
-
-                    b.Property<int>("AdvisedSeriesCount")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly?>("AdviserAsOf")
-                        .HasColumnType("date");
-
-                    b.Property<int?>("AdviserCrd")
-                        .HasColumnType("integer");
-
-                    b.Property<bool?>("AdvisesPrivateFunds")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ClientBase")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("ClientBaseAumShare")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("ComputedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DerivationVersion")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("EntityType")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly?>("EntityTypeAsOf")
-                        .HasColumnType("date");
-
-                    b.Property<int?>("EntityTypeSource")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("EntityTypeSourceKey")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<int>("EtfSeriesCount")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("HasConflictingEvidence")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal?>("IndexNetAssets")
-                        .HasColumnType("numeric");
-
-                    b.Property<int>("IndexSeriesCount")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("InstitutionalHolderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Lei")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<decimal?>("PooledVehicleAumShare")
-                        .HasColumnType("numeric");
-
-                    b.Property<int?>("PrivateFundCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PrivateFundFocus")
-                        .HasColumnType("integer");
-
-                    b.Property<long?>("PrivateFundGrossAssets")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("RegulatoryAum")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Sic")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EntityType");
-
-                    b.HasIndex("InstitutionalHolderId")
-                        .IsUnique();
-
-                    b.ToTable("InstitutionalHolderProfile");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolding", b =>
@@ -5784,6 +5601,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("PeriodType")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -5795,6 +5615,10 @@ namespace Equibles.Migrations.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DocumentId");
+
+                    b.HasIndex("EquityIssuerId", "AccessionNumber")
+                        .HasDatabaseName("IX_FinancialFact_FilingXbrlFill")
+                        .HasFilter("\"Source\" = 1 AND \"DimensionsKey\" = ''");
 
                     b.HasIndex("FinancialConceptId", "PeriodEnd");
 
@@ -6563,48 +6387,7 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("InstitutionalHolder");
                 });
 
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderClassificationEvidence", b =>
-                {
-                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
-                        .WithMany()
-                        .HasForeignKey("InstitutionalHolderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InstitutionalHolder");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderSuccession", b =>
-                {
-                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "PredecessorHolder")
-                        .WithMany()
-                        .HasForeignKey("PredecessorHolderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "SuccessorHolder")
-                        .WithMany()
-                        .HasForeignKey("SuccessorHolderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("PredecessorHolder");
-
-                    b.Navigation("SuccessorHolder");
-                });
-
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalFiling", b =>
-                {
-                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
-                        .WithMany()
-                        .HasForeignKey("InstitutionalHolderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InstitutionalHolder");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalHolderProfile", b =>
                 {
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
                         .WithMany()

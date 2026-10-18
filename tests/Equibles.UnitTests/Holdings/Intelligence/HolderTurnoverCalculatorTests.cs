@@ -120,6 +120,24 @@ public class HolderTurnoverCalculatorTests
     }
 
     [Fact]
+    public void Trades_UnresolvedSplitBasis_LeavesAHeldSecurityUnpricedButKeepsItsValue()
+    {
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Increased, 200, 2_000), new(Opened, 10, 100)],
+            [new(Increased, 100, 1_000), new(Exited, 5, 50)],
+            unresolvedBasis: new HashSet<HolderSecurityKey> { Increased, Opened, Exited }
+        );
+
+        trades.EquityAum.Should().Be(2_100);
+        trades.IncreasedCount.Should().Be(0);
+        trades.NewCount.Should().Be(1);
+        trades.ExitCount.Should().Be(1);
+        trades.UnpricedTradeCount.Should().Be(1);
+        trades.BuyValue.Should().Be(100m);
+        trades.SellValue.Should().Be(50m);
+    }
+
+    [Fact]
     public void Trades_AnIncreaseWithAPendingValueIsUnpriced()
     {
         var trades = HolderTurnoverCalculator.Trades(

@@ -57,5 +57,8 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         // Added by 20261017145057_AddNCenFilingParserVersion.
         builder.Entity<NCenFiling>().Ignore(filing => filing.ParserVersion);
         builder.Entity<NCenFiling>().Ignore(filing => filing.ReprocessAttempts);
+
+        // Added by 20261017203549_AddFinancialFactSource.
+        builder.Entity<FinancialFact>().Ignore(fact => fact.Source);
     }
 }

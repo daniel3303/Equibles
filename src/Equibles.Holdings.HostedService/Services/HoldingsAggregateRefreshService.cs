@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
+using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -218,6 +219,7 @@ public class HoldingsAggregateRefreshService
             // separate renewal connection blocks behind this transaction and a valid
             // long rebuild inevitably outlives its lease.
             await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
+            await StampHolderIntelligence(dbContext, reportDate, cancellationToken);
         }
 
         if (!dbContext.Database.IsRelational())
@@ -512,6 +514,35 @@ public class HoldingsAggregateRefreshService
                 s.ReportDate == reportDate && !currentHolderIds.Contains(s.InstitutionalHolderId)
             )
             .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    // The holder-intelligence drain recomputes a quarter whose holdings changed, and the quarter
+    // after it, whose trades compare against it. A fresh stamp also defeats a rebuild in flight.
+    private static async Task StampHolderIntelligence(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var now = DateTime.UtcNow;
+        var states = new[] { reportDate, reportDate.AddDays(1).AddMonths(3).AddDays(-1) }
+            .Where(quarter => HolderTenureCalculator.QuarterIndex(quarter) != null)
+            .Select(quarter => new HolderIntelligenceQuarterState
+            {
+                ReportDate = quarter,
+                DirtyAt = now,
+            })
+            .ToList();
+        if (states.Count == 0)
+            return;
+        await dbContext
+            .Set<HolderIntelligenceQuarterState>()
+            .UpsertRange(states)
+            .On(state => state.ReportDate)
+            .WhenMatched(
+                (_, incoming) => new HolderIntelligenceQuarterState { DirtyAt = incoming.DirtyAt }
+            )
+            .RunAsync(cancellationToken);
     }
 
     private static async Task UpsertAumSnapshot(
