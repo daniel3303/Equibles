@@ -14,6 +14,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -40,6 +41,12 @@ public class InstitutionalHoldingsTools
 
     private const string HolderTypeParameter =
         "Holder types to keep, as an array of tokens: adv (registered investment adviser), era (exempt reporting adviser), ia (other adviser), bank, ins (insurer), bd (broker-dealer), fund (registered fund), plan (benefit plan), nonus (non-US institution), unk (no deciding record yet), e.g. [\"bank\", \"ins\"]. Types come from Form ADV, SEC filer profiles, 13D/13G and N-CEN, never from names. Omit for all.";
+
+    private const string StyleParameter =
+        "Style bands to keep, as an array of tokens: idx (index-like), sys (systematic-like), conc (concentrated), divact (diversified active), unk (book too small or unvalued to band), e.g. [\"conc\"]. Bands are measured from each holder's filed 13F book in the newest measured quarter on or before the report date; a holder not measured that quarter is left out by any style filter. Omit for all.";
+
+    private const string StyleMeasuredWhen =
+        "quarters are measured from the first covered 13F quarter, once each filing window closes";
 
     private static string HolderTypeNote(string column) =>
         $"_{column} comes from regulatory records (Form ADV rosters, the SEC filer profile, 13D/13G type codes, N-CEN), never from the name; Unknown means no record decides it, and a dash means not yet classified._";
@@ -111,7 +118,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetTopHolders", Title = "Top Institutional Holders", ReadOnly = true)]
     [Description(
-        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership. Each holder shows its entity type from regulatory records (Form ADV, SEC filer profile, 13D/13G, N-CEN), and holderTypes filters by it."
+        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership. Each holder shows its entity type from regulatory records (Form ADV, SEC filer profile, 13D/13G, N-CEN), filtered by holderTypes, and its style band measured from its filed book, filtered by styles."
     )]
     public Task<string> GetTopHolders(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -123,7 +130,8 @@ public class InstitutionalHoldingsTools
             int maxResults = 20,
         [Description("Number of ranked holding rows to skip before returning results (default: 0)")]
             int offset = 0,
-        [Description(HolderTypeParameter)] string[] holderTypes = null
+        [Description(HolderTypeParameter)] string[] holderTypes = null,
+        [Description(StyleParameter)] string[] styles = null
     )
     {
         return _runner.Execute(
@@ -134,6 +142,9 @@ public class InstitutionalHoldingsTools
                 );
                 if (typeFilterError != null)
                     return typeFilterError;
+                var (styleFilter, styleFilterError) = HolderBucketTokens.ParseStyles(styles);
+                if (styleFilterError != null)
+                    return styleFilterError;
 
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
@@ -237,6 +248,17 @@ public class InstitutionalHoldingsTools
                         .Where(h => typeFilter.Contains(h.EntityType ?? HolderEntityType.Unknown))
                         .ToList();
                 }
+                // One measured quarter for every row, so the column compares like with like.
+                var styleAsOf = await _holderRepository.GetLatestMetricsReportDate(targetDate);
+                if (styleFilter != null && styleAsOf == null)
+                    return $"No quarter on or before {FormatDate(targetDate)} is measured, so no holder can match a style filter; {StyleMeasuredWhen}.";
+                if (styleFilter != null)
+                {
+                    await LoadStyleBands(holdings, styleAsOf);
+                    holdings = holdings
+                        .Where(h => h.StyleBand is { } band && styleFilter.Contains(band))
+                        .ToList();
+                }
                 var totalInstitutions = holdings
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
@@ -252,10 +274,13 @@ public class InstitutionalHoldingsTools
                     .ToList();
                 if (holdings.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {totalRows} holding rows exist; lower offset.";
+                var filterDescription = DescribeTopHolderFilters(typeFilter, styleFilter);
                 if (holdings.Count == 0)
-                    return $"No institutional holders of {ticker}{(typeFilter == null ? "" : $" with holder type {HolderBucketTokens.Describe(typeFilter)}")} as of {FormatDate(targetDate)}.";
+                    return $"No institutional holders of {ticker}{(filterDescription == null ? "" : $" with {filterDescription}")} as of {FormatDate(targetDate)}.";
                 if (typeFilter == null)
                     await LoadEntityTypes(holdings);
+                if (styleFilter == null)
+                    await LoadStyleBands(holdings, styleAsOf);
 
                 return RenderAdjustedTopHoldersTable(
                     stock,
@@ -271,12 +296,42 @@ public class InstitutionalHoldingsTools
                         dateNote,
                         presentCombined ? CombinedViewNote(targetDate, anchor) : null
                     ),
-                    typeFilter == null ? null : HolderBucketTokens.Describe(typeFilter)
+                    filterDescription,
+                    styleAsOf
                 );
             },
             "GetTopHolders",
-            $"ticker: {ticker}, reportDate: {reportDate}, offset: {offset}, holderTypes: {JoinTokens(holderTypes)}"
+            $"ticker: {ticker}, reportDate: {reportDate}, offset: {offset}, holderTypes: {JoinTokens(holderTypes)}, styles: {JoinTokens(styles)}"
         );
+    }
+
+    private static string DescribeTopHolderFilters(
+        IReadOnlySet<HolderEntityType> typeFilter,
+        IReadOnlySet<HolderStyleBand> styleFilter
+    )
+    {
+        var parts = new List<string>();
+        if (typeFilter != null)
+            parts.Add($"holder type {HolderBucketTokens.Describe(typeFilter)}");
+        if (styleFilter != null)
+            parts.Add($"style {HolderBucketTokens.Describe(styleFilter)}");
+        return parts.Count == 0 ? null : string.Join(" and ", parts);
+    }
+
+    // Stamps each row with its holder's style band in the measured quarter, null when the
+    // holder was not measured then or no quarter is measured.
+    private async Task LoadStyleBands(List<TopHolderRow> holdings, DateOnly? measuredQuarter)
+    {
+        if (measuredQuarter is not { } quarter)
+            return;
+        var bands = await _holderRepository.GetStyleBands(
+            holdings.Select(h => h.InstitutionalHolderId).Distinct().ToList(),
+            quarter
+        );
+        foreach (var holding in holdings)
+            holding.StyleBand = bands.TryGetValue(holding.InstitutionalHolderId, out var band)
+                ? band
+                : null;
     }
 
     // Stamps each row with its holder's entity type, null when the holder is not yet profiled.
@@ -379,15 +434,16 @@ public class InstitutionalHoldingsTools
         int totalRows,
         int offset,
         string combinedNote,
-        string holderTypeFilter = null
+        string filterDescription = null,
+        DateOnly? styleAsOf = null
     )
     {
         var first = holdings.Count == 0 ? 0 : offset + 1;
         var last = offset + holdings.Count;
         var subtitle =
-            holderTypeFilter == null
+            filterDescription == null
                 ? $"Showing rows {first}-{last} of {totalRows} across {totalInstitutions} institutions. Total: "
-                : $"Showing rows {first}-{last} of {totalRows} from holder type {holderTypeFilter}, across {totalInstitutions} institutions. All institutions: ";
+                : $"Showing rows {first}-{last} of {totalRows} from {filterDescription}, across {totalInstitutions} institutions. All institutions: ";
         subtitle +=
             $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
             + $"${FormatMillions(totalValueAll)}M value";
@@ -396,8 +452,8 @@ public class InstitutionalHoldingsTools
         var result = MarkdownTable.Start(
             $"Top institutional holders of {StockListingLabel(stock, ticker)} as of {FormatDate(targetDate)}:",
             subtitle,
-            "| # | Institution | Type | Shares | Value ($M) | % of Inst. Total | Holder Type |",
-            "|---|------------|------|--------|-----------|-----------|-------------|"
+            "| # | Institution | Type | Shares | Value ($M) | % of Inst. Total | Holder Type | Style |",
+            "|---|------------|------|--------|-----------|-----------|-------------|-------|"
         );
 
         result.AppendNumberedRows(
@@ -416,7 +472,8 @@ public class InstitutionalHoldingsTools
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{McpFormat.Invariant(pct, "F2")}% | "
-                    + $"{HolderBucketTokens.Label(h.EntityType)} |";
+                    + $"{HolderBucketTokens.Label(h.EntityType)} | "
+                    + $"{HolderBucketTokens.StyleLabel(h.StyleBand)} |";
             }
         );
 
@@ -425,6 +482,7 @@ public class InstitutionalHoldingsTools
             "_% of Inst. Total = the position's share of all institutional 13F shares in the stock, not of shares outstanding._"
         );
         result.AppendLine(HolderTypeNote("Holder Type"));
+        result.AppendLine(StyleNote(styleAsOf, targetDate));
         result.AppendLine(
             "_Type: Common = shares held outright; Principal = a principal-denominated security. Put/Call = an option position reported at the "
                 + "underlying's notional value. A PUT IS A BEARISH POSITION, so a large put line is a "
@@ -453,7 +511,13 @@ public class InstitutionalHoldingsTools
         public OptionType? OptionType { get; set; }
         public ShareType ShareType { get; set; }
         public HolderEntityType? EntityType { get; set; }
+        public HolderStyleBand? StyleBand { get; set; }
     }
+
+    private static string StyleNote(DateOnly? styleAsOf, DateOnly targetDate) =>
+        styleAsOf is { } asOf
+            ? $"_Style is each holder's band measured from its filed 13F book for {FormatDate(asOf)}{(asOf == targetDate ? "" : ", the newest measured quarter")}, never the firm's own description; GetInstitutionStyleHistory shows the measurements, and a dash means not measured that quarter._"
+            : $"_Style: no quarter on or before {FormatDate(targetDate)} is measured; {StyleMeasuredWhen}._";
 
     [McpServerTool(
         Name = "GetInstitutionalOwnershipHistory",
@@ -1912,7 +1976,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, and earlier or later CIKs its 13F reports continue under. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
+        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, and earlier or later CIKs its 13F reports continue under, then its style, turnover and horizon bands measured from its filed book. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
     )]
     public Task<string> GetInstitutionSummary(
         [Description(
@@ -1944,34 +2008,201 @@ public class InstitutionalHoldingsTools
                     .GetProfile(holder)
                     .AsNoTracking()
                     .FirstOrDefaultAsync();
-                var links = await _holderRepository
-                    .GetSuccessions(holder)
+                var links = await LoadHolderLinks(holder);
+                var style = await _holderRepository
+                    .GetQuarterlyMetrics(holder)
+                    .Where(metrics => metrics.ReportDate <= targetDate)
+                    .OrderByDescending(metrics => metrics.ReportDate)
                     .AsNoTracking()
-                    .Select(succession => new HolderLinkRow
-                    {
-                        ContinuesHere = succession.SuccessorHolderId == holder.Id,
-                        PredecessorName = succession.PredecessorHolder.Name,
-                        PredecessorCik = succession.PredecessorHolder.Cik,
-                        SuccessorName = succession.SuccessorHolder.Name,
-                        SuccessorCik = succession.SuccessorHolder.Cik,
-                        PredecessorLastReportDate = succession.PredecessorLastReportDate,
-                        SuccessorFirstReportDate = succession.SuccessorFirstReportDate,
-                    })
-                    .ToListAsync();
+                    .FirstOrDefaultAsync();
 
                 return RenderInstitutionSummary(
-                    holder,
-                    targetDate,
-                    previousDate,
-                    summary,
-                    notes,
-                    profile,
-                    links
-                );
+                        holder,
+                        targetDate,
+                        previousDate,
+                        summary,
+                        notes,
+                        profile,
+                        links
+                    ) + RenderStyleBlock(style, targetDate);
             },
             "GetInstitutionSummary",
             $"institution: {institutionName}"
         );
+    }
+
+    private Task<List<HolderLinkRow>> LoadHolderLinks(InstitutionalHolder holder) =>
+        _holderRepository
+            .GetSuccessions(holder)
+            .AsNoTracking()
+            .Select(succession => new HolderLinkRow
+            {
+                ContinuesHere = succession.SuccessorHolderId == holder.Id,
+                PredecessorName = succession.PredecessorHolder.Name,
+                PredecessorCik = succession.PredecessorHolder.Cik,
+                SuccessorName = succession.SuccessorHolder.Name,
+                SuccessorCik = succession.SuccessorHolder.Cik,
+                PredecessorLastReportDate = succession.PredecessorLastReportDate,
+                SuccessorFirstReportDate = succession.SuccessorFirstReportDate,
+            })
+            .ToListAsync();
+
+    // The holder's bands in the newest measured quarter on or before the summary's quarter.
+    private static string RenderStyleBlock(HolderQuarterlyMetrics style, DateOnly targetDate)
+    {
+        var result = new StringBuilder();
+        result.AppendLine();
+        if (style == null)
+        {
+            result.AppendLine("**Style** (measured from the filed 13F book):");
+            result.AppendLine(
+                $"_No quarter on or before {FormatDate(targetDate)} is measured; {StyleMeasuredWhen}._"
+            );
+            return result.ToString();
+        }
+        result.AppendLine(
+            $"**Style** (measured from the filed 13F book for {FormatDate(style.ReportDate)}{(style.ReportDate == targetDate ? "" : ", the newest measured quarter")}, never the firm's own description):"
+        );
+        result.AppendLine();
+        result.AppendLine("| Band | Measurement |");
+        result.AppendLine("|------|-------------|");
+        result.AppendLine($"| Style | {HolderStyleDescriptions.Style(style)} |");
+        result.AppendLine($"| Turnover | {HolderStyleDescriptions.Turnover(style)} |");
+        result.AppendLine($"| Horizon | {HolderStyleDescriptions.Horizon(style)} |");
+        result.AppendLine();
+        result.AppendLine(
+            "_GetInstitutionStyleHistory shows these measurements for every quarter, with the thresholds._"
+        );
+        return result.ToString();
+    }
+
+    [McpServerTool(
+        Name = "GetInstitutionStyleHistory",
+        Title = "Institution Style History",
+        ReadOnly = true
+    )]
+    [Description(
+        "Get an institutional 13F filer's portfolio style quarter by quarter, measured from its filed common-share book: style band (index-like, systematic-like, concentrated, diversified active), turnover band, holding-horizon band, and the measurements behind them (equity value, stock count, active share against every 13F filer's combined book, top 10 weight, effective positions, trailing annual turnover, value-weighted holding period). Bands are measurements with stated thresholds, never the firm's own description. Closed quarters only; the newest quarter is measured once its filing window closes."
+    )]
+    public Task<string> GetInstitutionStyleHistory(
+        [Description(
+            "Institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
+        )]
+            string institutionName,
+        [Description(
+            "Number of measured quarters to return, newest first (default: 8, clamped to 1-40)"
+        )]
+            int maxPeriods = 8
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var (holder, reportDates, _, notes, error) = await ResolveHolderAndTargetDate(
+                    institutionName,
+                    null
+                );
+                if (error != null)
+                    return error;
+
+                var periods = Math.Clamp(maxPeriods, 1, MaxStylePeriods);
+                var rows = await _holderRepository
+                    .GetQuarterlyMetrics(holder)
+                    .OrderByDescending(metrics => metrics.ReportDate)
+                    .Take(periods)
+                    .AsNoTracking()
+                    .ToListAsync();
+                var links = await LoadHolderLinks(holder);
+                return RenderStyleHistory(holder, reportDates[0], rows, notes, links);
+            },
+            "GetInstitutionStyleHistory",
+            $"institution: {institutionName}, maxPeriods: {maxPeriods}"
+        );
+    }
+
+    private const int MaxStylePeriods = 40;
+
+    private static string RenderStyleHistory(
+        InstitutionalHolder holder,
+        DateOnly latestReportDate,
+        IReadOnlyList<HolderQuarterlyMetrics> rows,
+        string notes,
+        IReadOnlyList<HolderLinkRow> links
+    )
+    {
+        var result = new StringBuilder();
+        if (rows.Count == 0)
+        {
+            result.AppendLine(
+                $"No style measurements for **{holder.Name}** (CIK {holder.Cik}); {StyleMeasuredWhen}."
+            );
+            if (notes != null)
+                result.AppendLine(notes);
+            AppendStyleLinkNotes(result, links);
+            return result.ToString();
+        }
+
+        var latest = rows[0];
+        result.AppendLine(
+            $"Style history of **{holder.Name}** (CIK {holder.Cik}), {rows.Count} measured {(rows.Count == 1 ? "quarter" : "quarters")} through {FormatDate(latest.ReportDate)}"
+        );
+        if (notes != null)
+            result.AppendLine(notes);
+        if (latestReportDate > latest.ReportDate)
+            result.AppendLine(
+                $"Note: its {FormatDate(latestReportDate)} 13F is not measured yet; {StyleMeasuredWhen}."
+            );
+        result.AppendLine();
+        result.AppendLine(
+            "| Quarter | Style | Turnover | Horizon | Equity value ($M) | Stocks | Active share | Top 10 weight | Effective positions | Annual turnover | Holding period (qtrs) |"
+        );
+        result.AppendLine(
+            "|---------|-------|----------|---------|-------------------|--------|--------------|---------------|---------------------|-----------------|-----------------------|"
+        );
+        foreach (var row in rows)
+            result.AppendLine(
+                $"| {FormatDate(row.ReportDate)} | {StyleCell(row)} | {row.TurnoverBand.NameForHumans()} | {row.HorizonBand.NameForHumans()} | "
+                    + $"{FormatMillions(row.EquityAum)} | {McpFormat.WholeNumber(row.StockCount)} | "
+                    + $"{FractionCell(row.AggregateActiveShare)} | {FractionCell(row.TopTenWeight)} | "
+                    + $"{DecimalCell(row.EffectivePositions)} | {FractionCell(row.TrailingAnnualTurnover)} | "
+                    + $"{DecimalCell(row.ValueWeightedTenureQuarters)} |"
+            );
+
+        result.AppendLine();
+        result.AppendLine($"**Latest quarter, {FormatDate(latest.ReportDate)}:**");
+        result.AppendLine($"- {HolderStyleDescriptions.Style(latest)}");
+        result.AppendLine($"- {HolderStyleDescriptions.Turnover(latest)}");
+        result.AppendLine($"- {HolderStyleDescriptions.Horizon(latest)}");
+        result.AppendLine();
+        result.AppendLine($"_{HolderStyleDescriptions.Methodology}_");
+        AppendStyleLinkNotes(result, links);
+        return result.ToString();
+    }
+
+    // An index-like band names the measurement that placed it, since two different tests can.
+    private static string StyleCell(HolderQuarterlyMetrics row) =>
+        row.StyleBand == HolderStyleBand.IndexLike
+            ? $"{HolderBucketTokens.StyleLabel(row.StyleBand)} ({row.IndexLikeEvidence.NameForHumans().ToLowerInvariant()})"
+            : HolderBucketTokens.StyleLabel(row.StyleBand);
+
+    private static string FractionCell(decimal? fraction) =>
+        fraction is { } value ? $"{FormatPercent(value * 100)}%" : "—";
+
+    private static string DecimalCell(decimal? value) =>
+        value is { } number ? FormatPercent(number) : "—";
+
+    // Measurements stay with the CIK that filed them, so a CIK change splits the history.
+    private static void AppendStyleLinkNotes(
+        StringBuilder result,
+        IReadOnlyList<HolderLinkRow> links
+    )
+    {
+        foreach (var link in links.OrderBy(link => link.SuccessorFirstReportDate))
+            result.AppendLine(
+                link.ContinuesHere
+                    ? $"_Quarters through {FormatDate(link.PredecessorLastReportDate)} were filed under {link.PredecessorName} (CIK {link.PredecessorCik}); pass that CIK for its earlier style history._"
+                    : $"_From {FormatDate(link.SuccessorFirstReportDate)} these 13F reports continue under {link.SuccessorName} (CIK {link.SuccessorCik}); pass that CIK for later quarters._"
+            );
     }
 
     private static string RenderInstitutionSummary(

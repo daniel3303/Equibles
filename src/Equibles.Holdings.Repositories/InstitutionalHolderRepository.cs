@@ -412,6 +412,40 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .Set<InstitutionalHolderProfile>()
             .Where(profile => profile.InstitutionalHolderId == holder.Id);
 
+    // The holder's measured quarters, one row per closed quarter the intelligence drain computed.
+    public IQueryable<HolderQuarterlyMetrics> GetQuarterlyMetrics(InstitutionalHolder holder) =>
+        DbContext
+            .Set<HolderQuarterlyMetrics>()
+            .Where(metrics => metrics.InstitutionalHolderId == holder.Id);
+
+    // The newest measured quarter on or before the date, null when none is measured yet.
+    public Task<DateOnly?> GetLatestMetricsReportDate(
+        DateOnly onOrBefore,
+        CancellationToken cancellationToken = default
+    ) =>
+        DbContext
+            .Set<HolderQuarterlyMetrics>()
+            .Where(metrics => metrics.ReportDate <= onOrBefore)
+            .MaxAsync(metrics => (DateOnly?)metrics.ReportDate, cancellationToken);
+
+    // Each listed holder's style band in one measured quarter; a holder not measured is absent.
+    public Task<Dictionary<Guid, HolderStyleBand>> GetStyleBands(
+        IReadOnlyCollection<Guid> holderIds,
+        DateOnly reportDate,
+        CancellationToken cancellationToken = default
+    ) =>
+        DbContext
+            .Set<HolderQuarterlyMetrics>()
+            .Where(metrics =>
+                metrics.ReportDate == reportDate
+                && holderIds.Contains(metrics.InstitutionalHolderId)
+            )
+            .ToDictionaryAsync(
+                metrics => metrics.InstitutionalHolderId,
+                metrics => metrics.StyleBand,
+                cancellationToken
+            );
+
     // The holder's current successions, as predecessor or successor.
     public IQueryable<HolderSuccession> GetSuccessions(InstitutionalHolder holder) =>
         DbContext
