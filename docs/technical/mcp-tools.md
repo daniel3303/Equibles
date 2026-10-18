@@ -104,8 +104,8 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 `CongressTools`:
 
 - `GetCongressionalTrades` — disclosed securities transactions for a ticker across all members; the Asset column identifies stock, option, bond, or another filed instrument.
-- `GetMemberTrades` — disclosed securities transactions by one member of Congress, including the filed Asset instrument.
-- `SearchCongressMembers` — punctuation-independent all-token roster search with a sparse any-token fallback, plus verified public-name aliases such as Dan Crenshaw → filed Daniel Crenshaw; optional chamber filter.
+- `GetMemberTrades` — disclosed securities transactions by one member of Congress, including the filed Asset instrument and the member's party on each transaction date.
+- `SearchCongressMembers` — punctuation-independent all-token roster search with a sparse any-token fallback, plus verified public-name aliases such as Dan Crenshaw → filed Daniel Crenshaw; optional chamber filter. Each row carries the member's current party (its latest term).
 - `GetMemberNetWorth` — a member's net-worth history from annual financial disclosures, reported as yearly min–max bands (electronic filings only).
 
 ### `mcp.AddFred()` — FRED economic indicators

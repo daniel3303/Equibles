@@ -1,6 +1,4 @@
-using Equibles.Congress.Data.Models;
-
-namespace Equibles.Congress.Repositories.Models;
+namespace Equibles.Congress.Data.Models;
 
 /// <summary>A trade and the term its member held on the transaction date, if one is known.</summary>
 public class CongressionalTradeTerm

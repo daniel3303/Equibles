@@ -25,6 +25,7 @@ public class CongressTools
     private readonly CongressionalTradeRepository _tradeRepository;
     private readonly CongressMemberRepository _memberRepository;
     private readonly CongressionalAnnualDisclosureRepository _disclosureRepository;
+    private readonly CongressMemberTermRepository _termRepository;
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
@@ -32,6 +33,7 @@ public class CongressTools
         CongressionalTradeRepository tradeRepository,
         CongressMemberRepository memberRepository,
         CongressionalAnnualDisclosureRepository disclosureRepository,
+        CongressMemberTermRepository termRepository,
         EquityIssuerRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<CongressTools> logger
@@ -40,6 +42,7 @@ public class CongressTools
         _tradeRepository = tradeRepository;
         _memberRepository = memberRepository;
         _disclosureRepository = disclosureRepository;
+        _termRepository = termRepository;
         _commonStockRepository = commonStockRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
@@ -127,7 +130,7 @@ public class CongressTools
 
     [McpServerTool(Name = "GetMemberTrades", Title = "Trades by Congress Member", ReadOnly = true)]
     [Description(
-        "Get a congress member's disclosed securities transactions (newest first, last year by default). Shows tickers, transaction and filing dates, disclosed amount ranges, and the filed Asset identifying the instrument (such as stock, option, or bond). Use SearchCongressMembers to find member names, and GetCongressionalTrades for all members' transactions in one ticker."
+        "Get a congress member's disclosed securities transactions (newest first, last year by default). Shows tickers, transaction and filing dates, disclosed amount ranges, the filed Asset identifying the instrument (such as stock, option, or bond), and the member's party on the transaction date. Use SearchCongressMembers to find member names, and GetCongressionalTrades for all members' transactions in one ticker."
     )]
     public Task<string> GetMemberTrades(
         [Description(
@@ -212,12 +215,22 @@ public class CongressTools
                 if (trades.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {totalCount} trades match; lower offset.";
 
+                // One set-based lookup for the whole page: the party comes from the term that
+                // covered each transaction date, so a mid-career switch splits the rows.
+                var tradeIds = trades.Select(t => t.Id).ToList();
+                var partyByTrade = await _tradeRepository
+                    .GetAll()
+                    .Where(t => tradeIds.Contains(t.Id))
+                    .WithTermOnTransactionDate(_termRepository.GetAll())
+                    .Select(row => new { TradeId = row.Trade.Id, row.Term.Party })
+                    .ToDictionaryAsync(row => row.TradeId, row => row.Party);
+
                 var table = MarkdownTable.Render(
                     trades,
                     $"No trades found for {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {listedTicker}")} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Trades by {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {listedTicker}")}, {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
-                    "| Date | Filed | Ticker | Type | Amount Range | Asset | Asset Type | Owner | Account |",
-                    "|------|-------|--------|------|-------------|-------|------------|-------|---------|",
+                    "| Date | Filed | Ticker | Type | Amount Range | Asset | Asset Type | Owner | Account | Party |",
+                    "|------|-------|--------|------|-------------|-------|------------|-------|---------|-------|",
                     t =>
                     {
                         var type = t.TransactionType.NameForHumans();
@@ -225,7 +238,7 @@ public class CongressTools
                         var filedTicker = string.IsNullOrWhiteSpace(t.FiledTicker)
                             ? t.Issuer?.Presentation?.Listing?.Ticker
                             : t.FiledTicker;
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {filedTicker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {filedTicker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} | {EscapeCell(partyByTrade.GetValueOrDefault(t.Id))} |";
                     }
                 );
                 var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);
@@ -322,7 +335,7 @@ public class CongressTools
         ReadOnly = true
     )]
     [Description(
-        "Search the tracked congressional roster by name. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified public-name aliases such as Dan Crenshaw resolve to the roster name. Returns each match with its position; pass the returned exact Name to GetMemberTrades or GetMemberNetWorth."
+        "Search the tracked congressional roster by name. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified public-name aliases such as Dan Crenshaw resolve to the roster name. Returns each match with its position, seat and current party (from the latest term); pass the returned exact Name to GetMemberTrades or GetMemberNetWorth."
     )]
     public Task<string> SearchCongressMembers(
         [Description("Search query — partial or full name (e.g., 'Pelosi', 'Cruz', 'Dan')")]
@@ -353,16 +366,28 @@ public class CongressTools
 
                 var members = await memberQuery.OrderBy(m => m.Name).Take(maxResults).ToListAsync();
 
+                // A member's current party is the party of its latest term; members without a
+                // BioGuide id or any term have none.
+                var bioguideIds = members
+                    .Where(m => m.BioguideId != null)
+                    .Select(m => m.BioguideId)
+                    .ToList();
+                var partyByBioguideId = await _termRepository
+                    .GetLatestTerms(bioguideIds)
+                    .Select(term => new { term.BioguideId, term.Party })
+                    .ToDictionaryAsync(term => term.BioguideId, term => term.Party);
+
                 var table = MarkdownTable.Render(
                     members,
                     $"No match for '{query}' in the tracked congressional roster. This result describes only the tracked roster.",
                     $"Congress members matching '{query}':",
-                    "| Name | Position | Seat |",
-                    "|------|----------|------|",
+                    "| Name | Position | Seat | Party |",
+                    "|------|----------|------|-------|",
                     m =>
                         $"| {MarkdownTable.EscapeCell(m.Name, "-")} "
                         + $"| {MarkdownTable.EscapeCell(m.Position.NameForHumans(), "-")} "
-                        + $"| {MarkdownTable.EscapeCell(CongressSeat.Format(m.StateDistrict), "-")} |"
+                        + $"| {MarkdownTable.EscapeCell(CongressSeat.Format(m.StateDistrict), "-")} "
+                        + $"| {MarkdownTable.EscapeCell(CurrentParty(m, partyByBioguideId), "-")} |"
                 );
                 return AppendTruncationNote(table, members.Count, totalCount);
             },
@@ -370,6 +395,14 @@ public class CongressTools
             $"query: {query}, position: {position}"
         );
     }
+
+    private static string CurrentParty(
+        CongressMember member,
+        Dictionary<string, string> partyByBioguideId
+    ) =>
+        member.BioguideId != null && partyByBioguideId.TryGetValue(member.BioguideId, out var party)
+            ? party
+            : null;
 
     // Exact lookup is case-insensitive (see CongressMemberRepository.GetByName); when it
     // misses, fall back to a contains-match only when it is unambiguous — 'pelosi' resolves,
