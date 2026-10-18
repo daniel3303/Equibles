@@ -71,6 +71,16 @@ public class ListedSecurityClassifierTests
         "Common Stock, par value $0.01 per share, together with the associated Preferred Stock Purchase Rights",
         ListedSecurityType.CommonShares
     )]
+    [InlineData(
+        "Common Stock, $0.01 par value including the Preferred Stock Purchase Rights",
+        ListedSecurityType.CommonShares
+    )]
+    [InlineData(
+        "Shares of common stock, $0.01 par value per share,including the preferred stock purchase rights",
+        ListedSecurityType.CommonShares
+    )]
+    // A rights listing in its own row still classifies Rights.
+    [InlineData("Rights to purchase Common Shares, no par value", ListedSecurityType.Rights)]
     // MLP and fund units both classify Units; surfaces deliberately keep them.
     [InlineData("Common Units Representing Limited Partner Interests", ListedSecurityType.Units)]
     [InlineData("Units Representing Limited Partnership Interests", ListedSecurityType.Units)]
