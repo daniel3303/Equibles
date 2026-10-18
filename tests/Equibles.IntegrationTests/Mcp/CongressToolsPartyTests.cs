@@ -62,15 +62,91 @@ public class CongressToolsPartyTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task SearchCongressMembers_MemberWithTerms_ReportsLatestTermParty()
+    public async Task SearchCongressMembers_MembersWithTerms_ReportEachMembersLatestTermParty()
     {
-        DbContext.Add(Sinema());
+        DbContext.AddRange(
+            new CongressLegislator
+            {
+                BioguideId = "B001305",
+                FirstName = "Ted",
+                LastName = "Budd",
+            },
+            Term(
+                CongressPosition.Senator,
+                null,
+                "Republican",
+                new DateOnly(2023, 1, 3),
+                new DateOnly(2029, 1, 3),
+                "B001305",
+                "NC"
+            ),
+            Sinema(),
+            new CongressMember
+            {
+                Name = "Ted Budd",
+                BioguideId = "B001305",
+                BioguideIdSource = CongressBioguideIdSource.Catalog,
+                Position = CongressPosition.Senator,
+            }
+        );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().SearchCongressMembers("Sinema");
+        // No name holds both words, so the search broadens to either word and returns both rows.
+        var result = await Sut().SearchCongressMembers("Kyrsten Budd");
 
         result.Should().Contain("| Name | Position | Seat | Party |");
         RowStartingWith(result, "| Kyrsten Sinema |").Should().EndWith("| Independent |");
+        RowStartingWith(result, "| Ted Budd |").Should().EndWith("| Republican |");
+    }
+
+    [Fact]
+    public async Task OverlappingTermsStartingTheSameDay_ReportOnePartyPerRowInBothTools()
+    {
+        var member = new CongressMember
+        {
+            Name = "Overlap Member",
+            BioguideId = "O000001",
+            BioguideIdSource = CongressBioguideIdSource.Catalog,
+            Position = CongressPosition.Senator,
+        };
+        DbContext.AddRange(
+            new CongressLegislator
+            {
+                BioguideId = "O000001",
+                FirstName = "Overlap",
+                LastName = "Member",
+            },
+            Term(
+                CongressPosition.Representative,
+                1,
+                "Democrat",
+                new DateOnly(2023, 1, 3),
+                new DateOnly(2025, 1, 3),
+                "O000001"
+            ),
+            Term(
+                CongressPosition.Senator,
+                null,
+                "Republican",
+                new DateOnly(2023, 1, 3),
+                new DateOnly(2025, 1, 3),
+                "O000001"
+            ),
+            member,
+            Trade(member, new DateOnly(2024, 6, 3))
+        );
+        await DbContext.SaveChangesAsync();
+
+        var search = await Sut().SearchCongressMembers("Overlap Member");
+        var trades = await Sut()
+            .GetMemberTrades("Overlap Member", startDate: "2024-01-01", endDate: "2024-12-31");
+
+        RowStartingWith(search, "| Overlap Member |")
+            .Should()
+            .Match(row => row.EndsWith("| Democrat |") || row.EndsWith("| Republican |"));
+        RowStartingWith(trades, "| 2024-06-03 |")
+            .Should()
+            .Match(row => row.EndsWith("| Democrat |") || row.EndsWith("| Republican |"));
     }
 
     [Fact]
@@ -155,13 +231,15 @@ public class CongressToolsPartyTests : ParadeDbMcpTestBase
         short? district,
         string party,
         DateOnly start,
-        DateOnly end
+        DateOnly end,
+        string bioguideId = "S001191",
+        string state = "AZ"
     ) =>
         new()
         {
-            BioguideId = "S001191",
+            BioguideId = bioguideId,
             Chamber = chamber,
-            State = "AZ",
+            State = state,
             District = district,
             Party = party,
             StartDate = start,

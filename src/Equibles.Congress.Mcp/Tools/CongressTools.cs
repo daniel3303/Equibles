@@ -218,12 +218,15 @@ public class CongressTools
                 // One set-based lookup for the whole page: the party comes from the term that
                 // covered each transaction date, so a mid-career switch splits the rows.
                 var tradeIds = trades.Select(t => t.Id).ToList();
-                var partyByTrade = await _tradeRepository
-                    .GetAll()
-                    .Where(t => tradeIds.Contains(t.Id))
-                    .WithTermOnTransactionDate(_termRepository.GetAll())
-                    .Select(row => new { TradeId = row.Trade.Id, row.Term.Party })
-                    .ToDictionaryAsync(row => row.TradeId, row => row.Party);
+                var partyByTrade =
+                    tradeIds.Count == 0
+                        ? []
+                        : await _termRepository
+                            .WithTermOnTransactionDate(
+                                _tradeRepository.GetAll().Where(t => tradeIds.Contains(t.Id))
+                            )
+                            .Select(row => new { TradeId = row.Trade.Id, row.Term.Party })
+                            .ToDictionaryAsync(row => row.TradeId, row => row.Party);
 
                 var table = MarkdownTable.Render(
                     trades,
@@ -372,10 +375,13 @@ public class CongressTools
                     .Where(m => m.BioguideId != null)
                     .Select(m => m.BioguideId)
                     .ToList();
-                var partyByBioguideId = await _termRepository
-                    .GetLatestTerms(bioguideIds)
-                    .Select(term => new { term.BioguideId, term.Party })
-                    .ToDictionaryAsync(term => term.BioguideId, term => term.Party);
+                var partyByBioguideId =
+                    bioguideIds.Count == 0
+                        ? []
+                        : await _termRepository
+                            .GetLatestTerms(bioguideIds)
+                            .Select(term => new { term.BioguideId, term.Party })
+                            .ToDictionaryAsync(term => term.BioguideId, term => term.Party);
 
                 var table = MarkdownTable.Render(
                     members,
