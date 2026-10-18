@@ -102,7 +102,7 @@ public class CongressLegislatorClient
                 continue;
 
             result.RecordCount++;
-            if (!record.Terms.Any(term => term?.End >= EarliestTermEnd))
+            if (record.Terms?.Any(term => term?.End >= EarliestTermEnd) != true)
                 continue;
 
             var rejection = TryBuildLegislator(record, out var legislator);
@@ -149,8 +149,12 @@ public class CongressLegislatorClient
         var ordered = terms.OrderBy(term => term.StartDate).ToList();
         for (var i = 0; i < ordered.Count - 1; i++)
         {
-            // A chamber switch can overlap by the day of the swearing-in; the later term wins it.
-            if (ordered[i].EndDate > ordered[i + 1].StartDate)
+            // A chamber switch can overlap by the swearing-in day, which the later term wins; an
+            // inclusive end the day before the next term starts meets it, as party switches do.
+            if (
+                ordered[i].EndDate > ordered[i + 1].StartDate
+                || ordered[i].EndDate.AddDays(1) == ordered[i + 1].StartDate
+            )
                 ordered[i].EndDate = ordered[i + 1].StartDate;
             if (ordered[i].EndDate <= ordered[i].StartDate)
                 return Reject($"terms starting {ordered[i].StartDate:O} overlap");
@@ -230,10 +234,9 @@ public class CongressLegislatorClient
     }
 
     /// <summary>
-    /// Splits a term at its party switches. The roster writes a switch either as one segment
-    /// ending the day the next starts or, inclusively, the day before; both meet at the next
-    /// segment's start. Segments that leave any other gap, overlap, or miss the term's own start
-    /// or end return null.
+    /// Splits a term at its party switches, ending each segment where the next starts whether the
+    /// roster ends it that day or, inclusively, the day before. Any other gap or overlap, or
+    /// segments missing the term's own start or end, return null.
     /// </summary>
     private static List<(DateOnly Start, DateOnly End, string Party)> SplitByParty(
         LegislatorTermRecord term
@@ -241,7 +244,7 @@ public class CongressLegislatorClient
     {
         var start = term.Start!.Value;
         var end = term.End!.Value;
-        if (term.PartyAffiliations.Count == 0)
+        if (term.PartyAffiliations == null || term.PartyAffiliations.Count == 0)
             return [(start, end, term.Party)];
 
         var affiliations = term.PartyAffiliations;

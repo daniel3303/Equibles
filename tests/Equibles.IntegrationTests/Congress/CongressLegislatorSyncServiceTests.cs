@@ -117,6 +117,43 @@ public class CongressLegislatorSyncServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task SyncAll_IdInBothFiles_KeepsTheCurrentRecord()
+    {
+        var historical = JsonNode.Parse(Historical()).AsArray();
+        historical.Add(
+            JsonNode.Parse(
+                """
+                {"id":{"bioguide":"B001305"},"name":{"first":"Stale","last":"Budd"},
+                 "terms":[{"type":"rep","start":"2013-01-03","end":"2015-01-03","state":"NC",
+                           "district":1,"party":"Democrat"}]}
+                """
+            )
+        );
+        historical.Add(
+            JsonNode.Parse(
+                """
+                {"id":{"bioguide":"Z999901"},"name":{"first":"Valid","last":"Elsewhere"},
+                 "terms":[{"type":"rep","start":"2013-01-03","end":"2015-01-03","state":"OH",
+                           "district":3,"party":"Democrat"}]}
+                """
+            )
+        );
+
+        await CreateSut(Current(), historical.ToJsonString()).SyncAll(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var budd = await verify
+            .Set<CongressLegislator>()
+            .AsNoTracking()
+            .SingleAsync(l => l.BioguideId == "B001305");
+        budd.FirstName.Should().Be("Ted");
+        (await TermsOf("B001305")).Should().NotContain(term => term.StartDate.Year == 2013);
+        (await verify.Set<CongressLegislator>().AnyAsync(l => l.BioguideId == "Z999901"))
+            .Should()
+            .BeFalse("the current file rejected that id, so the historical record is not used");
+    }
+
+    [Fact]
     public async Task DoWork_ResolvesSyncServiceAndRunsOneSync()
     {
         var syncService = CreateSut(Current(), Historical());

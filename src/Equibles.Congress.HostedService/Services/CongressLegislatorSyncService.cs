@@ -67,7 +67,7 @@ public class CongressLegislatorSyncService
 
         _logger.LogInformation(
             "Legislator roster synced: {Legislators} legislators, {Added} terms added, "
-                + "{Updated} kept, {Removed} removed, {Rejected} legislators rejected",
+                + "{Kept} kept, {Removed} removed, {Rejected} legislators rejected",
             legislators.Count,
             counts.Added,
             counts.Kept,

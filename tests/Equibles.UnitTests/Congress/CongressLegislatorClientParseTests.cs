@@ -232,10 +232,51 @@ public class CongressLegislatorClientParseTests
             );
     }
 
+    [Fact]
+    public async Task ParseLegislators_TermEndsTheDayBeforeTheNext_MeetsTheNextTerm()
+    {
+        const string json = """
+            [{"id":{"bioguide":"Z1"},"name":{"first":"A","last":"B"},"terms":[
+              {"type":"rep","start":"2021-01-03","end":"2022-12-21","state":"OH","district":1,"party":"Democrat"},
+              {"type":"rep","start":"2022-12-22","end":"2025-01-03","state":"OH","district":1,"party":"Democrat"}]}]
+            """;
+        await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+
+        var result = await CongressLegislatorClient.ParseLegislators(stream);
+
+        result
+            .Legislators.Single()
+            .Terms.Select(term => (term.StartDate, term.EndDate))
+            .Should()
+            .Equal(
+                (new DateOnly(2021, 1, 3), new DateOnly(2022, 12, 22)),
+                (new DateOnly(2022, 12, 22), new DateOnly(2025, 1, 3))
+            );
+    }
+
+    [Theory]
+    [InlineData("""[{"id":{"bioguide":"Z1"},"name":{"first":"A","last":"B"},"terms":null}]""")]
+    [InlineData(
+        """[{"id":{"bioguide":"Z1"},"name":{"first":"A","last":"B"},"terms":[{"type":"sen","start":"2019-01-03","end":"2025-01-03","state":"OH","party":"Democrat","party_affiliations":null}]}]"""
+    )]
+    public async Task ParseLegislators_NullCollections_DoNotAbortTheRead(string json)
+    {
+        await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+
+        var result = await CongressLegislatorClient.ParseLegislators(stream);
+
+        result.RecordCount.Should().Be(1);
+        result.Rejections.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(
         """[{"id":{"bioguide":"Z1"},"name":{"first":"A","last":"B"},"terms":[{"type":"rep","start":"2019-01-03","end":"2021-01-03","state":"OH","party":"Democrat"}]}]""",
         "House term without a district"
+    )]
+    [InlineData(
+        """[{"id":{"bioguide":"Z1"},"name":{"first":"A","last":"B"},"terms":[{"type":"sen","start":"2019-01-03","end":"2025-01-03","state":"OH","party":"Democrat","party_affiliations":[{"start":"2019-01-03","end":"2020-01-03","party":"Democrat"},{"start":"2020-01-05","end":"2025-01-03","party":"Independent"}]}]}]""",
+        "party segments two days apart"
     )]
     [InlineData(
         """[{"id":{"bioguide":"Z1"},"name":{"first":"A","last":"B"},"terms":[{"type":"del","start":"2019-01-03","end":"2021-01-03","state":"OH","district":1,"party":"Democrat"}]}]""",

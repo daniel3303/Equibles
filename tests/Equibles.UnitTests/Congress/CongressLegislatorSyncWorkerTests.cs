@@ -17,6 +17,10 @@ public class CongressLegislatorSyncWorkerTests
         CreateSut().InvokeSleepInterval().Should().Be(TimeSpan.FromDays(7));
 
     [Fact]
+    public void SkipStartupCycleWhenFresh_IsOn() =>
+        CreateSut().InvokeSkipStartupCycleWhenFresh().Should().BeTrue();
+
+    [Fact]
     public void ErrorSource_IsCongressScraper() =>
         CreateSut().InvokeErrorSource().Should().Be(ErrorSource.CongressScraper);
 
@@ -59,5 +63,7 @@ public class CongressLegislatorSyncWorkerTests
         public TimeSpan InvokeSleepInterval() => SleepInterval;
 
         public ErrorSource InvokeErrorSource() => ErrorSource;
+
+        public bool InvokeSkipStartupCycleWhenFresh() => SkipStartupCycleWhenFresh;
     }
 }

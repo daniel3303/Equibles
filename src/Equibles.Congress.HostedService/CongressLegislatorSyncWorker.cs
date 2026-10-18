@@ -14,6 +14,9 @@ public class CongressLegislatorSyncWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval => TimeSpan.FromDays(7);
     protected override ErrorSource ErrorSource => ErrorSource.CongressScraper;
 
+    // A sync is idempotent and nothing wakes it early, so a restart skips a fresh cycle.
+    protected override bool SkipStartupCycleWhenFresh => true;
+
     public CongressLegislatorSyncWorker(
         ILogger<CongressLegislatorSyncWorker> logger,
         IServiceScopeFactory scopeFactory,
