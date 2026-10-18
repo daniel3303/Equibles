@@ -18,7 +18,7 @@ public class Holdings13FReconciliationServiceReconcilableQuarterTests
     // Q3-2026's deadline falls on Sat 14 Nov and rolls to Mon 16 Nov → still Q2 that Monday.
     [InlineData("2026-11-16", "2026-06-30")]
     [InlineData("2026-11-17", "2026-09-30")]
-    // New year, before Q4-2025's 14 Feb deadline → reconcile through Q3-2025.
+    // New year, before Q4-2025's deadline (Sat 14 Feb, rolled past Washington's Birthday to Tue 17 Feb) → reconcile through Q3-2025.
     [InlineData("2026-01-01", "2025-09-30")]
     // Just after Q3-2025's 14 Nov deadline → Q3 reconcilable.
     [InlineData("2025-11-20", "2025-09-30")]

@@ -338,7 +338,9 @@ public class HolderSuccessionRuleTests
     [Theory]
     [InlineData("2026-10-17", "2026-06-30")]
     [InlineData("2026-11-14", "2026-06-30")]
-    [InlineData("2026-11-15", "2026-09-30")]
+    // Q3-2026's deadline (Sat 14 Nov) rolls to Mon 16 Nov, so Q3 closes on Tue 17 Nov.
+    [InlineData("2026-11-16", "2026-06-30")]
+    [InlineData("2026-11-17", "2026-09-30")]
     public void LatestClosedQuarter_WaitsForTheFilingDeadline(string today, string expected)
     {
         HolderSuccessionRefreshService

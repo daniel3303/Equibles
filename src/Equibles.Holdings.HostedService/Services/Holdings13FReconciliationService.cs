@@ -342,7 +342,7 @@ public class Holdings13FReconciliationService
     }
 
     /// <summary>
-    /// The most recent quarter end whose 13F filing deadline has passed — the newest
+    /// The most recent quarter end whose 13F filing deadline has passed, the newest
     /// quarter a filer can be considered late/missing on. During a quarter's open filing
     /// window we must not treat not-yet-filed filers as gaps, or reconciliation would
     /// flag the whole universe.

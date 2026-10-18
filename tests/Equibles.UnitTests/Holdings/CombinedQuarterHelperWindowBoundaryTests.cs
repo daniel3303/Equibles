@@ -16,8 +16,8 @@ public class CombinedQuarterHelperWindowBoundaryTests
     [Fact]
     public void IsFilingWindowOpen_OnTheDeadline_IsStillOpen()
     {
-        // Deadline day (quarter end + 45): filings are still legally arriving.
-        var deadline = QuarterEnd.AddDays(CombinedQuarterHelper.FilingDeadlineDays);
+        // Deadline day: filings are still legally arriving.
+        var deadline = CombinedQuarterHelper.FilingDeadline(QuarterEnd);
 
         Assert.True(CombinedQuarterHelper.IsFilingWindowOpen(QuarterEnd, deadline));
         Assert.False(CombinedQuarterHelper.IsFilingWindowOpen(QuarterEnd, deadline.AddDays(1)));

@@ -10,10 +10,10 @@ public class CombinedQuarterHelperIsFilingWindowClosedTests
     // (45+ days past the report date) returns false.
     //
     // Contract (CombinedQuarterHelper.IsFilingWindowOpen):
-    //   today <= latestReportDate.AddDays(45)
+    //   today <= FilingDeadline(latestReportDate), reportDate + 45 rolled to a business day
     // Closed-arm contract:
     //   latestReportDate is far enough in the past that
-    //   latestReportDate + 45 < today → return false.
+    //   FilingDeadline(latestReportDate) < today → return false.
     //
     // The risks this pin uniquely catches and that the open-arm
     // sibling cannot:
