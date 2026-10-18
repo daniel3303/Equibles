@@ -154,6 +154,34 @@ public class CongressLegislatorSyncServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task SyncAll_UnresolvedMembers_MatchesThemAndReportsConflictsOnce()
+    {
+        var bishop = Member("Sanford D. Bishop Jr.", "GA02", null);
+        var norton = Member("Eleanor Holmes Norton", "DC00", "X999999");
+        DbContext.AddRange(bishop, norton, Trade(bishop), Trade(norton));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await CreateSut(Current(), Historical()).SyncAll(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var members = await verify
+            .Set<CongressMember>()
+            .AsNoTracking()
+            .ToDictionaryAsync(member => member.Name);
+        members["Sanford D. Bishop Jr."].BioguideId.Should().Be("B000490");
+        members["Sanford D. Bishop Jr."]
+            .BioguideIdSource.Should()
+            .Be(CongressBioguideIdSource.SeatAndSurnameMatch);
+        members["Eleanor Holmes Norton"].BioguideId.Should().Be("X999999");
+        var conflict = await verify
+            .Set<Error>()
+            .AsNoTracking()
+            .SingleAsync(error => error.Context == ConflictErrorContext);
+        conflict.Message.Should().Contain("Eleanor Holmes Norton").And.Contain("N000147");
+    }
+
+    [Fact]
     public async Task DoWork_ResolvesSyncServiceAndRunsOneSync()
     {
         var syncService = CreateSut(Current(), Historical());
@@ -180,6 +208,32 @@ public class CongressLegislatorSyncServiceTests : ParadeDbMcpTestBase
 
     private const string RejectedErrorContext = "CongressLegislators.Rejected";
 
+    private const string ConflictErrorContext = "CongressMembers.LegislatorIdentityConflict";
+
+    private static CongressMember Member(string name, string seat, string bioguideId) =>
+        new()
+        {
+            Name = name,
+            Position = CongressPosition.Representative,
+            StateDistrict = seat,
+            BioguideId = bioguideId,
+            BioguideIdSource =
+                bioguideId == null ? null : CongressBioguideIdSource.SeatAndSurnameMatch,
+        };
+
+    private static CongressionalTrade Trade(CongressMember member) =>
+        new()
+        {
+            CongressMember = member,
+            TransactionDate = new DateOnly(2024, 4, 1),
+            FilingDate = new DateOnly(2024, 5, 1),
+            TransactionType = CongressTransactionType.Purchase,
+            OwnerType = "",
+            AssetName = $"Asset for {member.Name}",
+            AmountFrom = 1_001,
+            AmountTo = 15_000,
+        };
+
     private CongressLegislatorSyncService CreateSut(string currentJson, string historicalJson)
     {
         var client = new CongressLegislatorClient(
@@ -190,9 +244,11 @@ public class CongressLegislatorSyncServiceTests : ParadeDbMcpTestBase
             ServiceScopeSubstitute.Create((typeof(ErrorManager), ErrorManager)),
             NullLogger<ErrorReporter>()
         );
+        var context = Fixture.CreateDbContext();
         return new CongressLegislatorSyncService(
-            Fixture.CreateDbContext(),
+            context,
             client,
+            new CongressMemberIdentityService(context, NullLogger<CongressMemberIdentityService>()),
             errorReporter,
             NullLogger<CongressLegislatorSyncService>()
         );
