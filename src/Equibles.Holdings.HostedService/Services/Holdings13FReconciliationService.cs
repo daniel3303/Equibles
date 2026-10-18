@@ -29,10 +29,6 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class Holdings13FReconciliationService
 {
-    // 13F filers have 45 days after a quarter end to submit; only a quarter past
-    // that deadline can be called "missing" rather than "not filed yet".
-    private const int FilingDeadlineDays = 45;
-
     // Only chase filers whose newest materialised quarter is within this many
     // quarters of the reconcilable horizon, and only heal quarters back to this
     // window. Older trailing filers are either long defunct or carry deep
@@ -346,15 +342,15 @@ public class Holdings13FReconciliationService
     }
 
     /// <summary>
-    /// The most recent quarter end whose 13F filing deadline (45 days after the
-    /// quarter end) has elapsed — the newest quarter a filer can be considered
-    /// late/missing on. During a quarter's open filing window we must not treat
-    /// not-yet-filed filers as gaps, or reconciliation would flag the whole universe.
+    /// The most recent quarter end whose 13F filing deadline has passed, the newest
+    /// quarter a filer can be considered late/missing on. During a quarter's open filing
+    /// window we must not treat not-yet-filed filers as gaps, or reconciliation would
+    /// flag the whole universe.
     /// </summary>
     internal static DateOnly LatestReconcilableQuarterEnd(DateOnly today)
     {
         var quarterEnd = MostRecentQuarterEnd(today);
-        while (today < quarterEnd.AddDays(FilingDeadlineDays))
+        while (CombinedQuarterHelper.IsFilingWindowOpen(quarterEnd, today))
         {
             quarterEnd = PreviousQuarterEnd(quarterEnd);
         }

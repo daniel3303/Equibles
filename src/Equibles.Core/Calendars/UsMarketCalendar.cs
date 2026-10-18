@@ -49,6 +49,18 @@ public static class UsMarketCalendar
     }
 
     /// <summary>
+    /// <paramref name="date"/> itself when it is a trading day, otherwise the nearest trading
+    /// day after it. Models the "roll forward to the next business day" convention a filing
+    /// deadline that lands on a weekend or holiday follows.
+    /// </summary>
+    public static DateOnly NextOrSameTradingDay(DateOnly date)
+    {
+        while (!IsTradingDay(date))
+            date = date.AddDays(1);
+        return date;
+    }
+
+    /// <summary>
     /// The nearest trading day strictly before <paramref name="date"/> — the session a day
     /// change is measured from. Distinct from <see cref="PreviousOrSameTradingDay"/>, which
     /// returns the date itself when it already is a trading day.

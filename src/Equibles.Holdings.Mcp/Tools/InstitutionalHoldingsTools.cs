@@ -310,8 +310,8 @@ public class InstitutionalHoldingsTools
     // WHY the newest quarter is presented as a merge of two filing sets.
     private static string CombinedViewNote(DateOnly targetDate, StockQuarterAnchor anchor) =>
         $"Note: the {FormatDate(targetDate)} filing window is still open (13Fs are due 45 days "
-        + $"after quarter end). Combined view: funds that have not filed yet carry their "
-        + $"{FormatDate(RequirePreviousReportDate(anchor))} positions.";
+        + $"after quarter end, or the next business day). Combined view: funds that have not "
+        + $"filed yet carry their {FormatDate(RequirePreviousReportDate(anchor))} positions.";
 
     private static DateOnly RequirePreviousReportDate(StockQuarterAnchor anchor) =>
         anchor.PreviousReportDate

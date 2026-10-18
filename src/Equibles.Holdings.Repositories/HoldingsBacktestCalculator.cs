@@ -4,8 +4,8 @@ namespace Equibles.Holdings.Repositories;
 
 public static class HoldingsBacktestCalculator
 {
-    // 13F filings are due 45 days after the quarter-end ReportDate; that's the earliest a
-    // cloner could legally have learned the portfolio. Using ReportDate itself would peek.
+    // 13F filings are due 45 days after the quarter-end ReportDate (a weekend or holiday deadline
+    // moves 1-3 days later); rebalancing there approximates when a cloner learned the portfolio.
     public const int RebalanceDelayDays = 45;
 
     // Bound memory and rendering cost — a 10y simulation already exceeds 3,600 daily points.
