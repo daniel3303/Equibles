@@ -33,7 +33,10 @@ public class ClearDebtSecurityShareFiguresMigrationTests : ParadeDbMcpTestBase
         var stored = await DbContext
             .Set<EquitySecurity>()
             .AsNoTracking()
-            .ToDictionaryAsync(s => s.EquityIssuerId, s => (s.SharesOutstanding, s.MarketCapitalization));
+            .ToDictionaryAsync(
+                s => s.EquityIssuerId,
+                s => (s.SharesOutstanding, s.MarketCapitalization)
+            );
         stored[note.Id].Should().Be((0L, 0d));
         stored[preferred.Id].Should().Be((1_961_737_637L, 9.8e9));
         stored[common.Id].Should().Be((105_046_333L, 2_667_126_394d));

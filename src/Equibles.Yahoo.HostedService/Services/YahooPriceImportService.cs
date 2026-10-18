@@ -3004,6 +3004,10 @@ public class YahooPriceImportService
                     )
                 )
                     return;
+                _logger.LogInformation(
+                    "Cleared share count and market cap for {Ticker}: its presentation is filed as debt",
+                    ticker
+                );
             }
             await transaction.CommitAsync(cancellationToken);
             return;
