@@ -37,6 +37,24 @@ public class HolderIdentifierRulesTests
         HolderIdentifierRules.NormalizeSecFileNumber(filed).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("028-04295", "28-4295")]
+    [InlineData("28-4295", "28-4295")]
+    [InlineData(" 0028-04295 ", "28-4295")]
+    [InlineData("801-117266", null)]
+    [InlineData("028-0", null)]
+    [InlineData("028-04295-01", null)]
+    [InlineData("S028-04295", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void NormalizeForm13FFileNumber_KeepsOnlyForm13FFileNumbers(
+        string filed,
+        string expected
+    )
+    {
+        HolderIdentifierRules.NormalizeForm13FFileNumber(filed).Should().Be(expected);
+    }
+
     [Fact]
     public void SummarizeAdvisedSeries_CountsEachSeriesOnceAtItsLatestReport()
     {

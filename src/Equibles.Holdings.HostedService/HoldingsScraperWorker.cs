@@ -189,6 +189,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
         await RefreshHolderProfiles(stoppingToken);
 
         await SyncForm13FNotices(fileNames, stoppingToken);
+        // After the notices, which name the managers that report for a filer that stopped.
+        await RefreshHolderSuccessions(stoppingToken);
 
         // Position coverage does not depend on valuation. Check it before maintenance can
         // spend the cycle repricing a large backlog, but let maintenance survive SEC outages.
@@ -812,6 +814,21 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "Holder profile refresh failed; retrying next cycle");
+        }
+    }
+
+    private async Task RefreshHolderSuccessions(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<HolderSuccessionRefreshService>()
+                .Run(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogError(exception, "Holder succession refresh failed; retrying next cycle");
         }
     }
 

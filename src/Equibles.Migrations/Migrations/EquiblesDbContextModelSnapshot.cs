@@ -19,7 +19,7 @@ namespace Equibles.Migrations.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Proxies:ChangeTracking", false)
                 .HasAnnotation("Proxies:CheckEquality", false)
                 .HasAnnotation("Proxies:LazyLoading", true)
@@ -3020,6 +3020,53 @@ namespace Equibles.Migrations.Migrations
                     NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker"), false);
 
                     b.ToTable("HolderStockPresence");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderSuccession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Basis")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DerivationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EvidenceAccession")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("PredecessorGroupValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("PredecessorHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("PredecessorLastReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("SuccessorFirstReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<long>("SuccessorGroupValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("SuccessorHolderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SuccessorHolderId");
+
+                    b.HasIndex("PredecessorHolderId", "SuccessorHolderId")
+                        .IsUnique();
+
+                    b.ToTable("HolderSuccession");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HoldingLabelConvergenceState", b =>
@@ -6735,6 +6782,25 @@ namespace Equibles.Migrations.Migrations
                         .IsRequired();
 
                     b.Navigation("InstitutionalHolder");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderSuccession", b =>
+                {
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "PredecessorHolder")
+                        .WithMany()
+                        .HasForeignKey("PredecessorHolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "SuccessorHolder")
+                        .WithMany()
+                        .HasForeignKey("SuccessorHolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PredecessorHolder");
+
+                    b.Navigation("SuccessorHolder");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.InstitutionalFiling", b =>

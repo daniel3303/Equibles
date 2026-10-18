@@ -905,7 +905,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position); entries and exits require observed 13F filings in both compared quarters, so missing filings or a CIK migration cannot become a full-position buy or sale; the output counts the filers and shares left out and names the largest. While the newest quarter's filing window is open, results cover only the funds that have already filed (noted in the output). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
+        "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position); entries and exits require observed 13F filings in both compared quarters, so missing filings cannot become a full-position buy or sale; a filer that continues under one new CIK with a matching 13F book is compared through that successor, and one split across several new CIKs is left out; the output counts the filers and shares left out and names the largest. While the newest quarter's filing window is open, results cover only the funds that have already filed (noted in the output). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
     )]
     public Task<string> GetTopInstitutionalBuyersSellers(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -1004,8 +1004,12 @@ public class InstitutionalHoldingsTools
                     return SplitAdjustment.AdjustShareCount(shares, asOf, scoped);
                 }
 
+                // A filer continued by one successor under a new CIK is compared through it.
                 var movers = activity
-                    .GroupBy(row => row.InstitutionalHolderId)
+                    .GroupBy(row =>
+                        comparison?.ComparisonKey(row.InstitutionalHolderId)
+                        ?? row.InstitutionalHolderId
+                    )
                     .Where(g => comparison != null && comparison.CanCompareHolder(g.Key))
                     .Select(g =>
                     {
@@ -1124,12 +1128,18 @@ public class InstitutionalHoldingsTools
                         .ToHashSet();
                 }
 
+                // A successor compared with the filers it continues is named with them.
+                string RowName(Guid id) =>
+                    comparison?.ContinuedFrom(id) is { } predecessors
+                        ? $"{HolderName(id)} (continues {predecessors})"
+                        : HolderName(id);
                 var buyerRows = topBuyers
                     .Select(m =>
                         (
-                            firstTimeFilerIds.Contains(m.Id)
+                            comparison?.ContinuedFrom(m.Id) == null
+                            && firstTimeFilerIds.Contains(m.Id)
                                 ? $"{HolderName(m.Id)} (first 13F this quarter)"
-                                : HolderName(m.Id),
+                                : RowName(m.Id),
                             m.CurrentShares,
                             m.PreviousShares,
                             m.DeltaShares,
@@ -1140,7 +1150,7 @@ public class InstitutionalHoldingsTools
                 var sellerRows = topSellers
                     .Select(m =>
                         (
-                            HolderName(m.Id),
+                            RowName(m.Id),
                             m.CurrentShares,
                             m.PreviousShares,
                             m.DeltaShares,
@@ -1155,7 +1165,7 @@ public class InstitutionalHoldingsTools
                             + "movement requires observed filings in both compared quarters."
                     : previousDate.HasValue
                         ? $"Note: buyers and sellers require observed 13F filings in both compared quarters — "
-                            + "funds that stopped filing under this CIK (migrations, deregistrations) are excluded."
+                            + "funds that stopped filing under this CIK are excluded unless their filings tie them to a successor whose 13F book matches theirs."
                     : null;
 
                 return RenderBuyersSellersTable(
