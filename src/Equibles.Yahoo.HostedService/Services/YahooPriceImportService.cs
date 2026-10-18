@@ -1,4 +1,5 @@
 using System.Data;
+using Equibles.CommonStocks.Data.Extensions;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -2985,6 +2986,29 @@ public class YahooPriceImportService
         }
         EquityIssuer stock = lockedSeries.Value.Stock;
 
+        // A listed note has no equity share count or market cap, and Yahoo's figures for it are the
+        // parent's, so a debt-presented issuer stores none and loses any written before.
+        var presented = stock.Presentation.Listing.Security;
+        if (presented.RegistrationType == ListedSecurityType.DebtSecurities)
+        {
+            if (presented.SharesOutstanding != 0 || presented.MarketCapitalization != 0)
+            {
+                presented.SharesOutstanding = 0;
+                presented.MarketCapitalization = 0;
+                if (
+                    !await SaveStockChanges(
+                        stockRepo,
+                        target.EquityIssuerId,
+                        ticker,
+                        cancellationToken
+                    )
+                )
+                    return;
+            }
+            await transaction.CommitAsync(cancellationToken);
+            return;
+        }
+
         // The SEC cover-page count (dei:EntityCommonStockSharesOutstanding) is authoritative and
         // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
         // for the share count when the issuer has an SEC fact, so Yahoo can't overwrite it with a
@@ -3030,6 +3054,11 @@ public class YahooPriceImportService
                 stock.Presentation.Listing.Security.RegistrationTitle
             )
         )
+            edgarShares = null;
+
+        // The cover-page count is the common's, so a listed preferred, warrant or right keeps the
+        // feed's own per-ticker figures.
+        if (edgarShares != null && presented.RegistrationType.IsNonEquity())
             edgarShares = null;
 
         // A last guard for issuers the two authoritative statements above miss: detect the unit

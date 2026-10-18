@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Extensions;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 
@@ -36,7 +37,7 @@ public static class UsPresentationTicker
         return eligible.FirstOrDefault(ticker =>
                 FiledType(ticker, filedTypes) == ListedSecurityType.CommonShares
             )
-            ?? eligible.FirstOrDefault(ticker => !IsNonEquity(FiledType(ticker, filedTypes)))
+            ?? eligible.FirstOrDefault(ticker => !FiledType(ticker, filedTypes).IsNonEquity())
             ?? eligible[0];
     }
 
@@ -54,13 +55,5 @@ public static class UsPresentationTicker
     // Units stay demotable here even though equity surfaces keep them: an MLP files no common
     // sibling, so only a SPAC unit with separately listed shares is ever overridden.
     private static bool IsNonCommon(ListedSecurityType type) =>
-        type == ListedSecurityType.Units || IsNonEquity(type);
-
-    // The kinds equity surfaces exclude; any other sibling can present the issuer's equity.
-    private static bool IsNonEquity(ListedSecurityType type) =>
-        type
-            is ListedSecurityType.Warrants
-                or ListedSecurityType.Rights
-                or ListedSecurityType.PreferredShares
-                or ListedSecurityType.DebtSecurities;
+        type == ListedSecurityType.Units || type.IsNonEquity();
 }
