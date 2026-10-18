@@ -677,6 +677,33 @@ public class HoldingsComparisonCoverageTests
     }
 
     [Fact]
+    public void SuccessionNote_NameEndingInAPeriod_EndsTheSentenceOnce()
+    {
+        var status = new HoldingsComparisonStatus(
+            Current,
+            Prior,
+            new HashSet<Guid>(),
+            new HashSet<Guid>()
+        )
+        {
+            Successions =
+            [
+                new(
+                    Current,
+                    new Dictionary<Guid, string> { [Guid.NewGuid()] = "BlackRock Inc." },
+                    new Dictionary<Guid, string> { [Guid.NewGuid()] = "BlackRock, Inc." },
+                    Comparable: true
+                ),
+            ],
+        };
+
+        status
+            .SuccessionNote.Should()
+            .Be("Compared across CIK changes: BlackRock Inc. continues as BlackRock, Inc.");
+        status.Note.Should().Be(status.SuccessionNote);
+    }
+
+    [Fact]
     public async Task Succession_CombinedQuarter_DoesNotCarryTheContinuedFiler()
     {
         await using var db = NewDb();
