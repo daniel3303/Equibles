@@ -21,6 +21,11 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
 {
     private const long ReconciliationLockId = 4305;
 
+    // Only the reviewed catalog assigns these ids, so a seat-and-surname match never takes one.
+    private static readonly HashSet<string> CatalogBioguideIds = CongressMemberIdentityCatalog
+        .All.Select(identity => identity.BioguideId)
+        .ToHashSet(StringComparer.Ordinal);
+
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly CongressMemberHistoryMerger _historyMerger;
     private readonly ILogger<CongressMemberIdentityService> _logger;
@@ -199,8 +204,8 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
                 .ThenBy(member => member.Id)
                 .ToListAsync(ct);
 
-            // A row that holds the id only through a seat-and-surname match is not catalog
-            // evidence: it is never merged or renamed, and it gives the id up to an alias row.
+            // A row that holds a catalog id only through a seat-and-surname match is not catalog
+            // evidence: it gives the id up, unmerged and unrenamed, so an alias row can take it.
             var matchedHolders = candidates
                 .Where(member =>
                     member.BioguideIdSource == CongressBioguideIdSource.SeatAndSurnameMatch
@@ -208,9 +213,6 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
                 )
                 .ToList();
             candidates = candidates.Except(matchedHolders).ToList();
-            if (candidates.Count == 0)
-                continue;
-
             if (matchedHolders.Count > 0)
             {
                 foreach (var holder in matchedHolders)
@@ -224,9 +226,12 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
                     holder.BioguideIdSource = null;
                 }
 
-                // Freed before the alias row takes the id, so the unique index never sees it twice.
+                // Freed before an alias row takes the id, so the unique index never sees it twice.
                 await _dbContext.SaveChangesAsync(ct);
             }
+
+            if (candidates.Count == 0)
+                continue;
 
             var conflicting = candidates
                 .Where(member =>
@@ -360,6 +365,12 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
             {
                 foreach (var member in rows)
                     AddConflict(result, member, group.Key, "several unresolved members match it");
+                continue;
+            }
+
+            if (CatalogBioguideIds.Contains(group.Key))
+            {
+                AddConflict(result, rows[0], group.Key, "a reviewed catalog identity owns it");
                 continue;
             }
 

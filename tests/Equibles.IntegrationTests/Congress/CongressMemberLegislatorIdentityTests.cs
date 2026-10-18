@@ -150,7 +150,7 @@ public class CongressMemberLegislatorIdentityTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ReconcileMembers_MatchedRowHoldsACatalogIdWithoutAnAliasRow_LeavesItAlone()
+    public async Task ReconcileMembers_MatchedRowHoldsACatalogIdWithoutAnAliasRow_FreesItUnrenamed()
     {
         var matched = await SeedMember(
             "Teddy Budd",
@@ -164,8 +164,54 @@ public class CongressMemberLegislatorIdentityTests : ParadeDbMcpTestBase
 
         var stored = await Reload(matched);
         stored.Name.Should().Be("Teddy Budd");
-        stored.BioguideId.Should().Be("B001305");
-        stored.BioguideIdSource.Should().Be(CongressBioguideIdSource.SeatAndSurnameMatch);
+        stored.BioguideId.Should().BeNull();
+        stored.BioguideIdSource.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpsertMembers_AliasFilingWhileAMatchedRowHoldsTheCatalogId_InsertsTheCatalogRow()
+    {
+        var matched = await SeedMember(
+            "Teddy Budd",
+            "NC13",
+            filingDate: null,
+            bioguideId: "B001305",
+            source: CongressBioguideIdSource.SeatAndSurnameMatch
+        );
+
+        await CreateSut()
+            .UpsertMembers(
+                [
+                    new Equibles.Congress.HostedService.Models.CongressMemberObservation(
+                        "Theodore P. Budd",
+                        CongressPosition.Senator,
+                        null,
+                        new DateOnly(2024, 3, 1)
+                    ),
+                ],
+                CancellationToken.None
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var canonical = await verify
+            .Set<CongressMember>()
+            .AsNoTracking()
+            .SingleAsync(member => member.Name == "Ted Budd");
+        canonical.BioguideId.Should().Be("B001305");
+        canonical.BioguideIdSource.Should().Be(CongressBioguideIdSource.Catalog);
+        (await Reload(matched)).BioguideId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReconcileLegislatorIdentities_SeatAndSurnamePointAtACatalogId_LeavesItToTheCatalog()
+    {
+        var member = await SeedMember("Teddy Budd", "NC13", new DateOnly(2020, 3, 1));
+
+        var result = await CreateSut().ReconcileLegislatorIdentities(CancellationToken.None);
+
+        result.Assigned.Should().Be(0);
+        result.Conflicts.Should().ContainSingle().Which.DerivedBioguideId.Should().Be("B001305");
+        (await Reload(member)).BioguideId.Should().BeNull();
     }
 
     [Fact]
