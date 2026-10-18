@@ -1,4 +1,5 @@
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
 
 namespace Equibles.UnitTests.Holdings;
@@ -138,5 +139,22 @@ public class HolderBucketTokensTests
             )
             .Should()
             .Be("idx, unk");
+    }
+
+    [Fact]
+    public void EveryMixDimension_HasOneTokenThatParsesBackCaseInsensitively()
+    {
+        foreach (var dimension in Enum.GetValues<HolderMixDimension>())
+            HolderBucketTokens
+                .ParseMixDimension($" {HolderBucketTokens.Token(dimension).ToUpperInvariant()} ")
+                .Should()
+                .Be((dimension, null));
+        HolderBucketTokens.ParseMixDimension(" ").Should().Be((null, null));
+        HolderBucketTokens
+            .ParseMixDimension("sector")
+            .Error.Should()
+            .Be(
+                "Unknown dimension 'sector'. Use one of: type, style, turnover, horizon, aum, client, pf, country."
+            );
     }
 }
