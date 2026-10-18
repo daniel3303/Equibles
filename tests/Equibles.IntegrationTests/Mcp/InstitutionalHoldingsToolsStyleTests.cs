@@ -33,12 +33,15 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
         var focused = Holder("1", "Focused Capital");
         var tracker = Holder("2", "Tracker Advisers");
         var unmeasured = Holder("3", "New Filer LLC");
+        var small = Holder("4", "Small Book LLC");
         DbContext.AddRange(
             Holding(stock, focused, 6_000, December),
             Holding(stock, tracker, 3_000, December),
-            Holding(stock, unmeasured, 1_000, December),
+            Holding(stock, unmeasured, 900, December),
+            Holding(stock, small, 100, December),
             Metrics(focused, December, HolderStyleBand.Concentrated),
-            Metrics(tracker, December, HolderStyleBand.IndexLike)
+            Metrics(tracker, December, HolderStyleBand.IndexLike),
+            Metrics(small, December, HolderStyleBand.Unknown)
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -47,7 +50,8 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
         var all = await Sut(verify).GetTopHolders("AAPL");
         var picked = await Sut(verify).GetTopHolders("AAPL", styles: ["conc", "IDX"]);
         var both = await Sut(verify).GetTopHolders("AAPL", holderTypes: ["unk"], styles: ["idx"]);
-        var none = await Sut(verify).GetTopHolders("AAPL", styles: ["unk"]);
+        var unknown = await Sut(verify).GetTopHolders("AAPL", styles: ["unk"]);
+        var none = await Sut(verify).GetTopHolders("AAPL", styles: ["sys"]);
         var refused = await Sut(verify).GetTopHolders("AAPL", styles: ["growth"]);
 
         all.Should()
@@ -56,7 +60,8 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
                 "| 1 | Focused Capital | Common | 6,000 | 0.6 | 60.00% | — | Concentrated |"
             )
             .And.Contain("| Tracker Advisers | Common | 3,000 | 0.3 | 30.00% | — | Index-like |")
-            .And.Contain("| New Filer LLC | Common | 1,000 | 0.1 | 10.00% | — | — |")
+            .And.Contain("| New Filer LLC | Common | 900 | 0.1 | 9.00% | — | — |")
+            .And.Contain("| Small Book LLC | Common | 100 | 0.0 | 1.00% | — | Unknown |")
             .And.Contain(
                 "_Style is each holder's band measured from its filed 13F book for 2024-12-31, never the firm's own description;"
             );
@@ -69,7 +74,12 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             .Contain("from holder type unk and style idx, across 1 institutions.")
             .And.Contain("| 1 | Tracker Advisers |")
             .And.NotContain("Focused Capital");
-        none.Should().Be("No institutional holders of AAPL with style unk as of 2024-12-31.");
+        unknown
+            .Should()
+            .Contain("Showing rows 1-1 of 1 from style unk, across 1 institutions.")
+            .And.Contain("| 1 | Small Book LLC |")
+            .And.NotContain("New Filer LLC");
+        none.Should().Be("No institutional holders of AAPL with style sys as of 2024-12-31.");
         refused.Should().StartWith("Unknown style 'growth'.");
     }
 
@@ -96,6 +106,34 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             .Contain("| Focused Capital | Common | 6,000 | 0.6 | 66.67% | — | Concentrated |")
             .And.Contain("| Later Measured LP | Common | 3,000 | 0.3 | 33.33% | — | — |")
             .And.Contain("for 2024-09-30, the newest measured quarter, never");
+    }
+
+    [Fact]
+    public async Task GetTopHolders_StyleFilterBeforeAnyMeasuredQuarter_SaysNoneIsMeasured()
+    {
+        var stock = Stock();
+        var holder = Holder("1", "Focused Capital");
+        DbContext.AddRange(
+            Holding(stock, holder, 6_000, December),
+            Metrics(holder, March, HolderStyleBand.Concentrated)
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        await using var verify = Fixture.CreateDbContext();
+
+        var filtered = await Sut(verify).GetTopHolders("AAPL", styles: ["conc"]);
+        var all = await Sut(verify).GetTopHolders("AAPL");
+
+        filtered
+            .Should()
+            .Be(
+                "No quarter on or before 2024-12-31 is measured, so no holder can match a style filter; quarters are measured from the first complete 13F quarter on file, once each filing window closes."
+            );
+        all.Should()
+            .Contain("| Focused Capital | Common | 6,000 | 0.6 | 100.00% | — | — |")
+            .And.Contain(
+                "_Style: no quarter on or before 2024-12-31 is measured; quarters are measured from the first complete 13F quarter on file, once each filing window closes._"
+            );
     }
 
     [Fact]
@@ -136,7 +174,7 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
                 "Style history of **Focused Capital** (CIK 2012383), 2 measured quarters through 2024-12-31"
             )
             .And.Contain(
-                "Note: its 2025-03-31 13F is not measured yet; a quarter is measured once its filing window closes."
+                "Note: its 2025-03-31 13F is not measured yet; quarters are measured from the first complete 13F quarter on file, once each filing window closes."
             )
             .And.Contain(
                 "| 2024-12-31 | Concentrated | Medium turnover | Long horizon | 1,000.0 | 300 | 70.0% | 65.0% | 9.5 | 50.0% | 14.2 |"
@@ -146,7 +184,7 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             .And.Contain("- Concentrated: the top 10 positions are 65.0% of the book (60%+)")
             .And.Contain("- Medium turnover: 50.0% over the last four quarters")
             .And.Contain(
-                "_Style bands measure the filed 13F common-share book each closed quarter."
+                "_Style bands measure the filed 13F common-share book each closed quarter, tested in this order."
             )
             .And.Contain(
                 "_Quarters through 2024-06-30 were filed under Focused Capital (old) (CIK 1364742); pass that CIK for its earlier style history._"
@@ -155,10 +193,13 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             .IndexOf("| 2024-12-31 |", StringComparison.Ordinal)
             .Should()
             .BeLessThan(output.IndexOf("| 2024-09-30 |", StringComparison.Ordinal));
-        latestOnly.Should().Contain("1 measured quarters").And.NotContain("| 2024-09-30 |");
+        latestOnly
+            .Should()
+            .Contain("1 measured quarter through 2024-12-31")
+            .And.NotContain("| 2024-09-30 |");
         predecessor
             .Should()
-            .StartWith("No style measurements for **Focused Capital (old)** (CIK 1364742) yet;")
+            .StartWith("No style measurements for **Focused Capital (old)** (CIK 1364742);")
             .And.Contain(
                 "_From 2024-09-30 these 13F reports continue under Focused Capital (CIK 2012383); pass that CIK for later quarters._"
             );
@@ -179,7 +220,7 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
         output
             .Should()
             .Be(
-                "No style measurements for **New Filer LLC** (CIK 1) yet; a quarter is measured once its filing window closes.\n"
+                "No style measurements for **New Filer LLC** (CIK 1); quarters are measured from the first complete 13F quarter on file, once each filing window closes.\n"
             );
     }
 
@@ -193,7 +234,8 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             Holding(stock, holder, 6_000, December),
             Holding(stock, holder, 6_000, March),
             Holding(stock, unmeasured, 1_000, March),
-            Metrics(holder, December, HolderStyleBand.Concentrated)
+            Metrics(holder, December, HolderStyleBand.Concentrated),
+            Metrics(holder, new DateOnly(2025, 6, 30), HolderStyleBand.IndexLike)
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -219,9 +261,10 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             .Contain(
                 "**Style** (measured from the filed 13F book for 2024-12-31, never the firm's own description):"
             );
+        december.Should().NotContain("Index-like");
         none.Should()
             .Contain(
-                "_No quarter on or before 2025-03-31 is measured yet; a quarter is measured once its filing window closes._"
+                "_No quarter on or before 2025-03-31 is measured; quarters are measured from the first complete 13F quarter on file, once each filing window closes._"
             );
     }
 

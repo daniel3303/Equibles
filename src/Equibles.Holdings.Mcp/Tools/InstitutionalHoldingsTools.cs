@@ -45,6 +45,9 @@ public class InstitutionalHoldingsTools
     private const string StyleParameter =
         "Style bands to keep, as an array of tokens: idx (index-like), sys (systematic-like), conc (concentrated), divact (diversified active), unk (book too small or unvalued to band), e.g. [\"conc\"]. Bands are measured from each holder's filed 13F book in the newest measured quarter on or before the report date; a holder not measured that quarter is left out by any style filter. Omit for all.";
 
+    private const string StyleMeasuredWhen =
+        "quarters are measured from the first complete 13F quarter on file, once each filing window closes";
+
     private static string HolderTypeNote(string column) =>
         $"_{column} comes from regulatory records (Form ADV rosters, the SEC filer profile, 13D/13G type codes, N-CEN), never from the name; Unknown means no record decides it, and a dash means not yet classified._";
 
@@ -247,6 +250,8 @@ public class InstitutionalHoldingsTools
                 }
                 // One measured quarter for every row, so the column compares like with like.
                 var styleAsOf = await _holderRepository.GetLatestMetricsReportDate(targetDate);
+                if (styleFilter != null && styleAsOf == null)
+                    return $"No quarter on or before {FormatDate(targetDate)} is measured, so no holder can match a style filter; {StyleMeasuredWhen}.";
                 if (styleFilter != null)
                 {
                     await LoadStyleBands(holdings, styleAsOf);
@@ -314,7 +319,7 @@ public class InstitutionalHoldingsTools
     }
 
     // Stamps each row with its holder's style band in the measured quarter, null when the
-    // holder was not measured then or no quarter is measured yet.
+    // holder was not measured then or no quarter is measured.
     private async Task LoadStyleBands(List<TopHolderRow> holdings, DateOnly? measuredQuarter)
     {
         if (measuredQuarter is not { } quarter)
@@ -512,7 +517,7 @@ public class InstitutionalHoldingsTools
     private static string StyleNote(DateOnly? styleAsOf, DateOnly targetDate) =>
         styleAsOf is { } asOf
             ? $"_Style is each holder's band measured from its filed 13F book for {FormatDate(asOf)}{(asOf == targetDate ? "" : ", the newest measured quarter")}, never the firm's own description; GetInstitutionStyleHistory shows the measurements, and a dash means not measured that quarter._"
-            : $"_Style: no quarter on or before {FormatDate(targetDate)} is measured yet._";
+            : $"_Style: no quarter on or before {FormatDate(targetDate)} is measured; {StyleMeasuredWhen}._";
 
     [McpServerTool(
         Name = "GetInstitutionalOwnershipHistory",
@@ -2051,7 +2056,7 @@ public class InstitutionalHoldingsTools
         {
             result.AppendLine("**Style** (measured from the filed 13F book):");
             result.AppendLine(
-                $"_No quarter on or before {FormatDate(targetDate)} is measured yet; a quarter is measured once its filing window closes._"
+                $"_No quarter on or before {FormatDate(targetDate)} is measured; {StyleMeasuredWhen}._"
             );
             return result.ToString();
         }
@@ -2129,21 +2134,23 @@ public class InstitutionalHoldingsTools
         if (rows.Count == 0)
         {
             result.AppendLine(
-                $"No style measurements for **{holder.Name}** (CIK {holder.Cik}) yet; a quarter is measured once its filing window closes."
+                $"No style measurements for **{holder.Name}** (CIK {holder.Cik}); {StyleMeasuredWhen}."
             );
+            if (notes != null)
+                result.AppendLine(notes);
             AppendStyleLinkNotes(result, links);
             return result.ToString();
         }
 
         var latest = rows[0];
         result.AppendLine(
-            $"Style history of **{holder.Name}** (CIK {holder.Cik}), {rows.Count} measured quarters through {FormatDate(latest.ReportDate)}"
+            $"Style history of **{holder.Name}** (CIK {holder.Cik}), {rows.Count} measured {(rows.Count == 1 ? "quarter" : "quarters")} through {FormatDate(latest.ReportDate)}"
         );
         if (notes != null)
             result.AppendLine(notes);
         if (latestReportDate > latest.ReportDate)
             result.AppendLine(
-                $"Note: its {FormatDate(latestReportDate)} 13F is not measured yet; a quarter is measured once its filing window closes."
+                $"Note: its {FormatDate(latestReportDate)} 13F is not measured yet; {StyleMeasuredWhen}."
             );
         result.AppendLine();
         result.AppendLine(

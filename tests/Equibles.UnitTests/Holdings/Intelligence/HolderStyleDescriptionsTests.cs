@@ -54,7 +54,7 @@ public class HolderStyleDescriptionsTests
             .Style(metrics)
             .Should()
             .Be(
-                "Index-like: index series hold 90.0% of the $1,000,000,000 in registered funds it advises (80%+), equal to 90.0% of its 13F equity book (50%+), N-CEN as of 2026-03-31"
+                "Index-like: index series hold 90.0% of the $1,000,000,000 in registered funds it advises (80%+), equal to 90.0% of its 13F equity book (50%+), across 300 stocks (100+), N-CEN as of 2026-03-31"
             );
     }
 
@@ -257,12 +257,15 @@ public class HolderStyleDescriptionsTests
     {
         HolderStyleDescriptions
             .Methodology.Should()
-            .Contain("at 20% or less with 100+ stocks")
-            .And.Contain("index series holding 80%+")
+            .Contain(
+                "tested in this order. Unknown: under $10,000,000 of valued equity or 5 stocks."
+            )
+            .And.Contain(
+                "Index-like (100+ stocks): active share against every 13F filer's combined book at 20% or less, or index series holding 80%+"
+            )
             .And.Contain("equal to 50%+ of its book")
             .And.Contain("500+ stocks, 100%+ annual turnover and a top 10 weight of 25% or less")
             .And.Contain("a top 10 weight of 60%+ or 12 or fewer effective positions")
-            .And.Contain("under $10,000,000 of valued equity or 5 stocks")
             .And.Contain("low under 30%, high 100%+")
             .And.Contain("short under 4, long 12+");
     }
