@@ -170,6 +170,28 @@ public class UsMarketCalendarTests
         UsMarketCalendar.PreviousTradingDay(tradingDay).Should().BeBefore(tradingDay);
     }
 
+    [Theory]
+    // A trading day is its own next-or-same trading day.
+    [InlineData(2026, 5, 15, 2026, 5, 15)]
+    // Saturday rolls to Monday.
+    [InlineData(2026, 11, 14, 2026, 11, 16)]
+    // Sunday before Washington's Birthday rolls past the Monday holiday to Tuesday.
+    [InlineData(2027, 2, 14, 2027, 2, 16)]
+    public void NextOrSameTradingDay_RollsForwardPastWeekendsAndHolidays(
+        int year,
+        int month,
+        int day,
+        int expectedYear,
+        int expectedMonth,
+        int expectedDay
+    )
+    {
+        UsMarketCalendar
+            .NextOrSameTradingDay(new DateOnly(year, month, day))
+            .Should()
+            .Be(new DateOnly(expectedYear, expectedMonth, expectedDay));
+    }
+
     private static void AssertNextWindow(DateTimeOffset from, DateOnly expected)
     {
         var windowStart = TimeSpan.FromHours(16);
