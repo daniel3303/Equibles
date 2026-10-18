@@ -46,7 +46,7 @@ public class InstitutionalHoldingsTools
         "Style bands to keep, as an array of tokens: idx (index-like), sys (systematic-like), conc (concentrated), divact (diversified active), unk (book too small or unvalued to band), e.g. [\"conc\"]. Bands are measured from each holder's filed 13F book in the newest measured quarter on or before the report date; a holder not measured that quarter is left out by any style filter. Omit for all.";
 
     private const string StyleMeasuredWhen =
-        "quarters are measured from the first complete 13F quarter on file, once each filing window closes";
+        "quarters are measured from the first covered 13F quarter, once each filing window closes";
 
     private static string HolderTypeNote(string column) =>
         $"_{column} comes from regulatory records (Form ADV rosters, the SEC filer profile, 13D/13G type codes, N-CEN), never from the name; Unknown means no record decides it, and a dash means not yet classified._";

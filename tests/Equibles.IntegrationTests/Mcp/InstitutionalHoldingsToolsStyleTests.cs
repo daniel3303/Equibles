@@ -127,12 +127,12 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
         filtered
             .Should()
             .Be(
-                "No quarter on or before 2024-12-31 is measured, so no holder can match a style filter; quarters are measured from the first complete 13F quarter on file, once each filing window closes."
+                "No quarter on or before 2024-12-31 is measured, so no holder can match a style filter; quarters are measured from the first covered 13F quarter, once each filing window closes."
             );
         all.Should()
             .Contain("| Focused Capital | Common | 6,000 | 0.6 | 100.00% | — | — |")
             .And.Contain(
-                "_Style: no quarter on or before 2024-12-31 is measured; quarters are measured from the first complete 13F quarter on file, once each filing window closes._"
+                "_Style: no quarter on or before 2024-12-31 is measured; quarters are measured from the first covered 13F quarter, once each filing window closes._"
             );
     }
 
@@ -174,7 +174,7 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
                 "Style history of **Focused Capital** (CIK 2012383), 2 measured quarters through 2024-12-31"
             )
             .And.Contain(
-                "Note: its 2025-03-31 13F is not measured yet; quarters are measured from the first complete 13F quarter on file, once each filing window closes."
+                "Note: its 2025-03-31 13F is not measured yet; quarters are measured from the first covered 13F quarter, once each filing window closes."
             )
             .And.Contain(
                 "| 2024-12-31 | Concentrated | Medium turnover | Long horizon | 1,000.0 | 300 | 70.0% | 65.0% | 9.5 | 50.0% | 14.2 |"
@@ -220,7 +220,7 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
         output
             .Should()
             .Be(
-                "No style measurements for **New Filer LLC** (CIK 1); quarters are measured from the first complete 13F quarter on file, once each filing window closes.\n"
+                "No style measurements for **New Filer LLC** (CIK 1); quarters are measured from the first covered 13F quarter, once each filing window closes.\n"
             );
     }
 
@@ -264,7 +264,7 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
         december.Should().NotContain("Index-like");
         none.Should()
             .Contain(
-                "_No quarter on or before 2025-03-31 is measured; quarters are measured from the first complete 13F quarter on file, once each filing window closes._"
+                "_No quarter on or before 2025-03-31 is measured; quarters are measured from the first covered 13F quarter, once each filing window closes._"
             );
     }
 
