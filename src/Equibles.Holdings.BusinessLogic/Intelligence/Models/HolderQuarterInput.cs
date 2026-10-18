@@ -41,6 +41,14 @@ public sealed record HolderQuarterInput
     /// <summary>The three quarters before's stored turnover, oldest first; null where unknown.</summary>
     public IReadOnlyList<decimal?> PriorTurnovers { get; init; } = [null, null, null];
 
+    /// <summary>
+    /// The filer's adviser's index and total registered fund series net assets, by each series'
+    /// latest N-CEN report for a period ending up to the quarter end; null when none is known.
+    /// </summary>
     public decimal? IndexSeriesNetAssets { get; init; }
+
     public decimal? AdvisedSeriesNetAssets { get; init; }
+
+    /// <summary>The latest N-CEN period behind the advised series figures.</summary>
+    public DateOnly? AdvisedSeriesAsOf { get; init; }
 }

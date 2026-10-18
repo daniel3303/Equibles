@@ -7,6 +7,7 @@ using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.Repositories;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
@@ -23,9 +24,9 @@ public class HolderIntelligenceRefreshService
 {
     /// <summary>
     /// Bump when the metrics change meaning, so the drain recomputes every quarter. 2: trades are
-    /// priced at the quarter average price.
+    /// priced at the quarter average price. 3: N-CEN index series assets feed the index-like band.
     /// </summary>
-    public const int CalculationVersion = 2;
+    public const int CalculationVersion = 3;
 
     /// <summary>A stamp this old is past the drain's cooldown and is picked up on its next tick.</summary>
     public static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
@@ -104,6 +105,9 @@ public class HolderIntelligenceRefreshService
                     cancellationToken
                 )
                 : [];
+        var advisedSeries = HolderIdentifierRules.SummarizeAdvisedSeries(
+            await AdvisedSeriesLoader.Load(_dbContext, reportDate, cancellationToken)
+        );
 
         var presenceChanged = await ClearNonFilers(reportDate, bit, cancellationToken);
 
@@ -118,6 +122,7 @@ public class HolderIntelligenceRefreshService
                 priorDates,
                 benchmark,
                 averagePrices,
+                advisedSeries,
                 cancellationToken
             );
             metrics.AddRange(results.Select(result => result.Result.Metrics));
@@ -134,10 +139,11 @@ public class HolderIntelligenceRefreshService
         await Publish(reportDate, metrics, cancellationToken);
 
         _logger.LogInformation(
-            "Holder intelligence for {ReportDate}: {Count} filers, {Priced} securities at their quarter average price, presence changed: {Changed}",
+            "Holder intelligence for {ReportDate}: {Count} filers, {Priced} securities at their quarter average price, {Advised} filers with N-CEN series, presence changed: {Changed}",
             reportDate,
             metrics.Count,
             averagePrices.Count,
+            metrics.Count(row => row.AdvisedSeriesAsOf != null),
             presenceChanged
         );
         return true;
@@ -154,6 +160,7 @@ public class HolderIntelligenceRefreshService
         List<DateOnly> priorDates,
         Dictionary<Guid, decimal> benchmark,
         Dictionary<HolderSecurityKey, decimal> averagePrices,
+        Dictionary<int, AdvisedSeriesSummary> advisedSeries,
         CancellationToken cancellationToken
     )
     {
@@ -214,6 +221,7 @@ public class HolderIntelligenceRefreshService
             reportDate,
             cancellationToken
         );
+        var adviserCrds = await AdviserCrds(holderIds, cancellationToken);
 
         var rowsByHolder = rows.ToLookup(row => row.InstitutionalHolderId);
         var presenceByHolder = presence.ToLookup(row => row.InstitutionalHolderId);
@@ -223,6 +231,9 @@ public class HolderIntelligenceRefreshService
             .Select(holderId =>
             {
                 var holderRows = rowsByHolder[holderId].ToList();
+                var series = adviserCrds.TryGetValue(holderId, out var crd)
+                    ? advisedSeries.GetValueOrDefault(crd)
+                    : null;
                 var input = new HolderQuarterInput
                 {
                     InstitutionalHolderId = holderId,
@@ -252,11 +263,47 @@ public class HolderIntelligenceRefreshService
                                 ?.Turnover
                         )
                         .ToList(),
+                    IndexSeriesNetAssets = series?.IndexNetAssets,
+                    AdvisedSeriesNetAssets = series?.NetAssets,
+                    AdvisedSeriesAsOf = series?.AsOf,
                 };
                 return (holderId, HolderQuarterMetricsBuilder.Build(input, CalculationVersion));
             })
             .ToList();
         return (results, presence.ToDictionary(row => row.Key, row => row.Id));
+    }
+
+    // The adviser whose N-CEN series describe each filer: the Form ADV adviser behind its profile,
+    // else the CRD on its own 13F cover, as the profile's advised series are read.
+    private async Task<Dictionary<Guid, int>> AdviserCrds(
+        Guid[] holderIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var profiles = (
+            await _dbContext
+                .Set<InstitutionalHolderProfile>()
+                .Where(profile =>
+                    holderIds.Contains(profile.InstitutionalHolderId) && profile.AdviserCrd != null
+                )
+                .Select(profile => new { profile.InstitutionalHolderId, profile.AdviserCrd })
+                .ToListAsync(cancellationToken)
+        ).ToDictionary(
+            profile => profile.InstitutionalHolderId,
+            profile => profile.AdviserCrd.Value
+        );
+        var covers = await _dbContext
+            .Set<InstitutionalHolder>()
+            .AsNoTracking()
+            .Where(holder => holderIds.Contains(holder.Id) && holder.CrdNumber != null)
+            .Select(holder => new { holder.Id, holder.CrdNumber })
+            .ToListAsync(cancellationToken);
+        var coverCrds = covers
+            .Select(cover => (cover.Id, Crd: HolderIdentifierRules.ParseCrd(cover.CrdNumber)))
+            .Where(cover => cover.Crd != null);
+        foreach (var (holderId, crd) in coverCrds)
+            profiles.TryAdd(holderId, crd.GetValueOrDefault());
+        return profiles;
     }
 
     private Task<List<PresenceRow>> LoadPresence(
