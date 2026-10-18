@@ -95,9 +95,11 @@ public sealed record HoldingsComparisonStatus(
                 .Select(Continued)
                 .Order(StringComparer.Ordinal)
                 .ToList();
-            return continued.Count > 0
-                ? $"Compared across CIK changes: {string.Join("; ", continued)}."
-                : null;
+            if (continued.Count == 0)
+                return null;
+            // The sentence can end on a name that already ends in a period, as ", Inc." does.
+            var sentence = $"Compared across CIK changes: {string.Join("; ", continued)}";
+            return sentence.EndsWith('.') ? sentence : sentence + ".";
         }
     }
 

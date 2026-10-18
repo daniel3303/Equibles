@@ -29,6 +29,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- End the comparison note's "Compared across CIK changes" sentence with one period when it ends on a name that already ends in one ("BlackRock Inc. continues as BlackRock, Inc." read "Inc..").
 - Move a 13F filing deadline that falls on a weekend or holiday to the next business day, as SEC Rule 0-3 does. `CombinedQuarterHelper.FilingDeadline` rolls quarter end plus 45 days forward through the NYSE calendar (`UsMarketCalendar.NextOrSameTradingDay`), which matches SEC business days on every 13F deadline. The combined view stays open and `CompletedReportDateCutoff` holds a quarter back until that rolled deadline has passed: Q3 2026, due Saturday 14 November, now counts as complete on Tuesday 17 November instead of Sunday 15 November. `Holdings13FReconciliationService` reads the same rule instead of its own 45-day constant, so a filer is no longer called late on the deadline day itself.
 - Describe the adviser profile tool, README and guides as covering SEC-registered and exempt reporting advisers. The Form ADV import now reads the exempt reporting adviser roster too, so calling every profile SEC-registered mislabelled the exempt firms.
 - Dispose a failed response in `HttpRetry.Send` before it throws, so a status the caller reads as an answer (a GLEIF 404) no longer holds a pooled connection until garbage collection.
