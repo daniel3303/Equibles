@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Congress.Data.Models;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
@@ -60,5 +61,10 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
 
         // Added by 20261017203549_AddFinancialFactSource.
         builder.Entity<FinancialFact>().Ignore(fact => fact.Source);
+
+        // Added by 20261018160523_AddCongressLegislatorTerms.
+        builder.Ignore<CongressMemberTerm>();
+        builder.Ignore<CongressLegislator>();
+        builder.Entity<CongressMember>().Ignore(member => member.BioguideIdSource);
     }
 }

@@ -25,6 +25,15 @@ public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<CongressionalFilingRecord>();
         builder.Entity<CongressionalTradeImportPartition>();
         builder.Entity<CongressMemberRedirect>();
+        builder.Entity<CongressLegislator>();
+        builder
+            .Entity<CongressMemberTerm>()
+            .ToTable(table =>
+                table.HasCheckConstraint(
+                    "CK_CongressMemberTerm_EndAfterStart",
+                    "\"EndDate\" > \"StartDate\""
+                )
+            );
     }
 
     private static void ConfigureRequiredTradeText(

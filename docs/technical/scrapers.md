@@ -198,6 +198,14 @@ The two congressional scrapers re-read a fixed recent window every cycle instead
 - `CongressionalFilingRecord.ParserVersion` replays filings after parser changes. The trade parser retains the filed instrument type and account/subholding, and treats a lone standard range floor as that disclosure bracket rather than as a zero-based band.
 - [`CongressionalAnnualDisclosureSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalAnnualDisclosureSyncService.cs) re-reads annual financial disclosures across a span of coverage years (House per year, Senate by submitted date) and upserts each report by its stable key, so a late amendment refreshes the stored row rather than inserting a duplicate.
 
+### Congress legislators: full roster snapshot
+
+- [`CongressLegislatorSyncWorker`](../../src/Equibles.Congress.HostedService/CongressLegislatorSyncWorker.cs) runs weekly. [`CongressLegislatorSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressLegislatorSyncService.cs) reads the public [congress-legislators](https://github.com/unitedstates/congress-legislators) roster (CC0), `legislators-current.json` and `legislators-historical.json`; the current file wins a BioGuide id both list.
+- Only legislators with a term ending on or after 2012-01-01 are kept. `CongressLegislator` holds the name; `CongressMemberTerm` holds one row per chamber term and party, half-open `[StartDate, EndDate)`, so on January 3 the incoming member holds the seat.
+- A mid-term party switch splits the term at the next party's start date; the roster writes the earlier party's end either as that date or as the day before. Segments that leave any other gap, overlap, or miss the term's start or end reject the whole legislator, as does a House term without a district; rejections are logged and written as one `CongressLegislators.Rejected` Errors row per run.
+- Overlapping terms (a chamber switch) are trimmed so the earlier term ends when the later one starts, and a term the roster ends the day before the next one starts is extended to meet it; a legislator's terms never overlap. A final mid-session end (a resignation or death) is stored as published, so that last date reads as out of office.
+- A current file with fewer than 500 records, or an empty historical file, aborts the run before any write. Otherwise one transaction upserts legislators, keeps the row of every term whose (BioGuide id, chamber, start) is unchanged, and deletes the listed legislators' terms the roster no longer has. Legislators are never deleted.
+
 ## Cold-start patterns
 
 - Empty `CommonStock` table → most scrapers `RequestRetrySoon()` and wait `NotReadyRetryInterval` (2 min) instead of the full `SleepInterval` (24h).

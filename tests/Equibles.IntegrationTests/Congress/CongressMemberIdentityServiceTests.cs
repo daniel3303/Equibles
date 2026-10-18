@@ -1,4 +1,5 @@
 using Equibles.Congress.Data.Models;
+using Equibles.Congress.HostedService.Models;
 using Equibles.Congress.HostedService.Services;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,7 @@ public class CongressMemberIdentityServiceTests : ParadeDbMcpTestBase
         var member = await verify.Set<CongressMember>().AsNoTracking().SingleAsync();
         member.Id.Should().Be(survivor.Id);
         member.BioguideId.Should().Be("F000472");
+        member.BioguideIdSource.Should().Be(CongressBioguideIdSource.Catalog);
         var redirect = await verify.Set<CongressMemberRedirect>().AsNoTracking().SingleAsync();
         redirect.Id.Should().Be(retired.Id);
         redirect.MergedIntoId.Should().Be(survivor.Id);
@@ -130,6 +132,38 @@ public class CongressMemberIdentityServiceTests : ParadeDbMcpTestBase
             AmountFrom = 1_001,
             AmountTo = 15_000,
         };
+
+    [Fact]
+    public async Task UpsertMembers_NewCatalogAlias_InsertsTheCatalogIdentity()
+    {
+        await CreateSut()
+            .UpsertMembers(
+                [
+                    new CongressMemberObservation(
+                        "Theodore P. Budd",
+                        CongressPosition.Senator,
+                        null,
+                        new DateOnly(2024, 3, 1)
+                    ),
+                    new CongressMemberObservation(
+                        "Unknown Filer",
+                        CongressPosition.Representative,
+                        "OH03",
+                        new DateOnly(2024, 3, 1)
+                    ),
+                ],
+                CancellationToken.None
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var members = await verify
+            .Set<CongressMember>()
+            .AsNoTracking()
+            .ToDictionaryAsync(member => member.Name);
+        members["Ted Budd"].BioguideId.Should().Be("B001305");
+        members["Ted Budd"].BioguideIdSource.Should().Be(CongressBioguideIdSource.Catalog);
+        members["Unknown Filer"].BioguideIdSource.Should().BeNull();
+    }
 
     private CongressMemberIdentityService CreateSut() =>
         new(DbContext, Substitute.For<ILogger<CongressMemberIdentityService>>());

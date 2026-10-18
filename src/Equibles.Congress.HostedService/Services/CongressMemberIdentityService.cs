@@ -98,12 +98,14 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
                     .OrderBy(observation => observation.ObservedAt)
                     .LastOrDefault()
                     ?.StateDistrict.Trim();
+                var bioguideId = group
+                    .Select(observation => observation.BioguideId)
+                    .FirstOrDefault(id => id != null);
                 return new CongressMember
                 {
                     Name = group.Key,
-                    BioguideId = group
-                        .Select(observation => observation.BioguideId)
-                        .FirstOrDefault(id => id != null),
+                    BioguideId = bioguideId,
+                    BioguideIdSource = bioguideId == null ? null : CongressBioguideIdSource.Catalog,
                     Position = latest.Position,
                     StateDistrict = latestSeat,
                 };
@@ -115,6 +117,8 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
         CancellationToken ct
     )
     {
+        // A matched catalog row already carries its id and source from ReconcileCatalog, so the
+        // source is written only on insert.
         await _dbContext
             .Set<CongressMember>()
             .UpsertRange(members)
@@ -206,6 +210,7 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
 
             survivor.Name = identity.CanonicalName;
             survivor.BioguideId = identity.BioguideId;
+            survivor.BioguideIdSource = CongressBioguideIdSource.Catalog;
             await _dbContext.SaveChangesAsync(ct);
         }
     }

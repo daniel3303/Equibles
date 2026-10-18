@@ -65,6 +65,11 @@
       Link="TestAssets/NCen/%(RecursiveDir)%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="../Equibles.UnitTests/TestAssets/Congress/Legislators/*.json"
+      Link="TestAssets/Congress/Legislators/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <Content Include="TestAssets\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

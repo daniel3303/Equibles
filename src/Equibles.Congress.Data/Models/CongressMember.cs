@@ -22,6 +22,12 @@ public class CongressMember
     [MaxLength(7)]
     public string BioguideId { get; set; }
 
+    /// <summary>
+    /// How <see cref="BioguideId"/> was established; null exactly when it is null. A reviewed
+    /// catalog id always replaces a matched one.
+    /// </summary>
+    public CongressBioguideIdSource? BioguideIdSource { get; set; }
+
     public CongressPosition Position { get; set; }
 
     /// <summary>

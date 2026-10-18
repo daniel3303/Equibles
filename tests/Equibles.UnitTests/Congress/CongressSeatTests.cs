@@ -37,4 +37,44 @@ public class CongressSeatTests
     [InlineData("SC005")]
     public void Format_UnrecognisedShape_IsShownAsStored(string stored) =>
         CongressSeat.Format(stored).Should().Be(stored);
+
+    [Theory]
+    [InlineData("SC05", "SC", 5)]
+    [InlineData("TX37", "TX", 37)]
+    [InlineData("ny3", "NY", 3)]
+    [InlineData(" CA12 ", "CA", 12)]
+    [InlineData("AK00", "AK", 0)]
+    [InlineData("DC00", "DC", 0)]
+    [InlineData("WYAL", "WY", 0)]
+    [InlineData("mtal", "MT", 0)]
+    public void TryParse_SeatKey_ReturnsStateAndDistrict(
+        string stored,
+        string expectedState,
+        short expectedDistrict
+    )
+    {
+        CongressSeat.TryParse(stored, out var state, out var district).Should().BeTrue();
+
+        state.Should().Be(expectedState);
+        district.Should().Be(expectedDistrict);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("SC")]
+    [InlineData("SC-5")]
+    [InlineData("SC005")]
+    [InlineData("S05")]
+    [InlineData("PUERTO RICO")]
+    public void TryParse_UnrecognisedShape_ReturnsFalse(string stored)
+    {
+        CongressSeat.TryParse(stored, out var state, out _).Should().BeFalse();
+
+        state.Should().BeNull();
+    }
+
+    [Fact]
+    public void Format_AtLargeLetters_SaysAtLarge() =>
+        CongressSeat.Format("WYAL").Should().Be("WY At-Large");
 }
