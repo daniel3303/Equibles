@@ -10,9 +10,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Equibles.Congress.HostedService.Services;
 
 /// <summary>
-/// Resolves only reviewed BioGuide-backed aliases, then writes every affected member, filing,
-/// trade, and redirect in one transaction. Unknown names retain their own row; this service
-/// never infers identity from initials, punctuation, district, or name similarity.
+/// Resolves reviewed BioGuide-backed aliases, writing every affected member, filing, trade, and
+/// redirect in one transaction, and otherwise assigns an id only when a seat or Senate term
+/// covering the member's filing dates and an exact surname point at one legislator. Unknown
+/// names retain their own row; identity is never inferred from initials or name similarity, and
+/// rows are merged only by the reviewed catalog.
 /// </summary>
 [Service(ServiceLifetime.Scoped, typeof(ICongressMemberIdentityService))]
 public class CongressMemberIdentityService : ICongressMemberIdentityService
