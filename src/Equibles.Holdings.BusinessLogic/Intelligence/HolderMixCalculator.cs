@@ -60,7 +60,7 @@ public static class HolderMixCalculator
 
     // The style buckets of books measured as actively managed: index-like, Unknown and unmeasured
     // books are left out of the active holders.
-    public static readonly IReadOnlySet<string> ActiveStyleTokens = new HashSet<string>
+    private static readonly HashSet<string> ActiveStyleTokens = new()
     {
         HolderBucketTokens.StyleToken(HolderStyleBand.SystematicLike),
         HolderBucketTokens.StyleToken(HolderStyleBand.Concentrated),
