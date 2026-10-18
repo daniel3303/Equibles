@@ -163,15 +163,15 @@ public class UsPresentationTickerTests
     public void EveryTickerFiledNonEquity_KeepsSecOrder()
     {
         var chosen = UsPresentationTicker.Choose(
-            ["ENJ", "ENO", "ABCW"],
+            ["ABCL", "ABC-PA", "ABCW"],
             Filed(
-                ("ENJ", ListedSecurityType.DebtSecurities),
-                ("ENO", ListedSecurityType.DebtSecurities),
+                ("ABCL", ListedSecurityType.DebtSecurities),
+                ("ABCPA", ListedSecurityType.PreferredShares),
                 ("ABCW", ListedSecurityType.Warrants)
             )
         );
 
-        Assert.Equal("ENJ", chosen);
+        Assert.Equal("ABCL", chosen);
     }
 
     [Fact]

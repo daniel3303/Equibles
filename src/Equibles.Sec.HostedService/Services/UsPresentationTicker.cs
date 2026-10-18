@@ -5,8 +5,9 @@ namespace Equibles.Sec.HostedService.Services;
 
 /// <summary>
 /// Chooses the SEC ticker that presents an issuer. SEC's ticker file order is the default, but
-/// it sometimes lists a warrant, unit or preferred series ahead of the common stock (HeartBeam
-/// ships BEATW before BEAT), so the issuer's own 12(b) registration titles may override it.
+/// it sometimes lists a warrant, unit, preferred series or note ahead of the common stock
+/// (HeartBeam ships BEATW before BEAT), so the issuer's own 12(b) registration titles may
+/// override it.
 /// </summary>
 public static class UsPresentationTicker
 {
@@ -29,15 +30,13 @@ public static class UsPresentationTicker
             return null;
         if (filedTypes == null || filedTypes.Count == 0)
             return eligible[0];
-        var firstType = FiledType(eligible[0], filedTypes);
-        if (!IsNonCommon(firstType))
+        if (!IsNonCommon(FiledType(eligible[0], filedTypes)))
             return eligible[0];
-        var common = eligible.FirstOrDefault(ticker =>
-            FiledType(ticker, filedTypes) == ListedSecurityType.CommonShares
-        );
-        if (common != null || firstType == ListedSecurityType.Units)
-            return common ?? eligible[0];
-        return eligible.FirstOrDefault(ticker => !IsNonEquity(FiledType(ticker, filedTypes)))
+        // A units first ticker is not non-equity, so the fallback below can only return it.
+        return eligible.FirstOrDefault(ticker =>
+                FiledType(ticker, filedTypes) == ListedSecurityType.CommonShares
+            )
+            ?? eligible.FirstOrDefault(ticker => !IsNonEquity(FiledType(ticker, filedTypes)))
             ?? eligible[0];
     }
 
