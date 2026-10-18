@@ -99,18 +99,19 @@ public class CongressLegislatorSyncService
         if (conflicts.Count == 0)
             return;
 
+        // The message is truncated on storage, so the full list goes in the stack trace column.
+        var lines = conflicts
+            .Select(c =>
+                $"{c.MemberName} ({c.ExistingBioguideId ?? "no id"}) -> {c.DerivedBioguideId}: {c.Reason}"
+            )
+            .ToList();
         await _errorReporter.Report(
             ErrorSource.CongressScraper,
             LegislatorIdentityConflictErrorContext,
             $"{conflicts.Count} congress members match a legislator by seat and surname but were "
                 + "left unassigned (catalog merge candidates): "
-                + string.Join(
-                    "; ",
-                    conflicts.Select(c =>
-                        $"{c.MemberName} ({c.ExistingBioguideId ?? "no id"}) -> {c.DerivedBioguideId}: {c.Reason}"
-                    )
-                ),
-            stackTrace: null
+                + string.Join("; ", lines),
+            stackTrace: string.Join(Environment.NewLine, lines)
         );
     }
 
@@ -157,7 +158,10 @@ public class CongressLegislatorSyncService
             RejectedLegislatorsErrorContext,
             $"{rejections.Count} roster legislators were left out: "
                 + string.Join("; ", rejections.Select(r => $"{r.BioguideId}: {r.Reason}")),
-            stackTrace: null
+            stackTrace: string.Join(
+                Environment.NewLine,
+                rejections.Select(r => $"{r.BioguideId}: {r.Reason}")
+            )
         );
     }
 

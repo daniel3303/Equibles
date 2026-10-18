@@ -112,11 +112,19 @@ public class CongressMemberLegislatorIdentityTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ReconcileLegislatorIdentities_CatalogAliasRow_GetsTheCatalogIdentityNotAMatch()
     {
-        var alias = await SeedMember("Theodore P. Budd", "NC13", new DateOnly(2020, 3, 1));
+        // Another Budd holds NC-13 when the alias row filed, so matching it would report a conflict.
+        DbContext.AddRange(
+            Legislator("Z000077", "Budd"),
+            Term("Z000077", CongressPosition.Representative, "NC", 13, 2023, 2025)
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var alias = await SeedMember("Theodore P. Budd", "NC13", new DateOnly(2024, 3, 1));
 
         var result = await CreateSut().ReconcileLegislatorIdentities(CancellationToken.None);
 
         result.Assigned.Should().Be(0);
+        result.Conflicts.Should().BeEmpty();
         var stored = await Reload(alias);
         stored.Name.Should().Be("Ted Budd");
         stored.BioguideId.Should().Be("B001305");
@@ -139,6 +147,52 @@ public class CongressMemberLegislatorIdentityTests : ParadeDbMcpTestBase
         var stored = await Reload(alias);
         stored.BioguideId.Should().Be("B001305");
         stored.BioguideIdSource.Should().Be(CongressBioguideIdSource.Catalog);
+    }
+
+    [Fact]
+    public async Task ReconcileMembers_MatchedRowHoldsACatalogIdWithoutAnAliasRow_LeavesItAlone()
+    {
+        var matched = await SeedMember(
+            "Teddy Budd",
+            "NC13",
+            filingDate: null,
+            bioguideId: "B001305",
+            source: CongressBioguideIdSource.SeatAndSurnameMatch
+        );
+
+        await CreateSut().ReconcileMembers(CancellationToken.None);
+
+        var stored = await Reload(matched);
+        stored.Name.Should().Be("Teddy Budd");
+        stored.BioguideId.Should().Be("B001305");
+        stored.BioguideIdSource.Should().Be(CongressBioguideIdSource.SeatAndSurnameMatch);
+    }
+
+    [Fact]
+    public async Task ReconcileMembers_AliasRowAndMatchedHolder_MovesTheIdWithoutMerging()
+    {
+        var matched = await SeedMember(
+            "Teddy Budd",
+            "NC13",
+            filingDate: new DateOnly(2020, 3, 1),
+            bioguideId: "B001305",
+            source: CongressBioguideIdSource.SeatAndSurnameMatch
+        );
+        var alias = await SeedMember("Ted Budd", null, filingDate: null);
+
+        await CreateSut().ReconcileMembers(CancellationToken.None);
+
+        var aliasRow = await Reload(alias);
+        aliasRow.BioguideId.Should().Be("B001305");
+        aliasRow.BioguideIdSource.Should().Be(CongressBioguideIdSource.Catalog);
+        var matchedRow = await Reload(matched);
+        matchedRow.BioguideId.Should().BeNull();
+        matchedRow.BioguideIdSource.Should().BeNull();
+        await using var verify = Fixture.CreateDbContext();
+        (await verify.Set<CongressMemberRedirect>().CountAsync()).Should().Be(0);
+        (await verify.Set<CongressionalTrade>().SingleAsync())
+            .CongressMemberId.Should()
+            .Be(matched.Id);
     }
 
     [Fact]

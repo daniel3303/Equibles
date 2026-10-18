@@ -198,8 +198,35 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
                 .OrderBy(member => member.CreationTime)
                 .ThenBy(member => member.Id)
                 .ToListAsync(ct);
+
+            // A row that holds the id only through a seat-and-surname match is not catalog
+            // evidence: it is never merged or renamed, and it gives the id up to an alias row.
+            var matchedHolders = candidates
+                .Where(member =>
+                    member.BioguideIdSource == CongressBioguideIdSource.SeatAndSurnameMatch
+                    && !aliases.Contains(member.Name.ToLowerInvariant())
+                )
+                .ToList();
+            candidates = candidates.Except(matchedHolders).ToList();
             if (candidates.Count == 0)
                 continue;
+
+            if (matchedHolders.Count > 0)
+            {
+                foreach (var holder in matchedHolders)
+                {
+                    _logger.LogWarning(
+                        "Catalog alias of {CatalogId} takes the id from matched congress member {Name}, a catalog merge candidate",
+                        identity.BioguideId,
+                        holder.Name
+                    );
+                    holder.BioguideId = null;
+                    holder.BioguideIdSource = null;
+                }
+
+                // Freed before the alias row takes the id, so the unique index never sees it twice.
+                await _dbContext.SaveChangesAsync(ct);
+            }
 
             var conflicting = candidates
                 .Where(member =>
@@ -305,6 +332,21 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
         {
             if (member.BioguideId != bioguideId)
                 AddConflict(result, member, bioguideId, "the member already has another id");
+        }
+
+        var derivedMembers = derived.Select(pair => pair.Member.Id).ToHashSet();
+        foreach (
+            var member in members.Where(member =>
+                member.BioguideIdSource == CongressBioguideIdSource.SeatAndSurnameMatch
+                && !derivedMembers.Contains(member.Id)
+            )
+        )
+        {
+            _logger.LogWarning(
+                "Congress member {Name} keeps matched id {BioguideId}, which its seat and surname no longer derive",
+                member.Name,
+                member.BioguideId
+            );
         }
 
         foreach (
