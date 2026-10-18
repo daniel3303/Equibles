@@ -438,14 +438,6 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
                 && holderIds.Contains(metrics.InstitutionalHolderId)
             );
 
-    // Every measured quarter on or before the date, for callers that map several dates at once.
-    public IQueryable<DateOnly> GetMetricsReportDates(DateOnly onOrBefore) =>
-        DbContext
-            .Set<HolderQuarterlyMetrics>()
-            .Where(metrics => metrics.ReportDate <= onOrBefore)
-            .Select(metrics => metrics.ReportDate)
-            .Distinct();
-
     // The newest measured quarter on or before the date, null when none is measured yet.
     public Task<DateOnly?> GetLatestMetricsReportDate(
         DateOnly onOrBefore,

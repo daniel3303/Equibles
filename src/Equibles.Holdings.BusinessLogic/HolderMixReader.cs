@@ -224,18 +224,13 @@ public class HolderMixReader
             })
             .ToList();
 
-        var measured = await _holderRepository
-            .GetMetricsReportDates(ordered[^1])
-            .ToListAsync(cancellationToken);
-        var measuredQuarters = ordered
-            .Skip(1)
-            .ToDictionary(
-                date => date,
-                date =>
-                    measured
-                        .Where(quarter => quarter <= date)
-                        .Select(quarter => (DateOnly?)quarter)
-                        .Max()
+        // One MAX per column walks the ReportDate index backwards; a DISTINCT over every measured
+        // quarter would read the whole index instead.
+        var measuredQuarters = new Dictionary<DateOnly, DateOnly?>();
+        foreach (var date in ordered.Skip(1))
+            measuredQuarters[date] = await _holderRepository.GetLatestMetricsReportDate(
+                date,
+                cancellationToken
             );
         // A successor across a CIK change can hold none of the stock and still take its
         // predecessor's position, so every succession member needs its profile too.

@@ -376,9 +376,12 @@ public class InstitutionalHoldingsTools
     // The one wording every combined-view tool output carries, so agents and users always see
     // WHY the newest quarter is presented as a merge of two filing sets.
     private static string CombinedViewNote(DateOnly targetDate, StockQuarterAnchor anchor) =>
+        CombinedViewNote(targetDate, RequirePreviousReportDate(anchor));
+
+    private static string CombinedViewNote(DateOnly targetDate, DateOnly carriedFrom) =>
         $"Note: the {FormatDate(targetDate)} filing window is still open (13Fs are due 45 days "
         + $"after quarter end, or the next business day). Combined view: funds that have not "
-        + $"filed yet carry their {FormatDate(RequirePreviousReportDate(anchor))} positions.";
+        + $"filed yet carry their {FormatDate(carriedFrom)} positions.";
 
     private static DateOnly RequirePreviousReportDate(StockQuarterAnchor anchor) =>
         anchor.PreviousReportDate
@@ -834,9 +837,7 @@ public class InstitutionalHoldingsTools
         if (history.CarriedFrom is { } carriedFrom)
         {
             result.AppendLine();
-            result.AppendLine(
-                $"\\* Note: the {FormatDate(latest.ReportDate)} filing window is still open (13Fs are due 45 days after quarter end, or the next business day). Combined view: funds that have not filed yet carry their {FormatDate(carriedFrom)} positions."
-            );
+            result.AppendLine($"\\* {CombinedViewNote(latest.ReportDate, carriedFrom)}");
         }
 
         result.AppendLine();
