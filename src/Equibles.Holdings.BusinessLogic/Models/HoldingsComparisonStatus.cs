@@ -81,21 +81,33 @@ public sealed record HoldingsComparisonStatus(
             .ThenBy(filer => filer.InstitutionalHolderId)
             .Take(NamedExclusions);
 
+    // The sentence naming the filers compared across a CIK change, or null when none are. A
+    // surface that shows every missing filer as new or sold out, rather than excluding them,
+    // uses it alone.
+    public string SuccessionNote
+    {
+        get
+        {
+            if (!ConsecutiveQuarters)
+                return null;
+            var continued = Successions
+                .Where(group => group.Comparable)
+                .Select(Continued)
+                .Order(StringComparer.Ordinal)
+                .ToList();
+            return continued.Count > 0
+                ? $"Compared across CIK changes: {string.Join("; ", continued)}."
+                : null;
+        }
+    }
+
     public string Note
     {
         get
         {
             if (!ConsecutiveQuarters)
                 return "Comparison unavailable: the stored report dates are not consecutive quarters.";
-            var continued = Successions
-                .Where(group => group.Comparable)
-                .Select(Continued)
-                .Order(StringComparer.Ordinal)
-                .ToList();
-            var successions =
-                continued.Count > 0
-                    ? $"Compared across CIK changes: {string.Join("; ", continued)}."
-                    : null;
+            var successions = SuccessionNote;
             if (MissingPreviousFilers.Count == 0 && MissingCurrentFilers.Count == 0)
                 return successions;
 
