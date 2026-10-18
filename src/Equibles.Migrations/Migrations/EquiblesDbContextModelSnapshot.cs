@@ -19,7 +19,7 @@ namespace Equibles.Migrations.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Proxies:ChangeTracking", false)
                 .HasAnnotation("Proxies:CheckEquality", false)
                 .HasAnnotation("Proxies:LazyLoading", true)
@@ -2845,6 +2845,12 @@ namespace Equibles.Migrations.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("AdvisedSeriesAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("AdvisedSeriesNetAssets")
+                        .HasColumnType("numeric");
+
                     b.Property<decimal?>("AggregateActiveShare")
                         .HasPrecision(12, 6)
                         .HasColumnType("numeric(12,6)");
@@ -2891,6 +2897,9 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("IndexLikeEvidence")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("IndexSeriesNetAssets")
+                        .HasColumnType("numeric");
 
                     b.Property<Guid>("InstitutionalHolderId")
                         .HasColumnType("uuid");

@@ -157,6 +157,44 @@ public class HolderQuarterMetricsBuilderTests
     }
 
     [Fact]
+    public void Build_ReadsTheAdvisersIndexSeriesAssetsIntoTheBandAndKeepsThem()
+    {
+        // 120 equal positions far from the aggregate book: only the index-fund assets read index-like.
+        var book = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current = Enumerable
+                .Range(0, 120)
+                .Select(_ => Row(Guid.NewGuid(), Quarter, 1_000, 100_000))
+                .ToList(),
+            AggregateBenchmark = new Dictionary<Guid, decimal> { [Guid.NewGuid()] = 1 },
+        };
+        var asOf = new DateOnly(2024, 6, 30);
+
+        var withoutSeries = HolderQuarterMetricsBuilder.Build(book, 1).Metrics;
+        var withSeries = HolderQuarterMetricsBuilder
+            .Build(
+                book with
+                {
+                    IndexSeriesNetAssets = 9_000_000m,
+                    AdvisedSeriesNetAssets = 10_000_000m,
+                    AdvisedSeriesAsOf = asOf,
+                },
+                1
+            )
+            .Metrics;
+
+        withoutSeries.StyleBand.Should().Be(HolderStyleBand.DiversifiedActive);
+        withoutSeries.AdvisedSeriesAsOf.Should().BeNull();
+        withSeries.StyleBand.Should().Be(HolderStyleBand.IndexLike);
+        withSeries.IndexLikeEvidence.Should().Be(HolderIndexLikeEvidence.IndexFundAssets);
+        withSeries.IndexSeriesNetAssets.Should().Be(9_000_000m);
+        withSeries.AdvisedSeriesNetAssets.Should().Be(10_000_000m);
+        withSeries.AdvisedSeriesAsOf.Should().Be(asOf);
+    }
+
+    [Fact]
     public void Build_AQuarterOutsideCoverage_Throws()
     {
         var build = () =>

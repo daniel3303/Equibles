@@ -117,6 +117,9 @@ public static class HolderQuarterMetricsBuilder
             ValueWeightedTenureQuarters = tenure.ValueWeightedQuarters,
             CensoredValueShare = tenure.CensoredValueShare,
             AggregateActiveShare = activeShare,
+            IndexSeriesNetAssets = input.IndexSeriesNetAssets,
+            AdvisedSeriesNetAssets = input.AdvisedSeriesNetAssets,
+            AdvisedSeriesAsOf = input.AdvisedSeriesAsOf,
             CallValue = LegValue(input.Current, row => row.OptionType == OptionType.Call),
             PutValue = LegValue(input.Current, row => row.OptionType == OptionType.Put),
             PrincipalValue = LegValue(
