@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **64 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **65 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -215,7 +215,7 @@ The web portal at `http://localhost:8080` provides a browser-based interface for
 
 The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, etc.):
 
-- **Institutional Holdings** — Top holders, ownership history, institution portfolios and summary, sector allocation, quarterly activity, most-held stocks, consensus holdings, fund overlap, market-wide 13F activity, institution search
+- **Institutional Holdings** — Top holders, ownership history, institution portfolios and summary, sector allocation, quarterly activity, most-held stocks, consensus holdings, fund overlap, market-wide 13F activity, holder flows by kind of filer and sector, institution search
 - **Insider Trading** — Insider transactions, ownership summary, proposed (Form 144) sales, insider search
 - **Congressional Trading** — Trades for a ticker, trades by one member, member search
 - **SEC Documents** — Full-text search, semantic search, document browsing, keyword search within filings
@@ -344,7 +344,7 @@ Build first: a plain `dotnet run` restores and prints build output on stdout, wh
 
 ## Tools
 
-This self-hosted build exposes 64 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 65 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
@@ -352,6 +352,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 - GetTopHolders — top institutional holders of a stock (13F-HR), with each holder's type and measured style, filterable by both
 - GetInstitutionalOwnershipHistory — institutional ownership trend across quarters
 - GetHolderMix — who holds a stock by holder type, measured style, turnover, horizon, book size, client base, private funds or location, with each bucket's like-for-like change
+- GetHolderTypeFlows — market-wide money in and out of US equities by kind of 13F filer for a closed quarter, optionally split by sector, with net flow as a share of each bucket's prior book
 - GetInstitutionPortfolio — an institution's 13F portfolio
 - SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, position count, and holder type
 - GetTopInstitutionalBuyersSellers — biggest adds/reductions on a stock this quarter

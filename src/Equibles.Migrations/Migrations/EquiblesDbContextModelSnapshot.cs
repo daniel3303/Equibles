@@ -3047,6 +3047,46 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("HolderQuarterlyMetrics");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlySectorFlow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("BuyValue")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.Property<Guid>("InstitutionalHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("SectorGroup")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SectorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("SellValue")
+                        .HasPrecision(20, 2)
+                        .HasColumnType("numeric(20,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportDate");
+
+                    b.HasIndex("SectorId");
+
+                    b.HasIndex("InstitutionalHolderId", "ReportDate", "SectorGroup", "SectorId")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("InstitutionalHolderId", "ReportDate", "SectorGroup", "SectorId"), false);
+
+                    b.ToTable("HolderQuarterlySectorFlow");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlySnapshot", b =>
                 {
                     b.Property<Guid>("InstitutionalHolderId")
@@ -6863,6 +6903,22 @@ namespace Equibles.Migrations.Migrations
                         .HasForeignKey("InstitutionalHolderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("InstitutionalHolder");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlySectorFlow", b =>
+                {
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
+                        .WithMany()
+                        .HasForeignKey("InstitutionalHolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Equibles.CommonStocks.Data.Models.Taxonomies.Sector", null)
+                        .WithMany()
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("InstitutionalHolder");
                 });

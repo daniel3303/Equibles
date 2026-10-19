@@ -21,4 +21,7 @@ public sealed record HolderTradeSummary
 
     /// <summary>Trades with no price on either side, left out of the buy and sell values.</summary>
     public int? UnpricedTradeCount { get; init; }
+
+    /// <summary>Each priced trade behind the buy and sell values; empty without a comparison.</summary>
+    public IReadOnlyList<HolderSecurityTrade> SecurityTrades { get; init; } = [];
 }

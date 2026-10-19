@@ -133,7 +133,14 @@ public static class HolderQuarterMetricsBuilder
             BandVersion = HolderStyleBandClassifier.BandVersion,
             CalculationVersion = calculationVersion,
         };
-        return new HolderQuarterResult(metrics, toSet, toClear);
+        var sectorFlows = HolderSectorFlowCalculator.Flows(
+            input.InstitutionalHolderId,
+            input.ReportDate,
+            trades.SecurityTrades,
+            input.IssuerSectors,
+            input.ExchangeTradedSecurities
+        );
+        return new HolderQuarterResult(metrics, toSet, toClear, sectorFlows);
     }
 
     // Common shares only: put/call and principal legs never count as the filer's equity book.

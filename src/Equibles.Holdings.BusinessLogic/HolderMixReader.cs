@@ -272,12 +272,18 @@ public class HolderMixReader
             .Select(profile => new
             {
                 profile.InstitutionalHolderId,
-                profile.EntityType,
-                profile.ClientBase,
-                profile.AdvisesPrivateFunds,
-                profile.PrivateFundFocus,
+                Profile = new HolderMixProfile(
+                    profile.EntityType,
+                    profile.ClientBase,
+                    profile.AdvisesPrivateFunds,
+                    profile.PrivateFundFocus
+                ),
             })
-            .ToDictionaryAsync(profile => profile.InstitutionalHolderId, cancellationToken);
+            .ToDictionaryAsync(
+                profile => profile.InstitutionalHolderId,
+                profile => profile.Profile,
+                cancellationToken
+            );
         var metrics =
             measured.Count == 0
                 ? []
@@ -314,19 +320,14 @@ public class HolderMixReader
             var measurement = quarter is { } date
                 ? metrics.GetValueOrDefault((holderId, date))
                 : null;
-            return new HolderMixHolder
-            {
-                Profiled = profile != null,
-                EntityType = profile?.EntityType ?? HolderEntityType.Unknown,
-                ClientBase = profile?.ClientBase ?? HolderClientBase.Unknown,
-                AdvisesPrivateFunds = profile?.AdvisesPrivateFunds,
-                PrivateFundFocus = profile?.PrivateFundFocus ?? PrivateFundFocus.None,
-                StyleBand = measurement?.StyleBand,
-                TurnoverBand = measurement?.TurnoverBand,
-                HorizonBand = measurement?.HorizonBand,
-                EquityAum = measurement?.EquityAum,
-                StateOrCountry = locations.GetValueOrDefault(holderId),
-            };
+            return HolderMixHolder.Of(
+                profile,
+                measurement?.StyleBand,
+                measurement?.TurnoverBand,
+                measurement?.HorizonBand,
+                measurement?.EquityAum,
+                locations.GetValueOrDefault(holderId)
+            );
         };
     }
 }

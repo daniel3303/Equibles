@@ -51,4 +51,12 @@ public sealed record HolderQuarterInput
 
     /// <summary>The latest N-CEN period behind the advised series figures.</summary>
     public DateOnly? AdvisedSeriesAsOf { get; init; }
+
+    /// <summary>Each issuer's sector id for flows; a missing issuer is Unclassified.</summary>
+    public IReadOnlyDictionary<Guid, Guid> IssuerSectors { get; init; } =
+        new Dictionary<Guid, Guid>();
+
+    /// <summary>The listed securities that are exchange-traded products, whatever their issuer.</summary>
+    public IReadOnlySet<HolderSecurityKey> ExchangeTradedSecurities { get; init; } =
+        new HashSet<HolderSecurityKey>();
 }

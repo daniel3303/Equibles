@@ -30,6 +30,7 @@ public static class HolderTurnoverCalculator
         var previousEquityAum = PricedValue(previousBySecurity.Values);
         decimal buys = 0,
             sells = 0;
+        var trades = new List<HolderSecurityTrade>();
         int news = 0,
             exits = 0,
             increases = 0,
@@ -69,10 +70,18 @@ public static class HolderTurnoverCalculator
                 unpriced++;
                 continue;
             }
+            var tradeValue = Math.Abs(traded) * price.Value;
             if (traded > 0)
-                buys += traded * price.Value;
+                buys += tradeValue;
             else
-                sells += -traded * price.Value;
+                sells += tradeValue;
+            trades.Add(
+                new HolderSecurityTrade(
+                    security,
+                    traded > 0 ? tradeValue : 0,
+                    traded < 0 ? tradeValue : 0
+                )
+            );
         }
 
         var averageAum = (equityAum + previousEquityAum) / 2m;
@@ -88,6 +97,7 @@ public static class HolderTurnoverCalculator
             IncreasedCount = increases,
             ReducedCount = reductions,
             UnpricedTradeCount = unpriced,
+            SecurityTrades = trades,
         };
     }
 

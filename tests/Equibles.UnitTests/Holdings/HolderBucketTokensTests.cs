@@ -157,4 +157,22 @@ public class HolderBucketTokensTests
                 "Unknown dimension 'sector'. Use one of: type, style, turnover, horizon, aum, client, pf, country."
             );
     }
+
+    [Theory]
+    [InlineData(null, HolderFlowGrouping.None)]
+    [InlineData(" ", HolderFlowGrouping.None)]
+    [InlineData("none", HolderFlowGrouping.None)]
+    [InlineData(" Sector ", HolderFlowGrouping.Sector)]
+    public void ParseFlowGrouping_ReadsTokensInAnyCase(string token, HolderFlowGrouping expected)
+    {
+        HolderBucketTokens.ParseFlowGrouping(token).Should().Be((expected, null));
+    }
+
+    [Fact]
+    public void ParseFlowGrouping_UnknownToken_NamesTheAcceptedTokens()
+    {
+        var (_, error) = HolderBucketTokens.ParseFlowGrouping("industry");
+
+        error.Should().Be("Unknown groupBy 'industry'. Use one of: none, sector.");
+    }
 }

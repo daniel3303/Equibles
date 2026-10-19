@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Holdings.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -321,6 +322,24 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // presence bitmask tenure reads, unique per exact listing with a null primary.
         builder.Entity<HolderIntelligenceQuarterState>();
         builder.Entity<HolderQuarterlyMetrics>();
+        // A sector change in the taxonomy must never silently delete published flows.
+        builder
+            .Entity<HolderQuarterlySectorFlow>()
+            .HasOne<Sector>()
+            .WithMany()
+            .HasForeignKey(flow => flow.SectorId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<HolderQuarterlySectorFlow>()
+            .HasIndex(flow => new
+            {
+                flow.InstitutionalHolderId,
+                flow.ReportDate,
+                flow.SectorGroup,
+                flow.SectorId,
+            })
+            .IsUnique()
+            .AreNullsDistinct(false);
         builder
             .Entity<HolderStockPresence>()
             .HasIndex(p => new

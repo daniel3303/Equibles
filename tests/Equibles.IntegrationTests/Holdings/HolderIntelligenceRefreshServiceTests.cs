@@ -1,16 +1,21 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Data.Models.Taxonomies;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.BusinessLogic.Intelligence;
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -116,6 +121,121 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .AggregateActiveShare.Should()
             .Be(0m, "the benchmark is the 13F aggregate, which here is this book alone");
         second.CalculationVersion.Should().Be(HolderIntelligenceRefreshService.CalculationVersion);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_PublishesEachFilersTradesPerSector()
+    {
+        var sectors = await SeedSectorBook();
+
+        await Rebuild(Q2);
+
+        var metrics = await Metrics(Q2);
+        metrics.BuyValue.Should().Be(13_000m);
+        metrics.SellValue.Should().Be(9_000m);
+        (await SectorFlows(Q2))
+            .Should()
+            .BeEquivalentTo([
+                (HolderFlowSectorGroup.Sector, (Guid?)sectors.Technology, 6_000m, 0m),
+                (HolderFlowSectorGroup.Sector, (Guid?)sectors.Financials, 1_000m, 0m),
+                (HolderFlowSectorGroup.ExchangeTraded, (Guid?)null, 6_000m, 4_000m),
+                (HolderFlowSectorGroup.Unclassified, (Guid?)null, 0m, 5_000m),
+            ]);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_ReplacesTheSectorRowsOnARecompute()
+    {
+        var sectors = await SeedSectorBook();
+        await Rebuild(Q2);
+
+        await using (var mutate = _fixture.CreateDbContext())
+            await mutate
+                .Set<InstitutionalHolding>()
+                .Where(holding => holding.ReportDate == Q2 && holding.Shares == 20)
+                .ExecuteDeleteAsync();
+        await Rebuild(Q2);
+
+        // The fund position is now an exit at the prior quarter's 500 a share.
+        (await SectorFlows(Q2))
+            .Should()
+            .BeEquivalentTo([
+                (HolderFlowSectorGroup.Sector, (Guid?)sectors.Technology, 6_000m, 0m),
+                (HolderFlowSectorGroup.Sector, (Guid?)sectors.Financials, 1_000m, 0m),
+                (HolderFlowSectorGroup.ExchangeTraded, (Guid?)null, 0m, 9_000m),
+                (HolderFlowSectorGroup.Unclassified, (Guid?)null, 0m, 5_000m),
+            ]);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_AFailedPublishKeepsThePublishedSectorRows()
+    {
+        await SeedSectorBook();
+        await Rebuild(Q2);
+        var published = await SectorFlows(Q2);
+        await Seed(seed => seed.Add(Holding(_apple, _holder, Q2, 10, 1_000)));
+
+        await using (var context = _fixture.CreateDbContext())
+        {
+            var failing = new FailingPublishRefreshService(
+                context,
+                _provider.GetRequiredService<HoldingsCorpusCoverage>()
+            );
+            var rebuild = () => failing.RebuildQuarter(Q2, Today, CancellationToken.None);
+            await rebuild.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        (await SectorFlows(Q2)).Should().BeEquivalentTo(published);
+    }
+
+    [Fact]
+    public async Task HolderFlowReader_ReadsAComputedQuarterByProfileAndSector()
+    {
+        await SeedSectorBook();
+        await Rebuild(Q2);
+        await Seed(seed =>
+            seed.AddRange(
+                new InstitutionalHolderProfile
+                {
+                    InstitutionalHolderId = _holder.Id,
+                    EntityType = HolderEntityType.RegisteredAdviser,
+                },
+                new HolderIntelligenceQuarterState
+                {
+                    ReportDate = Q2,
+                    ComputedAt = DateTime.UtcNow,
+                    CalculationVersion = HolderIntelligenceRefreshService.CalculationVersion,
+                }
+            )
+        );
+
+        await using var context = _fixture.CreateDbContext();
+        var reader = new HolderFlowReader(
+            new InstitutionalHolderRepository(context),
+            new SectorRepository(context),
+            new MemoryCache(new MemoryCacheOptions())
+        );
+        var quarter = (await reader.GetQuarters()).Single();
+        var flows = await reader.ReadQuarter(
+            quarter,
+            HolderMixDimension.EntityType,
+            HolderFlowGrouping.Sector
+        );
+
+        var advisers = flows.Buckets.Should().ContainSingle().Which;
+        advisers.Token.Should().Be("adv");
+        advisers.BuyValue.Should().Be(13_000m);
+        advisers.SellValue.Should().Be(9_000m);
+        advisers.PriorEquityAum.Should().Be(24_000);
+        advisers
+            .Sectors.Select(sector => (sector.Name, sector.NetValue))
+            .Should()
+            .Equal(
+                ("Financials", 1_000m),
+                ("Technology", 6_000m),
+                (HolderFlowCalculator.ExchangeTradedLabel, 2_000m),
+                (HolderFlowCalculator.UnclassifiedLabel, -5_000m)
+            );
     }
 
     [Fact]
@@ -898,6 +1018,62 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .SingleAsync(row =>
                 row.InstitutionalHolderId == holder.Id && row.ReportDate == reportDate
             );
+    }
+
+    // A Q1 to Q2 book over a technology stock, a fund, a bank's common and its exchange-traded
+    // note, and Microsoft, which has no sector: 13,000 bought and 9,000 sold at quarter-end prices.
+    private async Task<(Guid Technology, Guid Financials)> SeedSectorBook()
+    {
+        var technology = new Sector { Name = "Technology" };
+        var financials = new Sector { Name = "Financials" };
+        var chips = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "Nvidia",
+            Industry: new Industry { Name = "Semiconductors", SectorId = technology.Id }
+        );
+        var fund = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "Index Fund",
+            ReferenceTickers: ["SPY"]
+        );
+        var bank = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BANK",
+            Name: "Bank",
+            Industry: new Industry { Name = "Banks", SectorId = financials.Id },
+            ReferenceTickers: ["BKETN"]
+        );
+        await Seed(seed =>
+        {
+            seed.AddRange(technology, financials, chips, fund, bank);
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(chips, _holder, Q1, 100, 10_000),
+                Holding(fund, _holder, Q1, 10, 5_000),
+                Holding(bank, _holder, Q1, 40, 4_000, listedTicker: "BKETN"),
+                Holding(_microsoft, _holder, Q1, 50, 5_000),
+                Filing(_holder, Q2),
+                Holding(chips, _holder, Q2, 150, 18_000),
+                Holding(fund, _holder, Q2, 20, 12_000),
+                Holding(bank, _holder, Q2, 10, 1_000)
+            );
+        });
+        return (technology.Id, financials.Id);
+    }
+
+    private async Task<List<(HolderFlowSectorGroup, Guid?, decimal, decimal)>> SectorFlows(
+        DateOnly reportDate
+    )
+    {
+        await using var read = _fixture.CreateDbContext();
+        return (
+            await read.Set<HolderQuarterlySectorFlow>()
+                .Where(row =>
+                    row.InstitutionalHolderId == _holder.Id && row.ReportDate == reportDate
+                )
+                .ToListAsync()
+        )
+            .Select(row => (row.SectorGroup, row.SectorId, row.BuyValue, row.SellValue))
+            .ToList();
     }
 
     private async Task<Dictionary<Guid, long>> Masks()
