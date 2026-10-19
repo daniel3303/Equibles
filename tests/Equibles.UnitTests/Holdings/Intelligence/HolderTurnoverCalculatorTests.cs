@@ -44,6 +44,19 @@ public class HolderTurnoverCalculatorTests
         trades.IncreasedCount.Should().Be(1);
         trades.ReducedCount.Should().Be(1);
         trades.UnpricedTradeCount.Should().Be(0);
+        trades
+            .SecurityTrades.Should()
+            .BeEquivalentTo(
+                new HolderSecurityTrade[]
+                {
+                    new(Increased, 550m, 0m),
+                    new(Opened, 200m, 0m),
+                    new(Exited, 0m, 400m),
+                    new(Reduced, 0m, 150m),
+                }
+            );
+        trades.SecurityTrades.Sum(trade => trade.BuyValue).Should().Be(trades.BuyValue);
+        trades.SecurityTrades.Sum(trade => trade.SellValue).Should().Be(trades.SellValue);
     }
 
     [Fact]
@@ -135,6 +148,11 @@ public class HolderTurnoverCalculatorTests
         trades.UnpricedTradeCount.Should().Be(1);
         trades.BuyValue.Should().Be(100m);
         trades.SellValue.Should().Be(50m);
+        // An unpriced trade adds nothing to any sector either.
+        trades
+            .SecurityTrades.Select(trade => trade.Security)
+            .Should()
+            .BeEquivalentTo([Opened, Exited]);
     }
 
     [Fact]

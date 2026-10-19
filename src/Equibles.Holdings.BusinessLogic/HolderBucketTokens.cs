@@ -75,6 +75,40 @@ public static class HolderBucketTokens
             : (match.Value, null);
     }
 
+    private static readonly (
+        string Token,
+        HolderFlowGrouping Value,
+        string Label
+    )[] FlowGroupings =
+    [
+        ("none", HolderFlowGrouping.None, "No split"),
+        ("sector", HolderFlowGrouping.Sector, "By sector"),
+    ];
+
+    public static string FlowGroupingTokenList => TokenList(FlowGroupings);
+
+    public static string Token(HolderFlowGrouping grouping) =>
+        FlowGroupings.Single(entry => entry.Value == grouping).Token;
+
+    /// <summary>
+    /// Parses a holder-flow grouping token, case-insensitively. Blank input means no split; an
+    /// unknown token returns an error naming the accepted tokens.
+    /// </summary>
+    public static (HolderFlowGrouping Grouping, string Error) ParseFlowGrouping(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return (HolderFlowGrouping.None, null);
+        var match = FlowGroupings.FirstOrDefault(entry =>
+            string.Equals(entry.Token, token.Trim(), StringComparison.OrdinalIgnoreCase)
+        );
+        return match.Token == null
+            ? (
+                HolderFlowGrouping.None,
+                $"Unknown groupBy '{token.Trim()}'. Use one of: {FlowGroupingTokenList}."
+            )
+            : (match.Value, null);
+    }
+
     public static string StyleTokenList => TokenList(StyleBands);
 
     public static string Token(HolderEntityType type) =>

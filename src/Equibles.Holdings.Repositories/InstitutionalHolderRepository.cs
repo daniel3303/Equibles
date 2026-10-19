@@ -438,6 +438,31 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
                 && holderIds.Contains(metrics.InstitutionalHolderId)
             );
 
+    // The closed quarters the intelligence drain has computed at least once.
+    public IQueryable<HolderIntelligenceQuarterState> GetComputedIntelligenceQuarters() =>
+        DbContext.Set<HolderIntelligenceQuarterState>().Where(state => state.ComputedAt != null);
+
+    // Every filer's measurements in one quarter.
+    public IQueryable<HolderQuarterlyMetrics> GetQuarterlyMetrics(DateOnly reportDate) =>
+        DbContext.Set<HolderQuarterlyMetrics>().Where(metrics => metrics.ReportDate == reportDate);
+
+    // The profiles of the filers measured in one quarter, joined on the server.
+    public IQueryable<InstitutionalHolderProfile> GetProfilesMeasuredIn(DateOnly reportDate) =>
+        DbContext
+            .Set<InstitutionalHolderProfile>()
+            .Where(profile =>
+                DbContext
+                    .Set<HolderQuarterlyMetrics>()
+                    .Any(metrics =>
+                        metrics.ReportDate == reportDate
+                        && metrics.InstitutionalHolderId == profile.InstitutionalHolderId
+                    )
+            );
+
+    // Every filer's per-sector buying and selling in one quarter.
+    public IQueryable<HolderQuarterlySectorFlow> GetSectorFlows(DateOnly reportDate) =>
+        DbContext.Set<HolderQuarterlySectorFlow>().Where(flow => flow.ReportDate == reportDate);
+
     // The newest measured quarter on or before the date, null when none is measured yet.
     public Task<DateOnly?> GetLatestMetricsReportDate(
         DateOnly onOrBefore,

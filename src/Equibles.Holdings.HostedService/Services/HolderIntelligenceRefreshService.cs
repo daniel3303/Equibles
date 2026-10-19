@@ -15,9 +15,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
-/// Rebuilds one closed quarter's <see cref="HolderQuarterlyMetrics"/> from Form 13F rows, a few
-/// hundred filers at a time, and keeps each filer's <see cref="HolderStockPresence"/> bit for the
-/// quarter current. A changed presence bit re-dirties every later quarter, whose tenure reads it.
+/// Rebuilds one closed quarter's <see cref="HolderQuarterlyMetrics"/> and
+/// <see cref="HolderQuarterlySectorFlow"/> rows from Form 13F rows, a few hundred filers at a time,
+/// and keeps each filer's <see cref="HolderStockPresence"/> bit for the quarter current. A changed presence bit re-dirties every later quarter, whose tenure reads it.
 /// </summary>
 [Service]
 public class HolderIntelligenceRefreshService
@@ -25,8 +25,9 @@ public class HolderIntelligenceRefreshService
     /// <summary>
     /// Bump when the metrics change meaning, so the drain recomputes every quarter. 2: trades are
     /// priced at the quarter average price. 3: N-CEN index series assets feed the index-like band.
+    /// 4: trades are also stored per sector (<see cref="HolderSectorFlowCalculator.FirstVersion"/>).
     /// </summary>
-    public const int CalculationVersion = 3;
+    public const int CalculationVersion = HolderSectorFlowCalculator.FirstVersion;
 
     /// <summary>A stamp this old is past the drain's cooldown and is picked up on its next tick.</summary>
     public static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
@@ -108,10 +109,13 @@ public class HolderIntelligenceRefreshService
         var advisedSeries = HolderIdentifierRules.SummarizeAdvisedSeries(
             await AdvisedSeriesLoader.Load(_dbContext, reportDate, cancellationToken)
         );
+        var (issuerSectors, exchangeTraded) =
+            previousFilers.Count > 0 ? await LoadSectors(cancellationToken) : ([], []);
 
         var presenceChanged = await ClearNonFilers(reportDate, bit, cancellationToken);
 
         var metrics = new List<HolderQuarterlyMetrics>(filers.Count);
+        var sectorFlows = new List<HolderQuarterlySectorFlow>();
         foreach (var batch in filers.Chunk(HolderBatchSize))
         {
             var (results, presenceIds) = await BuildBatch(
@@ -123,9 +127,12 @@ public class HolderIntelligenceRefreshService
                 benchmark,
                 averagePrices,
                 advisedSeries,
+                issuerSectors,
+                exchangeTraded,
                 cancellationToken
             );
             metrics.AddRange(results.Select(result => result.Result.Metrics));
+            sectorFlows.AddRange(results.SelectMany(result => result.Result.SectorFlows));
             presenceChanged |= await WritePresence(
                 results,
                 presenceIds,
@@ -136,12 +143,13 @@ public class HolderIntelligenceRefreshService
         }
 
         await BeforePublish(reportDate);
-        await Publish(reportDate, metrics, cancellationToken);
+        await Publish(reportDate, metrics, sectorFlows, cancellationToken);
 
         _logger.LogInformation(
-            "Holder intelligence for {ReportDate}: {Count} filers, {Priced} securities at their quarter average price, {Advised} filers with N-CEN series, presence changed: {Changed}",
+            "Holder intelligence for {ReportDate}: {Count} filers, {SectorFlows} sector flow rows, {Priced} securities at their quarter average price, {Advised} filers with N-CEN series, presence changed: {Changed}",
             reportDate,
             metrics.Count,
+            sectorFlows.Count,
             averagePrices.Count,
             metrics.Count(row => row.AdvisedSeriesAsOf != null),
             presenceChanged
@@ -161,6 +169,8 @@ public class HolderIntelligenceRefreshService
         Dictionary<Guid, decimal> benchmark,
         Dictionary<HolderSecurityKey, decimal> averagePrices,
         Dictionary<int, AdvisedSeriesSummary> advisedSeries,
+        Dictionary<Guid, Guid> issuerSectors,
+        HashSet<HolderSecurityKey> exchangeTraded,
         CancellationToken cancellationToken
     )
     {
@@ -266,6 +276,8 @@ public class HolderIntelligenceRefreshService
                     IndexSeriesNetAssets = series?.IndexNetAssets,
                     AdvisedSeriesNetAssets = series?.NetAssets,
                     AdvisedSeriesAsOf = series?.AsOf,
+                    IssuerSectors = issuerSectors,
+                    ExchangeTradedSecurities = exchangeTraded,
                 };
                 return (holderId, HolderQuarterMetricsBuilder.Build(input, CalculationVersion));
             })
@@ -511,11 +523,13 @@ public class HolderIntelligenceRefreshService
         return cleared > 0;
     }
 
-    // Replaces the quarter's metrics in one transaction. A changed filer set re-dirties every later
-    // quarter (tenure bridges unfiled quarters); a changed turnover the three whose trailing sum reads it.
+    // Replaces the quarter's metrics and sector flows in one transaction. A changed filer set
+    // re-dirties every later quarter (tenure bridges unfiled quarters); a changed turnover the three
+    // whose trailing sum reads it.
     private async Task Publish(
         DateOnly reportDate,
         List<HolderQuarterlyMetrics> metrics,
+        List<HolderQuarterlySectorFlow> sectorFlows,
         CancellationToken cancellationToken
     )
     {
@@ -534,7 +548,12 @@ public class HolderIntelligenceRefreshService
                 .Set<HolderQuarterlyMetrics>()
                 .Where(row => row.ReportDate == reportDate)
                 .ExecuteDeleteAsync(cancellationToken);
+            await _dbContext
+                .Set<HolderQuarterlySectorFlow>()
+                .Where(row => row.ReportDate == reportDate)
+                .ExecuteDeleteAsync(cancellationToken);
             _dbContext.Set<HolderQuarterlyMetrics>().AddRange(metrics);
+            _dbContext.Set<HolderQuarterlySectorFlow>().AddRange(sectorFlows);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             var filersChanged =
@@ -586,6 +605,44 @@ public class HolderIntelligenceRefreshService
             .GroupBy(holding => holding.EquityIssuerId)
             .Select(group => new { IssuerId = group.Key, Value = group.Sum(h => h.Value) })
             .ToDictionaryAsync(row => row.IssuerId, row => (decimal)row.Value, cancellationToken);
+
+    // Each issuer's industry sector as of now, and the US listings flagged as exchange-traded
+    // products by the reference directory: a presentation listing's rows carry no listed ticker.
+    private async Task<(
+        Dictionary<Guid, Guid> IssuerSectors,
+        HashSet<HolderSecurityKey> ExchangeTraded
+    )> LoadSectors(CancellationToken cancellationToken)
+    {
+        var sectors = await _dbContext
+            .Set<EquityIssuer>()
+            .AsNoTracking()
+            .Where(issuer => issuer.Industry.SectorId != null)
+            .Select(issuer => new { issuer.Id, issuer.Industry.SectorId })
+            .ToDictionaryAsync(
+                issuer => issuer.Id,
+                issuer => issuer.SectorId.Value,
+                cancellationToken
+            );
+        var listings = await _dbContext
+            .Set<EquityListing>()
+            .AsNoTracking()
+            .Where(listing => listing.MarketCountryCode == "US" && listing.IsReferenceListed)
+            .Select(listing => new
+            {
+                listing.Security.EquityIssuerId,
+                listing.Ticker,
+                IsPresentation = listing.Security.Issuer.Presentation.EquityListingId == listing.Id,
+            })
+            .ToListAsync(cancellationToken);
+        var exchangeTraded = new HashSet<HolderSecurityKey>();
+        foreach (var listing in listings)
+        {
+            exchangeTraded.Add(new HolderSecurityKey(listing.EquityIssuerId, listing.Ticker));
+            if (listing.IsPresentation)
+                exchangeTraded.Add(new HolderSecurityKey(listing.EquityIssuerId, null));
+        }
+        return (sectors, exchangeTraded);
+    }
 
     // Filers with a Form 13F for the quarter, including a restatement that reports no positions.
     private Task<List<Guid>> LoadFilers(DateOnly reportDate, CancellationToken cancellationToken) =>
