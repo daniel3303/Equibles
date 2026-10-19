@@ -151,4 +151,60 @@ public class McpToolExecutorTests
             .DidNotReceive()
             .Invoke(Arg.Any<string>(), Arg.Any<Exception>(), Arg.Any<string>());
     }
+
+    [Fact]
+    public async Task Execute_ActionThrows_ThrowsFaultWithToolFaultReason()
+    {
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw new InvalidOperationException("boom"),
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
+
+        (await act.Should().ThrowAsync<McpToolFaultException>())
+            .Which.Reason.Should()
+            .Be(McpToolErrorReason.ToolFault);
+    }
+
+    [Fact]
+    public async Task Execute_ActionThrowsWithTimeoutInChain_ThrowsFaultWithTimeoutReason()
+    {
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw new InvalidOperationException("query", new TimeoutException()),
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
+
+        (await act.Should().ThrowAsync<McpToolFaultException>())
+            .Which.Reason.Should()
+            .Be(McpToolErrorReason.Timeout);
+    }
+
+    [Fact]
+    public async Task Execute_ToolRaisesFaultWithReason_PreservesMessageAndReason()
+    {
+        var act = () =>
+            McpToolExecutor.Execute(
+                () =>
+                    throw new McpToolFaultException(
+                        "Search timed out, retry.",
+                        new InvalidOperationException("statement timeout"),
+                        McpToolErrorReason.Timeout
+                    ),
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
+
+        var fault = (await act.Should().ThrowAsync<McpToolFaultException>()).Which;
+        fault.Message.Should().Be("Search timed out, retry.");
+        fault.Reason.Should().Be(McpToolErrorReason.Timeout);
+    }
 }

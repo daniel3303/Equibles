@@ -17,4 +17,13 @@ public class McpToolFaultException : Exception
     // Errors row still carries the real cause behind the caller-facing wording.
     public McpToolFaultException(string message, Exception innerException)
         : base(message, innerException) { }
+
+    public McpToolFaultException(string message, Exception innerException, string reason)
+        : base(message, innerException)
+    {
+        Reason = reason ?? McpToolErrorReason.ToolFault;
+    }
+
+    // One of the McpToolErrorReason values, reported to usage telemetry.
+    public string Reason { get; } = McpToolErrorReason.ToolFault;
 }

@@ -546,7 +546,11 @@ public class RagSearchTools
         }
         catch (ChunkSearchTimeoutException exception)
         {
-            throw new McpToolFaultException(SearchTimeoutAdvice.For(scoped, match), exception);
+            throw new McpToolFaultException(
+                SearchTimeoutAdvice.For(scoped, match),
+                exception,
+                McpToolErrorReason.Timeout
+            );
         }
     }
 
