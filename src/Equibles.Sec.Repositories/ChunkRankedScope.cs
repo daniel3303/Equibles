@@ -11,7 +11,7 @@ namespace Equibles.Sec.Repositories;
 internal static class ChunkRankedScope
 {
     private const int InitialCandidateCount = 64;
-    private const int MaximumCandidateCount = 65536;
+    internal const int MaximumCandidateCount = 65536;
 
     internal static async Task<List<Chunk>> Read(
         EquiblesFinancialDbContext context,
@@ -22,9 +22,13 @@ internal static class ChunkRankedScope
         DateOnly? endDate,
         Stopwatch elapsed,
         int budgetSeconds,
+        ChunkRankedProgress progress,
+        int maximumCandidateCount,
         CancellationToken token
     )
     {
+        // A retried scan starts over, so it must not report an earlier attempt's round.
+        progress.Validated = [];
         if (maxResults <= 0)
             return [];
         var ranked = matching.OrderByDescending(chunk => EF.Functions.Score(chunk.Id));
@@ -33,14 +37,14 @@ internal static class ChunkRankedScope
 
         var scoped = ParentScope(context, ticker, startDate, endDate);
         var limit = Math.Max(InitialCandidateCount, maxResults);
-        var ceiling = Math.Max(MaximumCandidateCount, maxResults);
+        var ceiling = Math.Max(maximumCandidateCount, maxResults);
         while (true)
         {
-            SetRemainingBudget(context, elapsed, budgetSeconds, token);
+            SetRemainingBudget(context, elapsed, budgetSeconds, progress, token);
             // A join in this statement disables the index's TopK scan. Read only ranked keys;
             // validate the complete parent scope before admitting any candidate to the answer.
             var candidates = await ranked.Take(limit).Select(chunk => chunk.Id).ToListAsync(token);
-            SetRemainingBudget(context, elapsed, budgetSeconds, token);
+            SetRemainingBudget(context, elapsed, budgetSeconds, progress, token);
             var allowed = await scoped
                 .Where(chunk => candidates.Contains(chunk.Id))
                 .ToListAsync(token);
@@ -51,12 +55,16 @@ internal static class ChunkRankedScope
                 .Take(maxResults)
                 .Select(id => byId[id])
                 .ToList();
+            // Every in-scope match ranked inside this prefix is here, so the round is a true top
+            // of the answer that a later timeout can still return.
+            progress.Validated = result;
             if (result.Count == maxResults || candidates.Count < limit)
                 return result;
             if (limit == ceiling)
                 throw new ChunkSearchTimeoutException(
                     "BM25 candidate budget exhausted before the filing scope was complete.",
-                    null
+                    null,
+                    result
                 );
             // Re-read the ranked prefix: score ties need not keep their order across queries.
             // Combining offset pages could skip or duplicate tied candidates.
@@ -86,6 +94,7 @@ internal static class ChunkRankedScope
         EquiblesFinancialDbContext context,
         Stopwatch elapsed,
         int budgetSeconds,
+        ChunkRankedProgress progress,
         CancellationToken token
     )
     {
@@ -94,7 +103,8 @@ internal static class ChunkRankedScope
         if (remaining <= TimeSpan.Zero)
             throw new ChunkSearchTimeoutException(
                 $"BM25 chunk search exceeded its {budgetSeconds}s statement budget.",
-                null
+                null,
+                progress.Validated
             );
         context.Database.SetCommandTimeout((int)Math.Ceiling(remaining.TotalSeconds));
     }

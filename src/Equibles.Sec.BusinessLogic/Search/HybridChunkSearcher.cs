@@ -92,10 +92,9 @@ public class HybridChunkSearcher
         bool disjunctiveFallback = false,
         SearchMatch match = SearchMatch.Ranked,
         CancellationToken cancellationToken = default
-    )
-    {
-        if (match == SearchMatch.Phrase)
-            return await SearchPhrase(
+    ) =>
+        (
+            await SearchDetailed(
                 query,
                 maxResults,
                 ticker,
@@ -105,7 +104,44 @@ public class HybridChunkSearcher
                 maxResultsPerCompany,
                 startDate,
                 endDate,
+                disjunctiveFallback,
+                match,
                 cancellationToken
+            )
+        ).Chunks;
+
+    // Search, plus whether a keyword pass ran out of budget: a timed-out pass keeps the matches
+    // its completed rounds validated, so a non-empty answer can still be incomplete.
+    public async Task<ChunkSearchOutcome> SearchDetailed(
+        string query,
+        int maxResults,
+        string ticker = null,
+        IReadOnlyCollection<string> excludeTickers = null,
+        Guid? documentId = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        int maxResultsPerCompany = 0,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        bool disjunctiveFallback = false,
+        SearchMatch match = SearchMatch.Ranked,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (match == SearchMatch.Phrase)
+            return new ChunkSearchOutcome(
+                await SearchPhrase(
+                    query,
+                    maxResults,
+                    ticker,
+                    excludeTickers,
+                    documentId,
+                    documentTypes,
+                    maxResultsPerCompany,
+                    startDate,
+                    endDate,
+                    cancellationToken
+                ),
+                Incomplete: false
             );
 
         // When the semantic arm is live, BM25 returns a deeper pool so RRF has more to reorder;
@@ -169,20 +205,20 @@ public class HybridChunkSearcher
         catch (ChunkSearchTimeoutException exception)
         {
             // A cold BM25 index (first touch after a Postgres restart) can push a long
-            // conjunctive query past its statement budget. Degrade to an empty pool
-            // instead of failing the whole search: the disjunctive fallback and the
-            // corpus vector arm below can still answer — and the timed-out statement
-            // itself warmed the index pages, so they usually do. The timeout is kept so
-            // an empty final result surfaces it rather than reading as "no matches".
+            // conjunctive query past its statement budget. Degrade to the matches the pass
+            // validated before it ran out instead of failing the whole search: the disjunctive
+            // fallback and the corpus vector arm below can still answer — and the timed-out
+            // statement itself warmed the index pages, so they usually do. The timeout is kept
+            // so an empty final result surfaces it rather than reading as "no matches".
             _logger.LogWarning(exception, "Conjunctive BM25 pass timed out; degrading");
-            bm25 = [];
+            bm25 = exception.PartialResults.ToList();
             bm25Timeout = exception;
 
             if (scopedFallbackAvailable)
             {
                 try
                 {
-                    bm25 = await _chunkRepository.HybridSearchScopedFallback(
+                    var fallback = await _chunkRepository.HybridSearchScopedFallback(
                         query,
                         bm25Limit,
                         ticker,
@@ -192,8 +228,9 @@ public class HybridChunkSearcher
                         endDate,
                         cancellationToken
                     );
-                    if (bm25.Count > 0)
+                    if (fallback.Count > 0)
                     {
+                        bm25 = fallback;
                         scopedFallbackAnswered = true;
                         bm25Timeout = null;
                     }
@@ -256,6 +293,7 @@ public class HybridChunkSearcher
                     exception,
                     "Disjunctive BM25 fallback timed out; keeping the conjunctive results"
                 );
+                bm25 = bm25.Concat(exception.PartialResults).DistinctBy(chunk => chunk.Id).ToList();
                 bm25Timeout ??= exception;
             }
         }
@@ -309,11 +347,11 @@ public class HybridChunkSearcher
         // timeout instead; a retry hits the index pages the failed passes just warmed.
         // Declared below the fallback block on purpose: it reads bm25Timeout at call
         // time, and every mutation of that variable happens above this line.
-        List<Chunk> ThrowIfEmptyAfterTimeout(List<Chunk> results)
+        ChunkSearchOutcome ThrowIfEmptyAfterTimeout(List<Chunk> results)
         {
             if (results.Count == 0 && bm25Timeout != null)
                 ExceptionDispatchInfo.Capture(bm25Timeout).Throw();
-            return results;
+            return new ChunkSearchOutcome(results, Incomplete: bm25Timeout != null);
         }
 
         // The scoped fallback already returned proven full-text matches from a bounded ticker or
@@ -321,9 +359,12 @@ public class HybridChunkSearcher
         // the index or semantic arms that just failed under the same load.
         if (scopedFallbackAnswered)
         {
-            return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
-                .Take(maxResults)
-                .ToList();
+            return new ChunkSearchOutcome(
+                ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
+                    .Take(maxResults)
+                    .ToList(),
+                Incomplete: false
+            );
         }
 
         // With only the pool re-rank available, an empty BM25 pool leaves the semantic arm

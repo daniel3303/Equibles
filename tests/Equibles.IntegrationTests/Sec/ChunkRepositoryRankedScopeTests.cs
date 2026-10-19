@@ -325,6 +325,74 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         context.Database.CurrentTransaction.Should().BeNull();
     }
 
+    // Rounds of 64 then 128 candidates find one in-scope match among 200 foreign ones, so the
+    // ceiling throw must carry that validated match rather than discard it.
+    [Fact]
+    public async Task Search_CandidateCeilingExhausted_CarriesTheValidatedMatches()
+    {
+        var expected = SeedOneDomesticMatchAmongForeignOnes("CEIL", 200);
+        await DbContext.SaveChangesAsync();
+
+        Func<Task> search = () =>
+            new ChunkRepository(DbContext, maximumCandidateCount: 128).HybridSearch(
+                "orbital revenue",
+                2,
+                ticker: "CEIL"
+            );
+
+        var timeout = (await search.Should().ThrowAsync<ChunkSearchTimeoutException>()).Which;
+        timeout.PartialResults.Select(chunk => chunk.Id).Should().Equal(expected.Id);
+    }
+
+    // The statement budget runs out during the second ranked round; the first round's validated
+    // match survives the timeout.
+    [Fact]
+    public async Task Search_BudgetSpentInALaterRound_CarriesTheEarlierRoundsMatches()
+    {
+        var expected = SeedOneDomesticMatchAmongForeignOnes("LATE", 100);
+        await DbContext.SaveChangesAsync();
+        var capture = new RankCapture(delay: true, firstDelayedScan: 1);
+        await using var context = Fixture.CreateDbContext(builder =>
+            builder.AddInterceptors(capture)
+        );
+
+        Func<Task> search = () =>
+            new ChunkRepository(context).HybridSearch(
+                "orbital revenue",
+                2,
+                ticker: "LATE",
+                commandTimeoutSeconds: 3
+            );
+
+        var timeout = (await search.Should().ThrowAsync<ChunkSearchTimeoutException>()).Which;
+        capture.Scans.Should().HaveCount(2);
+        timeout.PartialResults.Select(chunk => chunk.Id).Should().Equal(expected.Id);
+    }
+
+    // The domestic chunk outranks the foreign ones (higher term frequency, shorter text), and the
+    // foreign issuer shares the symbol so only parent validation can drop its chunks.
+    private Chunk SeedOneDomesticMatchAmongForeignOnes(string ticker, int foreignCount)
+    {
+        var domestic = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: ticker);
+        var foreign = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: ticker);
+        foreign.Presentation.Listing.MarketCountryCode = "PT";
+        foreign.Presentation.Listing.MarketIdentifierCode = "XLIS";
+        var wrongOwner = AddDocument(foreign, new DateOnly(2026, 1, 1));
+        for (var index = 0; index < foreignCount; index++)
+            AddChunk(
+                wrongOwner,
+                index,
+                "orbital revenue " + string.Join(' ', Enumerable.Repeat("filler", 50)),
+                ticker: ticker
+            );
+        return AddChunk(
+            AddDocument(domestic, new DateOnly(2026, 1, 1)),
+            0,
+            "orbital revenue orbital revenue",
+            ticker: ticker
+        );
+    }
+
     private Document AddDocument(EquityIssuer issuer, DateOnly date)
     {
         var document = new Document
@@ -351,7 +419,8 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         Document document,
         int index,
         string content,
-        DateTime? writerDate = null
+        DateTime? writerDate = null,
+        string ticker = "SAME"
     )
     {
         var chunk = new Chunk
@@ -359,7 +428,7 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
             Document = document,
             Index = index,
             Content = content,
-            Ticker = "SAME",
+            Ticker = ticker,
             DocumentType = document.DocumentType,
             ReportingDate =
                 writerDate
@@ -389,7 +458,9 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         return string.Join('\n', plan);
     }
 
-    private sealed class RankCapture(bool delay = false) : DbCommandInterceptor
+    // firstDelayedScan holds back the BM25 scans from that zero-based position on.
+    private sealed class RankCapture(bool delay = false, int firstDelayedScan = 0)
+        : DbCommandInterceptor
     {
         public List<string> Scans { get; } = [];
         public List<NpgsqlParameter> Parameters { get; } = [];
@@ -412,7 +483,7 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
                             }
                         );
                 Scans.Add(command.CommandText);
-                if (delay)
+                if (delay && Scans.Count > firstDelayedScan)
                     await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
             }
             return result;
