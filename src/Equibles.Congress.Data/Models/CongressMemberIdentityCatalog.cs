@@ -18,6 +18,7 @@ public static class CongressMemberIdentityCatalog
             "Alexandria F. Ocasio-Cortez"
         ),
         Identity("R000305", "Deborah Ross", "Deborah K Ross", "Deborah K. Ross"),
+        Identity("D000628", "Neal Dunn", "Neal P Dunn", "Neal P. Dunn", "Neal Patrick Dunn"),
         Identity("B001299", "James Banks", "James E Banks", "James E. Banks", "Jim Banks"),
         Identity("C001114", "John Curtis", "John R Curtis", "John R. Curtis"),
         Identity(

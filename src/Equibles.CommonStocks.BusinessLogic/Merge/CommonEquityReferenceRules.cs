@@ -30,6 +30,8 @@ public static class CommonEquityReferenceRules
         new("FinancialFactsSyncStatus") { OnCollision = EquityReferenceCollision.KeepSurvivor },
         new("EquityIssuerTickerEvidence") { OnCollision = EquityReferenceCollision.KeepSurvivor },
         new("HoldingLabelConvergenceState") { OnCollision = EquityReferenceCollision.KeepSurvivor },
+        // A presence mask is derived from holdings; the next rebuild of each quarter restores a dropped bit.
+        new("HolderStockPresence") { OnCollision = EquityReferenceCollision.KeepSurvivor },
         new("HoldingsCusipRescan"),
         // A collision here means two records disagree about the same filing or listing; an operator decides.
         new("EquityListingRetirementEvidence"),

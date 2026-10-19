@@ -37,6 +37,32 @@ public class CongressMemberIdentityServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task ReconcileMembers_CredentialSpellings_MergeIntoOneCatalogMember()
+    {
+        var first = new CongressMember
+        {
+            Name = "Neal Patrick MD, Facs Dunn",
+            StateDistrict = "FL02",
+            CreationTime = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var second = new CongressMember { Name = "Neal Patrick Dunn MD, FACS" };
+        var third = new CongressMember { Name = "Neal Patrick Dunn, MD, FACS" };
+        var initial = new CongressMember { Name = "Neal P. Dunn" };
+        DbContext.AddRange(first, second, third, initial);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await CreateSut().ReconcileMembers(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var member = await verify.Set<CongressMember>().AsNoTracking().SingleAsync();
+        member.Name.Should().Be("Neal Dunn");
+        member.BioguideId.Should().Be("D000628");
+        member.StateDistrict.Should().Be("FL02");
+        (await verify.Set<CongressMemberRedirect>().CountAsync()).Should().Be(3);
+    }
+
+    [Fact]
     public async Task ReconcileMembers_AliasHasConflictingBioguideId_RefusesMerge()
     {
         var member = new CongressMember { Name = "James E. Banks", BioguideId = "X000001" };
