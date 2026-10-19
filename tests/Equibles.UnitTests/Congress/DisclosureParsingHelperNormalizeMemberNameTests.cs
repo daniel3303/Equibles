@@ -31,6 +31,14 @@ public class DisclosureParsingHelperNormalizeMemberNameTests
     [InlineData("Honorable Donald Beyer", "Donald Beyer")]
     // A surname that merely begins with the same letters is whole-token matched, so it stays.
     [InlineData("Grace Honorables", "Grace Honorables")]
+    // Professional credentials filed into the name, with their commas, in any position.
+    [InlineData("Neal Patrick Dunn MD, FACS", "Neal Patrick Dunn")]
+    [InlineData("Neal Patrick Dunn, MD, FACS", "Neal Patrick Dunn")]
+    [InlineData("Neal Patrick MD, Facs Dunn", "Neal Patrick Dunn")]
+    [InlineData("Jane Roe, Ph.D.", "Jane Roe, Ph.D.")]
+    [InlineData("Jane Roe, PhD", "Jane Roe")]
+    // A generational suffix is part of the name, so its comma stays.
+    [InlineData("Angus S King, Jr.", "Angus S King, Jr.")]
     // Doubled first name emitted by the parser.
     [InlineData("Scott Scott Franklin", "Scott Franklin")]
     // Stray whitespace collapses.

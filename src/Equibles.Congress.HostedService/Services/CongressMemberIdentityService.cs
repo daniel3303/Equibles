@@ -189,8 +189,75 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
             cancellationToken: ct
         );
 
+    // A stored name the normaliser now rewrites, such as one carrying "MD, FACS", merges into the
+    // row for its normalised name, so a member filed under several spellings keeps one row.
+    private async Task ReconcileNormalizedNames(CancellationToken ct)
+    {
+        var members = await _dbContext
+            .Set<CongressMember>()
+            .OrderBy(member => member.CreationTime)
+            .ThenBy(member => member.Id)
+            .ToListAsync(ct);
+        var stale = members
+            .Where(member =>
+                !string.Equals(
+                    member.Name,
+                    DisclosureParsingHelper.NormalizeMemberName(member.Name),
+                    StringComparison.Ordinal
+                )
+            )
+            .GroupBy(
+                member => DisclosureParsingHelper.NormalizeMemberName(member.Name),
+                StringComparer.OrdinalIgnoreCase
+            );
+
+        foreach (var group in stale)
+        {
+            var existing = members
+                .Where(member =>
+                    string.Equals(member.Name, group.Key, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToList();
+            var candidates = existing.Concat(group).ToList();
+            var bioguideIds = candidates
+                .Select(member => member.BioguideId)
+                .Where(id => id != null)
+                .Distinct()
+                .ToList();
+            if (bioguideIds.Count > 1)
+            {
+                _logger.LogWarning(
+                    "Congress members spelled as {Name} hold different BioGuide ids {Ids}; left unmerged",
+                    group.Key,
+                    string.Join(", ", bioguideIds)
+                );
+                continue;
+            }
+
+            var survivor = existing.FirstOrDefault() ?? group.First();
+            var holder = candidates.FirstOrDefault(member => member.BioguideId != null);
+            var retired = candidates.Where(member => member.Id != survivor.Id).ToList();
+            if (holder != null && holder.Id != survivor.Id)
+            {
+                // Freed before the survivor takes the id, so the unique index never sees it twice.
+                var (id, source) = (holder.BioguideId, holder.BioguideIdSource);
+                holder.BioguideId = null;
+                holder.BioguideIdSource = null;
+                await _dbContext.SaveChangesAsync(ct);
+                survivor.BioguideId = id;
+                survivor.BioguideIdSource = source;
+            }
+            if (retired.Count > 0)
+                await _historyMerger.MergeMembers(survivor, retired, ct);
+
+            survivor.Name = group.Key;
+            await _dbContext.SaveChangesAsync(ct);
+        }
+    }
+
     private async Task ReconcileCatalog(CancellationToken ct)
     {
+        await ReconcileNormalizedNames(ct);
         foreach (var identity in CongressMemberIdentityCatalog.All)
         {
             var aliases = identity.Aliases.Select(alias => alias.ToLowerInvariant()).ToList();
