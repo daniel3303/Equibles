@@ -205,13 +205,12 @@ public class HybridChunkSearcher
         catch (ChunkSearchTimeoutException exception)
         {
             // A cold BM25 index (first touch after a Postgres restart) can push a long
-            // conjunctive query past its statement budget. Degrade to an empty pool
-            // instead of failing the whole search: the disjunctive fallback and the
-            // corpus vector arm below can still answer — and the timed-out statement
-            // itself warmed the index pages, so they usually do. The timeout is kept so
-            // an empty final result surfaces it rather than reading as "no matches".
+            // conjunctive query past its statement budget. Degrade to the matches the pass
+            // validated before it ran out instead of failing the whole search: the disjunctive
+            // fallback and the corpus vector arm below can still answer — and the timed-out
+            // statement itself warmed the index pages, so they usually do. The timeout is kept
+            // so an empty final result surfaces it rather than reading as "no matches".
             _logger.LogWarning(exception, "Conjunctive BM25 pass timed out; degrading");
-            // Matches the pass validated before its budget ran out are the true top of its ranking.
             bm25 = exception.PartialResults.ToList();
             bm25Timeout = exception;
 
