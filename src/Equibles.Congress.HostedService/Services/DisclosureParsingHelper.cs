@@ -28,6 +28,23 @@ public static partial class DisclosureParsingHelper
         "Honorable",
     };
 
+    // Professional credentials some House filings append to the name ("Neal Patrick Dunn MD,
+    // FACS", or misplaced as "Neal Patrick MD, Facs Dunn"). Like honorifics they are not part of
+    // the name, and left in they split one member into a row per spelling.
+    private static readonly HashSet<string> CredentialTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "MD",
+        "FACS",
+        "FACP",
+        "FACC",
+        "PhD",
+        "DDS",
+        "DMD",
+        "DVM",
+        "CPA",
+        "Esq",
+    };
+
     /// <summary>
     /// Canonicalises a disclosed congressional member name so cosmetic variants
     /// resolve to one identity. The single normaliser every source (House
@@ -38,6 +55,8 @@ public static partial class DisclosureParsingHelper
     /// <list type="bullet">
     /// <item>drops honorific tokens in any position, period-agnostic
     /// ("Scott Mr Franklin" / "Mark Dr Green");</item>
+    /// <item>drops professional credentials and the comma that sets them off
+    /// ("Neal Patrick Dunn, MD, FACS"), leaving other commas such as ", Jr." alone;</item>
     /// <item>collapses an immediately repeated token — the parser's doubled
     /// first name ("Scott Scott Franklin");</item>
     /// <item>collapses runs of whitespace and trims.</item>
@@ -61,6 +80,12 @@ public static partial class DisclosureParsingHelper
         {
             if (HonorificTokens.Contains(token.TrimEnd('.')))
                 continue;
+            if (CredentialTokens.Contains(token.TrimEnd('.', ',')))
+            {
+                if (result.Count > 0 && result[^1].EndsWith(','))
+                    result[^1] = result[^1].TrimEnd(',');
+                continue;
+            }
             // Collapse an immediately repeated token (the parser's doubled first
             // name, "Scott Scott"), but never a repeated single-letter initial:
             // "C. C. Franklin" is a genuine two-initial name and folding it would
