@@ -64,4 +64,10 @@ public class SecDocumentInfo
     /// When the document was stored here (UTC).
     /// </summary>
     public DateTime IngestedAt { get; set; }
+
+    /// <summary>
+    /// A short plain-language summary of what the document says, or null when the deployment
+    /// provides none for it (see <see cref="IDocumentSummaryReader"/>).
+    /// </summary>
+    public string Summary { get; set; }
 }

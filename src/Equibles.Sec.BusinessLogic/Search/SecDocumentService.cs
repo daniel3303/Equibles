@@ -15,14 +15,19 @@ public class SecDocumentService : ISecDocumentService
 {
     private readonly DocumentRepository _documentRepository;
     private readonly ILogger<SecDocumentService> _logger;
+    private readonly IDocumentSummaryReader _summaryReader;
 
+    // The summary reader is optional by design: no framework registration exists, and the
+    // container falls back to null on deployments that do not summarize documents.
     public SecDocumentService(
         DocumentRepository documentRepository,
-        ILogger<SecDocumentService> logger
+        ILogger<SecDocumentService> logger,
+        IDocumentSummaryReader summaryReader = null
     )
     {
         _documentRepository = documentRepository;
         _logger = logger;
+        _summaryReader = summaryReader;
     }
 
     public async Task<List<SecDocumentInfo>> GetRecentDocuments(
@@ -105,6 +110,13 @@ public class SecDocumentService : ISecDocumentService
                 document.ReportingForDate = Document.StatedPeriod(document.ReportingForDate.Value);
                 if (!SecForms.IsEdgar(document.DocumentType))
                     document.AccessionNumber = null;
+            }
+
+            if (_summaryReader != null && documents.Count > 0)
+            {
+                var summaries = await _summaryReader.Read(documents.Select(d => d.Id).ToList());
+                foreach (var document in documents)
+                    document.Summary = summaries.GetValueOrDefault(document.Id);
             }
 
             _logger.LogInformation(
