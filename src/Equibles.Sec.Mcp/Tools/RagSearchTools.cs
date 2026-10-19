@@ -122,7 +122,7 @@ public class RagSearchTools
                     return tickerError;
 
                 maxResults = McpLimit.Clamp(maxResults);
-                List<Chunk> chunks;
+                ChunkSearchOutcome outcome;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
                     if (parsedTickers != null)
@@ -132,9 +132,9 @@ public class RagSearchTools
                     if (filerError != null)
                         return filerError;
 
-                    chunks = await SearchOrTimeoutFault(
+                    outcome = await SearchOrTimeoutFault(
                         () =>
-                            _ragManager.SearchRelevantChunksByCompany(
+                            _ragManager.SearchRelevantChunksByCompanyDetailed(
                                 query,
                                 filer,
                                 maxResults,
@@ -145,14 +145,15 @@ public class RagSearchTools
                                 match: searchMatch
                             ),
                         scoped: true,
-                        match: searchMatch
+                        match: searchMatch,
+                        query: query
                     );
                 }
                 else
                 {
-                    chunks = await SearchOrTimeoutFault(
+                    outcome = await SearchOrTimeoutFault(
                         () =>
-                            _ragManager.SearchRelevantChunks(
+                            _ragManager.SearchRelevantChunksDetailed(
                                 query,
                                 maxResults,
                                 parsedTypes,
@@ -164,17 +165,23 @@ public class RagSearchTools
                                 match: searchMatch
                             ),
                         scoped: false,
-                        match: searchMatch
+                        match: searchMatch,
+                        query: query
                     );
                 }
 
                 var context = await _ragManager.BuildContext(
-                    chunks,
+                    outcome.Chunks,
                     includeDocumentIds: true,
                     maxExcerptChars: maxExcerptChars,
                     includeExcerptLinks: true
                 );
-                return AppendShortfallNote(context, chunks.Count, maxResults);
+                return AppendShortfallNote(
+                    context,
+                    outcome.Chunks.Count,
+                    maxResults,
+                    outcome.Incomplete
+                );
             },
             "SearchDocuments",
             $"ticker: {ticker}, query: {query}"
@@ -221,16 +228,18 @@ public class RagSearchTools
                     );
                 if (mode != "semantic")
                     return $"Unknown searchMode \"{searchMode}\" — pass 'semantic' (default) or 'exact'.";
-                var chunks = await SearchOrTimeoutFault(
+                var outcome = await SearchOrTimeoutFault(
                     () =>
-                        _ragManager.SearchRelevantChunksByDocument(
+                        _ragManager.SearchRelevantChunksByDocumentDetailed(
                             query,
                             documentId,
                             maxResults,
                             broadenSparseResults: true
                         ),
-                    scoped: true
+                    scoped: true,
+                    query: query
                 );
+                var chunks = outcome.Chunks;
 
                 if (chunks.Count == 0)
                 {
@@ -250,7 +259,8 @@ public class RagSearchTools
                     includeExcerptLinks: true
                 );
                 return context
-                    + $"_{chunks.Count} excerpt(s) returned (maxResults {maxResults}); excerpts are in document order — pass an excerpt's line number to ReadDocumentLines for surrounding context._";
+                    + $"_{chunks.Count} excerpt(s) returned (maxResults {maxResults}); excerpts are in document order — pass an excerpt's line number to ReadDocumentLines for surrounding context._"
+                    + (outcome.Incomplete ? "\n" + IncompleteNote : "");
             },
             "SearchDocument",
             $"documentId: {documentId}, query: {query}, searchMode: {searchMode}"
@@ -534,10 +544,11 @@ public class RagSearchTools
     // Turns a BM25 statement-budget timeout into a fault the caller can act on, keeping the
     // original exception attached so the recorded Errors row still shows what actually failed.
     // Every other failure keeps the executor's catch-all wording.
-    internal static async Task<List<Chunk>> SearchOrTimeoutFault(
-        Func<Task<List<Chunk>>> search,
+    internal static async Task<T> SearchOrTimeoutFault<T>(
+        Func<Task<T>> search,
         bool scoped,
-        SearchMatch match = SearchMatch.Ranked
+        SearchMatch match = SearchMatch.Ranked,
+        string query = null
     )
     {
         try
@@ -547,7 +558,7 @@ public class RagSearchTools
         catch (ChunkSearchTimeoutException exception)
         {
             throw new McpToolFaultException(
-                SearchTimeoutAdvice.For(scoped, match),
+                SearchTimeoutAdvice.For(scoped, match, query),
                 exception,
                 McpToolErrorReason.Timeout
             );
@@ -570,13 +581,28 @@ public class RagSearchTools
         }
     }
 
+    internal const string IncompleteNote =
+        "_The search ran out of time, so these are the best-ranked excerpts found so far and more may match. Retry the same call for a complete ranking._";
+
     // Signposts a result shortfall so the caller knows relaxing filters (not paging or
-    // retrying) is the next move. Empty results keep the plain empty-state message.
-    private static string AppendShortfallNote(string context, int returned, int requested) =>
-        returned > 0 && returned < requested
+    // retrying) is the next move. Empty results keep the plain empty-state message. An incomplete
+    // search never claims only N matched: it stopped early, so a retry is the next move.
+    internal static string AppendShortfallNote(
+        string context,
+        int returned,
+        int requested,
+        bool incomplete = false
+    )
+    {
+        if (returned == 0)
+            return context;
+        if (incomplete)
+            return context + IncompleteNote;
+        return returned < requested
             ? context
                 + $"_Only {returned} excerpt(s) matched the query and filters — broaden the query or relax the filters to find more._"
             : context;
+    }
 
     private static DateOnly? ToDateOnly(DateTime? value) =>
         value.HasValue ? DateOnly.FromDateTime(value.Value) : null;

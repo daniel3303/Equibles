@@ -47,9 +47,34 @@ public class RagManager : IRagManager
         int maxResultsPerCompany = 0,
         bool broadenSparseResults = false,
         SearchMatch match = SearchMatch.Ranked
+    ) =>
+        (
+            await SearchRelevantChunksDetailed(
+                query,
+                maxResults,
+                documentTypes,
+                startDate,
+                endDate,
+                excludeTickers,
+                maxResultsPerCompany,
+                broadenSparseResults,
+                match
+            )
+        ).Chunks;
+
+    public async Task<ChunkSearchOutcome> SearchRelevantChunksDetailed(
+        string query,
+        int maxResults = 5,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        IReadOnlyCollection<string> excludeTickers = null,
+        int maxResultsPerCompany = 0,
+        bool broadenSparseResults = false,
+        SearchMatch match = SearchMatch.Ranked
     )
     {
-        var chunks = await _hybridChunkSearcher.Search(
+        var outcome = await _hybridChunkSearcher.SearchDetailed(
             query,
             maxResults,
             excludeTickers: excludeTickers,
@@ -61,8 +86,8 @@ public class RagManager : IRagManager
             match: match
         );
 
-        _logger.LogInformation("Found {Count} relevant chunks for query", chunks.Count);
-        return chunks;
+        _logger.LogInformation("Found {Count} relevant chunks for query", outcome.Chunks.Count);
+        return outcome;
     }
 
     public async Task<List<Chunk>> SearchRelevantChunksByCompany(
@@ -74,10 +99,33 @@ public class RagManager : IRagManager
         DateOnly? endDate = null,
         bool broadenSparseResults = false,
         SearchMatch match = SearchMatch.Ranked
+    ) =>
+        (
+            await SearchRelevantChunksByCompanyDetailed(
+                query,
+                ticker,
+                maxResults,
+                documentTypes,
+                startDate,
+                endDate,
+                broadenSparseResults,
+                match
+            )
+        ).Chunks;
+
+    public async Task<ChunkSearchOutcome> SearchRelevantChunksByCompanyDetailed(
+        string query,
+        string ticker,
+        int maxResults = 5,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        bool broadenSparseResults = false,
+        SearchMatch match = SearchMatch.Ranked
     )
     {
         ticker = await ResolvePrimaryTicker(ticker);
-        var chunks = await _hybridChunkSearcher.Search(
+        var outcome = await _hybridChunkSearcher.SearchDetailed(
             query,
             maxResults,
             ticker,
@@ -90,10 +138,10 @@ public class RagManager : IRagManager
 
         _logger.LogInformation(
             "Found {Count} relevant chunks for company {Ticker}",
-            chunks.Count,
+            outcome.Chunks.Count,
             ticker
         );
-        return chunks;
+        return outcome;
     }
 
     public async Task<List<Chunk>> SearchRelevantChunksByDocument(
@@ -101,9 +149,24 @@ public class RagManager : IRagManager
         Guid documentId,
         int maxResults = 5,
         bool broadenSparseResults = false
+    ) =>
+        (
+            await SearchRelevantChunksByDocumentDetailed(
+                query,
+                documentId,
+                maxResults,
+                broadenSparseResults
+            )
+        ).Chunks;
+
+    public async Task<ChunkSearchOutcome> SearchRelevantChunksByDocumentDetailed(
+        string query,
+        Guid documentId,
+        int maxResults = 5,
+        bool broadenSparseResults = false
     )
     {
-        var chunks = await _hybridChunkSearcher.Search(
+        var outcome = await _hybridChunkSearcher.SearchDetailed(
             query,
             maxResults,
             documentId: documentId,
@@ -112,10 +175,10 @@ public class RagManager : IRagManager
 
         _logger.LogInformation(
             "Found {Count} relevant chunks for document {DocumentId}",
-            chunks.Count,
+            outcome.Chunks.Count,
             documentId
         );
-        return chunks;
+        return outcome;
     }
 
     public async Task<List<Chunk>> SearchRelevantChunksByDocumentType(

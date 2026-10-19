@@ -19,8 +19,17 @@ public class ChunkRepository : BaseRepository<Chunk>
     private const int HybridSearchCommandTimeoutSeconds = 5;
     private const int ScopedFallbackCommandTimeoutSeconds = 3;
 
+    private readonly int _maximumCandidateCount = ChunkRankedScope.MaximumCandidateCount;
+
     public ChunkRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
+
+    // A lower ranked-prefix ceiling lets an integration test exhaust the candidate budget cheaply.
+    internal ChunkRepository(EquiblesFinancialDbContext dbContext, int maximumCandidateCount)
+        : base(dbContext)
+    {
+        _maximumCandidateCount = maximumCandidateCount;
+    }
 
     // virtual: unit tests stub the search seam by subclassing (no BM25 index in a unit run).
     // commandTimeoutSeconds overrides the default statement budget for this one call — the
@@ -147,6 +156,7 @@ public class ChunkRepository : BaseRepository<Chunk>
         var originalTimeout = DbContext.Database.GetCommandTimeout();
         DbContext.Database.SetCommandTimeout(timeoutSeconds);
         var stopwatch = Stopwatch.StartNew();
+        var progress = new ChunkRankedProgress();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
@@ -207,6 +217,8 @@ public class ChunkRepository : BaseRepository<Chunk>
                         endDate,
                         stopwatch,
                         timeoutSeconds,
+                        progress,
+                        _maximumCandidateCount,
                         scan
                     ),
                 deadline.Token
@@ -217,7 +229,8 @@ public class ChunkRepository : BaseRepository<Chunk>
         {
             throw new ChunkSearchTimeoutException(
                 $"BM25 chunk search exceeded its {timeoutSeconds}s statement budget.",
-                exception
+                exception,
+                progress.Validated
             );
         }
         catch (Exception exception)
@@ -233,7 +246,8 @@ public class ChunkRepository : BaseRepository<Chunk>
             // never conflated with "no matches".
             throw new ChunkSearchTimeoutException(
                 $"BM25 chunk search exceeded its {timeoutSeconds}s statement budget.",
-                exception
+                exception,
+                progress.Validated
             );
         }
         finally
