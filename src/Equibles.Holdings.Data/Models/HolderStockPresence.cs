@@ -6,7 +6,7 @@ namespace Equibles.Holdings.Data.Models;
 /// <summary>
 /// The quarters a 13F filer held one listed security as a bitmask: bit i is the i-th quarter end
 /// since 2020-03-31. Tenure reads the run of set bits; the issuer id carries no foreign key, so an
-/// issuer merge leaves rows the next rebuild of each quarter clears.
+/// issuer merge moves rows by rule and keeps the survivor's row on a collision.
 /// </summary>
 public class HolderStockPresence
 {
