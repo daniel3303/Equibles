@@ -17,6 +17,7 @@ public class CongressToolsGetCongressionalTradesCultureInvarianceTests : ParadeD
             new CongressionalTradeRepository(DbContext),
             new CongressMemberRepository(DbContext),
             new CongressionalAnnualDisclosureRepository(DbContext),
+            new CongressMemberTermRepository(DbContext),
             new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<CongressTools>()
