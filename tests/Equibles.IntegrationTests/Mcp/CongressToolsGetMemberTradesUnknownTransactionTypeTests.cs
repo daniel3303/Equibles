@@ -52,6 +52,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
             new CongressionalTradeRepository(verify),
             new CongressMemberRepository(verify),
             new CongressionalAnnualDisclosureRepository(verify),
+            new CongressMemberTermRepository(verify),
             new EquityIssuerRepository(verify),
             ErrorManager,
             NullLogger<CongressTools>()
@@ -102,6 +103,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
             new CongressionalTradeRepository(verify),
             new CongressMemberRepository(verify),
             new CongressionalAnnualDisclosureRepository(verify),
+            new CongressMemberTermRepository(verify),
             new EquityIssuerRepository(verify),
             ErrorManager,
             NullLogger<CongressTools>()

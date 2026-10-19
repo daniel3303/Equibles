@@ -1,6 +1,5 @@
 using Equibles.Congress.Data.Extensions;
 using Equibles.Congress.Data.Models;
-using Equibles.Congress.Repositories.Models;
 using Equibles.Data;
 
 namespace Equibles.Congress.Repositories;
@@ -19,13 +18,7 @@ public class CongressMemberTermRepository : BaseRepository<CongressMemberTerm>
     /// <summary>Each listed legislator's most recently started term.</summary>
     public IQueryable<CongressMemberTerm> GetLatestTerms(IReadOnlyCollection<string> bioguideIds)
     {
-        var terms = GetAll();
-        return terms.Where(term =>
-            bioguideIds.Contains(term.BioguideId)
-            && !terms.Any(later =>
-                later.BioguideId == term.BioguideId && later.StartDate > term.StartDate
-            )
-        );
+        return GetAll().LatestPerLegislator(bioguideIds);
     }
 
     /// <summary>
@@ -36,17 +29,6 @@ public class CongressMemberTermRepository : BaseRepository<CongressMemberTerm>
         IQueryable<CongressionalTrade> trades
     )
     {
-        var terms = GetAll();
-        return trades.SelectMany(
-            trade =>
-                terms
-                    .Where(term =>
-                        term.BioguideId == trade.CongressMember.BioguideId
-                        && term.StartDate <= trade.TransactionDate
-                        && trade.TransactionDate < term.EndDate
-                    )
-                    .DefaultIfEmpty(),
-            (trade, term) => new CongressionalTradeTerm { Trade = trade, Term = term }
-        );
+        return trades.WithTermOnTransactionDate(GetAll());
     }
 }

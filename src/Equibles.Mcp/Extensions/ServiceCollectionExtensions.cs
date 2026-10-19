@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -46,7 +47,8 @@ public static class ServiceCollectionExtensions
                 typeof(McpServerTool),
                 provider => new InvalidParamsTranslatingTool(
                     ResolveInner(provider, inner),
-                    provider.GetRequiredService<ILogger<InvalidParamsTranslatingTool>>()
+                    provider.GetRequiredService<ILogger<InvalidParamsTranslatingTool>>(),
+                    provider.GetService<IHttpContextAccessor>()
                 ),
                 descriptor.Lifetime
             );
