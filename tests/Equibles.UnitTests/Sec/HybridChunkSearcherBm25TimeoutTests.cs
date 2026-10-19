@@ -405,6 +405,128 @@ public class HybridChunkSearcherBm25TimeoutTests
         Assert.Empty(chunkRepository.ReducedTexts);
     }
 
+    // A ticker-scoped pass that validated in-scope matches before its budget ran out keeps them:
+    // they are the true top of the ranking, so the call answers instead of failing, flagged
+    // incomplete because more may exist below the prefix that was read.
+    [Fact]
+    public async Task ConjunctiveTimeout_TickerScoped_KeepsValidatedPartialResults_AsIncomplete()
+    {
+        var first = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Content = "best match",
+        };
+        var second = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Content = "next match",
+        };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            disjunctiveTimesOut: true,
+            conjunctivePartial: [first, second],
+            allChunks: [first, second]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var outcome = await searcher.SearchDetailed(
+            "segment revenue",
+            5,
+            ticker: "AAPL",
+            disjunctiveFallback: true
+        );
+
+        Assert.Equal([first.Id, second.Id], outcome.Chunks.Select(chunk => chunk.Id));
+        Assert.True(outcome.Incomplete);
+        Assert.Empty(chunkRepository.ReducedTexts);
+    }
+
+    [Fact]
+    public async Task DisjunctiveTimeout_AppendsItsPartialResults_AfterTheConjunctiveOnes()
+    {
+        var precise = new Chunk { Id = Guid.NewGuid(), Content = "precise match" };
+        var broad = new Chunk { Id = Guid.NewGuid(), Content = "broadened match" };
+        var chunkRepository = new TimeoutChunkRepository(
+            disjunctiveTimesOut: true,
+            conjunctiveResults: [precise],
+            disjunctivePartial: [precise, broad],
+            allChunks: [precise, broad]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var outcome = await searcher.SearchDetailed("query", 5, disjunctiveFallback: true);
+
+        Assert.Equal([precise.Id, broad.Id], outcome.Chunks.Select(chunk => chunk.Id));
+        Assert.True(outcome.Incomplete);
+    }
+
+    // A spent budget that validated nothing is still not a factual no-match.
+    [Fact]
+    public async Task AllPassesTimeout_TickerScoped_EmptyPartialResults_SurfacesTheTimeout()
+    {
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            disjunctiveTimesOut: true
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        await Assert.ThrowsAsync<ChunkSearchTimeoutException>(() =>
+            searcher.SearchDetailed("segment revenue", 5, ticker: "AAPL", disjunctiveFallback: true)
+        );
+    }
+
+    [Fact]
+    public async Task ConjunctiveTimeout_ScopedFallbackAnswer_ReplacesPartialResults_AsComplete()
+    {
+        var partial = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "TSM",
+            Content = "partial match",
+        };
+        var fallback = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "TSM",
+            Content = "full-text match",
+        };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            conjunctivePartial: [partial],
+            scopedFallbackResults: [fallback],
+            allChunks: [partial, fallback]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var outcome = await searcher.SearchDetailed(
+            "segment revenue",
+            5,
+            ticker: "TSM",
+            disjunctiveFallback: true
+        );
+
+        Assert.Equal(fallback.Id, Assert.Single(outcome.Chunks).Id);
+        Assert.False(outcome.Incomplete);
+    }
+
+    [Fact]
+    public async Task CompletedSearch_IsNotIncomplete()
+    {
+        var chunk = new Chunk { Id = Guid.NewGuid(), Content = "precise match" };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveResults: [chunk],
+            allChunks: [chunk]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var outcome = await searcher.SearchDetailed("query", 5, disjunctiveFallback: true);
+
+        Assert.Equal(chunk.Id, Assert.Single(outcome.Chunks).Id);
+        Assert.False(outcome.Incomplete);
+    }
+
     private static HybridChunkSearcher NewSearcher(
         ChunkRepository chunkRepository,
         EmbeddingRepository embeddingRepository

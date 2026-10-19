@@ -58,6 +58,8 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
     private readonly Exception _scopedFallbackError;
     private readonly List<Chunk> _reducedResults;
     private readonly bool _reducedTimesOut;
+    private readonly List<Chunk> _conjunctivePartial;
+    private readonly List<Chunk> _disjunctivePartial;
     private string _originalText;
 
     public List<int?> ConjunctiveBudgets { get; } = [];
@@ -87,10 +89,14 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         Exception scopedFallbackError = null,
         List<Chunk> allChunks = null,
         List<Chunk> reducedResults = null,
-        bool reducedTimesOut = false
+        bool reducedTimesOut = false,
+        List<Chunk> conjunctivePartial = null,
+        List<Chunk> disjunctivePartial = null
     )
         : base(null)
     {
+        _conjunctivePartial = conjunctivePartial ?? [];
+        _disjunctivePartial = disjunctivePartial ?? [];
         _reducedResults = reducedResults ?? [];
         _reducedTimesOut = reducedTimesOut;
         _conjunctiveTimesOut = conjunctiveTimesOut;
@@ -132,10 +138,12 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         (conjunctive ? ConjunctiveBudgets : DisjunctiveBudgets).Add(commandTimeoutSeconds);
         if (conjunctive && _conjunctiveError != null)
             throw _conjunctiveError;
+        // A timed-out pass carries whatever its completed ranked-prefix rounds validated.
         if (conjunctive ? _conjunctiveTimesOut : _disjunctiveTimesOut)
             throw new ChunkSearchTimeoutException(
                 "statement budget elapsed",
-                new TimeoutException()
+                new TimeoutException(),
+                conjunctive ? _conjunctivePartial : _disjunctivePartial
             );
         return Task.FromResult(conjunctive ? _conjunctiveResults : _disjunctiveResults);
     }

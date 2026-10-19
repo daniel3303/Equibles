@@ -6,5 +6,7 @@
   <ItemGroup>
     <!-- The statement-timeout classification rules are pinned by unit tests. -->
     <InternalsVisibleTo Include="Equibles.UnitTests" />
+    <!-- The ranked-scope ceiling overload lets ParadeDB tests exhaust the candidate budget. -->
+    <InternalsVisibleTo Include="Equibles.IntegrationTests" />
   </ItemGroup>
 </Project>

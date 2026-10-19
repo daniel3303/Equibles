@@ -1,3 +1,5 @@
+using Equibles.Sec.Data.Models.Chunks;
+
 namespace Equibles.Sec.Repositories;
 
 /// <summary>
@@ -10,4 +12,20 @@ public class ChunkSearchTimeoutException : Exception
 {
     public ChunkSearchTimeoutException(string message, Exception innerException)
         : base(message, innerException) { }
+
+    public ChunkSearchTimeoutException(
+        string message,
+        Exception innerException,
+        IReadOnlyList<Chunk> partialResults
+    )
+        : base(message, innerException)
+    {
+        PartialResults = partialResults ?? [];
+    }
+
+    /// <summary>
+    /// The best-ranked in-scope matches a completed earlier round validated before the budget ran
+    /// out, in rank order; possibly fewer than requested, and empty when no round completed.
+    /// </summary>
+    public IReadOnlyList<Chunk> PartialResults { get; } = [];
 }
