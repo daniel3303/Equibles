@@ -25,6 +25,7 @@ public class RagSearchToolsTimeoutMessageTests
         Assert.Contains("ticker", fault.Message);
         Assert.DoesNotContain("Retry the same call", fault.Message);
         Assert.IsType<ChunkSearchTimeoutException>(fault.InnerException);
+        Assert.Equal(McpToolErrorReason.Timeout, fault.Reason);
     }
 
     [Fact]

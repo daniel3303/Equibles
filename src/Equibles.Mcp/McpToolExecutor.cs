@@ -83,11 +83,16 @@ public static class McpToolExecutor
             // read, and that wording is the actionable half: "retry the same call" and "an error
             // occurred" ask for very different next steps. Re-wrapping would replace it with the
             // catch-all and leave the calling model unable to tell a retryable stall from a bug.
+            if (ex is McpToolFaultException fault)
+            {
+                throw new McpToolFaultException(fault.Message, null, fault.Reason);
+            }
             throw new McpToolFaultException(
-                ex is McpToolFaultException fault
-                    ? fault.Message
-                    : errorMessage
-                        ?? $"An error occurred while executing {toolName}. Please try again."
+                errorMessage ?? $"An error occurred while executing {toolName}. Please try again.",
+                null,
+                McpToolErrorReason.IsTimeout(ex)
+                    ? McpToolErrorReason.Timeout
+                    : McpToolErrorReason.ToolFault
             );
         }
     }
