@@ -74,7 +74,7 @@ public class HolderFlowReader
             grouping,
             holders,
             await SectorRows(quarter, cancellationToken),
-            await SectorNames(cancellationToken)
+            await SectorNames(quarter, cancellationToken)
         );
     }
 
@@ -140,9 +140,13 @@ public class HolderFlowReader
             }
         );
 
-    private Task<Dictionary<Guid, string>> SectorNames(CancellationToken cancellationToken) =>
+    // Keyed like the rows, so names read after the quarter was computed cover every sector it uses.
+    private Task<Dictionary<Guid, string>> SectorNames(
+        HolderFlowQuarterState quarter,
+        CancellationToken cancellationToken
+    ) =>
         _memoryCache.GetOrCreateAsync(
-            "holdings:holder-flows:sector-names",
+            CacheKey("sector-names", quarter),
             async entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = CacheDuration;
