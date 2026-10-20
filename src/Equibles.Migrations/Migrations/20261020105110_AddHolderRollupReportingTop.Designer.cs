@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020091042_AddHolderRollupReportingTop")]
+    [Migration("20261020105110_AddHolderRollupReportingTop")]
     partial class AddHolderRollupReportingTop
     {
         /// <inheritdoc />
@@ -3634,9 +3634,6 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<int>("Classification")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("ConfidentialTreatmentRequested")
                         .HasColumnType("boolean");
 
@@ -3671,8 +3668,6 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("Cik")
                         .IsUnique();
-
-                    b.HasIndex("Classification");
 
                     b.HasIndex("Name");
 
@@ -4085,6 +4080,18 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("SoldOutFilerCount")
                         .HasColumnType("integer");
 
+                    b.Property<long>("UnmatchedCurrentShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedCurrentValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousValue")
+                        .HasColumnType("bigint");
+
                     b.HasKey("EquityIssuerId", "ReportDate");
 
                     b.HasIndex("ReportDate");
@@ -4129,6 +4136,18 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("SoldOutFilerCount")
                         .HasColumnType("integer");
+
+                    b.Property<long>("UnmatchedCurrentShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedCurrentValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousValue")
+                        .HasColumnType("bigint");
 
                     b.HasKey("EquityIssuerId", "ReportDate");
 
@@ -4177,6 +4196,12 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<long?>("TopTenValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedCurrentShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousShares")
                         .HasColumnType("bigint");
 
                     b.HasKey("EquityIssuerId", "ReportDate", "IsCombined", "PriceSeriesTicker");
