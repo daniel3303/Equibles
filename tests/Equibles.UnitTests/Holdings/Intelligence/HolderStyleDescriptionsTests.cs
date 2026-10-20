@@ -116,6 +116,21 @@ public class HolderStyleDescriptionsTests
     }
 
     [Fact]
+    public void BenchmarkSummary_ABookWithNoValuedCommonSharesHasNothingToCompare()
+    {
+        // No recompute measures such a book, so it must never read as waiting for one.
+        var metrics = Metrics();
+        metrics.EquityAum = 0;
+        metrics.StockCount = 0;
+        metrics.AggregateActiveShare = null;
+
+        HolderStyleDescriptions
+            .BenchmarkSummary(metrics)
+            .Should()
+            .Be("Closest benchmark: no common-share positions to compare");
+    }
+
+    [Fact]
     public void Style_IndexLikeByIndexFundAssets_StatesBothSharesAndTheNCenDate()
     {
         var metrics = Metrics();

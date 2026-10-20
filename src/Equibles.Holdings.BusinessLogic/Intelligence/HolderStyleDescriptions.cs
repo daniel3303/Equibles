@@ -19,6 +19,13 @@ public static class HolderStyleDescriptions
     public const string NotYetComputed = "Closest benchmark: not yet computed";
 
     /// <summary>
+    /// What <see cref="BenchmarkSummary"/> reads for a book with no valued common shares, which no
+    /// recompute ever measures against a benchmark.
+    /// </summary>
+    public const string NoCommonPositions =
+        "Closest benchmark: no common-share positions to compare";
+
+    /// <summary>
     /// The benchmark a stored row names, with its as-of date when it is a published index: "the
     /// S&amp;P 500 as of 2026-06-30", or <see cref="AggregateBenchmark"/>.
     /// </summary>
@@ -58,7 +65,7 @@ public static class HolderStyleDescriptions
     public static string BenchmarkSummary(HolderQuarterlyMetrics metrics)
     {
         if (metrics.ClosestBenchmark == null || metrics.ClosestActiveShare is not { } activeShare)
-            return NotYetComputed;
+            return metrics.EquityAum <= 0 ? NoCommonPositions : NotYetComputed;
         var benchmark = Benchmark(
             metrics.ClosestBenchmark,
             metrics.ClosestBenchmarkName,
