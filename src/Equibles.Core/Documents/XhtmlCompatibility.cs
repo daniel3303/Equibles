@@ -32,6 +32,23 @@ public static class XhtmlCompatibility
 
         try
         {
+            // Cheap streaming pre-check FIRST. The DOM below only ever changes
+            // anything when the document actually contains an empty, non-void XHTML
+            // element, and most filings contain none - for those the whole
+            // XDocument + re-serialisation was paid for and then thrown away, and
+            // that DOM was the dominant memory term on the inline path (it is
+            // followed by AngleSharp building a second one from the result).
+            //
+            // This is deliberately not a streaming rewrite of the expansion itself:
+            // the transform has to reproduce XDocument's output exactly, including
+            // where xmlns:* declarations sit, because EsefEnvelopeWriter reads them
+            // where the source put them (a namespace-aware XmlWriter relocates them
+            // onto the elements that use them, and Compact() then rejects the report
+            // as having no inline XBRL markup). So the expensive path stays as it
+            // was, and only the "nothing to do" case gets cheaper.
+            if (!ContainsEmptyNonVoidElement(source))
+                return source;
+
             using var reader = XmlReader.Create(
                 new StringReader(source),
                 new XmlReaderSettings
@@ -67,6 +84,49 @@ public static class XhtmlCompatibility
         {
             // Non-XML filings remain supported by the existing HTML parser; never truncate them.
             return source;
+        }
+    }
+
+    /// <summary>
+    /// True when the source is an XHTML document holding at least one empty element
+    /// in the XHTML namespace that is not a void element — the only case
+    /// <see cref="ExpandEmptyElements"/> can change. False for everything it would
+    /// return unchanged, including sources that do not parse as XML, so the caller
+    /// can keep the previous tolerant behaviour by simply returning the source.
+    /// </summary>
+    private static bool ContainsEmptyNonVoidElement(string source)
+    {
+        try
+        {
+            using var reader = XmlReader.Create(
+                new StringReader(source),
+                new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Ignore,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = 64L * 1024 * 1024,
+                }
+            );
+            reader.MoveToContent();
+            if (reader.LocalName != "html" || reader.NamespaceURI != XhtmlNamespace)
+                return false;
+
+            while (reader.Read())
+            {
+                if (reader.NodeType != XmlNodeType.Element || !reader.IsEmptyElement)
+                    continue;
+                if (
+                    reader.NamespaceURI != XhtmlNamespace
+                    || VoidElements.Contains(reader.LocalName)
+                )
+                    continue;
+                return true;
+            }
+            return false;
+        }
+        catch (XmlException)
+        {
+            return false;
         }
     }
 }
