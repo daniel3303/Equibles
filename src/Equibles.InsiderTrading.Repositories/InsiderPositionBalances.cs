@@ -9,7 +9,9 @@ namespace Equibles.InsiderTrading.Repositories;
 /// balance. Indirect rows are grouped by their filed nature of ownership, and within a group a row
 /// continues the balance its trade started from (shares owned after, less the shares acquired or
 /// plus those disposed); a holding row is a separate balance unless it repeats one. Footnote ids
-/// only break ties: filers attach one-off footnotes to single trades of one vehicle.
+/// only break ties: filers attach one-off footnotes to single trades of one vehicle. A holding
+/// line whose balance footnotes share nothing with the footnotes on the balance it equals names
+/// another vehicle; trades never split on balance footnotes, which often explain a jump instead.
 /// </summary>
 public static class InsiderPositionBalances
 {
@@ -78,6 +80,7 @@ public static class InsiderPositionBalances
                 target = chains.LastOrDefault(chain =>
                     Continues(chain, row.SharesOwnedAfter)
                     && chain.Any(member => FootnoteKey(member) == key)
+                    && !NamesAnotherBalance(row, chain[^1])
                 );
             }
             else
@@ -105,6 +108,14 @@ public static class InsiderPositionBalances
             target.Add(row);
         }
         return chains;
+    }
+
+    // Both balances are footnoted, by different notes: the filer says which vehicle each one is.
+    private static bool NamesAnotherBalance(InsiderTransaction holding, InsiderTransaction earlier)
+    {
+        var mine = holding.BalanceFootnoteIds ?? [];
+        var theirs = earlier.BalanceFootnoteIds ?? [];
+        return mine.Count > 0 && theirs.Count > 0 && !mine.Intersect(theirs).Any();
     }
 
     private static bool Continues(List<InsiderTransaction> chain, long balance) =>

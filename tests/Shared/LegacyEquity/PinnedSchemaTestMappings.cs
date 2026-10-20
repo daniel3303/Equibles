@@ -37,6 +37,9 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
             .Entity<InsiderTransaction>()
             .Ignore(transaction => transaction.OwnershipNatureFootnoteIds);
 
+        // Added by 20261020074820_AddInsiderBalanceFootnotes.
+        builder.Entity<InsiderTransaction>().Ignore(transaction => transaction.BalanceFootnoteIds);
+
         // Added by 20261014150246_SplitShareCountEvidence.
         builder.Entity<StockSplit>().Ignore(split => split.ShareCountEvidence);
         builder.Entity<StockSplit>().Ignore(split => split.ShareCountEvidenceAsOf);

@@ -71,8 +71,9 @@ public class InsiderFilingParserOwnershipVehicleTests
             );
         var direct = rows.Single(row => row.OwnershipNature == OwnershipNature.Direct);
         direct.NatureOfOwnership.Should().BeNull();
-        // The direct balance's own footnote (shares vested from RSUs) is kept as filed.
-        direct.OwnershipNatureFootnoteIds.Should().Equal("F2");
+        direct.OwnershipNatureFootnoteIds.Should().BeEmpty();
+        // The direct balance's own footnote (shares vested from RSUs) is kept apart.
+        direct.BalanceFootnoteIds.Should().Equal("F2");
     }
 
     [Fact]
@@ -99,7 +100,7 @@ public class InsiderFilingParserOwnershipVehicleTests
     }
 
     [Fact]
-    public void ParseTransactions_FootnoteOnTheReportedBalance_BelongsToTheVehicle()
+    public void ParseTransactions_FootnoteOnTheReportedBalance_IsRecordedApart()
     {
         // Nelnet, accession 0001008886-26-000109, names each trust and GRAT in a footnote on the
         // shares owned rather than on the nature of ownership.
@@ -109,17 +110,24 @@ public class InsiderFilingParserOwnershipVehicleTests
             new DateOnly(2026, 4, 30)
         );
 
-        Vehicles(rows)
+        rows.Where(row => row.OwnershipNature == OwnershipNature.Indirect)
+            .Select(row =>
+                (
+                    row.NatureOfOwnership,
+                    Nature: string.Join(',', row.OwnershipNatureFootnoteIds),
+                    Balance: string.Join(',', row.BalanceFootnoteIds)
+                )
+            )
             .Should()
             .Equal(
-                ("By Trust", "F1"),
-                ("By GRAT", "F3"),
-                ("By GRAT", "F4"),
-                ("By Trust", "F5"),
-                ("By Trust", "F6"),
-                ("By revocable trust", "F7"),
-                ("By revocable trust", "F8"),
-                ("By spouse", "")
+                ("By Trust", "", "F1"),
+                ("By GRAT", "", "F3"),
+                ("By GRAT", "", "F4"),
+                ("By Trust", "", "F5"),
+                ("By Trust", "", "F6"),
+                ("By revocable trust", "", "F7"),
+                ("By revocable trust", "", "F8"),
+                ("By spouse", "", "")
             );
     }
 

@@ -374,6 +374,7 @@ public static class InsiderFilingParser
             OwnershipNature = ParseOwnershipNature(txElement),
             NatureOfOwnership = ParseNatureOfOwnership(txElement),
             OwnershipNatureFootnoteIds = ParseOwnershipNatureFootnoteIds(txElement),
+            BalanceFootnoteIds = ParseBalanceFootnoteIds(txElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
@@ -418,6 +419,7 @@ public static class InsiderFilingParser
             OwnershipNature = ParseOwnershipNature(holdingElement),
             NatureOfOwnership = ParseNatureOfOwnership(holdingElement),
             OwnershipNatureFootnoteIds = ParseOwnershipNatureFootnoteIds(holdingElement),
+            BalanceFootnoteIds = ParseBalanceFootnoteIds(holdingElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
@@ -501,22 +503,26 @@ public static class InsiderFilingParser
             : collapsed[..NatureOfOwnershipMaxLength];
     }
 
-    // Footnote ids that can name the row's vehicle: anywhere in its ownershipNature block, or on
-    // the balance it reports. Filers attach the naming footnote to natureOfOwnership, to
-    // directOrIndirectOwnership, or to sharesOwnedFollowingTransaction (Nelnet's trusts and GRATs).
+    // Footnote ids anywhere in the row's ownershipNature block: filers attach the footnote that
+    // names a vehicle to natureOfOwnership or to directOrIndirectOwnership.
     internal static List<string> ParseOwnershipNatureFootnoteIds(XElement element) =>
-        (element.Element("ownershipNature")?.Descendants("footnoteId") ?? [])
-            .Concat(
-                element
-                    .Element("postTransactionAmounts")
-                    ?.Element("sharesOwnedFollowingTransaction")
-                    ?.Descendants("footnoteId")
-                    ?? []
-            )
+        FootnoteIds(element.Element("ownershipNature"));
+
+    // Footnote ids on the balance the row reports. Some filers name the vehicle there (Nelnet's
+    // trusts and GRATs); others explain the balance, such as shares bought under an ESPP.
+    internal static List<string> ParseBalanceFootnoteIds(XElement element) =>
+        FootnoteIds(
+            element.Element("postTransactionAmounts")?.Element("sharesOwnedFollowingTransaction")
+        );
+
+    private static List<string> FootnoteIds(XElement element) =>
+        element
+            ?.Descendants("footnoteId")
             .Select(reference => reference.Attribute("id")?.Value?.Trim())
             .Where(id => !string.IsNullOrEmpty(id))
             .Distinct()
-            .ToList();
+            .ToList()
+        ?? [];
 
     // SEC ownership XML wraps each field in <field><value>...</value></field>,
     // sometimes nested under a grouping element (transactionAmounts, etc.).

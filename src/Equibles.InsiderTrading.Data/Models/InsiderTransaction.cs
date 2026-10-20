@@ -102,12 +102,18 @@ public class InsiderTransaction
     public string NatureOfOwnership { get; set; }
 
     /// <summary>
-    /// The footnote ids the filing attaches to the row's ownership nature or to the balance it
-    /// reports, where filers name the vehicle. Filers also footnote single trades there, so they
-    /// only tell apart balances whose stated nature reads the same; ids are only comparable within
-    /// one accession.
+    /// The footnote ids the filing attaches to the row's ownership nature, in document order. Filers
+    /// also footnote single trades here, so they only tell apart balances whose stated nature
+    /// reads the same; ids are only comparable within one accession.
     /// </summary>
     public List<string> OwnershipNatureFootnoteIds { get; set; } = [];
+
+    /// <summary>
+    /// The footnote ids on the balance the row reports (sharesOwnedFollowingTransaction). Some
+    /// filers name a holding line's vehicle there; others explain a jump in the balance, so a
+    /// trade never splits from its vehicle on these.
+    /// </summary>
+    public List<string> BalanceFootnoteIds { get; set; } = [];
 
     [MaxLength(128)]
     public string SecurityTitle { get; set; }
