@@ -501,6 +501,34 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             )
             .StillSucceeded(DbContext);
 
+    /// <summary>The stored parent rollups of these canonical CIKs.</summary>
+    public IQueryable<HolderRollup> GetRollups(IReadOnlyCollection<string> canonicalCiks) =>
+        DbContext.Set<HolderRollup>().Where(rollup => canonicalCiks.Contains(rollup.Cik));
+
+    /// <summary>
+    /// The confirmed link evidence naming this canonical CIK as parent, of these kinds, for these
+    /// quarters.
+    /// </summary>
+    public IQueryable<HolderLinkEvidence> GetConfirmedLinkEvidenceByParent(
+        string canonicalParentCik,
+        IReadOnlyCollection<HolderLinkKind> kinds,
+        IReadOnlyCollection<DateOnly> reportDates
+    ) =>
+        DbContext
+            .Set<HolderLinkEvidence>()
+            .Where(evidence =>
+                evidence.ParentCik == canonicalParentCik
+                && evidence.Confirmed
+                && kinds.Contains(evidence.Kind)
+                && evidence.ReportDate != null
+                && reportDates.Contains(evidence.ReportDate.Value)
+            );
+
+    /// <summary>The stored 13F filer links of these fund series.</summary>
+    public IQueryable<FundSeriesHolderLink> GetFundSeriesLinks(
+        IReadOnlyCollection<string> seriesIds
+    ) => DbContext.Set<FundSeriesHolderLink>().Where(link => seriesIds.Contains(link.SeriesId));
+
     private async Task<List<InstitutionalHolderSearchMatch>> RankWithStats(
         IQueryable<InstitutionalHolder> source,
         int maxResults,
@@ -750,12 +778,6 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .Where(h => h.StateOrCountry != null && h.StateOrCountry != "")
             .Select(h => h.StateOrCountry)
             .Distinct();
-    }
-
-    public IQueryable<InstitutionalHolder> GetUnclassified()
-    {
-        return GetAll()
-            .Where(h => h.Classification == FundClassification.Unknown && h.Name != null);
     }
 }
 

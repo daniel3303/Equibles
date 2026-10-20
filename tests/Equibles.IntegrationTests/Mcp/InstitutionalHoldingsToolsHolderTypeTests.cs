@@ -213,6 +213,55 @@ public class InstitutionalHoldingsToolsHolderTypeTests : ParadeDbMcpTestBase
         predecessor.Should().NotContain("Later CIK");
     }
 
+    [Fact]
+    public async Task GetInstitutionSummary_ShowsTheReportingParent()
+    {
+        var parent = Holder("2012383", "BlackRock, Inc.", null);
+        var child = Holder("1006249", "BlackRock Fund Advisors", null);
+        var orphan = Holder("913414", "BlackRock Institutional Trust Company", null);
+        SeedHoldings(parent, child, orphan);
+        DbContext.AddRange(
+            new HolderRollup
+            {
+                Cik = "1006249",
+                ReportingParentCik = "2012383",
+                UltimateCik = "2012383",
+                UltimateHolderId = parent.Id,
+                Basis = HolderRollupBasis.ReportingParent,
+                DerivationVersion = 1,
+            },
+            new HolderRollup
+            {
+                Cik = "2012383",
+                UltimateCik = "2012383",
+                UltimateHolderId = parent.Id,
+                DerivationVersion = 1,
+            },
+            new HolderRollup
+            {
+                Cik = "913414",
+                UltimateCik = "913414",
+                HasConflictingEvidence = true,
+                DerivationVersion = 1,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        await using var verify = Fixture.CreateDbContext();
+
+        var output = await Sut(verify).GetInstitutionSummary("1006249");
+        var top = await Sut(verify).GetInstitutionSummary("2012383");
+        var conflicted = await Sut(verify).GetInstitutionSummary("913414");
+
+        output
+            .Should()
+            .Contain(
+                "| Parent | BlackRock, Inc. (2012383), whose 13F filings report this filer's holdings |"
+            );
+        top.Should().NotContain("| Parent |");
+        conflicted.Should().NotContain("| Parent |");
+    }
+
     private void SeedHoldings(params InstitutionalHolder[] holders)
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(

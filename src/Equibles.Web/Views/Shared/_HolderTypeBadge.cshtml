@@ -13,6 +13,7 @@
         HolderEntityType.BrokerDealer => "badge-neutral",
         HolderEntityType.RegisteredFund => "badge-success",
         HolderEntityType.BenefitPlan => "badge-accent",
+        HolderEntityType.HoldingCompany => "badge-neutral badge-outline",
         _ => "badge-ghost",
     };
     <span class="badge @css badge-sm" data-testid="holder-type" title="From regulatory records, not the name">@HolderBucketTokens.Label(type)</span>

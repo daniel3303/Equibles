@@ -155,7 +155,8 @@ public class HolderProfileBuilderTests
     [Fact]
     public void ThirteenGNamingSeveralPersons_SpeaksForNobody()
     {
-        // A 13G person has no CIK, so with several persons the filer's own type is unknown.
+        // A 13G person has no CIK, so with several persons and no single Item 3 category under
+        // Rule 13d-1(b) alone, the filer's own type is unknown.
         var sources = Sources(
             beneficialOwnership:
             [

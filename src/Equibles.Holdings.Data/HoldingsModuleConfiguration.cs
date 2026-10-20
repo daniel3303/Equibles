@@ -314,6 +314,9 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<HolderClassificationEvidence>();
         builder.Entity<InstitutionalHolderProfile>();
         builder.Entity<HolderSuccession>();
+        builder.Entity<HolderLinkEvidence>();
+        builder.Entity<HolderRollup>();
+        builder.Entity<FundSeriesHolderLink>();
         builder.Entity<BeneficialOwnershipReportingPerson>();
         builder.Entity<FundScore>();
         builder.Entity<FundScoreAttempt>();

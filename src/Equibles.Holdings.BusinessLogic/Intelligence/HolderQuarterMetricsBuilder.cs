@@ -151,7 +151,8 @@ public static class HolderQuarterMetricsBuilder
             .Select(row => new HolderEquityPosition(
                 row.Security,
                 row.Shares,
-                row.ValueMissing ? null : row.Value
+                row.ValueMissing ? null : row.Value,
+                row.FiledValue
             ))
             .ToList();
 

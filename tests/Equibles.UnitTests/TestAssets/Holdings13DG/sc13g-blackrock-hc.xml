@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13g" xmlns:com="http://www.sec.gov/edgar/common">
+  <schemaVersion>X0202</schemaVersion>
+<headerData>
+    <submissionType>SCHEDULE 13G</submissionType>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <cik>0002012383</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <securitiesClassTitle>Common Stock</securitiesClassTitle>
+      <eventDateRequiresFilingThisStatement>09/30/2026</eventDateRequiresFilingThisStatement>
+      <issuerInfo>
+        <issuerCik>0001039684</issuerCik>
+        <issuerName>ONEOK INC /NEW/</issuerName>
+        <issuerCusips>
+          <issuerCusipNumber>30609A109</issuerCusipNumber>
+        </issuerCusips>
+        <issuerPrincipalExecutiveOfficeAddress>
+          <com:street1>100 WEST 5TH ST</com:street1>
+          <com:city>TULSA</com:city>
+          <com:stateOrCountry>OK</com:stateOrCountry>
+          <com:zipCode>74103</com:zipCode>
+        </issuerPrincipalExecutiveOfficeAddress>
+      </issuerInfo>
+      <designateRulesPursuantThisScheduleFiled>
+        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>
+      </designateRulesPursuantThisScheduleFiled>
+    </coverPageHeader>
+    <coverPageHeaderReportingPersonDetails>
+
+      <reportingPersonName>BlackRock, Inc.</reportingPersonName>
+      <memberGroup>b</memberGroup>
+      <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+      <reportingPersonBeneficiallyOwnedNumberOfShares>
+        <soleVotingPower>56786468.00</soleVotingPower>
+        <sharedVotingPower>0.00</sharedVotingPower>
+        <soleDispositivePower>60766830.00</soleDispositivePower>
+        <sharedDispositivePower>0.00</sharedDispositivePower>
+      </reportingPersonBeneficiallyOwnedNumberOfShares>
+      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>60766830.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+      <classPercent>9.6</classPercent>
+      <typeOfReportingPerson>HC</typeOfReportingPerson>
+    </coverPageHeaderReportingPersonDetails>
+    <items>
+      <item1>
+        <issuerName>ONEOK INC /NEW/</issuerName>
+        <issuerPrincipalExecutiveOfficeAddress>100 WEST 5TH ST, TULSA, OKLAHOMA, 74103</issuerPrincipalExecutiveOfficeAddress>
+      </item1>
+      <item2>
+        <filingPersonName>BlackRock, Inc.
+
+In accordance with SEC Release No. 34-39538 (January 12, 1998), this Schedule 13G reflects the securities beneficially owned, or deemed to be beneficially owned, by certain business units (collectively, the "Reporting Business Units") of BlackRock, Inc. and its subsidiaries and affiliates. It does not include securities, if any, beneficially owned by other business units whose beneficial ownership of securities are disaggregated from that of the Reporting Business Units in accordance with such release.</filingPersonName>
+        <principalBusinessOfficeOrResidenceAddress>BlackRock, Inc., 50 Hudson Yards New York, NY 10001</principalBusinessOfficeOrResidenceAddress>
+        <citizenship>See Item 4 of Cover Page</citizenship>
+      </item2>
+      <item3>
+        <notApplicableFlag>N</notApplicableFlag>
+        <typeOfPersonFiling>HC</typeOfPersonFiling>
+      </item3>
+      <item4>
+        <amountBeneficiallyOwned>60,766,830
+</amountBeneficiallyOwned>
+        <classPercent>9.6%</classPercent>
+        <numberOfSharesPersonHas>
+          <solePowerOrDirectToVote>56,786,468
+</solePowerOrDirectToVote>
+          <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>
+          <solePowerOrDirectToDispose>60,766,830
+</solePowerOrDirectToDispose>
+          <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>
+        </numberOfSharesPersonHas>
+      </item4>
+      <item5>
+        <notApplicableFlag>Y</notApplicableFlag>
+        <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>
+      </item5>
+      <item6>
+        <notApplicableFlag>N</notApplicableFlag>
+        <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Various persons have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of the common stock of ONEOK INC. No one person's interest in the common stock of ONEOK INC is more than five percent of the total outstanding common shares.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>
+      </item6>
+      <item7>
+        <notApplicableFlag>N</notApplicableFlag>
+        <subsidiaryIdentificationAndClassification>See Exhibit 99</subsidiaryIdentificationAndClassification>
+      </item7>
+      <item8>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item8>
+      <item9>
+        <notApplicableFlag>Y</notApplicableFlag>
+      </item9>
+      <item10>
+        <notApplicableFlag>N</notApplicableFlag>
+        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.
+
+</certifications>
+      </item10>
+    </items>
+    <exhibitInfo>Exhibit 24: Power of Attorney
+Exhibit 99: Item 7</exhibitInfo>
+    <signatureInformation>
+      <reportingPersonName>BlackRock, Inc.</reportingPersonName>
+      <signatureDetails>
+        <signature>Spencer Fleming</signature>
+        <title>Managing Director</title>
+        <date>10/05/2026</date>
+      </signatureDetails>
+    </signatureInformation>
+  </formData>
+
+</edgarSubmission>

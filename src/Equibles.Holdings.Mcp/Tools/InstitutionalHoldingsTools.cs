@@ -14,6 +14,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Contracts;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
@@ -41,7 +42,7 @@ public class InstitutionalHoldingsTools
         + "and can be zero when unavailable._";
 
     private const string HolderTypeParameter =
-        "Holder types to keep, as an array of tokens: adv (registered investment adviser), era (exempt reporting adviser), ia (other adviser), bank, ins (insurer), bd (broker-dealer), fund (registered fund), plan (benefit plan), nonus (non-US institution), unk (no deciding record yet), e.g. [\"bank\", \"ins\"]. Types come from Form ADV, SEC filer profiles, 13D/13G and N-CEN, never from names. Omit for all.";
+        "Holder types to keep, as an array of tokens: adv (registered investment adviser), era (exempt reporting adviser), ia (other adviser), bank, ins (insurer), bd (broker-dealer), fund (registered fund), plan (benefit plan), nonus (non-US institution), hc (parent holding company or control person with no other type on record), unk (no deciding record yet), e.g. [\"bank\", \"ins\"]. Types come from Form ADV, SEC filer profiles, 13D/13G and N-CEN, never from names. Omit for all.";
 
     private const string StyleParameter =
         "Style bands to keep, as an array of tokens: idx (index-like), sys (systematic-like), conc (concentrated), divact (diversified active), unk (book too small or unvalued to band), e.g. [\"conc\"]. Bands are measured from each holder's filed 13F book in the newest measured quarter on or before the report date; a holder not measured that quarter is left out by any style filter. Omit for all.";
@@ -88,6 +89,10 @@ public class InstitutionalHoldingsTools
     private readonly HolderMixReader _holderMixReader;
     private readonly McpToolRunner _runner;
 
+    // Injected as a sequence so the dependency stays optional: a deployment without a stated-strategy
+    // source registers nothing and resolves an empty one.
+    private readonly IHolderStrategyStatements _strategyStatements;
+
     public InstitutionalHoldingsTools(
         InstitutionalHoldingRepository holdingRepository,
         InstitutionalHolderRepository holderRepository,
@@ -100,9 +105,11 @@ public class InstitutionalHoldingsTools
         IMemoryCache memoryCache = null,
         InstitutionPortfolioSummaryProvider summaryProvider = null,
         MarketActivityShareRestater marketActivityShareRestater = null,
-        HolderMixReader holderMixReader = null
+        HolderMixReader holderMixReader = null,
+        IEnumerable<IHolderStrategyStatements> strategyStatements = null
     )
     {
+        _strategyStatements = strategyStatements?.FirstOrDefault();
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
         _commonStockRepository = commonStockRepository;
@@ -2175,7 +2182,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, and earlier or later CIKs its 13F reports continue under, then its style, turnover and horizon bands measured from its filed book. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
+        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, the parent 13F filer that reports its holdings, and earlier or later CIKs its 13F reports continue under, then any strategy the firm states in its own filed brochure (quoted, dated, linked), then its style, turnover and horizon bands measured from its filed book. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
     )]
     public Task<string> GetInstitutionSummary(
         [Description(
@@ -2208,12 +2215,15 @@ public class InstitutionalHoldingsTools
                     .AsNoTracking()
                     .FirstOrDefaultAsync();
                 var links = await LoadHolderLinks(holder);
+                var reportingParent = await LoadReportingParent(holder);
                 var style = await _holderRepository
                     .GetQuarterlyMetrics(holder)
                     .Where(metrics => metrics.ReportDate <= targetDate)
                     .OrderByDescending(metrics => metrics.ReportDate)
                     .AsNoTracking()
                     .FirstOrDefaultAsync();
+                var statedStrategy =
+                    _strategyStatements == null ? null : await _strategyStatements.Get(holder);
 
                 return RenderInstitutionSummary(
                         holder,
@@ -2222,8 +2232,11 @@ public class InstitutionalHoldingsTools
                         summary,
                         notes,
                         profile,
-                        links
-                    ) + RenderStyleBlock(style, targetDate);
+                        links,
+                        reportingParent
+                    )
+                    + RenderStatedStrategy(statedStrategy)
+                    + RenderStyleBlock(style, targetDate);
             },
             "GetInstitutionSummary",
             $"institution: {institutionName}"
@@ -2245,6 +2258,49 @@ public class InstitutionalHoldingsTools
                 SuccessorFirstReportDate = succession.SuccessorFirstReportDate,
             })
             .ToListAsync();
+
+    // The firm's own description from the documents it filed, kept apart from the measured bands.
+    private static string RenderStatedStrategy(IReadOnlyList<HolderStatedStrategy> strategies)
+    {
+        var result = new StringBuilder();
+        foreach (var strategy in strategies ?? [])
+        {
+            if (strategy.Statements.Count == 0)
+                continue;
+            result.AppendLine();
+            result.AppendLine(
+                $"**Stated strategy ({strategy.SourceName}, {FormatDate(strategy.AsOf)})** (the firm's own description; it never decides the holder type or style bands):"
+            );
+            result.AppendLine();
+            foreach (var statement in strategy.Statements)
+                result.AppendLine($"- {statement.Category}: \"{OneLine(statement.Quote)}\"");
+            if (!string.IsNullOrWhiteSpace(strategy.SourceUrl))
+            {
+                result.AppendLine();
+                result.AppendLine($"_Source: {strategy.SourceUrl}_");
+            }
+        }
+        return result.ToString();
+    }
+
+    private static string OneLine(string text) =>
+        string.Join(' ', (text ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+
+    // The 13F filer the stored parent links name as reporting this holder's holdings, if any.
+    private async Task<ReportingParentRow> LoadReportingParent(InstitutionalHolder holder)
+    {
+        if (CikNormalizer.Canonicalize(holder.Cik) is not { } cik)
+            return null;
+        var parentCik = await _holderRepository
+            .GetRollups([cik])
+            .AsNoTracking()
+            .Select(rollup => rollup.ReportingParentCik)
+            .FirstOrDefaultAsync();
+        if (parentCik == null || parentCik == cik)
+            return null;
+        var parent = await _holderRepository.GetByCik(parentCik);
+        return new ReportingParentRow(parentCik, parent?.Name);
+    }
 
     // The holder's bands in the newest measured quarter on or before the summary's quarter.
     private static string RenderStyleBlock(HolderQuarterlyMetrics style, DateOnly targetDate)
@@ -2411,7 +2467,8 @@ public class InstitutionalHoldingsTools
         InstitutionPortfolioSummary summary,
         string notes = null,
         InstitutionalHolderProfile profile = null,
-        IReadOnlyList<HolderLinkRow> links = null
+        IReadOnlyList<HolderLinkRow> links = null,
+        ReportingParentRow reportingParent = null
     )
     {
         var result = new StringBuilder();
@@ -2447,31 +2504,36 @@ public class InstitutionalHoldingsTools
             "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × tracked 13F value), where the per-share price proxy is the current quarter's Value / Shares._"
         );
 
-        AppendHolderProfile(result, profile, links ?? []);
+        AppendHolderProfile(result, profile, links ?? [], reportingParent);
         AppendConfidentialTreatmentWarning(result, holder, "portfolio");
 
         return result.ToString();
     }
 
-    // The holder's classification and the records behind it, plus the CIKs its 13F reports
-    // continue from or under.
+    // The holder's classification and the records behind it, the 13F filer that reports its
+    // holdings, and the CIKs its 13F reports continue from or under.
     private static void AppendHolderProfile(
         StringBuilder result,
         InstitutionalHolderProfile profile,
-        IReadOnlyList<HolderLinkRow> links
+        IReadOnlyList<HolderLinkRow> links,
+        ReportingParentRow reportingParent
     )
     {
         result.AppendLine();
         result.AppendLine("**Holder profile** (regulatory records, never the name):");
         if (profile == null)
             result.AppendLine("_Not yet classified; profiles refresh with each 13F import cycle._");
-        if (profile == null && links.Count == 0)
+        if (profile == null && links.Count == 0 && reportingParent == null)
             return;
         result.AppendLine();
         result.AppendLine("| Field | Value |");
         result.AppendLine("|-------|-------|");
         if (profile != null)
             AppendProfileRows(result, profile);
+        if (reportingParent != null)
+            result.AppendLine(
+                $"| Parent | {(reportingParent.Name == null ? $"CIK {reportingParent.Cik}" : $"{reportingParent.Name} ({reportingParent.Cik})")}, whose 13F filings report this filer's holdings |"
+            );
         foreach (
             var link in links
                 .OrderBy(link => link.SuccessorFirstReportDate)
@@ -2554,6 +2616,8 @@ public class InstitutionalHoldingsTools
         date is { } value
             ? $", {(source == null ? "" : $"{source} ")}as of {FormatDate(value)}"
             : "";
+
+    private sealed record ReportingParentRow(string Cik, string Name);
 
     private sealed class HolderLinkRow
     {

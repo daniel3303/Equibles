@@ -46,6 +46,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryCultureInvariance
             null,
             null,
             null,
+            null,
         ];
 
         var original = CultureInfo.CurrentCulture;
@@ -106,6 +107,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryCultureInvariance
             new InstitutionPortfolioSummary { ReportedAum = 1, PositionCount = 1 },
             null,
             profile,
+            null,
             null,
         ];
 

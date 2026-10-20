@@ -53,7 +53,8 @@ internal static class HolderIdentifierRules
 
     /// <summary>
     /// The 13D/13G facts a filing states about identifiable holders: a 13D person by its own CIK,
-    /// and a 13G (whose persons carry no CIK) only when it names one person, who is then the filer.
+    /// and a 13G (whose persons carry no CIK) only when it names one person, who is then the filer,
+    /// or when every person files as a qualified institution and Item 3 states one category.
     /// </summary>
     internal static IEnumerable<(
         string Cik,
@@ -80,11 +81,30 @@ internal static class HolderIdentifierRules
         }
 
         var filer = CikNormalizer.Canonicalize(filing.FilerCik);
-        if (
-            filing.FilingType != FilingType.Schedule13G
-            || filer == null
-            || filing.Persons.Count != 1
-        )
+        if (filing.FilingType != FilingType.Schedule13G || filer == null)
+            yield break;
+        if (filing.Persons.Count > 1)
+        {
+            // A joint 13G filed only under Rule 13d-1(b) checks in Item 3 the category of every
+            // person filing; one category stated describes the filer too. Its persons carry no
+            // CIK, so none is ever picked by its place on the cover pages.
+            if (
+                filing.Rules == Schedule13GRules.QualifiedInstitution
+                && IsSingleCode(filing.FilingPersonTypes)
+                && filing.UnrecognizedFilingPersonTypeCodes == null
+            )
+                yield return (
+                    filer,
+                    Fact(
+                        filing,
+                        HolderEvidenceSource.Schedule13G,
+                        HolderEvidenceFields.TypeOfPersonFiling,
+                        filing.FilingPersonTypes
+                    )
+                );
+            yield break;
+        }
+        if (filing.Persons.Count == 0)
             yield break;
         if (filing.Persons[0].Types != ReportingPersonTypes.None)
             yield return (
@@ -142,6 +162,9 @@ internal static class HolderIdentifierRules
                     );
                 }
             );
+
+    private static bool IsSingleCode(ReportingPersonTypes types) =>
+        types != ReportingPersonTypes.None && (types & (types - 1)) == 0;
 
     private static bool IsIndex(NCenFundTypes types) =>
         (types & (NCenFundTypes.IndexFund | NCenFundTypes.MultipleOrInverseIndexFund)) != 0;

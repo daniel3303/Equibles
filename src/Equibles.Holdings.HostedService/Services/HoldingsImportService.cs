@@ -1282,7 +1282,6 @@ public class HoldingsImportService
                 Form13FFileNumber = ClampLength(coverPage?.Form13FFileNumber, 32),
                 CrdNumber = ClampLength(coverPage?.CrdNumber, 32),
                 SecFileNumber = ClampLength(coverPage?.SecFileNumber, 32),
-                Classification = FundClassifierService.Classify(coverPage?.CompanyName),
                 ConfidentialTreatmentRequested = confidentialOmitted,
             };
 
@@ -1940,17 +1939,7 @@ public class HoldingsImportService
                 group => group.Key,
                 group => group.Select(row => row.Cusip).ToHashSet(StringComparer.OrdinalIgnoreCase)
             );
-        if (Corrupt13FShareCountRepairer.IsSuspect(bufferedRows))
-        {
-            var outcome = Corrupt13FShareCountRepairer.Repair(bufferedRows, context.StockPrices);
-            _logger.LogWarning(
-                "Filing {Accession} duplicates its value column into the share-count column; "
-                    + "recovered {Repaired} row(s) from the filed value, dropped {Dropped} unrepairable row(s)",
-                accession,
-                outcome.RepairedRows,
-                outcome.DroppedRows
-            );
-        }
+        RepairFiling(accession, bufferedRows, context, _logger);
 
         var holdingsMap = new Dictionary<string, InstitutionalHolding>();
         var duplicates = 0;
@@ -2003,6 +1992,66 @@ public class HoldingsImportService
         }
 
         return (flushResult.Inserted, duplicates, pending, flushResult.SkippedStaleParent, false);
+    }
+
+    // A duplicated or swapped share-count column is a property of the filing, never of one row,
+    // so both repairs read the whole buffered table before any row merges.
+    internal static void RepairFiling(
+        string accession,
+        List<BufferedHoldingRow> bufferedRows,
+        ImportContext context,
+        ILogger logger
+    )
+    {
+        if (Corrupt13FShareCountRepairer.IsSuspect(bufferedRows))
+        {
+            var outcome = Corrupt13FShareCountRepairer.Repair(bufferedRows, context.StockPrices);
+            logger.LogWarning(
+                "Filing {Accession} duplicates its value column into the share-count column; "
+                    + "recovered {Repaired} row(s) from the filed value, dropped {Dropped} unrepairable row(s)",
+                accession,
+                outcome.RepairedRows,
+                outcome.DroppedRows
+            );
+        }
+        else if (
+            Swapped13FColumnRepairer.IsSuspect(
+                bufferedRows,
+                holding => FilingBasisPrice(holding, context)
+            )
+        )
+        {
+            var repaired = Swapped13FColumnRepairer.Repair(
+                bufferedRows,
+                holding => FilingBasisPrice(holding, context),
+                row => Revalue(row, context)
+            );
+            logger.LogWarning(
+                "Filing {Accession} swaps its share-count and value columns; swapped {Repaired} row(s) back",
+                accession,
+                repaired
+            );
+        }
+    }
+
+    // Re-derives a repaired row from its corrected share count and filed dollars.
+    private static void Revalue(BufferedHoldingRow row, ImportContext context)
+    {
+        var holding = row.Holding;
+        var valuation = ValuePosition(
+            holding.Shares,
+            holding.ShareType,
+            holding.FiledValue,
+            holding.EquityIssuerId,
+            holding.ListedTicker,
+            holding.ReportDate,
+            context
+        );
+        holding.Value = valuation.Value;
+        holding.ValuePending = valuation.ValuePending;
+        holding.ValueUnavailable = valuation.ValueUnavailable;
+        holding.ValueSource = valuation.ValueSource;
+        row.ManagerEntry.Value = valuation.Value;
     }
 
     // Buffers a parsed row by its upsert key. A 13F holder can split one security
@@ -2086,70 +2135,6 @@ public class HoldingsImportService
         var votingAuthShared = ParseLongField("VOTING_AUTH_SHARED");
         var votingAuthNone = ParseLongField("VOTING_AUTH_NONE");
 
-        var hasPrice = context.StockPrices.TryGetValue(
-            (commonStockId, target.ListedTicker, reportDate),
-            out var closePrice
-        );
-        // The count is quoted as of the report date while the stored price is on today's
-        // post-split basis, so the count has to be restated before the two are multiplied. While a
-        // captured split is still awaiting its price adjustment the series straddles both bases and
-        // no honest value exists — the row stays pending for the repricing lane. For a SECONDARY
-        // listing the factor must come from that class's own splits; see HoldingValueBasis for the
-        // conservative rule while per-class split capture does not exist yet.
-        context.StockSplits.TryGetValue(commonStockId, out var splits);
-        context.PrimaryTickers.TryGetValue(commonStockId, out var primaryTicker);
-        context.SecondaryTickers.TryGetValue(commonStockId, out var secondaryTickers);
-        var basisKnown = HoldingValueBasis.TryResolveShareCountFactor(
-            reportDate,
-            splits,
-            target.ListedTicker,
-            primaryTicker,
-            secondaryTickers,
-            out var shareCountFactor
-        );
-        // An implausible close (a corrupt bar in the price series) is no price at all: deriving
-        // from it once stated a $13.7T position for a $1.09M filing. The row stays pending and the
-        // repricing lane values it when the series heals — or falls back to the filed value.
-        var canValue =
-            hasPrice && basisKnown && !HoldingValueSanityGuard.IsImplausibleClose(closePrice);
-
-        // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
-        // product exceed Int64, so range-check before the cast (mirrors Filing13DGXmlParser)
-        // instead of throwing OverflowException and aborting the whole filing's import.
-        var product =
-            shareType == ShareType.Principal ? 0m : shares * shareCountFactor * closePrice;
-        var value =
-            canValue && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
-        var valuePending = !canValue;
-
-        // A count bigger than the whole issuer is not a position we can price: the shares are in
-        // different units from the price (a depositary-share issuer whose filer reports the
-        // underlying ordinary shares), and multiplying them together states a holding worth many
-        // times the company. Keep the filer's share count, withhold the valuation, and stop the
-        // repricing lane from re-deriving the same wrong figure later.
-        var issuerSize =
-            context.IssuerSizes != null
-            && context.IssuerSizes.TryGetValue(commonStockId, out var size)
-                ? size
-                : null;
-        // Shares outstanding is today's figure, so the comparison needs today's count: an as-filed
-        // count from before a reverse split is inflated by the ratio and would read as impossible
-        // when it is only old. With the basis unknown there is nothing to compare against, and the
-        // row is already pending rather than unpriceable.
-        var valueUnavailable =
-            issuerSize != null
-            && basisKnown
-            && ImpossiblePositionGuard.ExceedsTheIssuer(
-                SplitAdjustment.AdjustShareCount(shares, shareCountFactor),
-                issuerSize.SharesOutstanding,
-                issuerSize.MarketCapitalization
-            );
-        if (valueUnavailable)
-        {
-            value = 0L;
-            valuePending = false;
-        }
-
         // Pre-2023 filings report value in thousands, so the filed figure is only comparable to
         // the derived one after being scaled by its own era.
         var filedDollars =
@@ -2157,39 +2142,30 @@ public class HoldingsImportService
         var filedValue =
             filedDollars > 0 && filedDollars <= long.MaxValue ? (long?)filedDollars : null;
 
-        if (shareType == ShareType.Shares && value > 0 && filedValue.HasValue)
+        var valuation = ValuePosition(
+            shares,
+            shareType,
+            filedValue,
+            commonStockId,
+            target.ListedTicker,
+            reportDate,
+            context
+        );
+        if (shareType == ShareType.Shares && valuation.Derived > 0 && filedValue.HasValue)
         {
             context.ValueBasisAudit.Record(
                 cusip,
                 reportDate,
                 shares,
-                value,
+                valuation.Derived,
                 filedValue.Value,
                 isOption: optionType != null
             );
         }
-
-        // A derivation grossly above the filer's own figure is a basis error (a depositary ratio,
-        // a split the series never captured) — the audit above measures it; this acts on it.
-        // Publish the filed figure instead of the wrong derivation — unless the disagreement is
-        // the ~1,000× signature of a filer still reporting thousands, where the filed figure is
-        // the wrong one and the derivation stands.
-        var valueSource = ValueSource.Derived;
-        if (HoldingValueSanityGuard.ShouldPublishFiledInsteadOfDerived(value, shares, filedValue))
-        {
-            value = filedValue.Value;
-            valueSource = ValueSource.Filed;
-        }
-
-        // PRN states a principal amount, never a share quantity compatible with an equity price.
-        // Preserve the source quantity and publish only the filing's own monetary value.
-        if (shareType == ShareType.Principal)
-        {
-            value = filedValue ?? 0L;
-            valuePending = false;
-            valueUnavailable = !filedValue.HasValue;
-            valueSource = filedValue.HasValue ? ValueSource.Filed : ValueSource.Derived;
-        }
+        var value = valuation.Value;
+        var valuePending = valuation.ValuePending;
+        var valueUnavailable = valuation.ValueUnavailable;
+        var valueSource = valuation.ValueSource;
 
         var (otherManagerNumber, sharedManagerNumbers) = ParseOtherManagerAttribution(
             GetValue(row, "OTHERMANAGER")
@@ -2246,6 +2222,157 @@ public class HoldingsImportService
 
         return (holding, managerEntry, valuePending, reportedValue);
     }
+
+    // One position's published valuation: shares restated onto the price series' basis times the
+    // close, guarded against implausible closes, impossible sizes and gross disagreement with the
+    // filed figure. Derived is the shares x close figure before the filed figure can replace it.
+    private readonly record struct PositionValuation(
+        long Value,
+        long Derived,
+        bool ValuePending,
+        bool ValueUnavailable,
+        ValueSource ValueSource
+    );
+
+    private static PositionValuation ValuePosition(
+        long shares,
+        ShareType shareType,
+        long? filedValue,
+        Guid commonStockId,
+        string listedTicker,
+        DateOnly reportDate,
+        ImportContext context
+    )
+    {
+        var canValue = TryPriceBasis(
+            commonStockId,
+            listedTicker,
+            reportDate,
+            context,
+            out var closePrice,
+            out var shareCountFactor,
+            out var basisKnown
+        );
+
+        // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
+        // product exceed Int64, so range-check before the cast (mirrors Filing13DGXmlParser)
+        // instead of throwing OverflowException and aborting the whole filing's import.
+        var product =
+            shareType == ShareType.Principal ? 0m : shares * shareCountFactor * closePrice;
+        var value =
+            canValue && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
+        var valuePending = !canValue;
+
+        // A count bigger than the whole issuer is not a position we can price: the shares are in
+        // different units from the price (a depositary-share issuer whose filer reports the
+        // underlying ordinary shares), and multiplying them together states a holding worth many
+        // times the company. Keep the filer's share count, withhold the valuation, and stop the
+        // repricing lane from re-deriving the same wrong figure later.
+        var issuerSize =
+            context.IssuerSizes != null
+            && context.IssuerSizes.TryGetValue(commonStockId, out var size)
+                ? size
+                : null;
+        // Shares outstanding is today's figure, so the comparison needs today's count: an as-filed
+        // count from before a reverse split is inflated by the ratio and would read as impossible
+        // when it is only old. With the basis unknown there is nothing to compare against, and the
+        // row is already pending rather than unpriceable.
+        var valueUnavailable =
+            issuerSize != null
+            && basisKnown
+            && ImpossiblePositionGuard.ExceedsTheIssuer(
+                SplitAdjustment.AdjustShareCount(shares, shareCountFactor),
+                issuerSize.SharesOutstanding,
+                issuerSize.MarketCapitalization
+            );
+        if (valueUnavailable)
+        {
+            value = 0L;
+            valuePending = false;
+        }
+
+        var derived = value;
+
+        // A derivation grossly above the filer's own figure is a basis error (a depositary ratio,
+        // a split the series never captured) — the value basis audit measures it; this acts on it.
+        // Publish the filed figure instead of the wrong derivation — unless the disagreement is
+        // the ~1,000× signature of a filer still reporting thousands, where the filed figure is
+        // the wrong one and the derivation stands.
+        var valueSource = ValueSource.Derived;
+        if (HoldingValueSanityGuard.ShouldPublishFiledInsteadOfDerived(value, shares, filedValue))
+        {
+            value = filedValue.Value;
+            valueSource = ValueSource.Filed;
+        }
+
+        // PRN states a principal amount, never a share quantity compatible with an equity price.
+        // Preserve the source quantity and publish only the filing's own monetary value.
+        if (shareType == ShareType.Principal)
+        {
+            value = filedValue ?? 0L;
+            valuePending = false;
+            valueUnavailable = !filedValue.HasValue;
+            valueSource = filedValue.HasValue ? ValueSource.Filed : ValueSource.Derived;
+        }
+
+        return new PositionValuation(value, derived, valuePending, valueUnavailable, valueSource);
+    }
+
+    // The stored close and the factor restating an as-filed count onto its basis; false when no
+    // honest price exists. basisKnown is reported apart, since the size check needs it unpriced.
+    private static bool TryPriceBasis(
+        Guid commonStockId,
+        string listedTicker,
+        DateOnly reportDate,
+        ImportContext context,
+        out decimal closePrice,
+        out decimal shareCountFactor,
+        out bool basisKnown
+    )
+    {
+        var hasPrice = context.StockPrices.TryGetValue(
+            (commonStockId, listedTicker, reportDate),
+            out closePrice
+        );
+        // The count is quoted as of the report date while the stored price is on today's
+        // post-split basis, so the count has to be restated before the two are multiplied. While a
+        // captured split is still awaiting its price adjustment the series straddles both bases and
+        // no honest value exists — the row stays pending for the repricing lane. For a SECONDARY
+        // listing the factor must come from that class's own splits; see HoldingValueBasis for the
+        // conservative rule while per-class split capture does not exist yet.
+        context.StockSplits.TryGetValue(commonStockId, out var splits);
+        context.PrimaryTickers.TryGetValue(commonStockId, out var primaryTicker);
+        context.SecondaryTickers.TryGetValue(commonStockId, out var secondaryTickers);
+        basisKnown = HoldingValueBasis.TryResolveShareCountFactor(
+            reportDate,
+            splits,
+            listedTicker,
+            primaryTicker,
+            secondaryTickers,
+            out shareCountFactor
+        );
+        // An implausible close (a corrupt bar in the price series) is no price at all: deriving
+        // from it once stated a $13.7T position for a $1.09M filing. The row stays pending and the
+        // repricing lane values it when the series heals — or falls back to the filed value.
+        return hasPrice && basisKnown && !HoldingValueSanityGuard.IsImplausibleClose(closePrice);
+    }
+
+    // A position's quarter-end price on its filing's share basis, or null when none is honest.
+    internal static decimal? FilingBasisPrice(
+        InstitutionalHolding holding,
+        ImportContext context
+    ) =>
+        TryPriceBasis(
+            holding.EquityIssuerId,
+            holding.ListedTicker,
+            holding.ReportDate,
+            context,
+            out var closePrice,
+            out var shareCountFactor,
+            out _
+        )
+            ? shareCountFactor * closePrice
+            : null;
 
     private readonly record struct HoldingsFlushResult(int Inserted, bool SkippedStaleParent);
 

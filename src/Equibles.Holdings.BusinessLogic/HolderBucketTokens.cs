@@ -21,6 +21,7 @@ public static class HolderBucketTokens
         ("fund", HolderEntityType.RegisteredFund, "Registered fund"),
         ("plan", HolderEntityType.BenefitPlan, "Benefit plan"),
         ("nonus", HolderEntityType.NonUsInstitution, "Non-US"),
+        ("hc", HolderEntityType.HoldingCompany, "Holding company"),
         ("unk", HolderEntityType.Unknown, "Unknown"),
     ];
 
