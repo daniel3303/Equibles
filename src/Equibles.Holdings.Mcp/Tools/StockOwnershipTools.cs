@@ -456,6 +456,8 @@ public class StockOwnershipTools
                     + $"{(block.PercentOfClass is { } percent ? $", {McpFormat.Invariant(percent, "0.##")}% of class" : "")}{change}"
                     + $"{(block.SplitUnresolved ? " (as filed: a split since cannot be attributed)" : "")}"
             );
+            if (!string.IsNullOrEmpty(block.Purpose))
+                result.AppendLine($"Purpose (Item 4): {block.Purpose}");
             if (block.Persons.Count == 0)
             {
                 result.AppendLine();
@@ -518,6 +520,8 @@ public class StockOwnershipTools
         var notes = new List<string>();
         if (!string.IsNullOrEmpty(row.Detail))
             notes.Add(row.Detail);
+        if (!string.IsNullOrEmpty(row.Purpose))
+            notes.Add($"purpose: {row.Purpose}");
         if (row.Carried)
             notes.Add("carried, not yet filed for the newest quarter");
         if (row.Has(StockHolderRowFlags.Stale))

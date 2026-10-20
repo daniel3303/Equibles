@@ -220,9 +220,55 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         (await tools.GetAllHolders("NVDA")).Should().NotContain("shares outstanding.");
     }
 
+    [Fact]
+    public async Task Purposes_DescribeEach13DOnTheListAndTheRecord()
+    {
+        var purposes = new StubPurposes("d-act-1", "Control or board");
+        var tools = new StockOwnershipTools(
+            new EquityIssuerRepository(DbContext),
+            Reader(purposeSource: purposes),
+            new StockBeneficialOwnershipReader(
+                new InstitutionalHoldingRepository(DbContext),
+                new StockSplitRepository(DbContext),
+                new FixedTime(Today),
+                purposes
+            ),
+            ErrorManager,
+            NullLogger<StockOwnershipTools>()
+        );
+
+        var holders = await tools.GetAllHolders("NVDA", source: "13d");
+        holders.Should().Contain("purpose: Control or board");
+        var record = await tools.GetBeneficialOwnership("NVDA");
+        record.Should().Contain("Purpose (Item 4): Control or board");
+        record.Split("Purpose (Item 4)").Should().HaveCount(2, "a 13G states no Item 4 purpose");
+        purposes
+            .Requested.Should()
+            .OnlyContain(accession => accession == "d-act-1", "only 13D accessions are described");
+    }
+
+    private sealed class StubPurposes(string accession, string purpose)
+        : IBeneficialOwnershipPurposeSource
+    {
+        public List<string> Requested { get; } = [];
+
+        public Task<IReadOnlyDictionary<string, string>> Describe(
+            IReadOnlyCollection<string> accessionNumbers,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Requested.AddRange(accessionNumbers);
+            IReadOnlyDictionary<string, string> described = accessionNumbers
+                .Where(requested => requested == accession)
+                .ToDictionary(requested => requested, _ => purpose);
+            return Task.FromResult(described);
+        }
+    }
+
     private StockOwnershipReader Reader(
         IMemoryCache cache = null,
-        bool foreignPrivateIssuer = false
+        bool foreignPrivateIssuer = false,
+        IBeneficialOwnershipPurposeSource purposeSource = null
     )
     {
         var holdingRepository = new InstitutionalHoldingRepository(DbContext);
@@ -253,7 +299,8 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
             rollupReader,
             cache ?? new MemoryCache(new MemoryCacheOptions()),
             shares,
-            new FixedTime(Today)
+            new FixedTime(Today),
+            purposeSource
         );
     }
 
