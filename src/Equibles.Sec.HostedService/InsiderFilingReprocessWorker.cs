@@ -1,3 +1,4 @@
+using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.BusinessLogic;
@@ -6,6 +7,7 @@ using Equibles.Sec.Repositories;
 using Equibles.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Equibles.Sec.HostedService;
 
@@ -37,12 +39,24 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
     // other SEC scrapers starting at the same time.
     protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(5);
 
+    private readonly WorkerOptions _workerOptions;
+
     public InsiderFilingReprocessWorker(
         ILogger<InsiderFilingReprocessWorker> logger,
         IServiceScopeFactory scopeFactory,
-        ErrorReporter errorReporter
+        ErrorReporter errorReporter,
+        IOptions<WorkerOptions> workerOptions
     )
-        : base(logger, scopeFactory, errorReporter) { }
+        : base(logger, scopeFactory, errorReporter)
+    {
+        _workerOptions = workerOptions.Value;
+    }
+
+    // Clamped so a typo cannot stall the reprocess for good.
+    internal TimeSpan BatchPause =>
+        TimeSpan.FromMilliseconds(
+            Math.Clamp(_workerOptions.InsiderReprocessBatchPauseMilliseconds, 0, 10_000)
+        );
 
     // One-shot marker for the sharesless-verdict reopen: unlike the signature restore, that
     // pass is NOT self-terminating (a re-flagged row matches its predicate again), so it runs
@@ -83,7 +97,7 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
         await using var scope = ScopeFactory.CreateAsyncScope();
         var manager = scope.ServiceProvider.GetRequiredService<InsiderFilingReprocessManager>();
 
-        var result = await manager.Run(cancellationToken: stoppingToken);
+        var result = await manager.Run(batchPause: BatchPause, cancellationToken: stoppingToken);
 
         if (result.Processed > 0)
             Logger.LogInformation("Insider filing reprocess cycle: {Summary}", result.Summary);

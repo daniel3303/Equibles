@@ -158,7 +158,7 @@ public class StocksHoldingsSeededTests
         //                holder 2 → 800   (Reduced Δ -200),
         //                holder 3 → gone  (Sold out Δ -1_000),
         //                holder 4 → 1_000 (Unchanged),
-        //                holder 5 → 2_000 (New Δ +2_000).
+        //                holder 5 → 2_000 (New Δ +2_000; it filed Q1 on another stock).
         // Expected Top Buyers: Holder 5 (+2_000), Holder 1 (+500).
         // Expected Top Sellers: Holder 3 (-1_000), Holder 2 (-200).
         var stockId = Guid.NewGuid();
@@ -199,6 +199,22 @@ public class StocksHoldingsSeededTests
                 };
                 db.Add(holders[i]);
             }
+
+            // Holder 5 reports a Q1 13F against the anchor stock, so its MSFT
+            // position is a new one rather than a first 13F's book.
+            db.Add(
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = anchorStockId,
+                    InstitutionalHolderId = holders[4].Id,
+                    ReportDate = prior,
+                    FilingDate = prior.AddDays(45),
+                    Value = 1_000_000,
+                    Shares = 1_000,
+                    ShareType = ShareType.Shares,
+                    InvestmentDiscretion = InvestmentDiscretion.Sole,
+                }
+            );
 
             // Holder 3 reports a Q2 13F against the anchor stock — proves to
             // the Sold-Out filter that they ARE filing the latest quarter,

@@ -7,10 +7,12 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
+using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.InsiderTrading.Repositories;
+using Equibles.Integrations.Sec.Models;
 using Equibles.Media.Data;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -147,6 +149,75 @@ public class InsiderTradingToolsOwnershipBucketsTests
 
         output.Should().Contain("| 571,715 | 7,307 | 579,022 |");
         output.Should().NotContain("600,000");
+    }
+
+    // Record-replay of NVIDIA's CEO's Form 4 (accession 0001197649-26-000012): the trust's gift
+    // line and nine holding lines each sit in their own vehicle, so every closing balance counts.
+    // One indirect bucket read only the trust and published 537.8M of his 811.5M shares.
+    [Fact]
+    public async Task GetInsiderOwnership_RealFilingWithSeveralIndirectVehicles_SumsEveryVehicle()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp",
+            Cik: "0001045810"
+        );
+        var owner = new InsiderOwner
+        {
+            OwnerCik = "0001197649",
+            Name = "HUANG JEN HSUN",
+            IsDirector = true,
+            IsOfficer = true,
+        };
+        db.AddRange(stock, owner);
+        var xml = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "InsiderTrading",
+                "form4-nvidia-ceo-vehicles.xml"
+            )
+        );
+        db.AddRange(
+            InsiderFilingParser.ParseTransactions(
+                InsiderFilingParser.TryGetOwnershipRoot(xml),
+                owner,
+                stock.Id,
+                new FilingData
+                {
+                    AccessionNumber = "0001197649-26-000012",
+                    Form = "4",
+                    FilingDate = new DateOnly(2026, 9, 18),
+                    ReportDate = new DateOnly(2026, 9, 16),
+                },
+                false
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var output = await Sut(db).GetInsiderOwnership("NVDA");
+
+        output.Should().Contain("| 70,100,666 | 741,420,494 | 811,521,160 |");
+    }
+
+    // Rows parsed before vehicles were recorded keep one indirect bucket until the reprocess
+    // reaches them, so the newest such line stays the closing balance.
+    [Fact]
+    public async Task GetInsiderOwnership_RowsWithoutAVehicle_ShareOneIndirectBucket()
+    {
+        await using var db = NewDb();
+        var (stock, owner) = Fixture(db);
+        db.AddRange(
+            Row(stock, owner, "acc-1", order: 0, ownedAfter: 571_715, OwnershipNature.Direct),
+            Row(stock, owner, "acc-1", order: 1, ownedAfter: 54_117, OwnershipNature.Indirect),
+            Row(stock, owner, "acc-1", order: 2, ownedAfter: 7_307, OwnershipNature.Indirect)
+        );
+        await db.SaveChangesAsync();
+
+        var output = await Sut(db).GetInsiderOwnership("LLY");
+
+        output.Should().Contain("| 571,715 | 7,307 | 579,022 |");
     }
 
     // Two different securities held directly are two buckets — both closing balances count.

@@ -20,8 +20,8 @@ The page shows four ranked boards, each highlighting a different dimension of in
 |-------|--------------|
 | **Top Buys** | Stocks where institutions increased their positions the most by dollar value. These are the largest net purchases across all 13F filers. |
 | **Top Sells** | Stocks where institutions reduced their positions the most by dollar value. These are the largest net sales. |
-| **New Positions** | Stocks that gained the most brand-new institutional holders — institutions that had zero shares in the prior quarter and now hold a position. |
-| **Sold-Out Positions** | Stocks that lost the most institutional holders entirely — institutions that held shares in the prior quarter and now report zero. |
+| **New Positions** | Stocks that gained the most brand-new institutional holders — institutions that reported a 13F without the stock in the prior quarter and now hold a position. A first-time filer's book is not counted. |
+| **Sold-Out Positions** | Stocks that lost the most institutional holders entirely — institutions that held shares in the prior quarter and filed a 13F without the stock this quarter. A filer that has not filed, or withheld its positions under confidential treatment, is not counted. |
 
 Each board lists stocks ranked by the relevant metric, with the ticker, company name, and the magnitude of the change.
 

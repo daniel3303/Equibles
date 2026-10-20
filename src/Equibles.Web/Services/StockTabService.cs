@@ -169,13 +169,20 @@ public class StockTabService
             selectedDate
         );
 
+        var filersWithPreviousQuarterFilings = await GetFilersWithPreviousQuarterFilings(
+            allCurrent,
+            allPrevious,
+            previousDate ?? selectedDate.AddDays(1).AddMonths(-3).AddDays(-1)
+        );
+
         var effectiveSplits = await LoadEffectiveSplits(stock);
         var grouped = HoldingsPositionGrouper.Group(
             allCurrent,
             allPrevious,
             filersWithCurrentQuarterFilings,
             effectiveSplits,
-            stock.Presentation.Listing.Ticker
+            stock.Presentation.Listing.Ticker,
+            filersWithPreviousQuarterFilings
         );
 
         var allChanges = grouped.SelectMany(g => g.Value).ToList();
@@ -290,6 +297,7 @@ public class StockTabService
             [PositionChangeType.Increased] = [],
             [PositionChangeType.Reduced] = [],
             [PositionChangeType.SoldOut] = [],
+            [PositionChangeType.NoPriorFiling] = [],
         };
 
         return new HoldingsTabViewModel
@@ -1085,13 +1093,33 @@ public class StockTabService
 
         return (
             await _institutionalHoldingRepository
-                .GetAll()
-                .Where(h =>
-                    h.ReportDate == selectedDate
-                    && previousOnlyHolderIds.Contains(h.InstitutionalHolderId)
-                )
-                .Select(h => h.InstitutionalHolderId)
-                .Distinct()
+                .GetFiledHolderIdsAmong(selectedDate, previousOnlyHolderIds)
+                .ToListAsync()
+        ).ToHashSet();
+    }
+
+    // Current holders without a prior row for this stock that filed a 13F for the prior quarter:
+    // only their missing prior position proves an entry. A stock's first quarter compares against
+    // the calendar quarter before it.
+    private async Task<HashSet<Guid>> GetFilersWithPreviousQuarterFilings(
+        List<InstitutionalHolding> allCurrent,
+        List<InstitutionalHolding> allPrevious,
+        DateOnly previousDate
+    )
+    {
+        var previousHolderIds = allPrevious.Select(h => h.InstitutionalHolderId).ToHashSet();
+        var currentOnlyHolderIds = allCurrent
+            .Select(h => h.InstitutionalHolderId)
+            .Where(id => !previousHolderIds.Contains(id))
+            .Distinct()
+            .ToList();
+
+        if (currentOnlyHolderIds.Count == 0)
+            return [];
+
+        return (
+            await _institutionalHoldingRepository
+                .GetFiledHolderIdsAmong(previousDate, currentOnlyHolderIds)
                 .ToListAsync()
         ).ToHashSet();
     }

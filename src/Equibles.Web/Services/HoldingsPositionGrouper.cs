@@ -37,12 +37,19 @@ public static class HoldingsPositionGrouper
     /// dollar values stay as filed. Pass an empty list for as-filed behaviour.
     /// </param>
     /// <param name="primaryTicker">The stock's primary ticker, scoping split attribution.</param>
+    /// <param name="filersWithPreviousQuarterFilings">
+    /// Current holders without a prior row for this stock that did file a 13F for the prior
+    /// quarter. Only they land in New: a first 13F, or a return after a gap, proves no entry, so
+    /// the other current-only holders land in <see cref="PositionChangeType.NoPriorFiling"/>.
+    /// Pass <c>null</c> to disable the filter (every current-only holder lands in New).
+    /// </param>
     public static Dictionary<PositionChangeType, List<HolderPositionChange>> Group(
         IReadOnlyList<InstitutionalHolding> currentHoldings,
         IReadOnlyList<InstitutionalHolding> previousHoldings,
         IReadOnlySet<Guid> filersWithCurrentQuarterFilings,
         IReadOnlyList<StockSplit> effectiveSplits,
-        string primaryTicker
+        string primaryTicker,
+        IReadOnlySet<Guid> filersWithPreviousQuarterFilings = null
     )
     {
         var currentByHolder = AggregateByHolder(currentHoldings, effectiveSplits, primaryTicker);
@@ -55,11 +62,20 @@ public static class HoldingsPositionGrouper
             [PositionChangeType.Reduced] = [],
             [PositionChangeType.Unchanged] = [],
             [PositionChangeType.SoldOut] = [],
+            [PositionChangeType.NoPriorFiling] = [],
         };
 
         foreach (var (holderId, current) in currentByHolder)
         {
             previousByHolder.TryGetValue(holderId, out var previous);
+            var changeType = ClassifyChange(current.TotalShares, previous?.TotalShares ?? 0);
+            if (
+                previous == null
+                && changeType == PositionChangeType.New
+                && filersWithPreviousQuarterFilings != null
+                && !filersWithPreviousQuarterFilings.Contains(holderId)
+            )
+                changeType = PositionChangeType.NoPriorFiling;
 
             var change = new HolderPositionChange
             {
@@ -70,7 +86,7 @@ public static class HoldingsPositionGrouper
                 CurrentValue = current.TotalValue,
                 PreviousShares = previous?.TotalShares ?? 0,
                 PreviousValue = previous?.TotalValue ?? 0,
-                ChangeType = ClassifyChange(current.TotalShares, previous?.TotalShares ?? 0),
+                ChangeType = changeType,
             };
 
             result[change.ChangeType].Add(change);
