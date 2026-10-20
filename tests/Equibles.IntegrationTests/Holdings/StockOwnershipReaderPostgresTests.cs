@@ -110,6 +110,47 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Read_APredecessorsBlockNestsUnderTheSuccessorIts13FReportsMovedTo()
+    {
+        // Shaped on Vanguard Group: its NVIDIA 13G predates the split that moved its 13F reports
+        // to new CIKs, so the successor's 13F already holds those shares.
+        var predecessor = Holder("102909", "Vanguard Group Inc", null);
+        var successor = Holder("2100119", "Vanguard Capital Management LLC", null);
+        Form13F(_nvda, successor, Q2, 700_000);
+        Schedule(
+            _nvda,
+            predecessor,
+            FilingType.Schedule13G,
+            new DateOnly(2023, 12, 29),
+            900_000,
+            "g-vg-1"
+        );
+        DbContext.Add(
+            new HolderSuccession
+            {
+                PredecessorHolderId = predecessor.Id,
+                SuccessorHolderId = successor.Id,
+                PredecessorLastReportDate = new DateOnly(2025, 12, 31),
+                SuccessorFirstReportDate = Q1,
+                Basis = HolderSuccessionBasis.NoticeReportedBy,
+                EvidenceAccession = "notice-vg",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        var read = await Reader().Read(_nvda, "NVDA", complete: true);
+        var block = read.Rows.Single(row => row.Name == "Vanguard Group Inc");
+        var filer = read.Rows.Single(row => row.Name == "Vanguard Capital Management LLC");
+
+        block.ParentRowKey.Should().Be(filer.RowKey);
+        block.Covering13FCik.Should().Be("2100119");
+        block.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+        read.DefaultRows.Should().NotContain(block);
+        read.Summary.Schedule13DGOnly.Shares.Should().Be(1_100_000);
+        read.Summary.Schedule13DGOnly.Holders.Should().Be(3);
+    }
+
+    [Fact]
     public async Task ChangeNeverCrossesSources_EachRowComparesWithItsOwnLane()
     {
         var read = await Reader().Read(_nvda, "NVDA", complete: true);

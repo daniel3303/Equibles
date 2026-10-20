@@ -520,6 +520,15 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             )
             .StillSucceeded(DbContext);
 
+    // The current successions of these predecessors.
+    public IQueryable<HolderSuccession> GetSuccessionsOf(
+        IReadOnlyCollection<Guid> predecessorIds
+    ) =>
+        DbContext
+            .Set<HolderSuccession>()
+            .Where(succession => predecessorIds.Contains(succession.PredecessorHolderId))
+            .StillSucceeded(DbContext);
+
     /// <summary>When the stored parent rollups were last replaced; null before the first refresh.</summary>
     public Task<DateTime?> GetRollupsComputedAt(CancellationToken cancellationToken = default) =>
         DbContext

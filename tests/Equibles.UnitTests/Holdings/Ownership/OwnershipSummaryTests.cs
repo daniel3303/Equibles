@@ -33,6 +33,38 @@ public class OwnershipSummaryTests
     }
 
     [Fact]
+    public void PredecessorBlockNotSummed_ItsSuccessors13FReportsHoldItsShares()
+    {
+        // A 13G filed before its filer's 13F reports moved to a new CIK sits inside the
+        // successor's report; summing it again counted Vanguard's NVIDIA stake twice.
+        var predecessor = Schedule13G("102909", 2_000, new DateOnly(2023, 12, 29));
+        var successor = Form13F("2100119", 1_500);
+        var activist = Schedule13D("900", 300, new DateOnly(2026, 8, 1));
+        var rows = new List<StockHolderRow> { predecessor, successor, activist };
+        StockOwnershipPrecedence.Arrange(
+            rows,
+            new StockOwnershipPrecedence.Context
+            {
+                Successors = new Dictionary<string, IReadOnlyList<string>>
+                {
+                    ["102909"] = ["2100119"],
+                },
+                Today = Today,
+            }
+        );
+
+        var summary = OwnershipSummaryCalculator.Build(
+            rows,
+            new OwnershipSummaryCalculator.Context { SharesOutstanding = 10_000 }
+        );
+
+        summary.Schedule13DGOnly.Holders.Should().Be(1);
+        summary.Schedule13DGOnly.Shares.Should().Be(300);
+        summary.Remaining.Shares.Should().Be(8_200);
+        predecessor.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+    }
+
+    [Fact]
     public void FundsNeverSummed()
     {
         var adviser = Form13F("100", 3_000);

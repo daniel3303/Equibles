@@ -11,9 +11,11 @@ namespace Equibles.Holdings.BusinessLogic.Ownership;
 /// A holder is its CIK, so a filer's 13F, 13D, 13G and Forms 3 to 5 are one holder. The freshest
 /// as-of date wins (13F report date, 13D or 13G event date, insider transaction date), then the
 /// filing date, then 13F before 13D or 13G before insider. A holder without a 13F row of its own
-/// nests under the 13F filer its confirmed reporting rollup names, unless it filed its own 13F
-/// for that filer's quarter; a fund series nests under its adviser's 13F filer. Nesting never
-/// reads names, and two 13F filers never nest, since 13F reports are disjoint.
+/// nests under the 13F filer its confirmed reporting rollup names, or else under the largest 13F
+/// filer its own 13F reports continue under (a stored succession, followed through later ones),
+/// unless it filed its own 13F for that filer's quarter; a fund series nests under its adviser's
+/// 13F filer. Nesting never reads names, and two 13F filers never nest, since 13F reports are
+/// disjoint.
 /// </remarks>
 public static class StockOwnershipPrecedence
 {
@@ -31,6 +33,13 @@ public static class StockOwnershipPrecedence
         /// makes it its own holder whatever an earlier quarter's reporting evidence says.
         /// </summary>
         public Func<string, DateOnly, bool> FiledOwn13F { get; init; } = (_, _) => false;
+
+        /// <summary>
+        /// The CIKs each filer's 13F reports continue under, by canonical CIK: a filer that stopped
+        /// filing still holds its last 13D or 13G inside its successors' reports.
+        /// </summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<string>> Successors { get; init; } =
+            new Dictionary<string, IReadOnlyList<string>>();
 
         public DateOnly Today { get; init; }
     }
@@ -164,12 +173,21 @@ public static class StockOwnershipPrecedence
         // A non-US disclosure nests only under the one 13F filer whose profile states its exact LEI.
         if (top.Source == StockHolderSource.NonUs)
             return top.Lei != null ? groupsBy13FLei.GetValueOrDefault(top.Lei) : null;
-        if (top.Cik == null || !context.Rollups.TryGetValue(top.Cik, out var rollup))
+        if (top.Cik == null)
             return null;
-        var parent = ReportingParentCandidates(rollup)
-            .Where(candidate => candidate != top.Cik)
-            .Select(candidate => groupsBy13FCik.GetValueOrDefault(candidate))
-            .FirstOrDefault(candidateGroup => candidateGroup != null);
+        var parent = context.Rollups.TryGetValue(top.Cik, out var rollup)
+            ? ReportingParentCandidates(rollup)
+                .Where(candidate => candidate != top.Cik)
+                .Select(candidate => groupsBy13FCik.GetValueOrDefault(candidate))
+                .FirstOrDefault(candidateGroup => candidateGroup != null)
+            : null;
+        // A split hands one book to several successors; the largest holder of the listing leads.
+        parent ??= SuccessorCiks(top.Cik, context.Successors)
+            .Select(successor => groupsBy13FCik.GetValueOrDefault(successor))
+            .Where(successorGroup => successorGroup != null)
+            .OrderByDescending(successorGroup => successorGroup.Form13F.Shares)
+            .ThenBy(successorGroup => successorGroup.Form13F.Cik, StringComparer.Ordinal)
+            .FirstOrDefault();
         if (parent == null || context.FiledOwn13F(top.Cik, parent.Form13F.AsOf))
             return null;
         return parent;
@@ -199,6 +217,26 @@ public static class StockOwnershipPrecedence
             yield return rollup.ReportingParentCik;
         if (rollup.Basis == HolderRollupBasis.ReportingParent && rollup.UltimateCik != null)
             yield return rollup.UltimateCik;
+    }
+
+    /// <summary>Every CIK a filer's 13F reports continue under, through later successions too.</summary>
+    public static IEnumerable<string> SuccessorCiks(
+        string cik,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> successors
+    )
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal) { cik };
+        var pending = new Queue<string>([cik]);
+        while (pending.TryDequeue(out var current))
+        {
+            foreach (var successor in successors.GetValueOrDefault(current) ?? [])
+            {
+                if (!seen.Add(successor))
+                    continue;
+                pending.Enqueue(successor);
+                yield return successor;
+            }
+        }
     }
 
     /// <summary>A non-US notification stating a percentage of voting rights and no share count.</summary>
