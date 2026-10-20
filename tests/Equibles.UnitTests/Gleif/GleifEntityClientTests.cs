@@ -275,6 +275,87 @@ public class GleifEntityClientTests
         await entity.Should().ThrowAsync<InvalidDataException>();
     }
 
+    // Toyota is filed in Japan's commercial register (RA000412) under 1803-01-018771, its corporate number less
+    // the leading check digit.
+    [Fact]
+    public async Task GetRegistered_ReturnsTheOneActiveEntityTheRegisterFilesUnderTheNumber()
+    {
+        var handler = new ReplyHandler([
+            (HttpStatusCode.OK, await Fixture("toyota-registered-as.json")),
+        ]);
+        using var http = new HttpClient(handler);
+
+        var entity = await Client(http).GetRegistered("RA000412", "1803-01-018771");
+
+        handler
+            .Requests.Should()
+            .Equal(
+                new Uri(
+                    "https://api.gleif.org/api/v1/lei-records?filter%5Bentity.registeredAs%5D=1803-01-018771&page%5Bsize%5D=10"
+                )
+            );
+        entity.LegalEntityIdentifier.Should().Be("5493006W3QUS5LMH6R84");
+        entity.RegistrationAuthorityId.Should().Be("RA000412");
+        entity.RegisteredAs.Should().Be("1803-01-018771");
+        entity.Country.Should().Be("JP");
+    }
+
+    [Fact]
+    public async Task GetRegistered_FindsNothingUnderAnotherAuthority()
+    {
+        var handler = new ReplyHandler([
+            (HttpStatusCode.OK, await Fixture("toyota-registered-as.json")),
+        ]);
+        using var http = new HttpClient(handler);
+
+        (await Client(http).GetRegistered("RA000463", "1803-01-018771")).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("""{"meta":{"pagination":{"total":0}},"data":[]}""")]
+    [InlineData("""{"meta":{"pagination":{"total":11}},"data":[]}""")]
+    public async Task GetRegistered_FindsNothingWhenGleifHoldsNoneOrMoreThanOnePage(string body)
+    {
+        var handler = new ReplyHandler([(HttpStatusCode.OK, body)]);
+        using var http = new HttpClient(handler);
+
+        (await Client(http).GetRegistered("RA000412", "1803-01-018771")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetRegistered_FindsNothingWhenTwoActiveEntitiesShareTheNumber()
+    {
+        var record = JsonNode.Parse(await Fixture("toyota-registered-as.json"))!;
+        var first = record["data"]![0]!;
+        var second = first.DeepClone();
+        second["id"] = "529900T8BM49AURSDO55";
+        second["attributes"]!["lei"] = "529900T8BM49AURSDO55";
+        record["data"]!.AsArray().Add(second);
+        record["meta"]!["pagination"]!["total"] = 2;
+        var handler = new ReplyHandler([(HttpStatusCode.OK, record.ToJsonString())]);
+        using var http = new HttpClient(handler);
+
+        (await Client(http).GetRegistered("RA000412", "1803-01-018771")).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null, "1803-01-018771")]
+    [InlineData("412", "1803-01-018771")]
+    [InlineData("RA000412", " ")]
+    public async Task GetRegistered_RefusesAMalformedAuthorityOrNumber_WithoutARequest(
+        string authority,
+        string number
+    )
+    {
+        var handler = new ReplyHandler([]);
+        using var http = new HttpClient(handler);
+
+        var lookup = () => Client(http).GetRegistered(authority, number);
+
+        await lookup.Should().ThrowAsync<ArgumentException>();
+        handler.Requests.Should().BeEmpty();
+    }
+
     // Serves each queued status and body in order.
     private sealed class ReplyHandler(IEnumerable<(HttpStatusCode Status, string Body)> replies)
         : HttpMessageHandler
