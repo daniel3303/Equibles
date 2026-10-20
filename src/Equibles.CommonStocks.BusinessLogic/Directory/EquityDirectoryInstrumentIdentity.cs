@@ -30,15 +30,14 @@ internal sealed class EquityDirectoryInstrumentIdentity(
         CancellationToken token
     )
     {
-        var proven =
-            input.ProvenSecurityId == null
-                ? null
-                : await repository
-                    .GetSecurities()
-                    .SingleOrDefaultAsync(row => row.Id == input.ProvenSecurityId.Value, token)
-                    ?? throw new InvalidDataException(
-                        "The security the source proved this share to be no longer exists."
-                    );
+        var proven = input.ProvenSecurityId is not { } provenId
+            ? null
+            : await repository
+                .GetSecurities()
+                .SingleOrDefaultAsync(row => row.Id == provenId, token)
+                ?? throw new InvalidDataException(
+                    "The security the source proved this share to be no longer exists."
+                );
         if (input.SourceSecurityIdentifier == null)
             return new(input, null, null, proven);
         var security = await repository
