@@ -325,13 +325,13 @@ public static partial class Schedule13DGCoverPageReader
     private static partial Regex LegalProceedingsLabel();
 
     [GeneratedRegex(
-        @"\bCITIZENSHIP(?:\s+(?:OR|OF|AND)\s+PLACE\s+OF\s+ORGANI[SZ]ATION)?\b",
+        @"\bCITIZENSHIP(?:\s+(?:OR|OF|AND)\s+PLACE\s+(?:OF|OR)\s+ORGANI[SZ]ATION)?\b",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex CitizenshipLabel();
 
     [GeneratedRegex(
-        @"\(\s*FOR\s+QUESTIONS[^)]{0,120}\)|\bNUMBER\s+OF\s+SHARES\s+BENEFICIALLY\s+OWNED\s+BY\s+EACH\s+REPORTING\s+PERSON\s+WITH\b\s*:?",
+        @"\(\s*FOR\s+QUESTIONS[^)]{0,120}\)|\bNUMBER\s+OF\s*SHARES\s+BENEFICIALLY\s+OWNED\s+BY\s+(?:EACH\s+)?(?:THE\s+)?REPORTING\s+PERSONS?\s+WITH\b\s*:?",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex SideHeadingLabel();
