@@ -519,6 +519,7 @@ public class InsiderFilingReprocessManager
                 // The holding vehicle (parser v13) keys each indirect balance in ownership reads.
                 row.NatureOfOwnership = reparsed.NatureOfOwnership;
                 row.OwnershipNatureFootnoteIds = reparsed.OwnershipNatureFootnoteIds;
+                row.BalanceFootnoteIds = reparsed.BalanceFootnoteIds;
                 // Transient one-for-one evidence for the derivative price check below; not stored.
                 row.UnderlyingShares = reparsed.UnderlyingShares;
                 row.ExercisePrice = reparsed.ExercisePrice;

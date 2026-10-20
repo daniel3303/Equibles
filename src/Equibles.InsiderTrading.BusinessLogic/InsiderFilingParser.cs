@@ -374,6 +374,7 @@ public static class InsiderFilingParser
             OwnershipNature = ParseOwnershipNature(txElement),
             NatureOfOwnership = ParseNatureOfOwnership(txElement),
             OwnershipNatureFootnoteIds = ParseOwnershipNatureFootnoteIds(txElement),
+            BalanceFootnoteIds = ParseBalanceFootnoteIds(txElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
@@ -418,6 +419,7 @@ public static class InsiderFilingParser
             OwnershipNature = ParseOwnershipNature(holdingElement),
             NatureOfOwnership = ParseNatureOfOwnership(holdingElement),
             OwnershipNatureFootnoteIds = ParseOwnershipNatureFootnoteIds(holdingElement),
+            BalanceFootnoteIds = ParseBalanceFootnoteIds(holdingElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
@@ -504,8 +506,17 @@ public static class InsiderFilingParser
     // Footnote ids anywhere in the row's ownershipNature block: filers attach the footnote that
     // names a vehicle to natureOfOwnership or to directOrIndirectOwnership.
     internal static List<string> ParseOwnershipNatureFootnoteIds(XElement element) =>
+        FootnoteIds(element.Element("ownershipNature"));
+
+    // Footnote ids on the balance the row reports. Some filers name the vehicle there (Nelnet's
+    // trusts and GRATs); others explain the balance, such as shares bought under an ESPP.
+    internal static List<string> ParseBalanceFootnoteIds(XElement element) =>
+        FootnoteIds(
+            element.Element("postTransactionAmounts")?.Element("sharesOwnedFollowingTransaction")
+        );
+
+    private static List<string> FootnoteIds(XElement element) =>
         element
-            .Element("ownershipNature")
             ?.Descendants("footnoteId")
             .Select(reference => reference.Attribute("id")?.Value?.Trim())
             .Where(id => !string.IsNullOrEmpty(id))
