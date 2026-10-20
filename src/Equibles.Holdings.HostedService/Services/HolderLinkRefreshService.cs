@@ -43,6 +43,19 @@ public class HolderLinkRefreshService
     {
         var quarters = Quarters(today);
         var holders = await LoadHolders(cancellationToken);
+        var newest13FReports = await _dbContext
+            .Set<InstitutionalFiling>()
+            .AsNoTracking()
+            .Where(filing =>
+                filing.FilingType == FilingType.Form13F && quarters.Contains(filing.ReportDate)
+            )
+            .GroupBy(filing => filing.InstitutionalHolderId)
+            .Select(group => new
+            {
+                HolderId = group.Key,
+                Newest = group.Max(filing => filing.ReportDate),
+            })
+            .ToDictionaryAsync(row => row.HolderId, row => row.Newest, cancellationToken);
         var managers = new List<LinkManagerRow>();
         var notices = new List<LinkNotice>();
         foreach (var quarter in quarters)
@@ -74,6 +87,7 @@ public class HolderLinkRefreshService
 
         var links = HolderLinkRule.Derive(
             holders,
+            newest13FReports,
             managers,
             notices,
             successions,

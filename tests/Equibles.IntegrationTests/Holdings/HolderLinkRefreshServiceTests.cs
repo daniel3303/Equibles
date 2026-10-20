@@ -41,11 +41,15 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
         // Outside the window: a quarter that is still open, and one before the eighth quarter.
         Notice("fmrco-open", "35368", new DateOnly(2026, 9, 30), crd: null, reporters: ["2012383"]);
         Notice("bfa-old", "1006249", new DateOnly(2024, 6, 30), crd: null, reporters: ["1364742"]);
+        // A notice an earlier quarter, then a full 13F report of its own: no parent any more.
+        var spunOut = Holder("777", null);
+        Notice("so-q1", "777", new DateOnly(2026, 3, 31), crd: null, reporters: ["315066"]);
+        Rollup(spunOut, "so-q2", Q2);
         AddFundReport("S000004310", "36405", 105247);
         AddFundReport("S000006037", "35315", 108281);
         await DbContext.SaveChangesAsync();
 
-        (await Sut().Run(Today, CancellationToken.None)).Should().Be(5);
+        (await Sut().Run(Today, CancellationToken.None)).Should().Be(6);
 
         await using var verify = Fixture.CreateDbContext();
         var rollups = await verify.Set<HolderRollup>().ToDictionaryAsync(rollup => rollup.Cik);
@@ -55,6 +59,8 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
         rollups["35368"].UltimateCik.Should().Be("315066");
         rollups["35368"].ReportingParentCik.Should().Be("315066");
         rollups["913414"].Basis.Should().Be(HolderRollupBasis.Self);
+        rollups["777"].ReportingParentCik.Should().BeNull();
+        rollups["777"].UltimateCik.Should().Be("777");
         rollups["2012383"].UltimateCik.Should().Be("2012383");
         rollups.Should().NotContainKey("1364742");
         rollups

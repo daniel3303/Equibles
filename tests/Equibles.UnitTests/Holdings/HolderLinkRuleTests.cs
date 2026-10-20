@@ -10,6 +10,7 @@ public class HolderLinkRuleTests
     private static readonly DateOnly Q2 = new(2026, 6, 30);
 
     private readonly List<LinkHolder> _holders = [];
+    private readonly Dictionary<Guid, DateOnly> _own13F = [];
     private readonly List<LinkManagerRow> _managers = [];
     private readonly List<LinkNotice> _notices = [];
     private readonly List<(Guid, Guid)> _successions = [];
@@ -189,7 +190,7 @@ public class HolderLinkRuleTests
     }
 
     [Fact]
-    public void NewestQuarterWithACandidateDecides()
+    public void NewestOwnNoticeDecides()
     {
         Holder("1364742");
         Holder("2012383");
@@ -200,6 +201,23 @@ public class HolderLinkRuleTests
         var rollup = Rollup(Derive(), "1006249");
 
         rollup.ReportingParentCik.Should().Be("2012383");
+        rollup.HasConflictingEvidence.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SpunOutFiler_NewerOwn13F_RollsToItself()
+    {
+        Holder("100");
+        var child = Holder("200");
+        Notice("200", Q1, "c-q1", [Manager(cik: "100")]);
+        // Its next quarter is a full 13F report of its own that names no other manager.
+        Filed13F(child, Q2);
+
+        var rollup = Rollup(Derive(), "200");
+
+        rollup.ReportingParentCik.Should().BeNull();
+        rollup.UltimateCik.Should().Be("200");
+        rollup.Basis.Should().Be(HolderRollupBasis.Self);
         rollup.HasConflictingEvidence.Should().BeFalse();
     }
 
@@ -288,7 +306,7 @@ public class HolderLinkRuleTests
     }
 
     private HolderLinkSet Derive() =>
-        HolderLinkRule.Derive(_holders, _managers, _notices, _successions, _sourced, []);
+        HolderLinkRule.Derive(_holders, _own13F, _managers, _notices, _successions, _sourced, []);
 
     private static HolderRollup Rollup(HolderLinkSet links, string cik) =>
         links.Rollups.Single(rollup => rollup.Cik == cik);
@@ -300,34 +318,36 @@ public class HolderLinkRuleTests
         return id;
     }
 
+    // Either list comes from a 13F report the filer filed for that quarter.
     private void Included(
         Guid filer,
         DateOnly quarter,
         string accession,
         ManagerReference manager
-    ) =>
-        _managers.Add(
-            new LinkManagerRow(
-                accession,
-                filer,
-                quarter,
-                quarter.AddDays(45),
-                OtherManagerDirection.IncludedInReport,
-                manager
-            )
-        );
+    ) => Listed(filer, quarter, accession, OtherManagerDirection.IncludedInReport, manager);
 
     private void Cover(Guid filer, DateOnly quarter, string accession, ManagerReference manager) =>
+        Listed(filer, quarter, accession, OtherManagerDirection.ReportsForFiler, manager);
+
+    private void Listed(
+        Guid filer,
+        DateOnly quarter,
+        string accession,
+        OtherManagerDirection direction,
+        ManagerReference manager
+    )
+    {
+        Filed13F(filer, quarter);
         _managers.Add(
-            new LinkManagerRow(
-                accession,
-                filer,
-                quarter,
-                quarter.AddDays(45),
-                OtherManagerDirection.ReportsForFiler,
-                manager
-            )
+            new LinkManagerRow(accession, filer, quarter, quarter.AddDays(45), direction, manager)
         );
+    }
+
+    private void Filed13F(Guid filer, DateOnly quarter)
+    {
+        if (!_own13F.TryGetValue(filer, out var newest) || quarter > newest)
+            _own13F[filer] = quarter;
+    }
 
     private void Notice(
         string filerCik,

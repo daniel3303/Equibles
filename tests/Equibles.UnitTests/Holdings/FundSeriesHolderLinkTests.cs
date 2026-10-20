@@ -118,7 +118,15 @@ public class FundSeriesHolderLinkTests
     }
 
     private HolderLinkSet Derive() =>
-        HolderLinkRule.Derive(_holders, _managers, _notices, [], [], _advisers);
+        HolderLinkRule.Derive(
+            _holders,
+            new Dictionary<Guid, DateOnly>(),
+            _managers,
+            _notices,
+            [],
+            [],
+            _advisers
+        );
 
     private Guid Holder(string cik, int? adviserCrd = null)
     {
