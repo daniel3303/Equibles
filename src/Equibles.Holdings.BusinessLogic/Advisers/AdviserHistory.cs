@@ -245,33 +245,56 @@ public static class AdviserHistory
     private static async Task<List<VersionRow>> LoadVersions(
         IQueryable<FormAdvAdviserVersion> versions,
         CancellationToken cancellationToken
-    ) => (
-            await versions
-                .AsNoTracking()
-                .Select(version => new
-                {
-                    version.Crd,
-                    version.Registration,
-                    version.ReportDate,
-                    version.LastSeenReportDate,
-                    version.LatestFilingDate,
-                    version.TotalRegulatoryAum,
-                    version.AdvisesPrivateFunds,
-                    version.PrivateFundCount,
-                    version.PrivateFundGrossAssets,
-                    version.HedgeFundCount,
-                    version.PrivateEquityFundCount,
-                    version.VentureCapitalFundCount,
-                    version.RealEstateFundCount,
-                    version.LiquidityFundCount,
-                    version.SecuritizedAssetFundCount,
-                    version.OtherPrivateFundCount,
-                    ClientTypes = version
-                        .ClientTypes.Select(row => new { row.ClientType, row.RegulatoryAum })
-                        .ToList(),
-                })
-                .ToListAsync(cancellationToken)
-        ).Select(row => new VersionRow(row.Crd, row.Registration, row.ReportDate, row.LastSeenReportDate, row.LatestFilingDate, row.TotalRegulatoryAum, row.AdvisesPrivateFunds, row.PrivateFundCount, row.PrivateFundGrossAssets, new RosterFundCounts(row.HedgeFundCount, row.PrivateEquityFundCount, row.VentureCapitalFundCount, row.RealEstateFundCount, row.LiquidityFundCount, row.SecuritizedAssetFundCount, row.OtherPrivateFundCount), row.ClientTypes.Select(type => (type.ClientType, type.RegulatoryAum)).ToList())).ToList();
+    )
+    {
+        var rows = await versions
+            .AsNoTracking()
+            .Select(version => new
+            {
+                version.Crd,
+                version.Registration,
+                version.ReportDate,
+                version.LastSeenReportDate,
+                version.LatestFilingDate,
+                version.TotalRegulatoryAum,
+                version.AdvisesPrivateFunds,
+                version.PrivateFundCount,
+                version.PrivateFundGrossAssets,
+                version.HedgeFundCount,
+                version.PrivateEquityFundCount,
+                version.VentureCapitalFundCount,
+                version.RealEstateFundCount,
+                version.LiquidityFundCount,
+                version.SecuritizedAssetFundCount,
+                version.OtherPrivateFundCount,
+                ClientTypes = version
+                    .ClientTypes.Select(row => new { row.ClientType, row.RegulatoryAum })
+                    .ToList(),
+            })
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => new VersionRow(
+                row.Crd,
+                row.Registration,
+                row.ReportDate,
+                row.LastSeenReportDate,
+                row.LatestFilingDate,
+                row.TotalRegulatoryAum,
+                row.AdvisesPrivateFunds,
+                row.PrivateFundCount,
+                row.PrivateFundGrossAssets,
+                new RosterFundCounts(
+                    row.HedgeFundCount,
+                    row.PrivateEquityFundCount,
+                    row.VentureCapitalFundCount,
+                    row.RealEstateFundCount,
+                    row.LiquidityFundCount,
+                    row.SecuritizedAssetFundCount,
+                    row.OtherPrivateFundCount
+                ),
+                row.ClientTypes.Select(type => (type.ClientType, type.RegulatoryAum)).ToList()
+            ))
+            .ToList();
+    }
 
     private static async Task<RosterCalendar> LoadRosters(
         InstitutionalHolderRepository repository,

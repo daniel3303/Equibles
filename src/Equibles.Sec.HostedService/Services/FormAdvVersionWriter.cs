@@ -25,23 +25,22 @@ internal static class FormAdvVersionWriter
             .GroupBy(version => version.Crd)
             .ToDictionary(group => group.Key, group => group.First());
         var crds = byCrd.Keys.ToList();
-        var heads = (
-            await dbContext
-                .Set<FormAdvAdviserVersion>()
-                .AsNoTracking()
-                .Where(version =>
-                    version.Registration == registration && crds.Contains(version.Crd)
-                )
-                .Select(version => new
-                {
-                    version.Id,
-                    version.Crd,
-                    version.ReportDate,
-                    version.LastSeenReportDate,
-                    version.ContentHash,
-                })
-                .ToListAsync()
-        ).GroupBy(version => version.Crd).ToDictionary(group => group.Key, group => group.MaxBy(version => version.ReportDate));
+        var versions = await dbContext
+            .Set<FormAdvAdviserVersion>()
+            .AsNoTracking()
+            .Where(version => version.Registration == registration && crds.Contains(version.Crd))
+            .Select(version => new
+            {
+                version.Id,
+                version.Crd,
+                version.ReportDate,
+                version.LastSeenReportDate,
+                version.ContentHash,
+            })
+            .ToListAsync();
+        var heads = versions
+            .GroupBy(version => version.Crd)
+            .ToDictionary(group => group.Key, group => group.MaxBy(version => version.ReportDate));
 
         var extended = new List<Guid>();
         var started = new List<FormAdvAdviserVersion>();
