@@ -180,6 +180,21 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         summary.Should().Contain("| Remaining | — | 6,750,000 | 67.50% | rest |");
         summary.Should().Contain("### Largest ultimate parents");
 
+        // FMR's group lists its own 13F and the 13G of 777, which reports through FMR; a parent
+        // holding alone through its own filing lists no member row.
+        var ultimate = await tools.GetAllHolders("NVDA", view: "ultimate");
+        ultimate
+            .Should()
+            .Contain("| 1 | FMR LLC | 315066 | — | 1,500,000 | 15.00% | 1,200,000 | 2 | — |");
+        ultimate
+            .Should()
+            .Contain(
+                "| 1.1 | ↳ FMR LLC | 315066 | 13F | 1,200,000 | 12.00% | 1,200,000 | — | the parent itself |"
+            );
+        ultimate.Should().Contain("| 1.2 | ↳ Spun Out Advisers | 777 | 13G |");
+        ultimate.Should().Contain("| — | — | 13F reporting link |");
+        ultimate.Should().NotContain("↳ Russell Investments");
+
         var record = await tools.GetBeneficialOwnership("NVDA");
         record.Should().Contain("### 1. BlackRock, Inc. (CIK 2012383)");
         record.Should().Contain("| Activist Partners LP (lead) | 900 | PN |");
