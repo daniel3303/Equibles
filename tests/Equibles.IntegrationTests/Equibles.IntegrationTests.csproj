@@ -22,7 +22,7 @@
       CopyToOutputDirectory="PreserveNewest"
     />
     <Content
-      Include="../Equibles.UnitTests/TestAssets/Holdings13DG/sc13ga-morgan-stanley-x0202.xml;../Equibles.UnitTests/TestAssets/Holdings13DG/sc13d-multiple-type-codes.xml"
+      Include="../Equibles.UnitTests/TestAssets/Holdings13DG/sc13ga-morgan-stanley-x0202.xml;../Equibles.UnitTests/TestAssets/Holdings13DG/sc13d-multiple-type-codes.xml;../Equibles.UnitTests/TestAssets/Holdings13DG/sc13ga-vanguard-nvidia.xml;../Equibles.UnitTests/TestAssets/Holdings13DG/sc13ga-vanguard-nvidia-exit.xml;../Equibles.UnitTests/TestAssets/Holdings13DG/sc13g-allspring-innospec.xml;../Equibles.UnitTests/TestAssets/Holdings13DG/sc13ga-allspring-innospec.xml"
       Link="TestAssets/Holdings13DG/%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"
     />

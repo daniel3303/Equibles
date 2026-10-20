@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<Holdings13FRealtimeWorker>();
         services.AddHostedService<Holdings13DGRealtimeWorker>();
         services.AddHostedService<BeneficialOwnershipDetailSyncWorker>();
+        services.AddHostedService<Holdings13DGCoverageWorker>();
         services.AddHostedService<AumSnapshotDrainWorker>();
         services.AddHostedService<HolderIntelligenceDrainWorker>();
         services.AddHostedService<AumSnapshotRebuildWorker>();

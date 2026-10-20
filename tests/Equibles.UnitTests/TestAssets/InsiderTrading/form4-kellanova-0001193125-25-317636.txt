@@ -1,0 +1,217 @@
+<SEC-DOCUMENT>0001193125-25-317636.txt : 20251212
+<SEC-HEADER>0001193125-25-317636.hdr.sgml : 20251212
+<ACCEPTANCE-DATETIME>20251212163007
+ACCESSION NUMBER:		0001193125-25-317636
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20251211
+FILED AS OF DATE:		20251212
+DATE AS OF CHANGE:		20251212
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			KELLOGG W K FOUNDATION
+		CENTRAL INDEX KEY:			0001197916
+		ORGANIZATION NAME:           	
+		STATE OF INCORPORATION:			MI
+		FISCAL YEAR END:			0831
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-04171
+		FILM NUMBER:		251568530
+
+	BUSINESS ADDRESS:	
+		STREET 1:		ONE MICHIGAN AVE EAST
+		CITY:			BATTLE CREEK
+		STATE:			MI
+		ZIP:			49017
+		BUSINESS PHONE:		2699692256
+
+	MAIL ADDRESS:	
+		STREET 1:		ONE MICHIGAN AVENUE EAST
+		CITY:			BATTLE CREEK
+		STATE:			MI
+		ZIP:			49017
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			KELLOGG W K FOUNDATION TRUST
+		CENTRAL INDEX KEY:			0001197921
+		ORGANIZATION NAME:           	
+		STATE OF INCORPORATION:			MI
+		FISCAL YEAR END:			0831
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-04171
+		FILM NUMBER:		251568531
+
+	BUSINESS ADDRESS:	
+		STREET 1:		ONE MICHIGAN AVE EAST
+		CITY:			BATTLE CREEK
+		STATE:			MI
+		ZIP:			49017
+		BUSINESS PHONE:		3124445615
+
+	MAIL ADDRESS:	
+		STREET 1:		50 S. LA SALLE ST.
+		STREET 2:		B-10
+		CITY:			CHICAGO
+		STATE:			IL
+		ZIP:			60603
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			KELLANOVA
+		CENTRAL INDEX KEY:			0000055067
+		STANDARD INDUSTRIAL CLASSIFICATION:	GRAIN MILL PRODUCTS [2040]
+		ORGANIZATION NAME:           	04 Manufacturing
+		EIN:				380710690
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1228
+
+	BUSINESS ADDRESS:	
+		STREET 1:		412 N WELLS ST
+		CITY:			CHICAGO
+		STATE:			IL
+		ZIP:			60654
+		BUSINESS PHONE:		2699612000
+
+	MAIL ADDRESS:	
+		STREET 1:		412 N WELLS ST
+		CITY:			CHICAGO
+		STATE:			IL
+		ZIP:			60654
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	KELLOGG CO
+		DATE OF NAME CHANGE:	19920703
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>ownership.xml
+<DESCRIPTION>4
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0508</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2025-12-11</periodOfReport>
+
+    <notSubjectToSection16>true</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0000055067</issuerCik>
+        <issuerName>KELLANOVA</issuerName>
+        <issuerTradingSymbol>K</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001197921</rptOwnerCik>
+            <rptOwnerName>KELLOGG W K FOUNDATION TRUST</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerStreet1>ONE MICHIGAN AVENUE EAST</rptOwnerStreet1>
+            <rptOwnerStreet2></rptOwnerStreet2>
+            <rptOwnerCity>BATTLE CREEK</rptOwnerCity>
+            <rptOwnerState>MI</rptOwnerState>
+            <rptOwnerZipCode>49017</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>false</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001197916</rptOwnerCik>
+            <rptOwnerName>KELLOGG W K FOUNDATION</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerStreet1>ONE MICHIGAN AVENUE EAST</rptOwnerStreet1>
+            <rptOwnerStreet2></rptOwnerStreet2>
+            <rptOwnerCity>BATTLE CREEK</rptOwnerCity>
+            <rptOwnerState>MI</rptOwnerState>
+            <rptOwnerZipCode>49017</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>false</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>false</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2025-12-11</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+                <footnoteId id="F1"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>45097438</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>83.50</value>
+                    <footnoteId id="F1"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>0</value>
+                    <footnoteId id="F2"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">On December 11, 2025, pursuant to a certain Agreement and Plan of Merger, dated as of August 13, 2024, entered into by and among the Issuer, Acquiror 10VB8, LLC (&quot;Acquiror&quot;), Merger Sub 10VB8, LLC, a wholly owned subsidiary of Acquiror (&quot;Merger Sub&quot;), and, solely for the limited purposes specified in the Merger Agreement, Mars, Incorporated (the &quot;Merger Agreement&quot;), Merger Sub merged with and into the Issuer, with the Issuer surviving such merger as a wholly-owned subsidiary of Acquiror (the &quot;Merger&quot;). At the effective time of the Merger (the &quot;Effective Time&quot;), each share of Issuer common stock issued and outstanding immediately prior to the Effective Time (other than certain excluded shares) was cancelled and converted into the right to receive $83.50, in cash, without interest.</footnote>
+        <footnote id="F2">These shares were owned by the W.K. Kellogg Foundation Trust (the &quot;Trust&quot;) of which Steven A. Cahillane, La June Montgomery Tabron, Richard M. Tsoumas and The Northern Trust Company are Trustees with investment and voting power over the Issuer common stock held by the Trust, and the W.K. Kellogg Foundation is the sole beneficiary.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>/s/ Craig R. Carberry, Associate General Counsel, The Northern Trust Company, as Corporate Trustee of the W.K. Kellogg Foundation Trust and signing for the W.K. Kellogg Foundation pursuant to a Power of Attorney dated August 30, 2017</signatureName>
+        <signatureDate>2025-12-12</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

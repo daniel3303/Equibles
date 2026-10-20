@@ -124,12 +124,18 @@ public class HoldingsValueRecalculator
             cs => cs.Id,
             cs => cs.SecondaryTickers ?? []
         );
+        var seriesByIssuer = await RegisteredSeriesTickers.Load(
+            lookupContext,
+            splitsByStock.Values.SelectMany(splits => splits),
+            cancellationToken
+        );
 
         var (totalUpdated, deferredPairKeys) = await ResolveHoldingsWithNewPrices(
             prices,
             splitsByStock,
             primaryTickers,
             secondaryTickers,
+            seriesByIssuer,
             cancellationToken
         );
 
@@ -260,6 +266,7 @@ public class HoldingsValueRecalculator
         Dictionary<Guid, List<StockSplit>> splitsByStock,
         Dictionary<Guid, string> primaryTickers,
         Dictionary<Guid, List<string>> secondaryTickersByStock,
+        Dictionary<Guid, IReadOnlyDictionary<string, string>> seriesByIssuer,
         CancellationToken cancellationToken
     )
     {
@@ -283,6 +290,7 @@ public class HoldingsValueRecalculator
             splitsByStock.TryGetValue(stockId, out var splits);
             primaryTickers.TryGetValue(stockId, out var primaryTicker);
             secondaryTickersByStock.TryGetValue(stockId, out var secondaryTickers);
+            seriesByIssuer.TryGetValue(stockId, out var seriesByTicker);
             if (
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     reportDate,
@@ -290,7 +298,8 @@ public class HoldingsValueRecalculator
                     listedTicker,
                     primaryTicker,
                     secondaryTickers,
-                    out var shareCountFactor
+                    out var shareCountFactor,
+                    seriesByTicker
                 )
             )
             {

@@ -300,6 +300,21 @@ public static class InsiderFilingParser
         return string.IsNullOrEmpty(cik) ? null : cik.TrimStart('0');
     }
 
+    /// <summary>
+    /// The trading symbol an ownership filing states for <paramref name="issuerCik"/>, or null
+    /// when the document is not that issuer's (a filing in a reporting owner's feed) or states none.
+    /// </summary>
+    public static string GetIssuerTradingSymbol(string submissionText, string issuerCik)
+    {
+        var root = TryGetOwnershipRoot(submissionText);
+        var expectedCik = issuerCik?.Trim().TrimStart('0');
+        if (root == null || string.IsNullOrEmpty(expectedCik) || GetIssuerCik(root) != expectedCik)
+            return null;
+
+        var symbol = root.Element("issuer")?.Element("issuerTradingSymbol")?.Value?.Trim();
+        return string.IsNullOrEmpty(symbol) ? null : symbol;
+    }
+
     internal static InsiderTransaction ParseTransaction(
         XElement txElement,
         InsiderOwner owner,
