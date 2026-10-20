@@ -7,8 +7,9 @@ public enum StockHolderRowFlags
     None = 0,
 
     /// <summary>
-    /// A zero balance, an insider filing older than 24 months, or a 13D or 13G older than the 13F
-    /// quarter of the holder or of the parent it nests under; hidden from the default view.
+    /// A zero balance, an insider filing older than 24 months, a 13D or 13G older than the 13F
+    /// quarter of the holder or of the parent it nests under, or a row its own lane dates as no
+    /// longer current; hidden from the default view.
     /// </summary>
     Stale = 1 << 0,
 

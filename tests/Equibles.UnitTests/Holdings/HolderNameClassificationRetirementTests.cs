@@ -3,8 +3,8 @@ using System.Text.RegularExpressions;
 namespace Equibles.UnitTests.Holdings;
 
 // InstitutionalHolder.Classification was filled by matching words in the filer's name. Holder types
-// now come only from regulatory evidence (InstitutionalHolderProfile); the column stays mapped until
-// it is dropped, so only its mapping lines may name it, and no code may read, write or compute it.
+// come only from regulatory evidence (InstitutionalHolderProfile); the property and its enum are gone,
+// and no code may bring back a reader, a writer or a name classifier.
 public class HolderNameClassificationRetirementTests
 {
     private const string ThisFile =
@@ -22,23 +22,6 @@ public class HolderNameClassificationRetirementTests
         new(@"nameof\((?:\w+\.)*Classification\)"),
     ];
 
-    // The entity and enum still map the column; these exact lines are the only allowed mentions.
-    private static readonly HashSet<(string Path, string Line)> MappingLines =
-    [
-        (
-            "src/Equibles.Holdings.Data/Models/InstitutionalHolder.cs",
-            "[Index(nameof(Classification))]"
-        ),
-        (
-            "src/Equibles.Holdings.Data/Models/InstitutionalHolder.cs",
-            "public FundClassification Classification { get; set; }"
-        ),
-        (
-            "src/Equibles.Holdings.Data/Models/FundClassification.cs",
-            "public enum FundClassification"
-        ),
-    ];
-
     private static readonly HashSet<string> SkippedDirectories =
     [
         "bin",
@@ -51,7 +34,6 @@ public class HolderNameClassificationRetirementTests
     public void No_code_reads_or_writes_the_name_derived_holder_classification()
     {
         var offenders = ScannedLines()
-            .Where(item => !MappingLines.Contains((item.Path, item.Line.Trim())))
             .Where(item => Forbidden.Any(pattern => pattern.IsMatch(item.Line)))
             .Select(item => $"{item.Path}:{item.Number}: {item.Line.Trim()}")
             .ToList();
@@ -63,20 +45,18 @@ public class HolderNameClassificationRetirementTests
             );
     }
 
-    // Guards the scan itself: an empty file set or a stale mapping line would let it pass on nothing.
+    // Guards the scan itself: an empty file set would let it pass on nothing.
     [Fact]
-    public void The_scan_reads_the_holdings_importer_and_every_mapping_line()
+    public void The_scan_reads_the_holdings_importer_and_the_holder_entity()
     {
-        var lines = ScannedLines().ToList();
-
-        lines
+        ScannedLines()
             .Select(item => item.Path)
+            .Distinct()
             .Should()
-            .Contain("src/Equibles.Holdings.HostedService/Services/HoldingsImportService.cs");
-        lines
-            .Select(item => (item.Path, item.Line.Trim()))
-            .Should()
-            .Contain(MappingLines, "an allowed mapping line that no longer exists must be removed");
+            .Contain([
+                "src/Equibles.Holdings.HostedService/Services/HoldingsImportService.cs",
+                "src/Equibles.Holdings.Data/Models/InstitutionalHolder.cs",
+            ]);
     }
 
     [Fact]

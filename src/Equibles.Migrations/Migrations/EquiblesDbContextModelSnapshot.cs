@@ -3627,9 +3627,6 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<int>("Classification")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("ConfidentialTreatmentRequested")
                         .HasColumnType("boolean");
 
@@ -3664,8 +3661,6 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("Cik")
                         .IsUnique();
-
-                    b.HasIndex("Classification");
 
                     b.HasIndex("Name");
 
