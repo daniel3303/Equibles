@@ -52,4 +52,30 @@ public class UltimateAggregationTests
                     + summary.Schedule13DGOnly.Shares
             );
     }
+
+    [Fact]
+    public void UltimateAggregation_NeverAddsABlockOrInsiderNamingA13FFiler()
+    {
+        // 777 owns no rollup to FMR, yet its 13D names FMR as a reporting person, and the insider
+        // 900 files a 13D naming 777: both report shares FMR's 13F already counts.
+        var fmr = Form13F("315066", 5_000);
+        var group13D = Schedule13D("777", 5_100, new DateOnly(2026, 8, 1), "777", "315066");
+        var insider = Insider("900", 400);
+        var insider13D = Schedule13D("900", 450, new DateOnly(2026, 8, 2), "900", "777");
+        var rows = new List<StockHolderRow> { fmr, group13D, insider, insider13D };
+        var rollups = new Dictionary<string, HolderRollup>();
+        StockOwnershipPrecedence.Arrange(
+            rows,
+            new StockOwnershipPrecedence.Context { Rollups = rollups, Today = Today }
+        );
+        OwnershipSummaryCalculator.Build(
+            rows,
+            new OwnershipSummaryCalculator.Context { SharesOutstanding = 20_000 }
+        );
+
+        var groups = UltimateAggregation.Build(rows, rollups, cik => cik, 20_000);
+
+        groups.Sum(group => group.Shares).Should().Be(5_000);
+        groups.Should().ContainSingle(group => group.UltimateCik == "315066");
+    }
 }

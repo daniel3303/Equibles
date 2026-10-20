@@ -138,7 +138,7 @@ public class StockOwnershipTools
         ReadOnly = true
     )]
     [Description(
-        "Get who owns a stock, as shares and % of shares outstanding: 13F institutions, insiders (Forms 3, 4, 5, single-class issuers only), 13D/13G blocks no 13F report contains, and the remaining float, flagged rather than clipped when negative. Registered funds are shown but never summed, since their shares sit inside their advisers' 13F reports. Each holder counts once: insiders who file 13Fs, holders a 13F filer reports and 13D co-filers of 13F filers are left out of the other lines, by CIK and SEC reporting links, never by name. Also splits the 13F shares by holder type, style and location. view=ultimate adds the largest ultimate parents."
+        "Get who owns a stock, as shares and % of shares outstanding: 13F institutions, insiders (Forms 3, 4, 5, single-class issuers only), 13D/13G blocks no 13F report already holds, and the remaining float, flagged rather than clipped when negative. Registered funds are shown but never summed, since their shares sit inside their advisers' 13F reports. Each holder counts once: insiders who file 13Fs, holders a 13F filer reports, and the filers and persons of any 13D or 13G that names a 13F filer, directly or through filings naming one another, are left out of the other lines, by CIK and SEC reporting links, never by name. A foreign private issuer's count is in ordinary shares, a different unit, so it gets no % or remainder. Also splits the 13F shares by holder type, style and location. view=ultimate adds the largest ultimate parents."
     )]
     public Task<string> GetOwnershipSummary(
         [Description("Listed security ticker (e.g., NVDA, VOO)")] string ticker,
@@ -377,7 +377,7 @@ public class StockOwnershipTools
                 $"_{McpFormat.WholeNumber(summary.SplitUnresolvedRows)} summed rows keep their filed counts because a split since cannot be attributed to the listing._"
             );
         result.AppendLine(
-            "_13D/G-only counts each filer's latest 13D or 13G that no 13F report of the listing contains and no counted insider files; filings naming one another's filers count once. Funds are never summed: their shares sit inside their advisers' 13F reports._"
+            "_13D/G-only counts each filer's latest 13D or 13G that no 13F report of the listing contains, that names no 13F filer (directly or through filings naming one another) and that no counted insider files; filings naming one another's filers count once. Funds are never summed: their shares sit inside their advisers' 13F reports._"
         );
 
         AppendBreakdown(result, "By holder type (13F shares)", summary.ByHolderType);

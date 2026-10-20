@@ -147,8 +147,69 @@ public class OwnershipSummaryTests
     }
 
     [Fact]
+    public void Schedule13DGOnly_BlockNamingA13FFilerNotCounted()
+    {
+        // A 13D naming a 13F filer as a reporting person reports shares that 13F already counts.
+        var filer = Form13F("100", 3_000);
+        var group13D = Schedule13D("900", 3_200, new DateOnly(2026, 8, 1), "900", "100");
+        // A block naming a person of that 13D is the same group, however far the chain runs.
+        var chained = Schedule13D("950", 3_150, new DateOnly(2026, 8, 2), "950", "900");
+
+        var summary = Summarize([filer, group13D, chained]);
+
+        summary.Institutional.Shares.Should().Be(3_000);
+        summary.Schedule13DGOnly.Shares.Should().Be(0);
+        summary.Schedule13DGOnly.Holders.Should().Be(0);
+        summary.Remaining.Shares.Should().Be(7_000);
+        group13D.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+        chained.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Insider_FilingA13DNamingA13FFiler_Excluded()
+    {
+        // The insider and the 13F filer report one group's shares, which the 13F already counts.
+        var filer = Form13F("100", 3_000);
+        var insider = Insider("400", 2_000);
+        var group13D = Schedule13D("400", 3_100, new DateOnly(2026, 8, 1), "400", "100");
+
+        var summary = Summarize([filer, insider, group13D]);
+
+        summary.Insiders.Shares.Should().Be(0);
+        summary.Insiders.Holders.Should().Be(0);
+        summary.Schedule13DGOnly.Shares.Should().Be(0);
+        summary.Remaining.Shares.Should().Be(7_000);
+        insider.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+        group13D.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Schedule13DGOnly_MutuallyNamingFilingsWhereOnlyTheLaterNamesA13FFiler_NeitherCounted()
+    {
+        // The first filing names its co-filer and an individual; only the co-filer's names the 13F
+        // filer, so a single pass in row order would never reach the individual the first names.
+        var lead = Schedule13D("900", 1_200, new DateOnly(2026, 8, 1), "900", "901", "902");
+        var coFiler = Schedule13D("901", 1_150, new DateOnly(2026, 8, 2), "901", "900", "100");
+        var insider = Insider("902", 1_000);
+
+        var summary = Summarize([lead, coFiler, insider, Form13F("100", 3_000)]);
+
+        summary.Schedule13DGOnly.Shares.Should().Be(0);
+        summary.Insiders.Shares.Should().Be(0);
+        lead.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+        coFiler.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+        insider.Has(StockHolderRowFlags.NotSummed).Should().BeTrue();
+        OwnershipSummaryCalculator
+            .Covered([lead, coFiler, insider])
+            .Should()
+            .BeEmpty("no 13F filer is among these rows");
+    }
+
+    [Fact]
     public void PercentUnavailable_LeavesSharesAndDropsPercent()
     {
+        // A foreign private issuer's count is in ordinary shares, a different unit from the 13F
+        // rows, so neither a percent nor a remainder may be taken from it.
         var summary = OwnershipSummaryCalculator.Build(
             [Form13F("100", 3_000)],
             new OwnershipSummaryCalculator.Context
@@ -160,5 +221,7 @@ public class OwnershipSummaryTests
 
         summary.Institutional.Shares.Should().Be(3_000);
         summary.Institutional.PercentOutstanding.Should().BeNull();
+        summary.Remaining.Should().BeNull();
+        summary.SharesOutstanding.Should().BeNull();
     }
 }

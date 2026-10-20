@@ -306,7 +306,7 @@ public class StockOwnershipReader
             return (null, "no shares outstanding count is on record");
         if (await _sharesOutstandingProvider.IsForeignPrivateIssuer(scope.Stock, cancellationToken))
             return (
-                shares,
+                null,
                 "a foreign private issuer reports ordinary shares, a different unit from the listed shares"
             );
         return (shares, null);

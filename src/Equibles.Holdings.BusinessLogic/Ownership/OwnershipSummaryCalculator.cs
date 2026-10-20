@@ -9,12 +9,13 @@ namespace Equibles.Holdings.BusinessLogic.Ownership;
 /// </summary>
 /// <remarks>
 /// Institutional is every 13F filer's common shares. Insiders count on single-class issuers only,
-/// leaving out 13F filers of the listing, holders a 13F filer's report contains and the CIKs a 13D
-/// names beside such a filer. A 13D or 13G block counts when no 13F report of the listing contains
-/// its filer and neither its filer nor a person it names is a counted insider; filings that name
-/// one another's filers are one group and count once, at the largest block, since reporting persons
-/// are never additive. Funds and non-US rows are never summed. Remaining is shares outstanding minus
-/// the summed lines, flagged rather than clipped when negative.
+/// leaving out every covered CIK (<see cref="Covered"/>): 13F filers of the listing, holders a 13F
+/// filer's report contains, and the persons of a 13D or 13G that names any of them. A 13D or 13G
+/// block counts when neither its filer nor a person it names is covered or a counted insider;
+/// filings that name one another's filers are one group and count once, at the largest block,
+/// since reporting persons are never additive. Funds and non-US rows are never summed. Remaining is
+/// shares outstanding minus the summed lines, flagged rather than clipped when negative, and absent
+/// with the shares outstanding whenever % Out is unavailable.
 /// </remarks>
 public static class OwnershipSummaryCalculator
 {
@@ -39,27 +40,22 @@ public static class OwnershipSummaryCalculator
 
     public static StockOwnershipSummary Build(IReadOnlyList<StockHolderRow> rows, Context context)
     {
+        // A count in another unit (a foreign private issuer's ordinary shares) or of another scope
+        // never meets the listed shares, so it is neither a denominator nor a remainder.
+        var outstanding =
+            context.PercentUnavailableReason == null ? context.SharesOutstanding : null;
         decimal? Percent(long shares) =>
-            context.PercentUnavailableReason == null && context.SharesOutstanding is > 0
-                ? Math.Round(100m * shares / context.SharesOutstanding.Value, 4)
-                : null;
+            outstanding is > 0 ? Math.Round(100m * shares / outstanding.Value, 4) : null;
 
         var institutional = rows.Where(row => row.Source == StockHolderSource.Form13F).ToList();
-        var filers = institutional
-            .Select(row => row.Cik)
-            .OfType<string>()
-            .ToHashSet(StringComparer.Ordinal);
-        // The persons a 13D names beside a filer that a 13F report of the listing contains.
-        var coPersons = rows.Where(row => IsSchedule(row.Source) && row.Covering13FCik != null)
-            .SelectMany(row => row.ReportingPersonCiks)
-            .ToHashSet(StringComparer.Ordinal);
+        var covered = Covered(rows);
 
         var insiders = rows.Where(row =>
                 row.Source == StockHolderSource.Insider
                 && context.InsidersNotSummedReason == null
                 && !row.Has(StockHolderRowFlags.Stale)
                 && row.Covering13FCik == null
-                && (row.Cik == null || (!filers.Contains(row.Cik) && !coPersons.Contains(row.Cik)))
+                && (row.Cik == null || !covered.Contains(row.Cik))
             )
             .ToList();
         var insiderCiks = insiders
@@ -71,8 +67,8 @@ public static class OwnershipSummaryCalculator
                 IsSchedule(row.Source)
                 && !row.Has(StockHolderRowFlags.Stale)
                 && row.Covering13FCik == null
-                && (row.Cik == null || !insiderCiks.Contains(row.Cik))
-                && !row.ReportingPersonCiks.Any(insiderCiks.Contains)
+                && !Names(row).Any(covered.Contains)
+                && !Names(row).Any(insiderCiks.Contains)
             )
             .ToList();
         var counted = LargestPerGroup(blocks);
@@ -93,13 +89,13 @@ public static class OwnershipSummaryCalculator
         var institutionalShares = institutional.Sum(row => row.Shares);
         var insiderShares = insiders.Sum(row => row.Shares);
         var blockShares = counted.Sum(row => row.Shares);
-        var remaining = context.SharesOutstanding is { } outstanding
-            ? outstanding - institutionalShares - insiderShares - blockShares
+        var remaining = outstanding is { } total
+            ? total - institutionalShares - insiderShares - blockShares
             : (long?)null;
 
         return new StockOwnershipSummary
         {
-            SharesOutstanding = context.SharesOutstanding,
+            SharesOutstanding = outstanding,
             PercentUnavailableReason = context.PercentUnavailableReason,
             Institutional = new OwnershipSummaryLine(
                 "Institutional (13F)",
@@ -147,6 +143,39 @@ public static class OwnershipSummaryCalculator
             StyleAsOf = context.StyleAsOf,
         };
     }
+
+    /// <summary>
+    /// The CIKs whose shares a 13F report of the listing already holds: its 13F filers, holders a
+    /// filer's report contains, and, until nothing changes, every person of a 13D or 13G whose
+    /// filer or any named person is already covered, since they all report the same block.
+    /// </summary>
+    internal static HashSet<string> Covered(IReadOnlyList<StockHolderRow> rows)
+    {
+        var covered = rows.Where(row =>
+                row.Cik != null
+                && (row.Source == StockHolderSource.Form13F || row.Covering13FCik != null)
+            )
+            .Select(row => row.Cik)
+            .ToHashSet(StringComparer.Ordinal);
+        var schedules = rows.Where(row => IsSchedule(row.Source)).ToList();
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var schedule in schedules)
+            {
+                var names = Names(schedule).ToList();
+                if (names.Any(covered.Contains))
+                    foreach (var cik in names)
+                        added |= covered.Add(cik);
+            }
+        } while (added);
+        return covered;
+    }
+
+    // A 13D or 13G's filer and the reporting persons it names, by CIK.
+    private static IEnumerable<string> Names(StockHolderRow row) =>
+        row.Cik == null ? row.ReportingPersonCiks : row.ReportingPersonCiks.Append(row.Cik);
 
     // Filings that name one another's filers report one group's shares; only the largest counts.
     private static List<StockHolderRow> LargestPerGroup(List<StockHolderRow> blocks)

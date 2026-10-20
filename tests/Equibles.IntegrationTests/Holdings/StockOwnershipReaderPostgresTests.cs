@@ -189,7 +189,41 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         (await tools.GetAllHolders("NVDA", source: "bogus")).Should().StartWith("Unknown source");
     }
 
-    private StockOwnershipReader Reader(IMemoryCache cache = null)
+    [Fact]
+    public async Task Read_AForeignPrivateIssuerHasNoSharesOutstandingOrRemaining()
+    {
+        var read = await Reader(foreignPrivateIssuer: true).Read(_nvda, "NVDA", complete: true);
+
+        read.Summary.SharesOutstanding.Should().BeNull();
+        read.Summary.Remaining.Should().BeNull();
+        read.Summary.Institutional.Shares.Should().Be(1_350_000);
+        read.Summary.Institutional.PercentOutstanding.Should().BeNull();
+        read.Rows.Should().OnlyContain(row => row.PercentOutstanding == null);
+
+        var tools = new StockOwnershipTools(
+            new EquityIssuerRepository(DbContext),
+            Reader(foreignPrivateIssuer: true),
+            new StockBeneficialOwnershipReader(
+                new InstitutionalHoldingRepository(DbContext),
+                new StockSplitRepository(DbContext),
+                new FixedTime(Today)
+            ),
+            ErrorManager,
+            NullLogger<StockOwnershipTools>()
+        );
+        var summary = await tools.GetOwnershipSummary("NVDA");
+        summary.Should().NotContain("Shares outstanding");
+        summary.Should().NotContain("| Remaining |");
+        summary
+            .Should()
+            .Contain("_% Out is unavailable: a foreign private issuer reports ordinary shares");
+        (await tools.GetAllHolders("NVDA")).Should().NotContain("shares outstanding.");
+    }
+
+    private StockOwnershipReader Reader(
+        IMemoryCache cache = null,
+        bool foreignPrivateIssuer = false
+    )
     {
         var holdingRepository = new InstitutionalHoldingRepository(DbContext);
         var holderRepository = new InstitutionalHolderRepository(DbContext);
@@ -198,6 +232,9 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         shares
             .GetCurrentSharesOutstanding(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(SharesOutstanding);
+        shares
+            .IsForeignPrivateIssuer(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
+            .Returns(foreignPrivateIssuer);
         return new StockOwnershipReader(
             [
                 new Form13FContributor(holdingRepository, holderRepository),
