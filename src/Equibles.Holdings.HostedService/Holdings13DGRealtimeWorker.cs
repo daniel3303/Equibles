@@ -14,20 +14,20 @@ namespace Equibles.Holdings.HostedService;
 /// Near-real-time Schedule 13D/13G ingestion worker. Sweeps EDGAR's daily index
 /// for newly accepted beneficial-ownership filings and feeds them through the
 /// shared holdings import pipeline. Unlike 13F there is no quarterly bulk data
-/// set to reconcile against, so this worker is the sole source — and coverage
-/// only goes back to 2024-12-18, when 13D/13G became machine-readable XML.
+/// set to reconcile against; <see cref="Holdings13DGCoverageWorker"/> re-walks the
+/// history behind this sweep's trailing window.
 /// </summary>
 public class Holdings13DGRealtimeWorker : BaseScraperWorker
 {
-    // Schedule 13D/13G became machine-readable XML on this date; earlier filings
-    // are unstructured HTML and out of scope, so the sweep never goes before it.
-    private static readonly DateOnly ScheduleXmlInception = new(2024, 12, 18);
+    // Filers could first submit Schedule 13D/13G as machine-readable XML on this date (it became
+    // mandatory on 2024-12-18); earlier filings are unstructured text or HTML and out of scope.
+    internal static readonly DateOnly ScheduleXmlInception = new(2023, 12, 18);
 
     // Once a watermark exists, still re-sweep this many recent days so late and
     // amended filings (which carry a fresh accession) are always re-checked.
-    private const int TrailingReSweepDays = 14;
+    internal const int TrailingReSweepDays = 14;
 
-    private const string WorkerStateName = "Holdings13DGRealtime";
+    internal const string WorkerStateName = "Holdings13DGRealtime";
 
     private readonly IConfiguration _configuration;
     private readonly WorkerOptions _workerOptions;

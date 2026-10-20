@@ -509,6 +509,13 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             )
             .StillSucceeded(DbContext);
 
+    /// <summary>When the stored parent rollups were last replaced; null before the first refresh.</summary>
+    public Task<DateTime?> GetRollupsComputedAt(CancellationToken cancellationToken = default) =>
+        DbContext
+            .Set<HolderRollup>()
+            .Select(rollup => (DateTime?)rollup.ComputedAt)
+            .MaxAsync(cancellationToken);
+
     /// <summary>The stored parent rollups of these canonical CIKs.</summary>
     public IQueryable<HolderRollup> GetRollups(IReadOnlyCollection<string> canonicalCiks) =>
         DbContext.Set<HolderRollup>().Where(rollup => canonicalCiks.Contains(rollup.Cik));

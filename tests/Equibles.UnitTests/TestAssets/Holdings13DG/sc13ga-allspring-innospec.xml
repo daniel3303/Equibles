@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13g" xmlns:com="http://www.sec.gov/edgar/common">
+    <schemaVersion>X0202</schemaVersion>
+<headerData>
+        <submissionType>SCHEDULE 13G/A</submissionType>
+        <previousAccessionNumber>0001890906-26-000051</previousAccessionNumber>
+        <filerInfo>
+            <filer>
+                <filerCredentials>
+                    <cik>0001890906</cik>
+                    <ccc>XXXXXXXX</ccc>
+                </filerCredentials>
+            </filer>
+            <liveTestFlag>LIVE</liveTestFlag>
+
+
+        </filerInfo>
+    </headerData>
+    <formData>
+        <coverPageHeader>
+            <amendmentNo>6</amendmentNo>
+            <securitiesClassTitle>Common Stock SH</securitiesClassTitle>
+            <eventDateRequiresFilingThisStatement>09/30/2026</eventDateRequiresFilingThisStatement>
+            <issuerInfo>
+                <issuerCik>0001054905</issuerCik>
+                <issuerName>Innospec Inc</issuerName>
+                <issuerCusips>
+                    <issuerCusipNumber>45768S105</issuerCusipNumber>
+                </issuerCusips>
+                <issuerPrincipalExecutiveOfficeAddress>
+                    <com:street1>8310 SOUTH VALLEY HIGHWAY</com:street1>
+                    <com:street2>SUITE 350</com:street2>
+                    <com:city>ENGLEWOOD</com:city>
+                    <com:stateOrCountry>CO</com:stateOrCountry>
+                    <com:zipCode>80112</com:zipCode>
+                </issuerPrincipalExecutiveOfficeAddress>
+            </issuerInfo>
+            <designateRulesPursuantThisScheduleFiled>
+                <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>
+            </designateRulesPursuantThisScheduleFiled>
+        </coverPageHeader>
+        <coverPageHeaderReportingPersonDetails>
+
+            <reportingPersonName>Allspring Global Investments Holdings, LLC</reportingPersonName>
+            <memberGroup>b</memberGroup>
+            <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+            <reportingPersonBeneficiallyOwnedNumberOfShares>
+                <soleVotingPower>1160597.00</soleVotingPower>
+                <sharedVotingPower>0</sharedVotingPower>
+                <soleDispositivePower>1161421.00</soleDispositivePower>
+                <sharedDispositivePower>0</sharedDispositivePower>
+            </reportingPersonBeneficiallyOwnedNumberOfShares>
+            <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>1161421.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+            <classPercent>4.7</classPercent>
+            <typeOfReportingPerson>HC</typeOfReportingPerson>
+        </coverPageHeaderReportingPersonDetails>
+        <items>
+            <item1>
+                <issuerName>Innospec Inc</issuerName>
+                <issuerPrincipalExecutiveOfficeAddress>8310 SOUTH VALLEY HIGHWAY, SUITE 350, ENGLEWOOD, US-CO, 80112, US</issuerPrincipalExecutiveOfficeAddress>
+            </item1>
+            <item2>
+                <filingPersonName>Allspring Global Investments Holdings, LLC</filingPersonName>
+                <principalBusinessOfficeOrResidenceAddress>1415 Vantage Park Drive, Charlotte, 28203, North Carolina, United States</principalBusinessOfficeOrResidenceAddress>
+                <citizenship>DELAWARE</citizenship>
+            </item2>
+            <item3>
+                <notApplicableFlag>N</notApplicableFlag>
+                <typeOfPersonFiling>HC</typeOfPersonFiling>
+            </item3>
+            <item4>
+                <amountBeneficiallyOwned>1,161,421</amountBeneficiallyOwned>
+                <classPercent>4.7</classPercent>
+                <numberOfSharesPersonHas>
+                    <solePowerOrDirectToVote>1,160,597</solePowerOrDirectToVote>
+                    <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>
+                    <solePowerOrDirectToDispose>1,161,421</solePowerOrDirectToDispose>
+                    <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>
+                </numberOfSharesPersonHas>
+            </item4>
+            <item5>
+                <notApplicableFlag>N</notApplicableFlag>
+                <classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>
+            </item5>
+            <item6>
+                <notApplicableFlag>N</notApplicableFlag>
+                <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>The securities as to which this Schedule is filed are owned of record by clients of one or more investment Advisers identified in Exhibit A directly or indirectly owned by Allspring Global Investments Holdings, LLC.  Those Clients have the right to receive, or the power to direct the receipt of, dividends from, or the proceeds for the sale of, such securities. No such client is known to have such right or power with respect to more than five percent of this class of securities, except as follows:
+None
+</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>
+            </item6>
+            <item7>
+                <notApplicableFlag>N</notApplicableFlag>
+                <subsidiaryIdentificationAndClassification>See Exhibit A</subsidiaryIdentificationAndClassification>
+            </item7>
+            <item8>
+                <notApplicableFlag>Y</notApplicableFlag>
+            </item8>
+            <item9>
+                <notApplicableFlag>Y</notApplicableFlag>
+            </item9>
+            <item10>
+                <notApplicableFlag>N</notApplicableFlag>
+                <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under § 240.14a-11. </certifications>
+            </item10>
+        </items>
+        <exhibitInfo>Exhibit A
+Subsidiary
+Allspring Global Investments, LLC - IA
+Allspring Funds Management, LLC - IA
+*Entity beneficially owns 5% or greater of the outstanding shares of the security class being reported on
+this schedule 13G
+</exhibitInfo>
+        <signatureInformation>
+            <reportingPersonName>Allspring Global Investments Holdings, LLC</reportingPersonName>
+            <signatureDetails>
+                <signature>Jennifer Grunberg</signature>
+                <title>Senior Compliance Manager</title>
+                <date>10/05/2026</date>
+            </signatureDetails>
+        </signatureInformation>
+    </formData>
+</edgarSubmission>
