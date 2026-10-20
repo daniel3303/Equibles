@@ -21,6 +21,8 @@ using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
+using Equibles.Holdings.BusinessLogic.Signals;
+using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Extensions;
@@ -79,6 +81,8 @@ public class InstitutionalHoldingsTools
         "filersdelta",
         "filersdeltaasc",
         "value",
+        "conviction",
+        "crowding",
     ];
 
     private readonly InstitutionalHoldingRepository _holdingRepository;
@@ -98,6 +102,11 @@ public class InstitutionalHoldingsTools
     // source registers nothing and resolves an empty one.
     private readonly IHolderStrategyStatements _strategyStatements;
 
+    // Optional so hand-built test instances keep working; DI always supplies them. Without them
+    // the signal sorts and the portfolio's tenure and cost columns read as not computed.
+    private readonly HolderSignalsReader _holderSignalsReader;
+    private readonly HolderPositionFactsReader _positionFactsReader;
+
     public InstitutionalHoldingsTools(
         InstitutionalHoldingRepository holdingRepository,
         InstitutionalHolderRepository holderRepository,
@@ -112,10 +121,14 @@ public class InstitutionalHoldingsTools
         MarketActivityShareRestater marketActivityShareRestater = null,
         HolderMixReader holderMixReader = null,
         IEnumerable<IHolderStrategyStatements> strategyStatements = null,
+        HolderSignalsReader holderSignalsReader = null,
+        HolderPositionFactsReader positionFactsReader = null,
         FundOwnershipReader fundOwnershipReader = null
     )
     {
         _strategyStatements = strategyStatements?.FirstOrDefault();
+        _holderSignalsReader = holderSignalsReader;
+        _positionFactsReader = positionFactsReader;
         _fundOwnershipReader = fundOwnershipReader;
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
@@ -1136,12 +1149,27 @@ public class InstitutionalHoldingsTools
                 // stock's post-report-date splits. Value is a paired per-holding dollar figure
                 // and stays as reported.
                 var splitsByStock = await LoadSplitsByStock(holdings.Select(h => h.EquityIssuerId));
+                var positionFacts =
+                    _positionFactsReader == null
+                        ? []
+                        : await _positionFactsReader.Read(
+                            holder,
+                            targetDate,
+                            holdings
+                                .Where(h => h.ShareType == ShareType.Shares && h.OptionType == null)
+                                .Select(h => new HolderSecurityKey(
+                                    h.EquityIssuerId,
+                                    h.ListedTicker
+                                ))
+                                .ToList()
+                        );
 
                 return RenderInstitutionPortfolio(
                     holder,
                     targetDate,
                     holdings,
                     splitsByStock,
+                    positionFacts,
                     offset,
                     totalRows,
                     totalPositions,
@@ -1161,6 +1189,7 @@ public class InstitutionalHoldingsTools
         DateOnly targetDate,
         List<InstitutionalHolding> holdings,
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        IReadOnlyDictionary<HolderSecurityKey, HolderPositionFacts> positionFacts,
         int offset,
         int totalRows,
         int totalPositions,
@@ -1223,8 +1252,8 @@ public class InstitutionalHoldingsTools
         var result = MarkdownTable.Start(
             $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {FormatDate(targetDate)}:",
             subtitle,
-            "| # | Ticker | Company | Type | Shares | Value ($M) | % of Portfolio |",
-            "|---|--------|---------|------|--------|-----------|----------------|"
+            "| # | Ticker | Company | Type | Shares | Value ($M) | % of Portfolio | Held (qtrs) | Est. cost/share |",
+            "|---|--------|---------|------|--------|-----------|----------------|-------------|-----------------|"
         );
 
         result.AppendNumberedRows(
@@ -1247,14 +1276,30 @@ public class InstitutionalHoldingsTools
                             )
                         );
                 var pct = Percentage.Of(h.Value, totalValue);
+                var facts =
+                    h.ShareType == ShareType.Shares && h.OptionType == null
+                        ? positionFacts.GetValueOrDefault(
+                            new HolderSecurityKey(h.EquityIssuerId, h.ListedTicker)
+                        )
+                        : null;
                 // Rank is the ABSOLUTE position in the value-ranked rows, so page two
                 // continues 21, 22, … instead of restarting at 1.
                 return $"| {offset + rank} | {listedTicker ?? "—"} | {h.Issuer.Name} | "
                     + $"{PositionType(h.OptionType, h.ShareType)} | "
                     + $"{McpFormat.WholeNumber(shares)} | "
                     + $"{FormatMillions(h.Value)} | "
-                    + $"{FormatPercent(pct)}% |";
+                    + $"{FormatPercent(pct)}% | "
+                    + $"{HeldQuartersCell(facts)} | "
+                    + $"{EstimatedCostCell(facts, h.Shares, shares)} |";
             }
+        );
+
+        result.AppendLine();
+        result.AppendLine(
+            "_Held (qtrs): consecutive quarters the filer has reported the position, a + when it was already held when coverage starts. "
+                + "Est. cost/share is ESTIMATED, never filed: each buy is costed at the quarter's average price and sells keep the cost, "
+                + "restated onto today's share basis like the Shares column; 'before history' means it was already held when the filer's "
+                + "comparable history starts, 'unpriced' that a buy had no trusted price._"
         );
 
         // A 13F reports option positions beside common stock, and a put is a bet AGAINST the
@@ -2166,7 +2211,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetMostHeldStocks", Title = "Most Widely Held Stocks", ReadOnly = true)]
     [Description(
-        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a quarter. Rank by filer count (default), quarter-over-quarter filer-count change, or total published position value. Values use report-date closing prices, may fall back to filer values, and can be zero when unvalued. Includes Δ filers, total value, Δ value, and share of the 13F universe. The first complete report quarter is published; earlier rankings and boundary-quarter deltas are unavailable. Only currently-held stocks rank; sold-out names use GetMarketWide13FActivity. During the newest quarter's open filing window, non-filers carry prior-quarter positions (noted in output)."
+        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a quarter. Rank by filer count (default), quarter-over-quarter filer-count change, total published position value, conviction (filers holding it among their ten largest positions) or crowding (high-turnover and private-fund adviser shares as % of shares outstanding), both among stocks 10+ filers hold. Conviction and crowding read the newest closed quarter measured across every 13F book (an open or unmeasured quarter snaps to it, noted). Values use report-date closing prices, may fall back to filer values, and can be zero when unvalued. Includes Δ filers, total value, Δ value, and share of the 13F universe. The first complete report quarter is published; earlier rankings and boundary-quarter deltas are unavailable. Only currently-held stocks rank; sold-out names use GetMarketWide13FActivity. During the newest quarter's open filing window, non-filers carry prior-quarter positions (noted in output)."
     )]
     public Task<string> GetMostHeldStocks(
         [Description(
@@ -2174,7 +2219,7 @@ public class InstitutionalHoldingsTools
         )]
             string reportDate = null,
         [Description(
-            "Sort by: 'filers' (default, # of 13F filers desc), 'filersDelta' (QoQ filer-count delta desc — warming names), 'filersDeltaAsc' (QoQ filer-count delta asc — cooling names), or 'value' (current total published position value desc)"
+            "Sort by: 'filers' (default, # of 13F filers desc), 'filersDelta' (QoQ filer-count delta desc — warming names), 'filersDeltaAsc' (QoQ filer-count delta asc — cooling names), 'value' (current total published position value desc), 'conviction' (filers holding it among their ten largest positions desc) or 'crowding' (high-turnover and private-fund adviser shares as % of shares outstanding desc)"
         )]
             string sort = "filers",
         [Description("Maximum number of stocks to return (default: 25, clamped to 1-500)")]
@@ -2190,6 +2235,14 @@ public class InstitutionalHoldingsTools
                         "sort",
                         sort,
                         string.Join(", ", ValidMostHeldSorts)
+                    );
+                if (normalizedSort is "conviction" or "crowding")
+                    return await RenderSignalsRanking(
+                        reportDate,
+                        normalizedSort == "crowding"
+                            ? StockSignalsSort.Crowding
+                            : StockSignalsSort.Conviction,
+                        McpLimit.Clamp(maxResults)
                     );
 
                 var (targetDate, previousDate, windowOpen, dateNote, coverage, error) =
@@ -2286,6 +2339,89 @@ public class InstitutionalHoldingsTools
             $"sort: {sort}, max: {maxResults}"
         );
     }
+
+    // Conviction and crowding come from the holder-intelligence signals, measured only for closed
+    // quarters; a requested quarter not measured yet snaps to the newest measured one before it.
+    private async Task<string> RenderSignalsRanking(
+        string reportDate,
+        StockSignalsSort sort,
+        int maxResults
+    )
+    {
+        var quarters = _holderSignalsReader == null ? [] : await _holderSignalsReader.Quarters();
+        if (quarters.Count == 0)
+            return "Conviction and crowding rankings are not computed yet; the 13F holder-intelligence rebuild has not published a quarter with them.";
+        var (targetDate, dateNote, dateError) = ResolveReportDateStrict(reportDate, quarters);
+        if (dateError != null)
+            return dateError;
+        var rows = await _holderSignalsReader.RankQuarter(targetDate, sort);
+        if (rows.Count == 0)
+            return $"No stocks have holder signals for {FormatDate(targetDate)}.";
+        var label = sort == StockSignalsSort.Crowding ? "crowding" : "conviction";
+        var result = new StringBuilder();
+        result.AppendLine(
+            $"Most-held 13F stocks as of {FormatDate(targetDate)}, sorted by {label}"
+        );
+        result.AppendLine(
+            sort == StockSignalsSort.Crowding
+                ? $"{McpFormat.WholeNumber(rows.Count)} primary listings held by at least {StockHolderSignalsCalculator.MinimumRankedFilers} filers, with a current single-class share count; crowding is shares held by high-turnover filers and private-fund advisers over shares outstanding"
+                : $"{McpFormat.WholeNumber(rows.Count)} primary listings held by at least {StockHolderSignalsCalculator.MinimumRankedFilers} filers; conviction holders are filers with the stock among their ten largest positions"
+        );
+        result.AppendLine();
+        result.AppendNumberedTable(
+            "| # | Ticker | Company | # Filers | Conviction holders | % of filers | Crowding (% of shares out) | Crowding percentile | Private-fund advisers (% of shares out) | Total $ Value ($M) |",
+            "|---|--------|---------|----------|--------------------|-------------|----------------------------|---------------------|-----------------------------------------|--------------------|",
+            rows.Take(maxResults).ToList(),
+            (rank, row) =>
+            {
+                var signals = row.Signals;
+                return $"| {rank} | {row.Ticker} | {MarkdownTable.EscapeCell(row.Name)} | "
+                    + $"{McpFormat.WholeNumber(signals.Filers)} | "
+                    + $"{McpFormat.WholeNumber(signals.ConvictionHolders)} | "
+                    + $"{SignalPercent(StockHolderSignalsMath.ConvictionShare(signals))} | "
+                    + $"{SignalPercent(StockHolderSignalsMath.Crowding(signals))} | "
+                    + $"{(signals.CrowdingPercentile is { } percentile ? McpFormat.Invariant(percentile, "F0") : "—")} | "
+                    + $"{SignalPercent(StockHolderSignalsMath.PrivateFundOwnership(signals))} | "
+                    + $"{FormatMillions(signals.Value)} |";
+            }
+        );
+        var latest = quarters[0];
+        var notes = JoinNotes(
+            dateNote,
+            targetDate == latest
+                ? null
+                : $"Note: the newest measured quarter is {FormatDate(latest)}.",
+            "Note: measured once the quarter's filing window closes, from each filer's own 13F; shares outstanding is the cover-page count dated on or before the quarter end, and a multi-class or foreign issuer, a count more than two quarters old or one below the 13F shares held shows no percentage."
+        );
+        return notes == null ? result.ToString() : $"{result}\n{notes}";
+    }
+
+    private static string SignalPercent(decimal? fraction) =>
+        fraction is { } value ? McpFormat.Invariant(value * 100, "F2") + "%" : "—";
+
+    private static string HeldQuartersCell(HolderPositionFacts facts) =>
+        facts?.HeldQuarters is { } quarters
+            ? McpFormat.WholeNumber(quarters) + (facts.HeldSinceCoverageStart ? "+" : "")
+            : "—";
+
+    // The slot is on the quarter's filing basis; the Shares column is restated onto today's, so
+    // the cost per share moves by the inverse of the same factor.
+    private static string EstimatedCostCell(
+        HolderPositionFacts facts,
+        long filedShares,
+        long restatedShares
+    ) =>
+        facts?.CostStatus switch
+        {
+            HolderCostStatus.Estimated
+                when facts.EstimatedCostPerShare is { } cost
+                    && filedShares > 0
+                    && restatedShares > 0 => "$"
+                + McpFormat.Price(cost * filedShares / restatedShares),
+            HolderCostStatus.UnknownEntry => "before history",
+            HolderCostStatus.Unpriced => "unpriced",
+            _ => "—",
+        };
 
     private static string RenderMostHeldStocksTable(
         DateOnly targetDate,

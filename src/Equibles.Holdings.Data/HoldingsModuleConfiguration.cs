@@ -361,6 +361,38 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             })
             .IsUnique()
             .AreNullsDistinct(false);
+        builder
+            .Entity<HolderPositionCostBasis>()
+            .HasIndex(p => new
+            {
+                p.InstitutionalHolderId,
+                p.EquityIssuerId,
+                p.ListedTicker,
+            })
+            .IsUnique()
+            .AreNullsDistinct(false);
+        builder
+            .Entity<StockQuarterlyHolderSignals>()
+            .HasIndex(s => new
+            {
+                s.EquityIssuerId,
+                s.ListedTicker,
+                s.ReportDate,
+            })
+            .IsUnique()
+            .AreNullsDistinct(false);
+        builder
+            .Entity<StockQuarterlyHolderOverlap>()
+            .HasIndex(o => new
+            {
+                o.EquityIssuerId,
+                o.ListedTicker,
+                o.ReportDate,
+                o.PeerEquityIssuerId,
+                o.PeerListedTicker,
+            })
+            .IsUnique()
+            .AreNullsDistinct(false);
 
         // Registered-fund ownership by N-CEN fund type, published per closed quarter by its own
         // drain; unique per exact listing with a null primary, and a retired issuer keeps its rows.

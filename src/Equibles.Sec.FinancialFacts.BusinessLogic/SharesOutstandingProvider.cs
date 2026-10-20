@@ -32,7 +32,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // sum across the axis members. Domestic filers use the us-gaap statement axis; IFRS filers
     // (20-F) report the same semantic on the ifrs-full share-capital axes — without them a
     // multi-class IFRS filer's per-class counts are invisible and a stale consolidated fact wins.
-    private static readonly string[] ClassOfStockAxes =
+    internal static readonly string[] ClassOfStockAxes =
     [
         "us-gaap:StatementClassOfStockAxis",
         "ifrs-full:ClassesOfShareCapitalAxis",
@@ -52,7 +52,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // definition, excluded from any per-class sum: the consolidated roll-up (summing it with the
     // classes it totals double-counts the company), treasury shares (issued but not outstanding),
     // and the ADS listing (a different unit from the ordinary-share classes beside it).
-    private static readonly string[] NonClassMembers =
+    internal static readonly string[] NonClassMembers =
     [
         "us-gaap:CommonStockMember",
         "us-gaap:TreasuryStockMember",

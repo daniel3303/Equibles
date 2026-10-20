@@ -15,6 +15,8 @@ using Equibles.Holdings.HostedService.Services.Benchmarks;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -62,6 +64,9 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         );
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddScoped<EquityIssuerRepository>();
+        services.AddScoped<FinancialFactRepository>();
+        services.AddScoped<FinancialConceptRepository>();
+        services.AddScoped<SharesOutstandingAsOfReader>();
         services.AddHolderBenchmarks();
         services.AddScoped<HolderIntelligenceRefreshService>();
         _provider = services.BuildServiceProvider();
@@ -1211,6 +1216,222 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         (await Metrics(Q2)).AdvisedSeriesAsOf.Should().BeNull("Filer One names no adviser");
     }
 
+    [Fact]
+    public async Task RebuildQuarter_CarriesTheEstimatedCostAndPublishesTheStockSignals()
+    {
+        await Seed(seed =>
+        {
+            seed.AddRange(Bars(_apple, 8m, 10m));
+            seed.AddRange(SessionBars(_apple.Presentation.Listing, new DateOnly(2024, 7, 1), 12m));
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_microsoft, _holder, Q1, 100, 1_000),
+                Filing(_holder, Q2),
+                Holding(_microsoft, _holder, Q2, 100, 1_000),
+                Holding(_apple, _holder, Q2, 200, 2_000),
+                Filing(_holder, Q3),
+                Holding(_microsoft, _holder, Q3, 100, 1_000),
+                Holding(_apple, _holder, Q3, 300, 3_600)
+            );
+        });
+
+        await Rebuild(Q1);
+        await Rebuild(Q2);
+        await Rebuild(Q3);
+
+        var opened = 210m / 26m;
+        var costs = await CostRows();
+        costs
+            .Keys.Should()
+            .BeEquivalentTo([_apple.Id], "Microsoft was held before the history starts");
+        var apple = costs[_apple.Id];
+        ((decimal)apple.CostPerShare[QuarterIndex(Q2)]).Should().BeApproximately(opened, 0.0001m);
+        ((decimal)apple.CostPerShare[QuarterIndex(Q3)])
+            .Should()
+            .BeApproximately((200m * opened + 100m * 12m) / 300m, 0.0001m, "100 more at 12");
+        apple.UnpricedMask.Should().Be(0);
+
+        await using var read = _fixture.CreateDbContext();
+        var signals = await read.Set<StockQuarterlyHolderSignals>()
+            .Where(row => row.ReportDate == Q2)
+            .ToDictionaryAsync(row => row.EquityIssuerId);
+        signals.Keys.Should().BeEquivalentTo([_apple.Id, _microsoft.Id]);
+        signals[_apple.Id].Filers.Should().Be(1);
+        signals[_apple.Id].Shares.Should().Be(200);
+        signals[_apple.Id].PricedShares.Should().Be(200);
+        signals[_apple.Id].EstimatedCostPerShare.Should().BeApproximately(opened, 0.0001m);
+        signals[_apple.Id].UnderwaterValueShare.Should().Be(0m, "bought near 8, worth 10");
+        signals[_microsoft.Id].PricedShares.Should().Be(0);
+        signals[_microsoft.Id].EstimatedCostPerShare.Should().BeNull();
+        signals[_microsoft.Id].SharesOutstandingBasis.Should().Be(SharesOutstandingBasis.None);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_AChangedCostSlotDirtiesEveryLaterQuarter()
+    {
+        await Seed(seed =>
+        {
+            seed.AddRange(Bars(_apple, 8m, 10m));
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 200, 2_000),
+                Filing(_holder, Q3),
+                Holding(_apple, _holder, Q3, 200, 2_000),
+                new HolderIntelligenceQuarterState { ReportDate = Q1 },
+                new HolderIntelligenceQuarterState { ReportDate = Q2 },
+                new HolderIntelligenceQuarterState { ReportDate = Q3 }
+            );
+        });
+        await Rebuild(Q1);
+        await Rebuild(Q2);
+        await Rebuild(Q3);
+        (await CostRows())[_apple.Id]
+            .CostPerShare[QuarterIndex(Q3)]
+            .Should()
+            .BeGreaterThan(0f, "a held position keeps its cost");
+        await ClearDirtyStamps();
+
+        await Rebuild(Q2);
+        (await QuarterState(Q3)).DirtyAt.Should().BeNull("an unchanged rebuild leaves Q3 alone");
+
+        // Without its bars the Q2 buy is unpriced, which Q3 carries forward.
+        await using (var mutate = _fixture.CreateDbContext())
+            await mutate.Set<EquityDailyStockPrice>().ExecuteDeleteAsync();
+        await Rebuild(Q2);
+
+        (await QuarterState(Q3)).DirtyAt.Should().NotBeNull();
+        var apple = (await CostRows())[_apple.Id];
+        apple.CostPerShare[QuarterIndex(Q2)].Should().Be(0f);
+        (apple.UnpricedMask & (1L << QuarterIndex(Q2))).Should().NotBe(0);
+        await Rebuild(Q3);
+        apple = (await CostRows())[_apple.Id];
+        apple.CostPerShare[QuarterIndex(Q3)].Should().Be(0f);
+        (apple.UnpricedMask & (1L << QuarterIndex(Q3))).Should().NotBe(0, "unpriced until sold");
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_ReplacesTheSignalsAndDropsOverlapPeersPastTheWindow()
+    {
+        await Seed(seed =>
+        {
+            seed.AddRange(Filing(_holder, Q2), Holding(_apple, _holder, Q2, 100, 1_000));
+            seed.AddRange(
+                new StockQuarterlyHolderSignals
+                {
+                    EquityIssuerId = _microsoft.Id,
+                    ReportDate = Q2,
+                    Filers = 9,
+                },
+                new StockQuarterlyHolderOverlap
+                {
+                    EquityIssuerId = _apple.Id,
+                    ReportDate = new DateOnly(2023, 6, 30),
+                    Rank = 1,
+                    PeerEquityIssuerId = _microsoft.Id,
+                    SharedHolders = 3,
+                    Similarity = 1m,
+                }
+            );
+        });
+
+        await Rebuild(Q2);
+
+        await using var read = _fixture.CreateDbContext();
+        (
+            await read.Set<StockQuarterlyHolderSignals>()
+                .Select(row => row.EquityIssuerId)
+                .ToListAsync()
+        )
+            .Should()
+            .BeEquivalentTo([_apple.Id]);
+        (await read.Set<StockQuarterlyHolderOverlap>().AnyAsync())
+            .Should()
+            .BeFalse("peers are kept for the newest four closed quarters only");
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_AFailedPublishKeepsThePublishedSignals()
+    {
+        await Seed(seed =>
+            seed.AddRange(Filing(_holder, Q2), Holding(_apple, _holder, Q2, 100, 1_000))
+        );
+        await Rebuild(Q2);
+        await Seed(seed => seed.Add(Holding(_microsoft, _holder, Q2, 50, 500)));
+
+        await using (var scope = _provider.CreateAsyncScope())
+        {
+            var failing = new FailingPublishRefreshService(
+                scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>(),
+                scope.ServiceProvider.GetRequiredService<HoldingsCorpusCoverage>()
+            );
+            var rebuild = () => failing.RebuildQuarter(Q2, Today, CancellationToken.None);
+            await rebuild.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        await using var read = _fixture.CreateDbContext();
+        (
+            await read.Set<StockQuarterlyHolderSignals>()
+                .Select(row => row.EquityIssuerId)
+                .ToListAsync()
+        )
+            .Should()
+            .BeEquivalentTo([_apple.Id]);
+    }
+
+    private async Task<Dictionary<Guid, HolderPositionCostBasis>> CostRows()
+    {
+        await using var read = _fixture.CreateDbContext();
+        return await read.Set<HolderPositionCostBasis>()
+            .Where(row => row.InstitutionalHolderId == _holder.Id)
+            .ToDictionaryAsync(row => row.EquityIssuerId);
+    }
+
+    private async Task ClearDirtyStamps()
+    {
+        await using var reset = _fixture.CreateDbContext();
+        await reset
+            .Set<HolderIntelligenceQuarterState>()
+            .ExecuteUpdateAsync(setters =>
+                setters.SetProperty(state => state.DirtyAt, (DateTime?)null)
+            );
+    }
+
+    private async Task<HolderIntelligenceQuarterState> QuarterState(DateOnly reportDate)
+    {
+        await using var read = _fixture.CreateDbContext();
+        return await read.Set<HolderIntelligenceQuarterState>()
+            .AsNoTracking()
+            .SingleAsync(state => state.ReportDate == reportDate);
+    }
+
+    private static int QuarterIndex(DateOnly reportDate) =>
+        HolderTenureCalculator.QuarterIndex(reportDate).Value;
+
+    // Every weekday session of a quarter at one close.
+    private static List<EquityDailyStockPrice> SessionBars(
+        EquityListing listing,
+        DateOnly start,
+        decimal close
+    ) =>
+        Enumerable
+            .Range(0, 92)
+            .Select(day => start.AddDays(day))
+            .Where(date => date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            .Select(date => new EquityDailyStockPrice
+            {
+                EquityListingId = listing.Id,
+                SourceTicker = listing.Ticker,
+                Date = date,
+                Open = close,
+                High = close,
+                Low = close,
+                Close = close,
+                AdjustedClose = close,
+                Volume = 1_000,
+            })
+            .ToList();
+
     private static List<EquityDailyStockPrice> Bars(
         EquityIssuer issuer,
         decimal close,
@@ -1526,6 +1747,10 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             corpusCoverage,
             [new AggregateHolderBenchmarkProvider(dbContext)],
             Options.Create(new HolderBenchmarkOptions()),
+            new SharesOutstandingAsOfReader(
+                new FinancialFactRepository(dbContext),
+                new FinancialConceptRepository(dbContext)
+            ),
             NullLogger<HolderIntelligenceRefreshService>.Instance
         )
     {

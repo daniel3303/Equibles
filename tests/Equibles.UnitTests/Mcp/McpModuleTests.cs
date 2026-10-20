@@ -283,6 +283,8 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetAllHolders");
         toolNames.Should().Contain("GetOwnershipSummary");
         toolNames.Should().Contain("GetBeneficialOwnership");
+        toolNames.Should().Contain("GetOwnershipSignals");
+        toolNames.Should().Contain("GetHolderTargets");
     }
 
     // ── InsiderTrading module specific ──────────────────────────────────
@@ -393,6 +395,8 @@ public class McpModuleToolDiscoveryTests
                     "GetAllHolders",
                     "GetOwnershipSummary",
                     "GetBeneficialOwnership",
+                    "GetOwnershipSignals",
+                    "GetHolderTargets",
                 }
             },
             {

@@ -65,6 +65,37 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly reportDate
     ) => Get13FByListing(stock, listedTicker, reportDate).Include(h => h.InstitutionalHolder);
 
+    /// <summary>
+    /// Every filer's 13F common-share positions in these issuers at a quarter end, summed per
+    /// listing, without put/call or principal legs: the peer holdings shareholder targeting reads.
+    /// </summary>
+    public IQueryable<HolderListingValue> Get13FListingValuesAt(
+        IReadOnlyCollection<Guid> issuerIds,
+        DateOnly reportDate
+    ) =>
+        GetAll()
+            .Where(Is13F)
+            .Where(h =>
+                issuerIds.Contains(h.EquityIssuerId)
+                && h.ReportDate == reportDate
+                && h.ShareType == ShareType.Shares
+                && h.OptionType == null
+            )
+            .GroupBy(h => new
+            {
+                h.InstitutionalHolderId,
+                h.EquityIssuerId,
+                h.ListedTicker,
+            })
+            .Select(g => new HolderListingValue
+            {
+                InstitutionalHolderId = g.Key.InstitutionalHolderId,
+                EquityIssuerId = g.Key.EquityIssuerId,
+                ListedTicker = g.Key.ListedTicker,
+                Shares = g.Sum(h => h.Shares),
+                Value = g.Sum(h => h.Value),
+            });
+
     // Same stock/date 13F-only filter as Get13FByStock, with the InstitutionalHolder navigation
     // eagerly loaded for callers that render holder fields while aggregating rows.
     public IQueryable<InstitutionalHolding> Get13FByStockWithHolder(
