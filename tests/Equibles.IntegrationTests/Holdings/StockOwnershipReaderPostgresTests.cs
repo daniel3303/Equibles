@@ -305,6 +305,9 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         fmr.Lei.Should().Be(lei);
         notification.ParentRowKey.Should().Be(fmr.RowKey);
         notification.Has(StockHolderRowFlags.Stale).Should().BeFalse();
+        notification
+            .PercentOutstanding.Should()
+            .BeNull("a voting percentage is not a share of outstanding");
         read.Summary.Institutional.Shares.Should().Be(1_350_000, "a notification is never summed");
 
         var tools = new StockOwnershipTools(
@@ -320,7 +323,7 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         );
         (await tools.GetAllHolders("NVDA", source: "nonus"))
             .Should()
-            .Contain("| Non-US | 2026-09-01 | — | — |")
+            .Contain("| Non-US | 2026-09-01 | — | — | — |")
             .And.Contain("5.2% of voting rights as filed, no share count");
     }
 

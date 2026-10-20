@@ -162,11 +162,13 @@ public class StockOwnershipReader
             scope,
             cancellationToken
         );
+        // A percentage of voting rights with no share count has no share of outstanding to state.
         foreach (var row in rows)
             row.PercentOutstanding =
                 percentUnavailable == null
                 && sharesOutstanding is > 0
                 && !row.Has(StockHolderRowFlags.SplitUnresolved)
+                && !StockOwnershipPrecedence.StatesOnlyAPercentage(row)
                     ? Math.Round(100m * row.Shares / sharesOutstanding.Value, 4)
                     : null;
 
