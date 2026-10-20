@@ -11,6 +11,7 @@
         new BucketDisplay(PositionChangeType.Reduced, "Reduced", "badge-warning", true),
         new BucketDisplay(PositionChangeType.SoldOut, "Sold out", "badge-error", true),
         new BucketDisplay(PositionChangeType.Unchanged, "Unchanged", "badge-ghost", false),
+        new BucketDisplay(PositionChangeType.NoPriorFiling, "No prior 13F", "badge-ghost", false),
     };
 
     static IEnumerable<HolderPositionChange> SortBucket(PositionChangeType type, IEnumerable<HolderPositionChange> entries)
@@ -248,7 +249,11 @@
                                     </td>
                                     <td class="text-right font-mono whitespace-nowrap"><compactable-number value="@e.CurrentShares" /></td>
                                     @if (!Model.IsCombinedView) {
-                                        <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
+                                        if (e.ChangeType == PositionChangeType.NoPriorFiling) {
+                                            <td class="text-right font-mono hidden md:table-cell whitespace-nowrap text-base-content/50">—</td>
+                                        } else {
+                                            <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
+                                        }
                                         <td class="text-right font-mono hidden md:table-cell whitespace-nowrap @e.ChangePercent.SignCss()">@FormatPct(e.ChangePercent)</td>
                                     }
                                     <td class="text-right font-mono hidden lg:table-cell whitespace-nowrap">@(own != null ? $"{own:F2}%" : "—")</td>
@@ -258,7 +263,11 @@
                                     }
                                     <td class="text-right hidden xl:table-cell whitespace-nowrap text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
                                     @if (!Model.IsCombinedView) {
-                                        <td class="text-right font-mono whitespace-nowrap @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
+                                        if (e.ChangeType == PositionChangeType.NoPriorFiling) {
+                                            <td class="text-right font-mono whitespace-nowrap text-base-content/50">—</td>
+                                        } else {
+                                            <td class="text-right font-mono whitespace-nowrap @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
+                                        }
                                     }
                                     <td class="text-right">
                                         @if (e.InstitutionalHolder?.Cik != null) {
@@ -292,6 +301,9 @@
                 <span class="badge @bucket.BadgeCss badge-sm">@count.ToString("N0")</span>
             </div>
             <div class="collapse-content p-0">
+                @if (bucket.Type == PositionChangeType.NoPriorFiling) {
+                    <div class="px-4 pb-2 text-xs text-base-content/50" data-testid="holdings-no-prior-filing-note">These holders filed no 13F for the prior quarter (a first 13F, or a return after a gap), so their position is not counted as new.</div>
+                }
                 @if (count == 0) {
                     <div class="px-4 pb-4 text-xs text-base-content/50">No holders in this bucket.</div>
                 } else {
@@ -323,12 +335,20 @@
                                             }
                                         </td>
                                         <td class="text-right font-mono"><compactable-number value="@e.CurrentShares" /></td>
-                                        <td class="text-right font-mono hidden md:table-cell @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
+                                        @if (e.ChangeType == PositionChangeType.NoPriorFiling) {
+                                            <td class="text-right font-mono hidden md:table-cell text-base-content/50">—</td>
+                                        } else {
+                                            <td class="text-right font-mono hidden md:table-cell @deltaSharesCss"><compactable-number value="@e.DeltaShares" sign /></td>
+                                        }
                                         <td class="text-right font-mono hidden md:table-cell @e.ChangePercent.SignCss()">@FormatPct(e.ChangePercent)</td>
                                         <td class="text-right font-mono hidden lg:table-cell">@(own != null ? $"{own:F2}%" : "—")</td>
                                         <td class="text-right font-mono hidden lg:table-cell"><compactable-number value="@e.CurrentValue" prefix="$" /></td>
                                         <td class="text-right hidden xl:table-cell text-base-content/60">@FormatQuarter(e.QuarterFirstOwned)</td>
-                                        <td class="text-right font-mono @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
+                                        @if (e.ChangeType == PositionChangeType.NoPriorFiling) {
+                                            <td class="text-right font-mono text-base-content/50">—</td>
+                                        } else {
+                                            <td class="text-right font-mono @deltaValueCss"><compactable-number value="@e.DeltaValue" prefix="$" sign /></td>
+                                        }
                                         <td class="text-right">
                                             @if (e.InstitutionalHolder?.Cik != null) {
                                                 <a asp-controller="Stocks" asp-action="ShowHolder"

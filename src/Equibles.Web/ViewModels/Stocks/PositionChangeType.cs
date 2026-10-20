@@ -18,4 +18,9 @@ public enum PositionChangeType
 
     [Display(Name = "Sold out")]
     SoldOut = 5,
+
+    // A current holder that filed no 13F for the prior quarter (its first 13F, or a return after
+    // a gap): its position cannot be compared, so it is neither new nor unchanged.
+    [Display(Name = "No prior 13F")]
+    NoPriorFiling = 6,
 }

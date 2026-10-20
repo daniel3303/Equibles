@@ -75,15 +75,17 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
         EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
+        EquityIssuer msft = await SeedStock(seed, "MSFT", industry);
         var holderA = await SeedHolder(seed, "H001");
         var holderB = await SeedHolder(seed, "H002");
         var holderC = await SeedHolder(seed, "H003");
         var holder13D = await SeedHolder(seed, "H004");
         var holder13G = await SeedHolder(seed, "H005");
         seed.AddRange(
-            // Prior 13F quarter: two filers.
+            // Prior 13F quarter: two AAPL filers; holder C filed without AAPL.
             MakeHolding(aapl, holderA, QPrev, 100_000, "acc-a-prev"),
             MakeHolding(aapl, holderB, QPrev, 100_000, "acc-b-prev"),
+            MakeHolding(msft, holderC, QPrev, 100_000, "acc-c-prev"),
             // Current 13F quarter: holders A and B stay, C is a new filer.
             MakeHolding(aapl, holderA, QCur, 120_000, "acc-a-cur"),
             MakeHolding(aapl, holderB, QCur, 120_000, "acc-b-cur"),
@@ -249,33 +251,48 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     }
 
     // Shape of a confidential-treatment original (Norges Bank, 2026-03-31): the filer published a
-    // full book the quarter before, but its 13F for this quarter is one placeholder row, so the
-    // quarter holds no row and no rollup for it.
+    // full book the quarter before and after, but its 13F for the middle quarter is one placeholder
+    // row, so that quarter holds no row and no rollup for it. A first-time filer joins after it.
     [Fact]
-    public async Task RebuildQuarterAsync_QuarterWithoutAPublished13F_IsNoSale()
+    public async Task RebuildQuarterAsync_QuarterWithoutAPublished13F_IsNeitherASaleNorABuy()
     {
         var before = new DateOnly(2025, 12, 31);
         var confidential = new DateOnly(2026, 3, 31);
+        var after = new DateOnly(2026, 6, 30);
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
         EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
         EquityIssuer msft = await SeedStock(seed, "MSFT", industry);
         var withheld = await SeedHolder(seed, "1374170");
-        var seller = await SeedHolder(seed, "H002");
+        var trader = await SeedHolder(seed, "H002");
+        var firstFiler = await SeedHolder(seed, "H003");
         seed.AddRange(
             MakeHolding(aapl, withheld, before, 100_000, "acc-w-before"),
-            MakeHolding(aapl, seller, before, 100_000, "acc-s-before"),
-            MakeHolding(msft, seller, confidential, 100_000, "acc-s-confidential")
+            MakeHolding(aapl, withheld, after, 100_000, "acc-w-after"),
+            MakeHolding(aapl, trader, before, 100_000, "acc-t-before"),
+            MakeHolding(msft, trader, confidential, 100_000, "acc-t-confidential"),
+            MakeHolding(aapl, trader, after, 100_000, "acc-t-after"),
+            MakeHolding(aapl, firstFiler, after, 100_000, "acc-f-after")
         );
         await seed.SaveChangesAsync();
 
         await BuildService().RebuildQuarterAsync(confidential, CancellationToken.None);
+        await BuildService().RebuildQuarterAsync(after, CancellationToken.None);
 
         await using var read = FreshContext();
-        var row = await read.Set<StockQuarterlyActivity>()
+        var exits = await read.Set<StockQuarterlyActivity>()
             .SingleAsync(s => s.EquityIssuerId == aapl.Id && s.ReportDate == confidential);
-        row.SoldOutFilerCount.Should()
+        exits
+            .SoldOutFilerCount.Should()
             .Be(1, "only the filer that reported the quarter without AAPL sold it");
+        var entries = await read.Set<StockQuarterlyActivity>()
+            .SingleAsync(s => s.EquityIssuerId == aapl.Id && s.ReportDate == after);
+        entries
+            .NewFilerCount.Should()
+            .Be(
+                1,
+                "only the filer that reported the quarter before without AAPL bought it; the withheld book and the first-time filer's book did not"
+            );
     }
 
     [Fact]

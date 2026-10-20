@@ -758,7 +758,8 @@ public class HoldingsAggregateRefreshService
 
         // The prior quarter on record. default(DateOnly) when this is the
         // earliest — no holding row carries that date, so every "previous"
-        // predicate below is simply false and all current filers count as new.
+        // predicate below is simply false and, with no filer of that quarter,
+        // no position counts as new.
         // Form 13F only: Schedule 13D/G rows carry event-driven report dates
         // clustered around quarter-ends, and would otherwise resolve the prior
         // quarter to a sparse non-quarter date where almost no stock has a
@@ -1077,8 +1078,9 @@ public class HoldingsAggregateRefreshService
     // prod scale — while this shape is one index-only scan plus two hash aggregates (~8x
     // faster), and a rebuild runs on every dirty-quarter drain. Internal so the translation
     // test can pin that the chained-GroupBy shape stays translatable on the Npgsql provider.
-    // A missing position proves an exit only when its filer reported a 13F for the current
-    // quarter, so a prior row counts only for those filers; a confidential quarter is no sale.
+    // A missing position proves an entry or exit only when its filer reported a 13F for the
+    // other quarter, so only filers of both quarters count: a first-time filer's book is no buy
+    // and a confidential quarter is no sale.
     internal static IQueryable<MarketWideStockChurn> BuildChurnQuery(
         EquiblesFinancialDbContext dbContext,
         DateOnly reportDate,
@@ -1086,15 +1088,21 @@ public class HoldingsAggregateRefreshService
     )
     {
         var filedCurrent = dbContext.Filed13FHolderIds(reportDate);
+        var filedPrevious = dbContext.Filed13FHolderIds(previousReportDate);
         return dbContext
             .Set<InstitutionalHolding>()
-            // The date pair stays its own conjunct so Postgres keeps the ReportDate index scan
-            // and probes the filer set as one hashed subplan.
+            // Each row needs its filer in the other quarter's set. Written as one OR per side so
+            // Postgres keeps the ReportDate index scan and probes each set as a hashed subplan;
+            // a bare IN is pulled up into a join whose estimates explode.
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
                 && h.Issuer.Presentation.Listing.Active
                 && (h.ReportDate == reportDate || filedCurrent.Contains(h.InstitutionalHolderId))
+                && (
+                    h.ReportDate == previousReportDate
+                    || filedPrevious.Contains(h.InstitutionalHolderId)
+                )
             )
             .GroupBy(h => new { h.EquityIssuerId, h.InstitutionalHolderId })
             .Select(g => new

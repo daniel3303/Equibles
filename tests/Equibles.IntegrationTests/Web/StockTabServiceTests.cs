@@ -1121,9 +1121,13 @@ public class StockTabServiceTests : IDisposable
         result.TotalShares.Should().Be(11_000);
         result.TotalValue.Should().Be(600_000);
         result.HolderCount.Should().Be(1);
-        // No prior quarter, so the single holder lands in the New bucket.
-        result.BucketCounts[PositionChangeType.New].Should().Be(1);
-        result.GroupedHolders[PositionChangeType.New].Single().CurrentShares.Should().Be(11_000);
+        // The holder filed no 13F for the prior quarter, so its position is not counted as new.
+        result.BucketCounts[PositionChangeType.New].Should().Be(0);
+        result
+            .GroupedHolders[PositionChangeType.NoPriorFiling]
+            .Single()
+            .CurrentShares.Should()
+            .Be(11_000);
     }
 
     [Fact]
@@ -1164,10 +1168,14 @@ public class StockTabServiceTests : IDisposable
         var result = await _service.LoadHoldingsTab(stock, new DateOnly(2024, 12, 31));
 
         result.SelectedDate.Should().Be(new DateOnly(2024, 12, 31));
-        // The 2025-Q1 holding is not in this quarter's bucket; 2024-Q4 has no prior
-        // quarter loaded, so the single 10_000-share holding lands in New.
-        result.BucketCounts[PositionChangeType.New].Should().Be(1);
-        result.GroupedHolders[PositionChangeType.New].Single().CurrentShares.Should().Be(10_000);
+        // The 2025-Q1 holding is not in this quarter's bucket; the holder filed no 13F for
+        // 2024-Q3, so the single 10_000-share holding is not counted as new.
+        result.BucketCounts[PositionChangeType.NoPriorFiling].Should().Be(1);
+        result
+            .GroupedHolders[PositionChangeType.NoPriorFiling]
+            .Single()
+            .CurrentShares.Should()
+            .Be(10_000);
     }
 
     [Fact]
@@ -1187,15 +1195,42 @@ public class StockTabServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadHoldingsTab_NoPreviousQuarter_AllHoldersInNewBucket()
+    public async Task LoadHoldingsTab_NoPreviousQuarter_OnlyPriorQuarterFilersAreNew()
     {
         EquityIssuer stock = CreateStock();
+        EquityIssuer other = CreateStock("KO", "Coca-Cola Co.");
         var holder = CreateInstitutionalHolder("Fidelity", "0004445556");
+        var buyer = CreateInstitutionalHolder("Wellington", "0004445557");
 
-        // Only one quarter of data
+        // One quarter of data for this stock; the buyer filed the calendar quarter before
+        // without it, the other holder filed no 13F then.
         _dbContext
             .Set<InstitutionalHolding>()
-            .Add(
+            .AddRange(
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = other.Id,
+                    InstitutionalHolderId = buyer.Id,
+                    FilingDate = new DateOnly(2024, 11, 14),
+                    ReportDate = new DateOnly(2024, 9, 30),
+                    Value = 1_000,
+                    Shares = 10,
+                    ShareType = ShareType.Shares,
+                    TitleOfClass = "COM",
+                    AccessionNumber = "0001-24-000041",
+                },
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = stock.Id,
+                    InstitutionalHolderId = buyer.Id,
+                    FilingDate = new DateOnly(2025, 2, 14),
+                    ReportDate = new DateOnly(2024, 12, 31),
+                    Value = 200_000,
+                    Shares = 4_000,
+                    ShareType = ShareType.Shares,
+                    TitleOfClass = "COM",
+                    AccessionNumber = "0001-25-000041",
+                },
                 new InstitutionalHolding
                 {
                     EquityIssuerId = stock.Id,
@@ -1213,8 +1248,17 @@ public class StockTabServiceTests : IDisposable
 
         var result = await _service.LoadHoldingsTab(stock, new DateOnly(2024, 12, 31));
 
-        // With no prior quarter, every current holder is classified New.
-        result.BucketCounts[PositionChangeType.New].Should().Be(1);
+        // A first 13F proves no entry; only the holder that filed the quarter before is New.
+        result
+            .GroupedHolders[PositionChangeType.New]
+            .Single()
+            .InstitutionalHolderId.Should()
+            .Be(buyer.Id);
+        result
+            .GroupedHolders[PositionChangeType.NoPriorFiling]
+            .Single()
+            .InstitutionalHolderId.Should()
+            .Be(holder.Id);
         result.BucketCounts[PositionChangeType.SoldOut].Should().Be(0);
         result.BucketCounts[PositionChangeType.Increased].Should().Be(0);
         result.BucketCounts[PositionChangeType.Reduced].Should().Be(0);
@@ -1309,10 +1353,10 @@ public class StockTabServiceTests : IDisposable
         result.TotalShares.Should().Be(16_000);
         result.TotalValue.Should().Be(800_000);
         result.HolderCount.Should().Be(2);
-        // Both holders are new (no prior quarter loaded for this stock).
-        result.BucketCounts[PositionChangeType.New].Should().Be(2);
+        // Neither holder filed a 13F for the prior quarter, so neither position is new.
+        result.BucketCounts[PositionChangeType.New].Should().Be(0);
         var byValue = result
-            .GroupedHolders[PositionChangeType.New]
+            .GroupedHolders[PositionChangeType.NoPriorFiling]
             .OrderByDescending(e => e.CurrentValue)
             .ToList();
         byValue[0].CurrentValue.Should().Be(500_000);
