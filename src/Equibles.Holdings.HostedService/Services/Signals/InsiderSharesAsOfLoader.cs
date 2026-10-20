@@ -154,6 +154,7 @@ internal static class InsiderSharesAsOfLoader
                 OwnershipNature = row.OwnershipNature,
                 NatureOfOwnership = row.NatureOfOwnership,
                 OwnershipNatureFootnoteIds = row.OwnershipNatureFootnoteIds,
+                BalanceFootnoteIds = row.BalanceFootnoteIds,
                 SecurityTitle = row.SecurityTitle,
                 AccessionNumber = row.AccessionNumber,
                 TransactionOrder = row.TransactionOrder,
