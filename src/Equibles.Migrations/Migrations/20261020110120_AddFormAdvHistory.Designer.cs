@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020102829_AddFormAdvHistory")]
+    [Migration("20261020110120_AddFormAdvHistory")]
     partial class AddFormAdvHistory
     {
         /// <inheritdoc />
@@ -3296,6 +3296,10 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("ReportingParentCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ReportingTopCik")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
