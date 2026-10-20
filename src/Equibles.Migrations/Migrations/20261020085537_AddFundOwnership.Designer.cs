@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020082141_AddFundOwnership")]
+    [Migration("20261020085537_AddFundOwnership")]
     partial class AddFundOwnership
     {
         /// <inheritdoc />
@@ -2502,8 +2502,15 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<int?>("ParserVersion")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("ReadAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefusalReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<int>("Rules")
                         .HasColumnType("integer");
