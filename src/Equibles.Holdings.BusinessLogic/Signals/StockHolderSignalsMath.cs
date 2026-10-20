@@ -102,6 +102,8 @@ public static class StockHolderSignalsMath
                     "the issuer has more than one class of common stock, so its count is the total across classes",
                 SharesOutstandingBasis.ForeignOrdinary =>
                     "a foreign private issuer reports ordinary shares, a different unit from the listed shares",
+                _ when StockHolderSignalsCalculator.HeldBeyondCount(row) =>
+                    "13F filers report more than twice the cover-page count, so that count is misstated or predates an issuance",
                 _ => row.SharesOutstanding is > 0 ? null : "no share count is on record",
             };
 }

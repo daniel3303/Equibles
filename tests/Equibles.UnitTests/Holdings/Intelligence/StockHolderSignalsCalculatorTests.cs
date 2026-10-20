@@ -1,5 +1,6 @@
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
+using Equibles.Holdings.BusinessLogic.Signals;
 using Equibles.Holdings.Data.Models;
 
 namespace Equibles.UnitTests.Holdings.Intelligence;
@@ -83,6 +84,56 @@ public class StockHolderSignalsCalculatorTests
             .CountDividesListing(rows[multiClass.IssuerId])
             .Should()
             .BeFalse();
+    }
+
+    [Fact]
+    public void Build_ACountFarBelowThe13FSharesDividesNothing()
+    {
+        // A shell's nominal 100 shares against 16M held, and a stale count 1.6x below the holdings.
+        var shell = new HolderSecurityKey(Guid.NewGuid(), null);
+        var stale = new HolderSecurityKey(Guid.NewGuid(), null);
+        var calculator = new StockHolderSignalsCalculator();
+        calculator.Add(
+            Holder(
+                3_000,
+                [new(shell, 16_000_000, 1_000), new(stale, 1_600, 1_000)],
+                turnover: HolderTurnoverBand.High
+            )
+        );
+
+        var rows = calculator
+            .Build(
+                Quarter,
+                new StockHolderSignalsQuarterInputs
+                {
+                    SharesOutstanding = new Dictionary<
+                        Guid,
+                        (long, DateOnly, SharesOutstandingBasis)
+                    >
+                    {
+                        [shell.IssuerId] = (100, Quarter, SharesOutstandingBasis.Consolidated),
+                        [stale.IssuerId] = (1_000, Quarter, SharesOutstandingBasis.Consolidated),
+                    },
+                }
+            )
+            .ToDictionary(row => row.EquityIssuerId);
+
+        var shellRow = rows[shell.IssuerId];
+        StockHolderSignalsCalculator.CountDividesListing(shellRow).Should().BeFalse();
+        shellRow.CrowdingPercentile.Should().BeNull();
+        shellRow.SharesOutstanding.Should().Be(100, "the count is kept as read");
+        StockHolderSignalsMath.Crowding(shellRow).Should().BeNull();
+        StockHolderSignalsMath.InstitutionalShareOfOutstanding(shellRow).Should().BeNull();
+        StockHolderSignalsMath
+            .OutstandingUnavailableReason(shellRow)
+            .Should()
+            .Contain("more than twice");
+        // Above 100% but within twice the count stays measured, and alone in the ranking.
+        rows[stale.IssuerId].CrowdingPercentile.Should().Be(100m);
+        StockHolderSignalsMath
+            .InstitutionalShareOfOutstanding(rows[stale.IssuerId])
+            .Should()
+            .Be(1.6m);
     }
 
     [Fact]
