@@ -42,6 +42,9 @@ public class UltimateAggregationTests
         fmrGroup.Form13FShares.Should().Be(6_000);
         fmrGroup.Members.Should().BeEquivalentTo([fmr, sub13F, owned]);
         fmrGroup.PercentOutstanding.Should().Be(31.5m);
+        fmr.RollupBasis.Should().Be(HolderRollupBasis.Self);
+        sub13F.RollupBasis.Should().Be(HolderRollupBasis.ReportingParent);
+        owned.RollupBasis.Should().Be(HolderRollupBasis.GleifUltimateParent);
         groups.Single(group => group.UltimateCik == "500").Shares.Should().Be(200);
         groups
             .Sum(group => group.Shares)

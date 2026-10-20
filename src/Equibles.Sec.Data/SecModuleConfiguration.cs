@@ -73,6 +73,15 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<FormAdvAdviser>();
         builder.Entity<FormAdvAdviserClientType>();
         builder.Entity<FormAdvRosterImport>();
+        builder.Entity<FormAdvAdviserVersion>();
+        builder
+            .Entity<FormAdvClientTypeAum>()
+            .HasOne(row => row.FormAdvAdviserVersion)
+            .WithMany(version => version.ClientTypes)
+            .HasForeignKey(row => row.FormAdvAdviserVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<FormAdvPrivateFundFiling>();
+        builder.Entity<FormAdvFilingArchiveImport>();
         builder.Entity<SecFilerProfile>();
         builder
             .Entity<FormDFiling>()

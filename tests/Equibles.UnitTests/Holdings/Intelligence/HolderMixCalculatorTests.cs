@@ -386,7 +386,7 @@ public class HolderMixCalculatorTests
                 positions,
                 new Dictionary<DateOnly, HoldingsComparisonStatus> { [Current] = status },
                 new Dictionary<DateOnly, DateOnly?> { [Current] = Current },
-                (holderId, _) => holders[holderId],
+                (holderId, _, _) => holders[holderId],
                 combined ? Current : null
             )
             .Single();

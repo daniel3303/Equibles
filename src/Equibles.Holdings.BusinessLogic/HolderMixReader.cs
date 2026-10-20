@@ -4,6 +4,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
+using Equibles.Holdings.BusinessLogic.Advisers;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
@@ -246,6 +247,7 @@ public class HolderMixReader
             .ToList();
         var holderAt = await LoadHolders(
             holderIds,
+            ordered.Skip(1).ToList(),
             measuredQuarters.Values.OfType<DateOnly>().Distinct().ToList(),
             cancellationToken
         );
@@ -260,8 +262,11 @@ public class HolderMixReader
         );
     }
 
-    private async Task<Func<Guid, DateOnly?, HolderMixHolder>> LoadHolders(
+    // Each filer's entity type is current; its client base and private funds come from the Form
+    // ADV roster current at each report date, so no quarter borrows a later roster.
+    private async Task<Func<Guid, DateOnly, DateOnly?, HolderMixHolder>> LoadHolders(
         List<Guid> holderIds,
+        List<DateOnly> reportDates,
         List<DateOnly> measured,
         CancellationToken cancellationToken
     )
@@ -272,18 +277,16 @@ public class HolderMixReader
             .Select(profile => new
             {
                 profile.InstitutionalHolderId,
-                Profile = new HolderMixProfile(
-                    profile.EntityType,
-                    profile.ClientBase,
-                    profile.AdvisesPrivateFunds,
-                    profile.PrivateFundFocus
-                ),
+                profile.EntityType,
+                profile.AdviserCrd,
             })
-            .ToDictionaryAsync(
-                profile => profile.InstitutionalHolderId,
-                profile => profile.Profile,
-                cancellationToken
-            );
+            .ToDictionaryAsync(profile => profile.InstitutionalHolderId, cancellationToken);
+        var advisers = await AdviserHistory.FactsAt(
+            _holderRepository,
+            AdviserHistory.Crds(profiles.Values.Select(profile => profile.AdviserCrd)),
+            reportDates,
+            cancellationToken
+        );
         var metrics =
             measured.Count == 0
                 ? []
@@ -314,14 +317,21 @@ public class HolderMixReader
                 cancellationToken
             );
 
-        return (holderId, quarter) =>
+        return (holderId, reportDate, quarter) =>
         {
             var profile = profiles.GetValueOrDefault(holderId);
             var measurement = quarter is { } date
                 ? metrics.GetValueOrDefault((holderId, date))
                 : null;
             return HolderMixHolder.Of(
-                profile,
+                profile == null
+                    ? null
+                    : HolderMixProfile.At(
+                        profile.EntityType,
+                        profile.AdviserCrd is { } crd
+                            ? advisers.GetValueOrDefault((crd, reportDate))
+                            : null
+                    ),
                 measurement?.StyleBand,
                 measurement?.TurnoverBand,
                 measurement?.HorizonBand,

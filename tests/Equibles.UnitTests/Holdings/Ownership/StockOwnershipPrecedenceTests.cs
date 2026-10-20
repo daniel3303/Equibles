@@ -65,6 +65,30 @@ public class StockOwnershipPrecedenceTests
     }
 
     [Fact]
+    public void SubsidiaryGNests_UnderItsReportingTopWhateverGleifSays()
+    {
+        // Two GLEIF parents leave the subsidiary's ultimate parent on itself, and its direct
+        // reporting parent files only a notice, yet FMR's 13F at the top of its reporting chain
+        // still holds its shares.
+        var parent = Form13F(Fmr, 50_000);
+        var subsidiary = Schedule13G("35368", 9_000, new DateOnly(2026, 8, 1));
+        var rollup = new HolderRollup
+        {
+            Cik = "35368",
+            ReportingParentCik = "1000",
+            ReportingTopCik = Fmr,
+            UltimateCik = "35368",
+            Basis = HolderRollupBasis.Self,
+            HasConflictingEvidence = true,
+        };
+
+        var tops = Arrange([parent, subsidiary], null, rollup);
+
+        tops.Should().ContainSingle().Which.Should().BeSameAs(parent);
+        subsidiary.Covering13FCik.Should().Be(Fmr);
+    }
+
+    [Fact]
     public void SubsidiaryGNests_A13GOlderThanTheParentsQuarterIsStale()
     {
         var parent = Form13F(Fmr, 50_000);
@@ -186,6 +210,49 @@ public class StockOwnershipPrecedenceTests
 
         tops.Should().BeEquivalentTo([blackRock, unlinked]);
         linked.ParentRowKey.Should().Be(blackRock.RowKey);
+    }
+
+    [Fact]
+    public void NonUsNotification_NestsOnlyUnderThe13FFilerWithItsExactLei()
+    {
+        const string lei = "549300ABCDEFGHIJKL12";
+        var blackRock = Form13F(BlackRock, 900_000).WithLei(lei);
+        var matched = NonUsNotification("fca-1", 5.12m, lei.ToLowerInvariant());
+        var otherLei = NonUsNotification("fca-2", 3.4m, "529900ZYXWVUTSRQPO98");
+        var noLei = NonUsNotification("fca-3", 4.1m);
+
+        var tops = Arrange([blackRock, matched, otherLei, noLei]);
+
+        matched.ParentRowKey.Should().Be(blackRock.RowKey);
+        blackRock.Children.Should().ContainSingle().Which.Should().BeSameAs(matched);
+        tops.Should().BeEquivalentTo([blackRock, otherLei, noLei]);
+    }
+
+    [Fact]
+    public void NonUsNotification_AnLeiTwo13FFilersShareNestsUnderNeither()
+    {
+        const string lei = "549300ABCDEFGHIJKL12";
+        var first = Form13F(BlackRock, 900_000).WithLei(lei);
+        var second = Form13F(Russell, 10_000).WithLei(lei);
+        var notification = NonUsNotification("fca-1", 5.12m, lei);
+
+        var tops = Arrange([first, second, notification]);
+
+        notification.ParentRowKey.Should().BeNull();
+        tops.Should().Contain(notification);
+    }
+
+    [Fact]
+    public void NonUsNotification_APercentageWithoutACountStaysVisible()
+    {
+        var percentOnly = NonUsNotification("fca-1", 5.12m);
+        var belowThreshold = NonUsNotification("fca-2", 0m);
+
+        var visible = StockOwnershipPrecedence.Visible(Arrange([percentOnly, belowThreshold]));
+
+        visible.Should().ContainSingle().Which.Should().BeSameAs(percentOnly);
+        belowThreshold.Has(StockHolderRowFlags.Stale).Should().BeTrue();
+        StockOwnershipPrecedence.StatesOnlyAPercentage(percentOnly).Should().BeTrue();
     }
 
     [Fact]

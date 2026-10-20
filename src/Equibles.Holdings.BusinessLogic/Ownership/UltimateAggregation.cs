@@ -19,7 +19,7 @@ public static class UltimateAggregation
     {
         var summed = rows.Where(row => !row.Has(StockHolderRowFlags.NotSummed)).ToList();
         foreach (var row in summed)
-            row.RollupCik = UltimateOf(row, rollups);
+            Assign(row, rollups);
         return summed
             .GroupBy(row => row.RollupCik ?? row.RowKey)
             .Select(group =>
@@ -45,6 +45,17 @@ public static class UltimateAggregation
             .ThenBy(group => group.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(group => group.UltimateCik, StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>Sets a row's ultimate parent and the evidence that chose its holder's own parent.</summary>
+    public static void Assign(StockHolderRow row, IReadOnlyDictionary<string, HolderRollup> rollups)
+    {
+        row.RollupCik = UltimateOf(row, rollups);
+        row.RollupBasis =
+            row.Cik == null ? null
+            : row.RollupCik != row.Cik && rollups.TryGetValue(row.Cik, out var rollup)
+                ? rollup.Basis
+            : HolderRollupBasis.Self;
     }
 
     /// <summary>The ultimate parent CIK of a row's holder: its stored rollup, else the holder itself.</summary>

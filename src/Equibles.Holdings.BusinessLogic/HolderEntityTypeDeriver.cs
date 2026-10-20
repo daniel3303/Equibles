@@ -15,9 +15,11 @@ public static class HolderEntityTypeDeriver
     /// <summary>
     /// Stamped on every profile; bump when the rules change so readers can tell them apart.
     /// 2: HC reads HoldingCompany, and a multi-person 13G filed only under Rule 13d-1(b) with
-    /// one Item 3 code speaks for its filer.
+    /// one Item 3 code speaks for its filer. 3: the private-fund focus weighs gross assets from a
+    /// Schedule D 7.B.(1) filing at most 24 months old before roster fund counts, and quarter
+    /// readers take the client base from the Form ADV roster current at each quarter end.
     /// </summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     public const int BeneficialOwnershipLookbackMonths = 36;
     public const int NCenLookbackMonths = 24;

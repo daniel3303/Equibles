@@ -162,11 +162,13 @@ public class StockOwnershipReader
             scope,
             cancellationToken
         );
+        // A percentage of voting rights with no share count has no share of outstanding to state.
         foreach (var row in rows)
             row.PercentOutstanding =
                 percentUnavailable == null
                 && sharesOutstanding is > 0
                 && !row.Has(StockHolderRowFlags.SplitUnresolved)
+                && !StockOwnershipPrecedence.StatesOnlyAPercentage(row)
                     ? Math.Round(100m * row.Shares / sharesOutstanding.Value, 4)
                     : null;
 
@@ -193,11 +195,31 @@ public class StockOwnershipReader
         var styleBands = styleAsOf is { } measured
             ? await _holderRepository.GetStyleBands(holderIds, measured, cancellationToken)
             : new Dictionary<Guid, HolderStyleBand>();
+        var filerIds = rows.Where(row => row.Source == StockHolderSource.Form13F)
+            .Select(row => row.InstitutionalHolderId)
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+        var leis =
+            filerIds.Count == 0 || !rows.Any(row => row.Source == StockHolderSource.NonUs)
+                ? []
+                : await _holderRepository
+                    .GetProfiles(filerIds)
+                    .AsNoTracking()
+                    .Where(profile => profile.Lei != null)
+                    .Select(profile => new { profile.InstitutionalHolderId, profile.Lei })
+                    .ToDictionaryAsync(
+                        profile => profile.InstitutionalHolderId,
+                        profile => profile.Lei,
+                        cancellationToken
+                    );
         foreach (var row in rows.Where(row => row.InstitutionalHolderId != null))
         {
             var id = row.InstitutionalHolderId!.Value;
             row.EntityType ??= entityTypes.TryGetValue(id, out var type) ? type : null;
             row.StyleBand ??= styleBands.TryGetValue(id, out var band) ? band : null;
+            if (row.Source == StockHolderSource.Form13F)
+                row.Lei ??= leis.GetValueOrDefault(id);
         }
 
         var rollups = await _rollupReader.GetRollups(
@@ -205,7 +227,7 @@ public class StockOwnershipReader
             cancellationToken
         );
         foreach (var row in rows)
-            row.RollupCik = UltimateAggregation.UltimateOf(row, rollups);
+            UltimateAggregation.Assign(row, rollups);
         var filedOwn = await FiledOwn13F(rows, rollups, cancellationToken);
         var tops = StockOwnershipPrecedence.Arrange(
             rows,

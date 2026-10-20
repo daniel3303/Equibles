@@ -2,7 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.Holdings.Data.Models;
 
-/// <summary>Which evidence decided a <see cref="HolderRollup"/>'s ultimate parent, in precedence order.</summary>
+/// <summary>
+/// Which evidence chose a <see cref="HolderRollup"/> filer's own parent, in precedence order; the
+/// chain above it follows each parent's own choice.
+/// </summary>
 public enum HolderRollupBasis
 {
     [Display(Name = "No parent")]

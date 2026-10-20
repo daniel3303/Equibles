@@ -8,6 +8,13 @@ namespace Equibles.Integrations.Sec.FormAdv;
 /// quote, and commas or line breaks embedded inside quoted fields (adviser names routinely
 /// contain commas, e.g. "SMITH, BROWN &amp; GROOVER, INC."). Records are produced one at a
 /// time so a 15k-row, 14&#160;MB file never has to be materialised in full.
+/// <para>
+/// SEC's Form ADV filing archive leaves quotes inside a quoted field unescaped (<c>"BOTH
+/// "VENTURE CAPITAL FUND" AND "HEDGE FUND""</c>). As in Python's lenient reader, a quote opens
+/// quoting only at the start of a field; once quoting ends early, the rest of the field up to
+/// the next comma is literal, so such a row keeps its columns instead of swallowing the rows
+/// after it.
+/// </para>
 /// </summary>
 public static class CsvRecordReader
 {
@@ -21,6 +28,7 @@ public static class CsvRecordReader
         var fields = new List<string>();
         var field = new StringBuilder();
         var inQuotes = false;
+        var atFieldStart = true;
         var recordHasContent = false;
 
         int read;
@@ -41,6 +49,7 @@ public static class CsvRecordReader
                     else
                     {
                         inQuotes = false;
+                        atFieldStart = false;
                     }
                 }
                 else
@@ -53,13 +62,14 @@ public static class CsvRecordReader
 
             switch (c)
             {
-                case '"':
+                case '"' when atFieldStart:
                     inQuotes = true;
                     recordHasContent = true;
                     break;
                 case ',':
                     fields.Add(field.ToString());
                     field.Clear();
+                    atFieldStart = true;
                     recordHasContent = true;
                     break;
                 case '\r':
@@ -72,6 +82,7 @@ public static class CsvRecordReader
                     field.Clear();
                     yield return fields;
                     fields = new List<string>();
+                    atFieldStart = true;
                     recordHasContent = false;
                     break;
                 case '\n':
@@ -79,10 +90,12 @@ public static class CsvRecordReader
                     field.Clear();
                     yield return fields;
                     fields = new List<string>();
+                    atFieldStart = true;
                     recordHasContent = false;
                     break;
                 default:
                     field.Append(c);
+                    atFieldStart = false;
                     recordHasContent = true;
                     break;
             }

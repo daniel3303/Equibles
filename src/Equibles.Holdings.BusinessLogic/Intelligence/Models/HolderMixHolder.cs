@@ -3,8 +3,9 @@ using Equibles.Holdings.Data.Models;
 namespace Equibles.Holdings.BusinessLogic.Intelligence.Models;
 
 /// <summary>
-/// What decides a filer's bucket in one quarter: its current regulatory profile, its measurements
-/// in the quarter's measured quarter (null when not measured) and its filed address code.
+/// What decides a filer's bucket in one quarter: its current entity type, its client base and
+/// private funds from the Form ADV roster current at the quarter end, its measurements in the
+/// quarter's measured quarter (null when not measured) and its filed address code.
 /// </summary>
 public sealed record HolderMixHolder
 {

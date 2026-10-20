@@ -19,14 +19,18 @@ public static class HolderMixCalculator
     /// </summary>
     /// <param name="comparisons">The like-for-like comparison of each quarter with the one before.</param>
     /// <param name="measuredQuarters">The measured quarter each report date reads its bands from.</param>
-    /// <param name="holderAt">A filer's bucket inputs in a measured quarter (null: none measured).</param>
+    /// <param name="holderAt">
+    /// A filer's bucket inputs for a report date: its regulatory profile as of that date and its
+    /// bands from the measured quarter (null: none measured). Both sides of a quarter's
+    /// comparison bucket a filer alike.
+    /// </param>
     /// <param name="combinedReportDate">The open quarter shown as the combined view, if any.</param>
     public static List<HolderMixQuarter> Build(
         IReadOnlyList<DateOnly> ordered,
         IReadOnlyList<HolderMixPosition> positions,
         IReadOnlyDictionary<DateOnly, HoldingsComparisonStatus> comparisons,
         IReadOnlyDictionary<DateOnly, DateOnly?> measuredQuarters,
-        Func<Guid, DateOnly?, HolderMixHolder> holderAt,
+        Func<Guid, DateOnly, DateOnly?, HolderMixHolder> holderAt,
         DateOnly? combinedReportDate = null
     )
     {
@@ -50,7 +54,7 @@ public static class HolderMixCalculator
                     byDate.GetValueOrDefault(previousDate) ?? [],
                     comparison,
                     measured,
-                    holderId => holderAt(holderId, measured),
+                    holderId => holderAt(holderId, reportDate, measured),
                     reportDate == combinedReportDate
                 )
             );

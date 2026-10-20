@@ -151,6 +151,12 @@ public class FormAdvAdviser
     /// <summary>The snapshot date of the bulk file this record was last imported from.</summary>
     public DateOnly ReportDate { get; set; }
 
+    /// <summary>
+    /// The newest roster of either kind that listed the adviser; null for a row no roster has
+    /// listed since the column existed. An adviser missing from the newest roster has left it.
+    /// </summary>
+    public DateOnly? LastSeenReportDate { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdateTime { get; set; } = DateTime.UtcNow;

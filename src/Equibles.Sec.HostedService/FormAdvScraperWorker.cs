@@ -4,6 +4,7 @@ using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Worker;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.Sec.HostedService;
@@ -36,6 +37,17 @@ public class FormAdvScraperWorker : BaseScraperWorker
     protected override bool ValidateConfiguration() =>
         ValidateSecContactEmail(_configuration, "Form ADV Scraper", treatWhitespaceAsAbsent: true);
 
-    protected override Task DoWork(CancellationToken stoppingToken) =>
-        RunImport<FormAdvImportService>(stoppingToken);
+    // The roster history and the Schedule D archive backfill one download per cycle, a minute
+    // apart, through the shared SEC limiter.
+    protected override TimeSpan ContinuationInterval => TimeSpan.FromMinutes(1);
+
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var moreQueued = await scope
+            .ServiceProvider.GetRequiredService<FormAdvImportService>()
+            .ImportCycle(stoppingToken);
+        if (moreQueued)
+            RequestImmediateContinuation();
+    }
 }

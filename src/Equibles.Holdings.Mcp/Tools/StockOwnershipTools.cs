@@ -57,7 +57,7 @@ public class StockOwnershipTools
 
     [McpServerTool(Name = "GetAllHolders", Title = "All Holders of a Stock", ReadOnly = true)]
     [Description(
-        "Get every disclosed holder of a stock or ETF listing in one table: 13F institutions, Schedule 13D and 13G filers, insiders (Forms 3, 4, 5) and registered funds (N-PORT). The default view shows one row per holder from its freshest filing, with its other filings and the 13D/G, insider and fund disclosures its 13F report contains nested under it, matched by CIK and SEC reporting links, never by name. Shares are restated onto today's split basis, change is against the same holder's previous filing in the same source, and % Out is of shares outstanding. Funds are never summed: their shares sit inside their advisers' 13F reports. view=all lists every row flat, stale ones included; view=ultimate groups the summed holders under their ultimate parent. Use GetOwnershipSummary for the totals."
+        "Get every disclosed holder of a stock or ETF listing in one table: 13F institutions, Schedule 13D and 13G filers, insiders (Forms 3, 4, 5) and registered funds (N-PORT). The default view shows one row per holder from its freshest filing, with its other filings and the 13D/G, insider and fund disclosures its 13F report contains nested under it, matched by CIK and SEC reporting links, never by name. Shares are restated onto today's split basis, change is against the same holder's previous filing in the same source, and % Out is of shares outstanding. Funds are never summed: their shares sit inside their advisers' 13F reports. view=all lists every row flat, stale ones included; view=ultimate groups the summed holders under their ultimate parent and lists each parent's members with the link that put them there. Use GetOwnershipSummary for the totals."
     )]
     public Task<string> GetAllHolders(
         [Description("Listed security ticker (e.g., NVDA, VOO)")] string ticker,
@@ -66,7 +66,7 @@ public class StockOwnershipTools
         )]
             string source = "all",
         [Description(
-            "default (one row per holder, others nested), all (every row flat, stale included) or ultimate (summed holders grouped by ultimate parent)"
+            "default (one row per holder, others nested), all (every row flat, stale included) or ultimate (summed holders grouped by ultimate parent, members listed beneath)"
         )]
             string view = "default",
         [Description(HolderTypesParameter)] string[] holderTypes = null,
@@ -305,28 +305,42 @@ public class StockOwnershipTools
         var result = MarkdownTable.Start(
             $"## Holders of {label} by ultimate parent",
             Subtitle(read, $"{McpFormat.WholeNumber(groups.Count)} ultimate parents"),
-            "| # | Ultimate parent | CIK | Shares | % Out | 13F shares | Holders | Largest members |",
-            "|---|-----------------|-----|--------|-------|------------|---------|-----------------|"
+            "| # | Ultimate parent or member | CIK | Source | Shares | % Out | 13F shares | Holders | Linked by |",
+            "|---|---------------------------|-----|--------|--------|-------|------------|---------|-----------|"
         );
+        var hidden = 0;
         for (var index = 0; index < page.Count; index++)
         {
             var group = page[index];
-            var members = string.Join(
-                "; ",
-                group
-                    .Members.Take(3)
-                    .Select(member => $"{member.Name} ({SourceText(member.Source)})")
-            );
+            var rank = McpFormat.Invariant(offset + index + 1, "0");
             result.AppendLine(
-                $"| {offset + index + 1} | {MarkdownTable.EscapeCell(group.Name, "—")} | {group.UltimateCik ?? "—"} | "
+                $"| {rank} | {MarkdownTable.EscapeCell(group.Name, "—")} | {group.UltimateCik ?? "—"} | — | "
                     + $"{McpFormat.WholeNumber(group.Shares)} | {Percent(group.PercentOutstanding)} | "
-                    + $"{McpFormat.WholeNumber(group.Form13FShares)} | {McpFormat.WholeNumber(group.Members.Count)} | "
-                    + $"{MarkdownTable.EscapeCell(members, "—")} |"
+                    + $"{McpFormat.WholeNumber(group.Form13FShares)} | {McpFormat.WholeNumber(group.Members.Count)} | — |"
             );
+            // A parent holding alone through its own filing has nothing to list beneath it.
+            if (group.Members is [var only] && only.Cik == group.UltimateCik)
+                continue;
+            var shown = group.Members.Take(ChildrenShown).ToList();
+            for (var member = 0; member < shown.Count; member++)
+            {
+                var row = shown[member];
+                result.AppendLine(
+                    $"| {rank}.{member + 1} | ↳ {MarkdownTable.EscapeCell(row.Name, "—")} | {row.Cik ?? "—"} | {SourceText(row.Source)} | "
+                        + $"{McpFormat.WholeNumber(row.Shares)} | {Percent(row.PercentOutstanding)} | "
+                        + $"{(row.Source == StockHolderSource.Form13F ? McpFormat.WholeNumber(row.Shares) : "—")} | — | "
+                        + $"{LinkText(row.RollupBasis)} |"
+                );
+            }
+            hidden += group.Members.Count - shown.Count;
         }
         result.AppendLine();
+        if (hidden > 0)
+            result.AppendLine(
+                $"_{McpFormat.WholeNumber(hidden)} more members are not shown; each parent's Holders column counts all of them._"
+            );
         result.AppendLine(
-            "_Each group sums its 13F filers, which the 13F rules keep disjoint, plus the insider and 13D/G blocks no 13F report of the listing contains; funds are never summed. Parents come from SEC reporting links (other-manager lists, 13F notices) and recorded corporate parents, never from names._"
+            "_Each group sums its 13F filers, which the 13F rules keep disjoint, plus the insider and 13D/G blocks no 13F report of the listing contains; funds are never summed. Linked by is the evidence that chose each member's own parent, and the chain continues from that parent's own link: a GLEIF ultimate parent, then a GLEIF direct parent, both matched to a filer by LEI, then an SEC reporting link (other-manager lists, 13F notices). Parents never come from names._"
         );
         result.Append(McpOutput.PagedTruncationNote(page.Count, groups.Count, offset));
         return result.ToString().TrimEnd();
@@ -521,6 +535,11 @@ public class StockOwnershipTools
             notes.Add(row.Detail);
         if (row.Purpose != null)
             notes.Add($"purpose: {row.Purpose.Summary}");
+        var percentOnly = StockOwnershipPrecedence.StatesOnlyAPercentage(row);
+        if (percentOnly)
+            notes.Add(
+                $"{McpFormat.Invariant(row.FiledPercentOfClass!.Value, "0.##")}% of voting rights as filed, no share count"
+            );
         if (row.Carried)
             notes.Add("carried, not yet filed for the newest quarter");
         if (row.Has(StockHolderRowFlags.Stale))
@@ -532,8 +551,9 @@ public class StockOwnershipTools
         if (row.Has(StockHolderRowFlags.NotSummed))
             notes.Add("not summed");
         var change = row.ChangeShares is { } delta ? SignedWhole(delta) : "—";
+        var shares = percentOnly ? "—" : McpFormat.WholeNumber(row.Shares);
         return $"| {rank} | {(nested ? "↳ " : "")}{MarkdownTable.EscapeCell(row.Name, "—")} | {IdText(row.HolderKey)} | {SourceText(row.Source)} | "
-            + $"{FormatDate(row.AsOf)} | {McpFormat.WholeNumber(row.Shares)} | {change} | {Percent(row.PercentOutstanding)} | "
+            + $"{FormatDate(row.AsOf)} | {shares} | {change} | {Percent(row.PercentOutstanding)} | "
             + $"{(row.Value is { } value ? McpFormat.CompactUsd(value) : "—")} | {HolderBucketTokens.Label(row.EntityType)} | "
             + $"{MarkdownTable.EscapeCell(string.Join("; ", notes), "—")} |";
     }
@@ -564,6 +584,16 @@ public class StockOwnershipTools
             StockHolderSource.Fund => "Fund",
             StockHolderSource.NonUs => "Non-US",
             _ => source.ToString(),
+        };
+
+    private static string LinkText(HolderRollupBasis? basis) =>
+        basis switch
+        {
+            HolderRollupBasis.Self => "the parent itself",
+            HolderRollupBasis.ReportingParent => "13F reporting link",
+            HolderRollupBasis.GleifDirectParent => "GLEIF direct parent",
+            HolderRollupBasis.GleifUltimateParent => "GLEIF ultimate parent",
+            _ => "—",
         };
 
     private static string IdText(StockHolderKey key) =>

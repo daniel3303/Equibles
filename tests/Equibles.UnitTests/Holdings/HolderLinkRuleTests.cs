@@ -198,36 +198,44 @@ public class HolderLinkRuleTests
     }
 
     [Fact]
-    public void IncludedEdgeConfirmedByTheChildsCover_IsAParent()
+    public void IncludedEdgeAndTheChildsCombinationCover_IsNotAParent()
     {
-        var parent = Holder("100", fileNumber: "28-451");
-        var child = Holder("200");
-        Included(parent, Q2, "p-q2", Manager(cik: "200"));
-        Cover(child, Q2, "c-q2", Manager(fileNumber: "028-00451"));
+        // Shaped on Prudential Financial, whose combination report names its subsidiary Jennison
+        // Associates as reporting part of its holdings while Jennison's 13F includes it: Prudential
+        // reports the rest itself, so Jennison's report does not hold its shares.
+        var jennison = Holder("53417");
+        var prudential = Holder("1137774");
+        Included(jennison, Q2, "j-q2", Manager(cik: "1137774"));
+        Cover(prudential, Q2, "p-q2", Manager(cik: "53417"));
 
-        var rollup = Rollup(Derive(), "200");
+        var links = Derive();
 
-        rollup.ReportingParentCik.Should().Be("100");
-        rollup.Basis.Should().Be(HolderRollupBasis.ReportingParent);
+        var rollup = Rollup(links, "1137774");
+        rollup.ReportingParentCik.Should().BeNull();
+        rollup.UltimateCik.Should().Be("1137774");
+        rollup.Basis.Should().Be(HolderRollupBasis.Self);
+        links.Evidence.Should().HaveCount(2).And.OnlyContain(row => !row.Confirmed);
     }
 
     [Fact]
-    public void IncludedEdgeConfirmedByTheChildsCover_ConfirmsBothRows()
+    public void IncludedEdgeConfirmedByTheChildsNotice_ConfirmsThatPairOnly()
     {
         var parent = Holder("100");
-        var child = Holder("200");
-        Included(parent, Q2, "p-q2", Manager(cik: "200"));
-        Cover(child, Q2, "c-q2", Manager(cik: "100"));
-        // A cover naming the parent another quarter confirms nothing here.
-        Cover(child, Q1, "c-q1", Manager(cik: "100"));
+        Holder("200");
+        Holder("300");
+        Included(parent, Q2, "p-q2", Manager(cik: "300"));
+        // The notice names two managers, so neither is sole; only the one that includes the child
+        // is confirmed, and it is the child's reporting parent.
+        Notice("300", Q2, "c-q2", [Manager(cik: "100"), Manager(cik: "200")]);
 
         var links = Derive();
 
         links
             .Evidence.Where(row => row.Confirmed)
-            .Select(row => row.SourceKey)
+            .Select(row => (row.ParentCik, row.SourceKey))
             .Should()
-            .BeEquivalentTo(["p-q2", "c-q2"]);
+            .BeEquivalentTo([("100", "p-q2"), ("100", "c-q2")]);
+        Rollup(links, "300").ReportingParentCik.Should().Be("100");
     }
 
     [Fact]

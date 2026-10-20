@@ -16,6 +16,12 @@ public sealed class StockHolderRow
     public string Cik { get; init; }
 
     public Guid? InstitutionalHolderId { get; init; }
+
+    /// <summary>
+    /// The holder's LEI as a filed record states it: a 13F filer's profile LEI, or the LEI a non-US
+    /// notification names for its holder; never derived from a name.
+    /// </summary>
+    public string Lei { get; set; }
     public string SeriesId { get; init; }
 
     /// <summary>The 13F filer whose report holds a fund series' positions (<c>FundSeriesHolderLink</c>).</summary>
@@ -66,6 +72,12 @@ public sealed class StockHolderRow
 
     /// <summary>The ultimate parent CIK the holder rolls up to; its own CIK when it has none.</summary>
     public string RollupCik { get; set; }
+
+    /// <summary>
+    /// The evidence that chose the holder's own parent on the way to <see cref="RollupCik"/>:
+    /// Self when the holder is its own ultimate parent, null without a CIK.
+    /// </summary>
+    public HolderRollupBasis? RollupBasis { get; set; }
 
     /// <summary>
     /// The CIK of the 13F filer of this listing whose report includes this holder's shares: the

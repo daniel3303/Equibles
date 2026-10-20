@@ -5,7 +5,6 @@ namespace Equibles.Holdings.Data.Models;
 
 [Index(nameof(Cik), IsUnique = true)]
 [Index(nameof(Name))]
-[Index(nameof(Classification))]
 public class InstitutionalHolder
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -38,8 +37,6 @@ public class InstitutionalHolder
     /// </summary>
     [MaxLength(32)]
     public string IdentityAccession { get; set; }
-
-    public FundClassification Classification { get; set; }
 
     public bool ConfidentialTreatmentRequested { get; set; }
 
