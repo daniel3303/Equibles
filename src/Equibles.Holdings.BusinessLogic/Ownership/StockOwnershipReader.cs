@@ -193,11 +193,31 @@ public class StockOwnershipReader
         var styleBands = styleAsOf is { } measured
             ? await _holderRepository.GetStyleBands(holderIds, measured, cancellationToken)
             : new Dictionary<Guid, HolderStyleBand>();
+        var filerIds = rows.Where(row => row.Source == StockHolderSource.Form13F)
+            .Select(row => row.InstitutionalHolderId)
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+        var leis =
+            filerIds.Count == 0 || !rows.Any(row => row.Source == StockHolderSource.NonUs)
+                ? []
+                : await _holderRepository
+                    .GetProfiles(filerIds)
+                    .AsNoTracking()
+                    .Where(profile => profile.Lei != null)
+                    .Select(profile => new { profile.InstitutionalHolderId, profile.Lei })
+                    .ToDictionaryAsync(
+                        profile => profile.InstitutionalHolderId,
+                        profile => profile.Lei,
+                        cancellationToken
+                    );
         foreach (var row in rows.Where(row => row.InstitutionalHolderId != null))
         {
             var id = row.InstitutionalHolderId!.Value;
             row.EntityType ??= entityTypes.TryGetValue(id, out var type) ? type : null;
             row.StyleBand ??= styleBands.TryGetValue(id, out var band) ? band : null;
+            if (row.Source == StockHolderSource.Form13F)
+                row.Lei ??= leis.GetValueOrDefault(id);
         }
 
         var rollups = await _rollupReader.GetRollups(

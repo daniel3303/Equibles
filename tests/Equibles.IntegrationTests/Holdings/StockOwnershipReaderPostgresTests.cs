@@ -272,10 +272,71 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         }
     }
 
+    [Fact]
+    public async Task NonUsNotification_NestsUnderThe13FFilerWhoseProfileStatesItsLei()
+    {
+        const string lei = "5493001Z012YSB2A0K51";
+        await using (var seed = Fixture.CreateDbContext())
+        {
+            var fmrId = await seed.Set<InstitutionalHolder>()
+                .Where(holder => holder.Cik == "315066")
+                .Select(holder => holder.Id)
+                .SingleAsync();
+            seed.Add(new InstitutionalHolderProfile { InstitutionalHolderId = fmrId, Lei = lei });
+            await seed.SaveChangesAsync();
+        }
+        var notification = new StockHolderRow
+        {
+            HolderKey = new StockHolderKey(StockHolderKeyKind.Lei, lei),
+            Source = StockHolderSource.NonUs,
+            Name = "FMR LLC",
+            Lei = lei,
+            FiledPercentOfClass = 5.2m,
+            AsOf = new DateOnly(2026, 9, 1),
+            Flags = StockHolderRowFlags.NotSummed,
+        };
+
+        var read = await Reader(lanes: [new StubLane(notification)])
+            .Read(_nvda, "NVDA", complete: true);
+
+        var fmr = read.Rows.Single(row =>
+            row.Source == StockHolderSource.Form13F && row.Name == "FMR LLC"
+        );
+        fmr.Lei.Should().Be(lei);
+        notification.ParentRowKey.Should().Be(fmr.RowKey);
+        notification.Has(StockHolderRowFlags.Stale).Should().BeFalse();
+        read.Summary.Institutional.Shares.Should().Be(1_350_000, "a notification is never summed");
+
+        var tools = new StockOwnershipTools(
+            new EquityIssuerRepository(DbContext),
+            Reader(lanes: [new StubLane(notification)]),
+            new StockBeneficialOwnershipReader(
+                new InstitutionalHoldingRepository(DbContext),
+                new StockSplitRepository(DbContext),
+                new FixedTime(Today)
+            ),
+            ErrorManager,
+            NullLogger<StockOwnershipTools>()
+        );
+        (await tools.GetAllHolders("NVDA", source: "nonus"))
+            .Should()
+            .Contain("| Non-US | 2026-09-01 | — | — |")
+            .And.Contain("5.2% of voting rights as filed, no share count");
+    }
+
+    private sealed class StubLane(params StockHolderRow[] rows) : IHolderSourceContributor
+    {
+        public Task<IReadOnlyList<StockHolderRow>> Read(
+            StockOwnershipScope scope,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyList<StockHolderRow>>(rows);
+    }
+
     private StockOwnershipReader Reader(
         IMemoryCache cache = null,
         bool foreignPrivateIssuer = false,
-        IBeneficialOwnershipPurposeSource purposeSource = null
+        IBeneficialOwnershipPurposeSource purposeSource = null,
+        IReadOnlyList<IHolderSourceContributor> lanes = null
     )
     {
         var holdingRepository = new InstitutionalHoldingRepository(DbContext);
@@ -298,6 +359,7 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
                     new FundSeriesRepository(DbContext),
                     rollupReader
                 ),
+                .. (lanes ?? []),
             ],
             holdingRepository,
             holderRepository,

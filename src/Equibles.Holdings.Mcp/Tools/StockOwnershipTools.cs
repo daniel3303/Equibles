@@ -521,6 +521,11 @@ public class StockOwnershipTools
             notes.Add(row.Detail);
         if (row.Purpose != null)
             notes.Add($"purpose: {row.Purpose.Summary}");
+        var percentOnly = StockOwnershipPrecedence.StatesOnlyAPercentage(row);
+        if (percentOnly)
+            notes.Add(
+                $"{McpFormat.Invariant(row.FiledPercentOfClass!.Value, "0.##")}% of voting rights as filed, no share count"
+            );
         if (row.Carried)
             notes.Add("carried, not yet filed for the newest quarter");
         if (row.Has(StockHolderRowFlags.Stale))
@@ -532,8 +537,9 @@ public class StockOwnershipTools
         if (row.Has(StockHolderRowFlags.NotSummed))
             notes.Add("not summed");
         var change = row.ChangeShares is { } delta ? SignedWhole(delta) : "—";
+        var shares = percentOnly ? "—" : McpFormat.WholeNumber(row.Shares);
         return $"| {rank} | {(nested ? "↳ " : "")}{MarkdownTable.EscapeCell(row.Name, "—")} | {IdText(row.HolderKey)} | {SourceText(row.Source)} | "
-            + $"{FormatDate(row.AsOf)} | {McpFormat.WholeNumber(row.Shares)} | {change} | {Percent(row.PercentOutstanding)} | "
+            + $"{FormatDate(row.AsOf)} | {shares} | {change} | {Percent(row.PercentOutstanding)} | "
             + $"{(row.Value is { } value ? McpFormat.CompactUsd(value) : "—")} | {HolderBucketTokens.Label(row.EntityType)} | "
             + $"{MarkdownTable.EscapeCell(string.Join("; ", notes), "—")} |";
     }
