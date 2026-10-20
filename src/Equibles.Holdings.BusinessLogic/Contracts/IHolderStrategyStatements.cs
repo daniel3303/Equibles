@@ -11,9 +11,10 @@ namespace Equibles.Holdings.BusinessLogic.Contracts;
 public interface IHolderStrategyStatements
 {
     /// <summary>
-    /// The holder's current stated strategy, or <c>null</c> when none is on file.
+    /// The holder's current stated strategies, one per filed document that states any (a firm can
+    /// file several brochures), newest first; empty when none is on file.
     /// </summary>
-    Task<HolderStatedStrategy> Get(
+    Task<IReadOnlyList<HolderStatedStrategy>> Get(
         InstitutionalHolder holder,
         CancellationToken cancellationToken = default
     );

@@ -42,9 +42,7 @@ public class InstitutionalHoldingsToolsStatedStrategyTests : ParadeDbMcpTestBase
     {
         await SeedHolder("00090002", "Silent Partners LP");
         var source = Substitute.For<IHolderStrategyStatements>();
-        source
-            .Get(Arg.Any<InstitutionalHolder>(), Arg.Any<CancellationToken>())
-            .Returns((HolderStatedStrategy)null);
+        source.Get(Arg.Any<InstitutionalHolder>(), Arg.Any<CancellationToken>()).Returns([]);
         await using var verify = Fixture.CreateDbContext();
 
         var output = await Sut(verify, source).GetInstitutionSummary("Silent Partners");
@@ -54,7 +52,7 @@ public class InstitutionalHoldingsToolsStatedStrategyTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetInstitutionSummary_SourceReturnsStatements_RendersEachWithDateAndLink()
+    public async Task GetInstitutionSummary_SourceReturnsDocuments_RendersEachWithItsDateAndLink()
     {
         await SeedHolder("00090003", "Systematic Advisors LLC");
         var source = Substitute.For<IHolderStrategyStatements>();
@@ -63,7 +61,7 @@ public class InstitutionalHoldingsToolsStatedStrategyTests : ParadeDbMcpTestBase
                 Arg.Is<InstitutionalHolder>(holder => holder.Cik == "00090003"),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(
+            .Returns([
                 new HolderStatedStrategy(
                     "Form ADV Part 2A",
                     new DateOnly(2026, 3, 31),
@@ -78,8 +76,14 @@ public class InstitutionalHoldingsToolsStatedStrategyTests : ParadeDbMcpTestBase
                             "Certain strategies take long and short positions."
                         ),
                     ]
-                )
-            );
+                ),
+                new HolderStatedStrategy(
+                    "Form ADV Part 2A",
+                    new DateOnly(2025, 12, 15),
+                    null,
+                    [new HolderStrategyStatement("Income", "We seek current income.")]
+                ),
+            ]);
         await using var verify = Fixture.CreateDbContext();
 
         var output = await Sut(verify, source).GetInstitutionSummary("Systematic Advisors");
@@ -93,7 +97,13 @@ public class InstitutionalHoldingsToolsStatedStrategyTests : ParadeDbMcpTestBase
             .And.Contain(
                 "- Long/short hedge: \"Certain strategies take long and short positions.\""
             )
-            .And.Contain("_Source: https://example.org/brochure/1038771_");
+            .And.Contain("_Source: https://example.org/brochure/1038771_")
+            .And.Contain("**Stated strategy (Form ADV Part 2A, 2025-12-15)**")
+            .And.Contain("- Income: \"We seek current income.\"");
+        output
+            .Split("_Source:")
+            .Should()
+            .HaveCount(2, "a document without a public link prints none");
         output
             .IndexOf("Stated strategy", StringComparison.Ordinal)
             .Should()

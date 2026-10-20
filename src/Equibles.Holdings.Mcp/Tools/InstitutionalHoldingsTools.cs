@@ -2251,23 +2251,26 @@ public class InstitutionalHoldingsTools
             })
             .ToListAsync();
 
-    // The firm's own description from a document it filed, kept apart from the measured bands.
-    private static string RenderStatedStrategy(HolderStatedStrategy strategy)
+    // The firm's own description from the documents it filed, kept apart from the measured bands.
+    private static string RenderStatedStrategy(IReadOnlyList<HolderStatedStrategy> strategies)
     {
-        if (strategy == null || strategy.Statements.Count == 0)
-            return "";
         var result = new StringBuilder();
-        result.AppendLine();
-        result.AppendLine(
-            $"**Stated strategy ({strategy.SourceName}, {FormatDate(strategy.AsOf)})** (the firm's own description; it never decides the holder type or style bands):"
-        );
-        result.AppendLine();
-        foreach (var statement in strategy.Statements)
-            result.AppendLine($"- {statement.Category}: \"{OneLine(statement.Quote)}\"");
-        if (!string.IsNullOrWhiteSpace(strategy.SourceUrl))
+        foreach (var strategy in strategies ?? [])
         {
+            if (strategy.Statements.Count == 0)
+                continue;
             result.AppendLine();
-            result.AppendLine($"_Source: {strategy.SourceUrl}_");
+            result.AppendLine(
+                $"**Stated strategy ({strategy.SourceName}, {FormatDate(strategy.AsOf)})** (the firm's own description; it never decides the holder type or style bands):"
+            );
+            result.AppendLine();
+            foreach (var statement in strategy.Statements)
+                result.AppendLine($"- {statement.Category}: \"{OneLine(statement.Quote)}\"");
+            if (!string.IsNullOrWhiteSpace(strategy.SourceUrl))
+            {
+                result.AppendLine();
+                result.AppendLine($"_Source: {strategy.SourceUrl}_");
+            }
         }
         return result.ToString();
     }
