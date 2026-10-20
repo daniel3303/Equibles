@@ -125,14 +125,15 @@ public static partial class Schedule13DGTextValues
     /// </summary>
     public static List<(int Index, int Length, DateOnly Date)> FindDates(string text)
     {
-        var dates = new List<(int, int, DateOnly)>();
-        foreach (Match match in DatePattern().Matches(text ?? string.Empty))
-        {
-            if (TryBuildDate(match, out var date))
-                dates.Add((match.Index, match.Length, date));
-        }
-
-        return dates;
+        return DatePattern()
+            .Matches(text ?? string.Empty)
+            .Select(match =>
+                TryBuildDate(match, out var date)
+                    ? (match.Index, match.Length, date)
+                    : ((int, int, DateOnly)?)null
+            )
+            .OfType<(int, int, DateOnly)>()
+            .ToList();
     }
 
     /// <summary>True when <paramref name="cusip"/> is nine characters with a valid check digit.</summary>

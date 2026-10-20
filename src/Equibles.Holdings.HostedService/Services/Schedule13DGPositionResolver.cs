@@ -131,9 +131,7 @@ internal static class Schedule13DGPositionResolver
                 issuer.Cik,
                 // A retained security with a CUSIP may be another class, so it counts.
                 Securities = issuer
-                    .Securities.Where(security =>
-                        security.Listings.Any() || security.Cusip != null
-                    )
+                    .Securities.Where(security => security.Listings.Any() || security.Cusip != null)
                     .Select(security => new
                     {
                         security.Cusip,
@@ -145,26 +143,27 @@ internal static class Schedule13DGPositionResolver
             })
             .ToListAsync(cancellationToken);
 
-        var candidates = new Dictionary<string, (Guid IssuerId, SubjectSecurity Security)>();
-        foreach (var group in rows.GroupBy(row => CikNormalizer.Canonicalize(row.Cik)))
-        {
-            if (group.Key == null || group.Count() != 1)
-                continue;
-            var issuer = group.Single();
-            if (issuer.Securities.Count != 1)
-                continue;
-            var security = issuer.Securities[0];
-            if (
-                !security.Listed
-                || security.RegistrationType != ListedSecurityType.CommonShares
-                || string.IsNullOrWhiteSpace(security.Cusip)
+        var candidates = rows.GroupBy(row => CikNormalizer.Canonicalize(row.Cik))
+            .Where(group => group.Key != null && group.Count() == 1)
+            .Select(group => (Cik: group.Key, Issuer: group.Single()))
+            .Where(pair => pair.Issuer.Securities.Count == 1)
+            .Select(pair => (pair.Cik, pair.Issuer.Id, Security: pair.Issuer.Securities[0]))
+            .Where(pair =>
+                pair.Security.Listed
+                && pair.Security.RegistrationType == ListedSecurityType.CommonShares
+                && !string.IsNullOrWhiteSpace(pair.Security.Cusip)
             )
-                continue;
-            candidates[group.Key] = (
-                issuer.Id,
-                new SubjectSecurity(security.Cusip, security.SharesOutstanding)
+            .ToDictionary(
+                pair => pair.Cik,
+                pair =>
+                    (
+                        IssuerId: pair.Id,
+                        Security: new SubjectSecurity(
+                            pair.Security.Cusip,
+                            pair.Security.SharesOutstanding
+                        )
+                    )
             );
-        }
 
         if (candidates.Count == 0)
             return [];

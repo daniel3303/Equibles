@@ -81,9 +81,8 @@ public static partial class SecSubmissionText
             sectionName = null;
         }
 
-        foreach (var rawLine in headerText.Split('\n'))
+        foreach (var line in headerText.Split('\n').Select(rawLine => rawLine.TrimEnd('\r')))
         {
-            var line = rawLine.TrimEnd('\r');
             if (line.Length == 0)
                 continue;
             var indented = char.IsWhiteSpace(line[0]);
@@ -139,9 +138,12 @@ public static partial class SecSubmissionText
         if (string.IsNullOrEmpty(submission) || string.IsNullOrWhiteSpace(documentType))
             return null;
 
-        foreach (Match document in DocumentPattern().Matches(submission))
+        foreach (
+            var body in DocumentPattern()
+                .Matches(submission)
+                .Select(document => document.Groups["body"].Value)
+        )
         {
-            var body = document.Groups["body"].Value;
             var type = DocumentTypePattern().Match(body);
             if (
                 !type.Success
