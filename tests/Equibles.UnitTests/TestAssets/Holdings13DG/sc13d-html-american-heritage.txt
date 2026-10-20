@@ -1,0 +1,797 @@
+<SEC-DOCUMENT>0001214659-24-015452.txt : 20240828
+<SEC-HEADER>0001214659-24-015452.hdr.sgml : 20240828
+<ACCEPTANCE-DATETIME>20240828161514
+ACCESSION NUMBER:		0001214659-24-015452
+CONFORMED SUBMISSION TYPE:	SC 13D
+PUBLIC DOCUMENT COUNT:		1
+FILED AS OF DATE:		20240828
+DATE AS OF CHANGE:		20240828
+GROUP MEMBERS:		ALLEN C. HARPER
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Rocky Mountain Chocolate Factory, Inc.
+		CENTRAL INDEX KEY:			0001616262
+		STANDARD INDUSTRIAL CLASSIFICATION:	SUGAR & CONFECTIONERY PRODUCTS [2060]
+		ORGANIZATION NAME:           	04 Manufacturing
+		IRS NUMBER:				471535633
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			0228
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-89350
+		FILM NUMBER:		241255651
+
+	BUSINESS ADDRESS:	
+		STREET 1:		265 TURNER DRIVE
+		CITY:			DURANGO
+		STATE:			CO
+		ZIP:			80202
+		BUSINESS PHONE:		(970) 259-0554
+
+	MAIL ADDRESS:	
+		STREET 1:		265 TURNER DRIVE
+		CITY:			DURANGO
+		STATE:			CO
+		ZIP:			80202
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Rocky Mountain Brands, Inc.
+		DATE OF NAME CHANGE:	20140808
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			American Heritage Railways, Inc.
+		CENTRAL INDEX KEY:			0002035146
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				650848158
+		STATE OF INCORPORATION:			FL
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D
+
+	BUSINESS ADDRESS:	
+		STREET 1:		479 MAIN AVENUE
+		CITY:			DURANGO
+		STATE:			CO
+		ZIP:			81301
+		BUSINESS PHONE:		(970) 259-0274
+
+	MAIL ADDRESS:	
+		STREET 1:		479 MAIN AVENUE
+		CITY:			DURANGO
+		STATE:			CO
+		ZIP:			81301
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13D
+<SEQUENCE>1
+<FILENAME>z822240sc13d.htm
+<TEXT>
+<HTML>
+<HEAD>
+     <TITLE></TITLE>
+</HEAD>
+<BODY STYLE="font: 10pt Times New Roman, Times, Serif">
+
+<P STYLE="margin: 0">&nbsp;</P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin-top: 12pt; margin-bottom: 3pt; width: 100%"><DIV STYLE="font-size: 1pt; border-top: Black 2pt solid; border-bottom: Black 1pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="margin: 0"></P>
+
+<P STYLE="font: 14pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>UNITED STATES</B></P>
+
+<P STYLE="font: 14pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>SECURITIES AND EXCHANGE COMMISSION</B></P>
+
+<P STYLE="font: 12pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Washington, D.C. 20549</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 18pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>SCHEDULE 13D</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">(Rule 13d-101)</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">INFORMATION TO BE INCLUDED IN STATEMENTS FILED
+PURSUANT</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">TO &sect; 240.13d-1(a) AND AMENDMENTS THERETO FILED
+PURSUANT TO</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&sect; 240.13d-2(a)</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">(Amendment No. )<SUP>*</SUP></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 24pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Rocky Mountain Chocolate Factory, Inc.</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center; border-top: Black 0.5pt solid">(Name of Issuer)</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">Common Stock, $0.001 par value per share</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center; border-top: Black 0.5pt solid">(Title of Class
+of Securities)</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">77467X101</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center; border-top: Black 0.5pt solid">(CUSIP Number)</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">American Heritage Railways, Inc.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">479 Main Avenue</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">Durango, CO 81301</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">(970) 259-0274</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center; border-top: Black 0.5pt solid">(Name, Address and
+Telephone Number of Person Authorized to Receive Notices and Communications)</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">August 5, 2024</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center; border-top: Black 0.5pt solid">(Date of Event Which
+Requires Filing of This Statement)</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">If the filing person has previously filed a statement on Schedule 13G
+to report the acquisition that is the subject of this Schedule 13D, and is filing this schedule because of &sect;&sect; 240.13d-1(e),
+240.13d-1(f) or 240.13d-1(g), check the following box <FONT STYLE="font-family: Wingdings">&uml;</FONT>.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in"><I>Note:</I> Schedules filed in paper format shall include
+a signed original and five copies of the schedule, including all exhibits. See &sect; 240.13d-7 for other parties to whom copies are to
+be sent.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">* The remainder of this cover page shall be filled out for a reporting
+person&rsquo;s initial filing on this form with respect to the subject class of securities, and for any subsequent amendment containing
+information which would alter disclosures provided in a prior cover page.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The information required on the remainder of this cover page shall
+not be deemed to be &ldquo;filed&rdquo; for the purpose of Section 18 of the Securities Exchange Act of 1934 (&ldquo;Act&rdquo;) or otherwise
+subject to the liabilities of that section of the Act but shall be subject to all other provisions of the Act (however, see the Notes).</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin-top: 3pt; margin-bottom: 12pt; width: 100%"><DIV STYLE="font-size: 1pt; border-top: Black 1pt solid; border-bottom: Black 2pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 1; Options: NewSection -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>1</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="border-top: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">CUSIP No. 77467X101</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-top: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">13D</FONT></TD>
+    <TD STYLE="border-top: Black 1pt solid; border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt; text-align: right"><FONT STYLE="font-size: 10pt">Page 2 of 9</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(1)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NAMES OF REPORTING PERSONS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">American Heritage Railways, Inc.</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(2)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CHECK THE APPROPRIATE
+    BOX IF A MEMBER OF A GROUP (see instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt">(a) <FONT STYLE="font-family: Wingdings">&uml;</FONT>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(b)
+    <FONT STYLE="font-family: Wingdings">&uml;</FONT></P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(3)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SEC
+USE ONLY</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(4)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SOURCE OF FUNDS (see instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">WC</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; padding-left: 34.5pt; font-size: 10pt; text-indent: -34.5pt"><FONT STYLE="font-size: 10pt">(5)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CHECK BOX IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED PURSUANT TO ITEM 2(d) or 2(e) <FONT STYLE="font-family: Wingdings">&uml;</FONT></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(6)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CITIZENSHIP OR PLACE OF
+    ORGANIZATION</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">Florida</P></TD></TR>
+  <TR>
+    <TD COLSPAN="2" ROWSPAN="8" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">NUMBER OF SHARES</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">BENEFICIALLY OWNED BY EACH</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">REPORTING PERSON WITH</P></TD>
+    <TD COLSPAN="2" STYLE="vertical-align: top; border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(7)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SOLE VOTING POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">0 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(8)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SHARED VOTING POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">1,000,000 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(9)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SOLE DISPOSITIVE POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">0 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(10)&nbsp;&nbsp;&nbsp;SHARED DISPOSITIVE POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">1,000,000 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(11)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AGGREGATE AMOUNT BENEFICIALLY
+    OWNED BY EACH REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">1,000,000 shares</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; padding-left: 34.5pt; font-size: 10pt; text-indent: -34.5pt"><FONT STYLE="font-size: 10pt">(12)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CHECK IF THE AGGREGATE AMOUNT IN ROW (11) EXCLUDES CERTAIN SHARES (see instructions) <FONT STYLE="font-family: Wingdings">&uml;</FONT></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; font-size: 10pt"><P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt">(13)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (11)</FONT></P>
+                                                                                <P STYLE="margin-left: 60pt; text-align: left; margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt">13.2%*</FONT></P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(14)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TYPE OF REPORTING PERSON
+    (see instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">CO</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">* Percentage calculated is based on 6,341,595 shares of common stock,
+par value $0.001 per share outstanding as of July 15, 2024, as reported in the Form 10-Q for the fiscal quarter ended May 31, 2024, of
+Rocky Mountain Chocolate Factory, Inc., plus 1,250,000 shares of common stock, par value $0.001 per share outstanding issued by Rocky
+Mountain Chocolate Factory, Inc. on August 5, 2024, as reported in Form 8-K filed with the U.S. Securities and Exchange Commission on
+August 7, 2024.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<!-- Field: Page; Sequence: 2 -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>2</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="border-top: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">CUSIP No. 77467X101</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-top: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">13D</FONT></TD>
+    <TD STYLE="border-top: Black 1pt solid; border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt; text-align: right"><FONT STYLE="font-size: 10pt">Page 3 of 9</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(1)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NAMES OF REPORTING PERSONS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">Allen C. Harper</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(2)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CHECK THE APPROPRIATE
+    BOX IF A MEMBER OF A GROUP (see instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt">(a) <FONT STYLE="font-family: Wingdings">&uml;</FONT>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(b)
+    <FONT STYLE="font-family: Wingdings">&uml;</FONT></P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(3)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SEC
+USE ONLY</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(4)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SOURCE OF FUNDS (see instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">OO</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; padding-left: 34.5pt; font-size: 10pt; text-indent: -34.5pt"><FONT STYLE="font-size: 10pt">(5)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CHECK BOX IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED PURSUANT TO ITEM 2(d) or 2(e) <FONT STYLE="font-family: Times New Roman, Times, Serif">&#9744;</FONT>&nbsp;</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(6)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CITIZENSHIP OR PLACE OF
+    ORGANIZATION</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">United States of America</P></TD></TR>
+  <TR>
+    <TD COLSPAN="2" ROWSPAN="8" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">NUMBER OF SHARES</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">BENEFICIALLY OWNED BY EACH</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">REPORTING PERSON WITH</P></TD>
+    <TD COLSPAN="2" STYLE="vertical-align: top; border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(7)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SOLE VOTING POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">1,911 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(8)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SHARED VOTING POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">1,000,000 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(9)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SOLE DISPOSITIVE POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">1,911 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; font-size: 10pt"><FONT STYLE="font-size: 10pt">(10)&nbsp;&nbsp;&nbsp;SHARED DISPOSITIVE POWER</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="2" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; padding-left: 1in; font-size: 10pt"><FONT STYLE="font-size: 10pt">1,000,000 shares</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(11)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AGGREGATE AMOUNT BENEFICIALLY
+    OWNED BY EACH REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">1,001,911 shares</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; padding-left: 34.5pt; font-size: 10pt; text-indent: -34.5pt"><FONT STYLE="font-size: 10pt">(12)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CHECK IF THE AGGREGATE AMOUNT IN ROW (11) EXCLUDES CERTAIN SHARES (see instructions) <FONT STYLE="font-family: Wingdings">&uml;</FONT></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid; font-size: 10pt"><P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt">(13)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (11)</FONT></P>
+                                                                                <P STYLE="margin-left: 60pt; margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt">13.2%*</FONT></P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD COLSPAN="4" STYLE="border-right: Black 1pt solid; border-bottom: Black 1pt solid; border-left: Black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(14)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TYPE OF REPORTING PERSON
+    (see instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 60pt; text-align: left">IN</P></TD></TR>
+  </TABLE>
+
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">* Percentage calculated is based on 6,341,595 shares of common stock,
+par value $0.001 per share outstanding as of July 15, 2024, as reported in the Form 10-Q for the fiscal quarter ended May 31, 2024, of
+Rocky Mountain Chocolate Factory, Inc., plus 1,250,000 shares of common stock, par value $0.001 per share outstanding issued by Rocky
+Mountain Chocolate Factory, Inc. on August 5, 2024, as reported in Form 8-K filed with the U.S. Securities and Exchange Commission on
+August 7, 2024.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<!-- Field: Page; Sequence: 3 -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>3</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 40pt"><B>Item 1.</B></TD><TD><B>Security and Issuer.</B></TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">The securities to which this statement on Schedule 13D (this
+&ldquo;Statement&rdquo;) relates are the common stock, par value $0.001 per share (the &ldquo;Common Stock&rdquo;), of Rocky Mountain
+Chocolate Factory, Inc., a Delaware corporation (the &ldquo;Issuer&rdquo;). The address of the principal executive offices of the Issuer
+is 265 Turner Drive, Durango, CO 81303.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 40pt"><B>Item 2.</B></TD><TD><B>Identity and Background.</B></TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(a)</TD><TD><I>Name</I><BR>
+<BR>
+This Statement is filed by:</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.75in"></TD><TD STYLE="width: 0.25in">(i)</TD><TD>American Heritage Railways, Inc., a Florida corporation (&ldquo;AHR&rdquo;);</TD></TR></TABLE>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.75in"></TD><TD STYLE="width: 0.25in">(ii)</TD><TD>Allen C. Harper, who serves as the chief executive officer, director, and controlling shareholder of AHR;</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.75in">AHR and Mr. Harper are referred to collectively as the &ldquo;Reporting
+Persons.&rdquo;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(b)</TD><TD><I>Residence of Business Address</I><BR>
+<BR>
+The address of the principal business and principal office of each of the Reporting Persons is 479 Main Avenue, Durango, CO 81301.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(c)</TD><TD><I>Present Principal Occupation or Employment and the Name, Principal Business and Address of any Corporation or Other Organization
+in Which Such Employment Is Conducted</I><BR>
+<BR>
+The principal business of AHR is operating a heritage tourism company.<BR>
+<BR>
+The principal occupation of Allen C. Harper is acting as the chief executive officer of AHR.<BR>
+<BR>
+</TD></TR></TABLE>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(d)</TD><TD><I>Criminal Convictions</I><BR>
+<BR>
+During the past five years, none of the Reporting Persons has been convicted in a criminal proceeding (excluding traffic violations or
+similar misdemeanors).</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(e)</TD><TD><I>Civil Proceedings<BR>
+<BR>
+</I>During the past five years, none of the Reporting Persons has been a party to a civil proceeding of a judicial or administrative body
+of competent jurisdiction and as a result of such proceeding such person was or is subject to a judgment, decree or final order enjoining
+future violations of, or prohibiting or mandating activities subject to, federal or state securities laws or finding any violation with
+respect to such laws.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(f)</TD><TD><I>Citizenship</I><BR>
+<BR>
+AHR is a Florida corporation. Mr. Allen C. Harper is a citizen of the United States of America.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 40pt"><B>Item 3.</B></TD><TD><B>Source and Amount of Funds or Other Consideration.</B></TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">All of the shares of Common Stock to which this Statement
+relates were purchased on behalf of the Reporting Persons using the investment capital of the Reporting Persons. Such shares of Common
+Stock are or may be held from time to time in margin accounts established with their respective brokers or banks, and a portion of the
+purchase price for the Common Stock may have been obtained through margin borrowing. Common Stock positions held in margin accounts may
+be pledged as collateral security for the repayment of debit balances in the margin accounts. The aggregate purchase price of the 1,001,911
+shares of Common Stock acquired was approximately $1,760,112.55 (excluding commissions).</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-right: 0; margin-bottom: 0pt">&nbsp;</P>
+
+<!-- Field: Page; Sequence: 4 -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>4</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-right: 0; margin-bottom: 0pt">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-right: 0; margin-bottom: 0pt"></P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 40pt"><B>Item 4.</B></TD><TD><B>Purpose of Transaction.</B></TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">The Reporting Persons purchased the shares of Common Stock
+for investment purposes, and such purchases have been made in the ordinary course of business of the Reporting Persons.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">In pursuing such investment purposes, the Reporting Persons
+may further purchase, hold, vote, trade, dispose, or otherwise deal in the Common Stock at times, and in such manner, as they deem advisable
+to benefit from, among other things, (1) changes in the market prices of the shares of Common Stock; (2) changes in the Issuer&rsquo;s
+operations, business strategy, or prospects; or (3) from the sale or merger of the Issuer. To evaluate such alternatives, the Reporting
+Persons will closely monitor the Issuer&rsquo;s operations, prospects, business development, management, competitive and strategic matters,
+capital structure, and prevailing market conditions, as well as other economic, securities markets, and investment considerations. The
+Reporting Persons have in the past discussed, and may in the future discuss, such matters with the management or Board of Directors of
+the Issuer. Such evaluations and discussions may materially affect, and result in, among other things, the Reporting Persons (1) modifying
+their ownership of the Common Stock; (2) exchanging information with the Issuer pursuant to appropriate confidentiality or similar agreements;
+(3) proposing changes in the Issuer&rsquo;s operations, governance, or capitalization; (4) initiating or pursuing a transaction that would
+result in the Reporting Persons&rsquo; acquisition of all or a controlling interest in the Issuer; or (5) pursuing one or more of the
+other actions described in subsections (a) through (j) of Item 4 of Schedule 13D.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 40pt"><B>Item 5.</B></TD><TD><B>Interest in Securities of the Issuer.</B></TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.75in; text-indent: -0.25in">(a) and (b)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The responses of the
+Reporting Persons to rows 7, 8, 9, 10, 11 and 13 on the cover pages of this Statement are incorporated herein by reference. As of 4:00
+p.m., Eastern time, on August 15, 2025, the Reporting Persons beneficially owned 1,001,911 shares of Common Stock, representing approximately
+13.2% of the outstanding shares of Common Stock. The percentage in this paragraph relating to beneficial ownership of Common Stock is
+based on 6,341,595 shares of common stock, par value $0.001 per share outstanding as of July 15, 2024, as reported in the Form 10-Q for
+the fiscal quarter ended May 31, 2024, of Rocky Mountain Chocolate Factory, Inc., plus 1,250,000 shares of common stock, par value $0.001
+per share outstanding issued by Rocky Mountain Chocolate Factory, Inc. on August 5, 2024, as reported in Form 8-K filed with the U.S.
+Securities and Exchange Commission on August 7, 2024.<BR>
+<BR>
+</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.75in">Mr. Allen C. Harper, as the chief executive officer, a director,
+and the controlling shareholder of AHR, may be deemed to have the power to direct the voting and disposition of the shares of Common Stock
+beneficially owned by AHR, and may be deemed to be the indirect beneficial owner of such shares. Mr. Allen C. Harper disclaims beneficial
+ownership of such shares for all other purposes. Mr. Allen C. Harper owns shares of Common Stock in his personal capacity for which he
+has sole power to direct the voting and disposition of the shares of Common Stock.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(c)</TD><TD>Except as set forth in Schedule A, none of the Reporting Persons has effected any transactions in the Common Stock in the 60 days
+prior to the date of this Statement.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(d)</TD><TD>No other person is known to the Reporting Persons to have the right to receive or the power to direct the receipt of dividends from,
+or the proceeds from the sale of, the shares of Common Stock covered by this Statement.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0.5in"></TD><TD STYLE="width: 0.25in">(e)</TD><TD>Not applicable.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<!-- Field: Page; Sequence: 5 -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>5</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-right: 0; margin-bottom: 0pt">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 40pt"><B>Item 6.</B></TD><TD><B>Contracts, Arrangements, Understandings or Relationships With Respect to Securities of the Issuer.</B></TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0 0pt 0.5in">Other than as described in this Statement, to the knowledge
+of the Reporting Persons, there are no other contracts, arrangements, understandings or relationships (legal or otherwise) among the
+Reporting Persons or between the Reporting Persons and any other persons with respect to any securities of the Issuer, including but
+not limited to transfer or voting of any of the securities, finder&rsquo;s fees, joint ventures, loan or option arrangements, puts or
+calls, guarantees of profits, division of profits or loss, or the giving or withholding of proxies.&nbsp;</P>
+
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-right: 0; margin-bottom: 0pt">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 40pt"><B>Item 7.</B></TD><TD><B>Material to be Filed as Exhibits.</B></TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 21%; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt"><B>Exhibit Number</B></FONT></TD>
+    <TD STYLE="width: 2%; font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="width: 77%; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt"><B>Description</B></FONT></TD></TR>
+  <TR STYLE="vertical-align: top; background-color: rgb(204,238,255)">
+    <TD STYLE="font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">1</FONT></TD>
+    <TD STYLE="font-size: 10pt">&nbsp;</TD>
+    <TD STYLE="font-size: 10pt"><FONT STYLE="font-size: 10pt">Joint Filing Agreement, dated August 15, 2024.</FONT></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<!-- Field: Page; Sequence: 6 -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>6</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B></B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>SIGNATURES</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">After reasonable inquiry and to the best of his knowledge and belief,
+the undersigned certifies that the information set forth in this statement is true, complete, and correct.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Dated: August 15, 2024</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="text-align: left; vertical-align: top"><P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-bottom: 0pt">AMERICAN HERITAGE RAILWAYS, INC.</P>
+</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 50%">&nbsp;</TD>
+    <TD STYLE="width: 3%">&nbsp;</TD>
+    <TD STYLE="width: 47%">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt"><FONT STYLE="font-size: 10pt">By:</FONT></TD>
+    <TD STYLE="border-bottom: Black 1pt solid">/s/ Allen C. Harper</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD><FONT STYLE="font-size: 10pt">Name: Allen C. Harper</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD><FONT STYLE="font-size: 10pt">Title: Chief Executive Officer</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-bottom: 1pt">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid">/s/ Allen C. Harper </TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD COLSPAN="2"><FONT STYLE="font-size: 10pt">Allen C. Harper</FONT></TD></TR>
+  </TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<!-- Field: Page; Sequence: 7 -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>7</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Schedule A</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Transactions by the Reporting Persons in the
+Past 60 Days</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The following table sets forth all unreported transactions with respect
+to the Common Stock effected in the last 60 days by or on behalf of the Reporting Persons, inclusive of any transactions effected through
+4:00 p.m., Eastern time, on August 15, 2024. The single reported transaction was effected pursuant to a securities purchase agreement,
+dated as of August 5, 2024, by and between Rocky Mountain Chocolate Factory, Inc. and AHR.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><B>&nbsp;</B></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="width: 21%; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Person Effecting the</B></FONT></P>
+                                                                                <P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Transaction</B></FONT></P></TD>
+    <TD STYLE="width: 2%; font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="width: 13%; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Transaction</B></FONT></P>
+                                                                                <P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Date</B></FONT></P></TD>
+    <TD STYLE="width: 2%; font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="width: 32%; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt"><B>Nature of Transaction</B></FONT></TD>
+    <TD STYLE="width: 2%; font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="width: 13%; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Securities</B></FONT></P>
+                                                                                <P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Purchased</B></FONT></P></TD>
+    <TD STYLE="width: 2%; font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="width: 13%; border-bottom: Black 1pt solid; font-size: 10pt; text-align: center"><P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Price per</B></FONT></P>
+                                                                                <P STYLE="margin-top: 0; margin-bottom: 0"><FONT STYLE="font-size: 10pt"><B>Share</B></FONT></P></TD></TR>
+  <TR STYLE="background-color: rgb(204,238,255)">
+    <TD STYLE="font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">AHR</FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">08/06/2024</FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">Purchase of Common Stock</FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">1,000,000</FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: center">&nbsp;</TD>
+    <TD STYLE="font-size: 10pt; text-align: center"><FONT STYLE="font-size: 10pt">$1.75</FONT></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<!-- Field: Page; Sequence: 8 -->
+    <DIV STYLE="margin-top: 8pt; margin-bottom: 6pt; border-bottom: Black 2px solid"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font-size: 10pt"><TR STYLE="vertical-align: top; text-align: left"><TD STYLE="width: 33%">&nbsp;</TD><TD STYLE="width: 34%; text-align: center">Page
+                                            <!-- Field: Sequence; Type: Arabic; Name: PageNo --><B>8</B><!-- Field: /Sequence --> of
+                                            <B>9</B></TD><TD STYLE="width: 33%; text-align: right">&nbsp;</TD></TR></TABLE></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 8pt"><TABLE CELLPADDING="0" CELLSPACING="0" STYLE="width: 100%"><TR><TD STYLE="text-align: left; width: 100%"><FONT STYLE="font-size: 8pt">&nbsp;</FONT></TD></TR></TABLE></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>JOINT FILING AGREEMENT</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">In accordance with Rule 13d-1(k)(1)(iii) under the Securities Exchange
+Act of 1934, as amended, the persons named below agree to the joint filing on behalf of each of them of a Statement on Schedule 13D (including
+additional amendments thereto) with respect to the shares of Common Stock, $0.001 par value, of Rocky Mountain Chocolate Factory, Inc.,
+a Delaware corporation. This Joint Filing Agreement shall be filed as an Exhibit to such Statement.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Dated: August 15, 2024</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="text-align: left; vertical-align: top"><P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-bottom: 0pt">AMERICAN HERITAGE RAILWAYS, INC.</P>
+</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 50%">&nbsp;</TD>
+    <TD STYLE="width: 3%">&nbsp;</TD>
+    <TD STYLE="width: 47%">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt"><FONT STYLE="font-size: 10pt">By:</FONT></TD>
+    <TD STYLE="border-bottom: Black 1pt solid">/s/ Allen C. Harper </TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD><FONT STYLE="font-size: 10pt">Name: Allen C. Harper</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD><FONT STYLE="font-size: 10pt">Title: Chief Executive Officer</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD>
+    <TD>&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-bottom: 1pt">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid">/s/ Allen C. Harper </TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD>&nbsp;</TD>
+    <TD COLSPAN="2"><FONT STYLE="font-size: 10pt">Allen C. Harper</FONT></TD></TR>
+  </TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-bottom: 0pt">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: center; margin-top: 0pt; margin-bottom: 0pt">Page <B>9</B> of <B>9</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"></P>
+
+<P STYLE="margin: 0"></P>
+
+<!-- Field: Rule-Page --><DIV ALIGN="LEFT" STYLE="margin-top: 3pt; margin-bottom: 3pt"><DIV STYLE="font-size: 1pt; border-top: Black 2px solid; width: 100%">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="margin: 0">&nbsp;</P>
+
+<P STYLE="margin: 0">&nbsp;</P>
+
+</BODY>
+</HTML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

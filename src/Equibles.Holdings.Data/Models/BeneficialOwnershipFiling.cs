@@ -51,6 +51,19 @@ public class BeneficialOwnershipFiling
     /// </summary>
     public bool IsUnreadable { get; set; }
 
+    /// <summary>
+    /// The text reader version that read a pre-XML filing (form SC 13D or SC 13G); null for a
+    /// filing read from structured XML.
+    /// </summary>
+    public int? ParserVersion { get; set; }
+
+    /// <summary>
+    /// Why the text reader refused the filing, which is then unreadable and parked under
+    /// <see cref="ParserVersion"/>: a later reader version reads it again.
+    /// </summary>
+    [MaxLength(128)]
+    public string RefusalReason { get; set; }
+
     public DateTime ReadAt { get; set; } = DateTime.UtcNow;
 
     public virtual List<BeneficialOwnershipReportingPerson> ReportingPersons { get; set; } = [];

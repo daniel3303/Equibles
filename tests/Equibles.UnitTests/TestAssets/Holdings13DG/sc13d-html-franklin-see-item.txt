@@ -1,0 +1,1196 @@
+<SEC-DOCUMENT>0001104659-24-023494.txt : 20240214
+<SEC-HEADER>0001104659-24-023494.hdr.sgml : 20240214
+<ACCEPTANCE-DATETIME>20240214152306
+ACCESSION NUMBER:		0001104659-24-023494
+CONFORMED SUBMISSION TYPE:	SC 13D
+PUBLIC DOCUMENT COUNT:		2
+FILED AS OF DATE:		20240214
+DATE AS OF CHANGE:		20240214
+GROUP MEMBERS:		DAVID J. ADELMAN
+GROUP MEMBERS:		FSH SEED CAPITAL VEHICLE I LLC
+GROUP MEMBERS:		MICHAEL C. FORMAN
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			KKR FS Income Trust Select
+		CENTRAL INDEX KEY:			0001975736
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				923617067
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-94422
+		FILM NUMBER:		24636761
+
+	BUSINESS ADDRESS:	
+		STREET 1:		201 ROUSE BOULEVARD
+		CITY:			PHILADELPHIA
+		STATE:			PA
+		ZIP:			19112
+		BUSINESS PHONE:		215-495-1150
+
+	MAIL ADDRESS:	
+		STREET 1:		201 ROUSE BOULEVARD
+		CITY:			PHILADELPHIA
+		STATE:			PA
+		ZIP:			19112
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Franklin Square Holdings, L.P.
+		CENTRAL INDEX KEY:			0001697432
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				260196373
+		STATE OF INCORPORATION:			PA
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D
+
+	BUSINESS ADDRESS:	
+		STREET 1:		201 ROUSE BOULEVARD
+		CITY:			PHILADELPHIA
+		STATE:			PA
+		ZIP:			19112
+		BUSINESS PHONE:		2154951150
+
+	MAIL ADDRESS:	
+		STREET 1:		201 ROUSE BOULEVARD
+		CITY:			PHILADELPHIA
+		STATE:			PA
+		ZIP:			19112
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13D
+<SEQUENCE>1
+<FILENAME>tm246257d1_sc13d.htm
+<DESCRIPTION>SC 13D
+<TEXT>
+<HTML>
+<HEAD>
+     <TITLE></TITLE>
+</HEAD>
+<BODY STYLE="font: 10pt Times New Roman, Times, Serif">
+
+<P STYLE="text-align: center; margin-top: 0; margin-bottom: 0">&nbsp;</P>
+
+<P STYLE="text-align: center; margin-top: 0; margin-bottom: 0"></P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin-top: 0; margin-bottom: 0; width: 100%"><DIV STYLE="font-size: 1pt; border-top: Black 2pt solid; border-bottom: Black 1pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="text-align: center; margin-top: 0; margin-bottom: 0"></P>
+
+<P STYLE="text-align: center; margin-top: 0; margin-bottom: 0">&nbsp;</P>
+
+<P STYLE="font: 18pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>UNITED STATES </B></P>
+
+<P STYLE="font: 18pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>SECURITIES AND EXCHANGE COMMISSION </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>WASHINGTON, DC 20549</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 18pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>SCHEDULE 13D </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>(Amendment No. )* </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Under the Securities Exchange Act of 1934</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 18pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>KKR FS Income Trust Select</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>(Name of Issuer) </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Common Shares of Beneficial Interest, par value
+$0.01 per share </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>(Title of Class of Securities) </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>48256J 108 </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>(CUSIP Number)</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Michael C. Forman </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>KKR FS Income Trust Select</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>201 Rouse Boulevard </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Philadelphia, PA 19112 </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>(215) 495-1150 </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>(Name, Address and Telephone Number of Person
+Authorized to Receive Notices and Communications) </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B><I>With copies to: </I></B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>James A. Lebovitz, Esq.</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Eric S. Siegel, Esq.</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Clay Douglas, Esq.</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Dechert LLP </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Cira Centre </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>2929 Arch Street </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Philadelphia, PA 19104 </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Tel: (215)&nbsp;994-4000 </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Fax: (215)&nbsp;994-2222 </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>February 9, 2024</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>(Date of Event which Requires Filing of this
+Statement) </B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">If the filing
+person has previously filed a statement on Schedule 13G to report the acquisition which is the subject of this Schedule 13D, and is filing
+this schedule because of &sect;&sect;240.13d-1(e), 240.13d-1(f) or 240.13d-1(g), check the following box <FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT>.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif"><B>NOTE:</B></FONT>
+Schedules filed in paper format shall include a signed original and five copies of the schedule, including all exhibits. See &sect;240.13d-7
+for other parties to whom copies are to be sent.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin-top: 0; margin-bottom: 0; width: 100%"><DIV STYLE="font-size: 1pt; border-top: Black 1pt solid; border-bottom: Black 2pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 1 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>1 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">NAMES OF REPORTING PERSONS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Franklin Square Holdings, L.P.</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>2</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CHECK THE APPROPRIATE BOX IF A MEMBER OF GROUP</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">(a)
+</FONT><FONT STYLE="font-family: Wingdings">&#168;</FONT>&#8239;(b) <FONT STYLE="font-family: Wingdings">&#120;</FONT></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>3</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">SEC USE ONLY</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>4</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOURCE OF FUNDS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">WC</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>5</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED PURSUANT TO ITEM 2(d) OR 2(e) <FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>6</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CITIZENSHIP OR PLACE OF ORGANIZATION</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">United States</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD ROWSPAN="4" STYLE="width: 15%; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.25pt 2.5pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">NUMBER OF</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">SHARES</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">BENEFICIALLY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">OWNED BY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">EACH</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">REPORTING</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">WITH</P></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 2%; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>7 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 81%; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>8</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(1)</SUP></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>9</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 3.5pt 0.25pt 3.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>10</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 2.5pt 0.25pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(1)</SUP></P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>11</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(1)</SUP></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>12</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF THE AGGREGATE AMOUNT IN ROW (11) EXCLUDES CERTAIN SHARES (See Item 5) </FONT><FONT STYLE="font-family: Wingdings; font-size: 10pt"><FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>13</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (11)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">100%</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>14</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">TYPE OF REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">PN</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(1) Includes 40 Class S common shares of beneficial interest, par value
+$0.01 per share (the &ldquo;Shares&rdquo;), of KKR FS Income Trust Select (the &ldquo;Fund&rdquo;) held by FSH Seed Capital Vehicle I
+LLC (the &ldquo;Seed Vehicle&rdquo;), a wholly-owned special purpose financing subsidiary of Franklin Square Holdings, L.P. (&ldquo;FSH&rdquo;).
+As the direct parent of the Seed Vehicle, FSH may be deemed to have shared voting and dispositive power of the Shares held by the Seed
+Vehicle.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 2 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>1 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">NAMES OF REPORTING PERSONS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">FSH Seed Capital Vehicle I LLC</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>2</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CHECK THE APPROPRIATE BOX IF A MEMBER OF GROUP</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">(a) </FONT><FONT STYLE="font-family: Wingdings"><FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT>
+    (b) <FONT STYLE="font-family: Wingdings"><FONT STYLE="font-family: Wingdings">&#120;</FONT></FONT></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>3</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">SEC USE ONLY</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>4</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOURCE OF FUNDS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">AF</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>5</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED PURSUANT TO ITEM 2(d) OR 2(e) <FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>6</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CITIZENSHIP OR PLACE OF ORGANIZATION</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">United States</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD ROWSPAN="4" STYLE="width: 15%; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.25pt 2.5pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">NUMBER OF</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">SHARES</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">BENEFICIALLY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">OWNED BY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">EACH</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">REPORTING</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">WITH</P></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 2%; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>7 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 81%; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>8</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">40</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>9</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 3.5pt 0.25pt 3.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>10</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 2.5pt 0.25pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">40</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>11</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">40</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>12</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF THE AGGREGATE AMOUNT IN ROW (11) EXCLUDES CERTAIN SHARES (See Item 5) </FONT><FONT STYLE="font-family: Wingdings; font-size: 10pt"><FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>13</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (11)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">100%</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>14</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">TYPE OF REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">OO</P></TD></TR>
+  </TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 3 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>1 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">NAMES OF REPORTING PERSONS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Michael C. Forman</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>2</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CHECK THE APPROPRIATE BOX IF A MEMBER OF GROUP</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">(a)
+</FONT><FONT STYLE="font-family: Wingdings">&#168;</FONT>&#8239;(b) <FONT STYLE="font-family: Wingdings">&#120;</FONT></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>3</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">SEC USE ONLY</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>4</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOURCE OF FUNDS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">AF</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>5</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED PURSUANT TO ITEM 2(d) OR 2(e) </FONT><FONT STYLE="font-family: Wingdings; font-size: 10pt"><FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>6</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CITIZENSHIP OR PLACE OF ORGANIZATION</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">United States</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD ROWSPAN="4" STYLE="width: 15%; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.25pt 2.5pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">NUMBER OF</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">SHARES</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">BENEFICIALLY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">OWNED BY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">EACH</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">REPORTING</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">WITH</P></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 2%; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>7 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 81%; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>8</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(2)</SUP></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>9</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 3.5pt 0.25pt 3.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>10</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 2.5pt 0.25pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(2)</SUP></P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>11</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(2)</SUP></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>12</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF THE AGGREGATE AMOUNT IN ROW (11) EXCLUDES CERTAIN SHARES (See Item 5) </FONT><FONT STYLE="font-family: Wingdings; font-size: 10pt"><FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>13</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (11)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">100%</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>14</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">TYPE OF REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">IN</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(2) Includes 40 Shares held by the Seed Vehicle, a wholly-owned special
+purpose financing subsidiary of FSH. Mr. Forman and Mr. Adelman each own equal interests in the general partner of FSH, the direct parent
+of the Seed Vehicle, and may be deemed to have shared voting and dispositive power of the Shares held by FSH and the Seed Vehicle.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 4 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>1 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">NAMES OF REPORTING PERSONS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">David J. Adelman</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>2</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CHECK THE APPROPRIATE BOX IF A MEMBER OF GROUP</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">(a) </FONT><FONT STYLE="font-family: Wingdings">&#168;</FONT><FONT STYLE="font-family: Times New Roman, Times, Serif">&nbsp;</FONT>(b)
+    <FONT STYLE="font-family: Wingdings">&#120;</FONT></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>3</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">SEC USE ONLY</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>4</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOURCE OF FUNDS</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">AF</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>5</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED PURSUANT TO ITEM 2(d) OR 2(e) <FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>6</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">CITIZENSHIP OR PLACE OF ORGANIZATION</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">United States</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD ROWSPAN="4" STYLE="width: 15%; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.25pt 2.5pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">NUMBER OF</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">SHARES</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">BENEFICIALLY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">OWNED BY</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">EACH</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">REPORTING</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">WITH</P></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 2%; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>7 </B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 81%; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>8</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED VOTING POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(3)</SUP></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 3.5pt 0.5pt 3.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>9</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SOLE DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">0</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 3.5pt 0.25pt 3.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>10</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt 0.25pt 0.25pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; padding: 0.25pt 2.5pt 0.25pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">SHARED DISPOSITIVE POWER (See Item 5)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(3)</SUP></P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-size: 1pt">&nbsp;</FONT></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR>
+    <TD STYLE="vertical-align: top; width: 5%; border: black 1pt solid; padding: 0.5pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>11</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 1%; border-top: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 94%; border-top: black 1pt solid; border-right: black 1pt solid; border-bottom: black 1pt solid; padding: 0.5pt 2.5pt 0.5pt 1.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif">40</FONT><SUP>(3)</SUP></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>12</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">CHECK IF THE AGGREGATE AMOUNT IN ROW (11) EXCLUDES CERTAIN SHARES (See Item 5) </FONT><FONT STYLE="font-family: Wingdings; font-size: 10pt"><FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>13</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (11)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">100%</P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; border-right: black 1pt solid; border-bottom: black 1pt solid; border-left: black 1pt solid; padding: 0.25pt 1.5pt 0.5pt 2.5pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>14</B></FONT></TD>
+    <TD STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding: 0.25pt 0.25pt 0.5pt 1pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; border-bottom: black 1pt solid; padding: 0.25pt 2.5pt 0.5pt 1.25pt; border-right: black 1pt solid">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">TYPE OF REPORTING PERSON</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">IN</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(3) Includes 40 Shares held by the Seed Vehicle, a wholly-owned special
+purpose financing subsidiary of FSH. Mr. Forman and Mr. Adelman each own equal interests in the general partner of FSH, the direct parent
+of the Seed Vehicle, and may be deemed to have shared voting and dispositive power of the Shares held by FSH and the Seed Vehicle.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 5 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 0.75in; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Item 1.</B></FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: justify"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B><U>Security and Issuer</U></B></FONT><B><FONT STYLE="font-size: 10pt">.</FONT></B></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The class of equity securities to which this statement relates is the
+Class S common shares of beneficial interest, par value $0.01 per share (the &ldquo;<U>Shares</U>&rdquo;), of KKR FS Income Trust Select
+(the &ldquo;<U>Fund</U>&rdquo;), a Delaware statutory trust. The Fund is <FONT STYLE="background-color: white">an externally managed,&nbsp;non-diversified,&nbsp;closed-end&nbsp;management
+investment company registered under the Investment Company Act of 1940, as amended (the &ldquo;<U>1940 Act</U>&rdquo;), that intends to
+file an election to be regulated as a business development company (a &ldquo;<U>BDC</U>&rdquo;) under the 1940 Act.</FONT> The Fund&rsquo;s
+principal executive offices are located at 201 Rouse Boulevard, Philadelphia, Pennsylvania 19112.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 0.75in; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Item 2.</B></FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: justify"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B><U>Identity and Background</U></B></FONT><B><FONT STYLE="font-size: 10pt">.</FONT></B></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(a) The Reporting Persons are Franklin Square Holdings, L.P. (&ldquo;<U>FSH</U>,&rdquo;
+doing business as &ldquo;<U>FS Investments</U>&rdquo;), FSH Seed Capital Vehicle I LLC (the &ldquo;<U>Seed Vehicle</U>&rdquo;), Michael
+C. Forman and David J. Adelman. FSH is a Pennsylvania limited partnership, and its principal business is conducting, through its registered
+investment adviser subsidiaries, a leading asset management business dedicated to helping individuals, financial professionals and institutions
+design better portfolios. The Seed Vehicle, a Delaware limited liability company, was created to hold investment products sponsored by
+FSH in connection with a financing transaction with Nomura Securities (Bermuda) Ltd., as lender, in which the Seed Vehicle, a wholly-owned
+special purpose financing subsidiary of FSH, serves as a borrower.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(b) The business address of each reporting person is 201 Rouse Boulevard,
+Philadelphia, Pennsylvania 19112.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(c) Mr. Forman is the Chairman and chief executive officer of FS Investments
+and has been leading FS Investments since founding it in 2007. Mr. Forman serves as Chairman and chief executive officer of the Fund and
+serves as Chairman, president and/or chief executive officer of certain of the firm&rsquo;s other funds and affiliated investment advisers.
+Mr. Adelman is one of the founders of FS Investments and is the Vice Chairman of FS Investments. Mr. Adelman also serves on the boards
+of certain of the firm&rsquo;s other funds and affiliated investment advisers. Mr. Adelman is also president and chief executive officer
+of Campus Apartments, Inc. (&ldquo;<U>Campus Apartments</U>&rdquo;), which develops, manages, designs and privately finances upscale housing
+facilities for colleges and universities across the United States. The principal business and business address of FS Investments and the
+Seed Vehicle are described in Items 2(a) and (b) above. The business address for Campus Apartments is 4043 Walnut Street, Philadelphia,
+Pennsylvania 19104.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(d) No Reporting Person has been convicted in a criminal proceeding
+(excluding traffic violations or similar misdemeanors) during the last five years.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(e) During the last five years, no Reporting Person was a party to
+a civil proceeding of a judicial or administrative body of competent jurisdiction as a result of which he or it was or is subject to a
+judgment, decree or final order enjoining future violations of, or prohibiting or mandating activities subject to, federal or state securities
+laws or finding any violation with respect to such laws.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(f) Messrs. Forman and Adelman are United States citizens.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 0.75in; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Item 3.</B></FONT></TD>
+    <TD STYLE="font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B><U>Source and Amount of Funds or Other Consideration</U></B></FONT><B><FONT STYLE="font-size: 10pt">. </FONT></B></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif; background-color: white">On
+May&nbsp;16, 2023, the Seed Vehicle contributed $1,000 to the Fund as a seed investment to purchase 40 Shares at $25.00 per Share (the
+ &ldquo;<U>Initial Seed Investment</U>&rdquo;). The Initial Seed Investment was a </FONT>private placement transaction under the exemption
+provided by Section&nbsp;4(a)(2) of the U.S. Securities Act of 1933, as amended (the &ldquo;<U>Securities Act</U>&rdquo;), and Rule 506
+of Regulation D promulgated thereunder.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">On February 9, 2024, the Seed Vehicle made a capital commitment to
+invest an aggregate of $10,000,000 in Shares pursuant to private placement transactions under the exemption provided by Section&nbsp;4(a)(2)
+of the U.S. Securities Act of 1933, as amended, and Rule 506 of Regulation D promulgated thereunder (the &ldquo;<U>Seed Commitment</U>&rdquo;).</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 6 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Under the terms of the Fund&rsquo;s declaration of trust (as amended
+and restated from time to time), all Shares have equal rights as to voting. Except as may be provided by the Fund&rsquo;s Board of Trustees
+(the &ldquo;<U>Board</U>&rdquo;) in setting the terms of classified or reclassified shares, the Shares have no preemptive, exchange, conversion,
+appraisal or redemption rights. In the event of the Fund&rsquo;s liquidation, dissolution or winding up, each Share would be entitled
+to share pro rata in all of the Fund&rsquo;s assets that are legally available for distribution after it pays all debts and other liabilities
+and subject to any preferential rights of holders of the Fund&rsquo;s preferred shares, if any preferred shares are outstanding at such
+time. Subject to the rights of holders of any other class or series of shares, each Share will be entitled to one vote on all matters
+submitted to a vote of shareholders, including the election of trustees. Except as may be provided by the Board in setting the terms of
+classified or reclassified shares, and subject to the express terms of any class or series of preferred shares, the holders of the Shares
+will possess exclusive voting power. There is no cumulative voting in the election of the Fund&rsquo;s trustees. Subject to the special
+rights of the holders of any class or series of preferred shares to elect trustees, each trustee of the Fund will be elected by a plurality
+of the votes cast with respect to such trustee&rsquo;s election.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The Initial Seed Investment was paid, and any purchase of Shares made
+pursuant to the Seed Commitment will be paid, from working capital of FSH.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 0.75in; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Item 4.</B></FONT></TD>
+    <TD STYLE="font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B><U>Purpose of Transaction</U></B></FONT><B><FONT STYLE="font-size: 10pt">. </FONT></B></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">FSH (indirectly through the Seed Vehicle) made the Initial Seed Investment
+and the Seed Commitment in order to provide the Fund with sufficient capital to establish an initial portfolio of investments and, as
+the ultimate parent company of one of the joint owners and operators of the Fund&rsquo;s investment adviser, to demonstrate the alignment
+of its interests with those of Fund shareholders.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The descriptions of the contributions and the transactions contained
+in Item 3 are hereby incorporated by reference into this Item 4.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Mr. Forman is the Chairman and chief executive officer of FSH, serves
+as Chairman and chief executive officer of the Fund and serves as Chairman, president and/or chief executive officer of certain of the
+firm&rsquo;s other funds and affiliated investment advisers. Mr. Adelman is one of the founders of FSH and is the Vice Chairman of FSH.
+FSH is the ultimate parent company of one of the joint owners and operators of the Fund&rsquo;s investment adviser, and the Seed Vehicle
+is a wholly-owned subsidiary of FSH. Messrs. Forman and Adelman each own equal interests in the general partner of FSH. In such roles,
+the Reporting Persons have engaged and will continue to engage in discussions with management, members of the Board and other representatives
+of the Fund, other security holders of the Fund and other persons from time to time with respect to various matters, including the Shares
+and the business and operations of the Fund.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The Reporting Persons intend to periodically review their respective
+investments in the Fund, and based on a number of factors, including the Reporting Persons&rsquo; respective evaluations of the Fund&rsquo;s
+business prospects and financial condition, the market for the Shares, general economic and stock market conditions and other investment
+opportunities, the Reporting Persons may acquire additional securities of the Fund or dispose of the Shares reported herein through open
+market (to the extent available) or privately negotiated transactions in accordance with applicable securities laws.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Notwithstanding the foregoing, the Seed Vehicle has agreed to not transfer
+or otherwise dispose of its Seed Commitment or Shares without the Fund&rsquo;s prior written consent for a period ending on the third
+anniversary of the date on which the Fund elects to be regulated as a BDC under the 1940 Act.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Except as otherwise set forth herein or as disclosed in the Fund&rsquo;s
+public filings with the Securities and Exchange Commission, the Reporting Persons do not have any current plans or proposals which would
+relate to or would result in any of the events or matters described in (a)&mdash;(j) of Item 4 of Schedule 13D. Notwithstanding the foregoing,
+the Reporting Persons intend to review and analyze his or its investment in the Fund on a continuing basis. As a result of such review
+and analysis, a Reporting Person may, at any time and from time to time, plan and/or propose to effect and/or cause one or more actions
+relating to and/or resulting in one or more of the actions specified in (a)&mdash;(j) of Item 4 of Schedule 13D.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 7 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 0.75in; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Item 5.</B></FONT></TD>
+    <TD STYLE="font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B><U>Interest in Securities of the Issuer</U></B></FONT><B><FONT STYLE="font-size: 10pt">. </FONT></B></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(a)-(b) The Reporting Persons&rsquo; responses to Rows 11, 12 and 13
+of the cover page of this Schedule 13D that relate to the aggregate number and percentage of Shares beneficially owned by the Reporting
+Persons are incorporated herein by reference. The Reporting Persons&rsquo; responses to Rows 7, 8, 9 and 10 of the cover page of this
+Schedule 13D that relate to the number of Shares as to which the Reporting Persons have sole or shared power to vote or to direct the
+vote and sole or shared power to dispose or to direct the disposition of are incorporated herein by reference. The aggregate percentage
+of Shares reported as beneficially owned by the Reporting Persons was calculated based on 40 Shares outstanding as of February 14, 2024,
+which constitute all of the issued and outstanding Shares as of February 14, 2024.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(c) Except as set forth herein, the Reporting Persons have not engaged
+in any transactions in the Shares during the past sixty days.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(d) Not applicable.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">(e) Not applicable.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 0.75in; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Item 6.</B></FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: justify"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B><U>Contracts, Arrangements, Understandings or Relationships with Respect to Securities of the Issuer</U></B></FONT><B><FONT STYLE="font-size: 10pt">.</FONT></B></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Pursuant to Rule 13d-1(k)(1) promulgated under the Securities Exchange
+Act of 1934, as amended, the Reporting Persons have entered into an agreement with respect to the joint filing of this Statement, and
+any amendment or amendments hereto.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The Seed Vehicle has agreed to not transfer or otherwise dispose of
+its Seed Commitment or Shares without the Fund&rsquo;s prior written consent for a period ending on the third anniversary of the date
+on which the Fund elects to be regulated as a BDC under the 1940 Act.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Except as set forth in this Item 6 of this Schedule 13D, the Reporting
+Persons do not have any contract, arrangement, understanding or relationship (legal or otherwise) with any person with respect to any
+securities of the Fund, including, but not limited to, any contract, arrangement, understanding or relationship concerning the transfer
+or voting of any securities of the Fund, finder&rsquo;s fees, joint ventures, loan or option arrangements, puts or calls, guaranties of
+profits, division of profits or loss or the giving or withholding of proxies.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 0.75in; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Item 7.</B></FONT></TD>
+    <TD STYLE="font-size: 10pt; text-align: justify"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B><U>Material to Be Filed as Exhibits</U></B></FONT><B><FONT STYLE="font-size: 10pt">.</FONT></B></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: bottom">
+    <TD STYLE="width: 5%; padding: 0.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Exhibit</B></P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center; border-bottom: black 1pt solid"><B>No.</B></P></TD>
+    <TD STYLE="width: 2%; padding: 0.25pt">&nbsp;</TD>
+    <TD STYLE="width: 93%; padding: 0.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center; border-bottom: black 1pt solid"><B>Description</B></P></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding: 0.25pt; font-size: 10pt"><A HREF="tm246257d1_ex1.htm"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">1</FONT></A></TD>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding: 0.25pt; font-size: 10pt"><A HREF="tm246257d1_ex1.htm"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Agreement Regarding the Joint Filing of Schedule 13D by and among the Reporting Persons.</FONT></A></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding: 0.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">3.1</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt; font-size: 10pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding: 0.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Subscription Agreement, dated as of May 16, 2023, between the Fund and the Seed Vehicle.</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding: 0.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">3.2</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding: 0.25pt; font-size: 10pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding: 0.25pt; font-size: 10pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Subscription Agreement, dated as of February 9, 2024, between the Fund and the Seed Vehicle.</FONT></TD></TR>
+  </TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"></P>
+
+<!-- Field: Page; Sequence: 8 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">&nbsp;&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B><U>SIGNATURE </U></B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">After reasonable inquiry and to the best of my knowledge and belief,
+I certify that the information set forth in this statement is true, complete and correct.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Date: February 14, 2024</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>FRANKLIN SQUARE HOLDINGS, L.P.</B></FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">By:</FONT></TD>
+    <TD COLSPAN="2" STYLE="vertical-align: bottom; border-bottom: black 1pt solid; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">/s/ Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="width: 50%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 5%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; width: 5%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Name:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 40%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Title:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Chief Executive Officer</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding: 0.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="text-transform: uppercase"><B>FSH Seed Capital Vehicle
+    I LLC </B></FONT></P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="text-transform: uppercase"><B>&nbsp;</B></FONT></P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">By: Franklin Square Holdings, L.P., as Sole Member</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">By:</FONT></TD>
+    <TD COLSPAN="2" STYLE="vertical-align: bottom; padding: 0.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; border-bottom: black 0.75pt solid">/s/ Michael C. Forman</P></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Name:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Title:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Chief Executive Officer</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; border-bottom: black 1pt solid; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">/s/ Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; border-bottom: black 1pt solid; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">/s/ David J. Adelman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">David J. Adelman</FONT></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;&nbsp;</P>
+
+<!-- Field: Page; Sequence: 9; Options: Last -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+</BODY>
+</HTML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>EX-99.1
+<SEQUENCE>2
+<FILENAME>tm246257d1_ex1.htm
+<DESCRIPTION>EXHIBIT 1
+<TEXT>
+<HTML>
+<HEAD>
+     <TITLE></TITLE>
+</HEAD>
+<BODY STYLE="font: 10pt Times New Roman, Times, Serif">
+
+<P STYLE="margin: 0">&nbsp;&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: right"><B>Exhibit 1</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>Joint Filing Agreement</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: justify">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: justify"><FONT STYLE="font-family: Times New Roman, Times, Serif">In
+accordance with Rule 13d-1(k)(1) under the Securities Exchange Act of 1934, as amended, the persons named below agree to the joint filing
+on behalf of each of them of a Statement on Schedule 13D (including amendments thereto) (the &ldquo;<U>Statement</U>&rdquo;) with respect
+to the </FONT>common shares of beneficial interest, par value $0.01 per share, of KKR FS Income Trust Select. This Joint Filing Agreement
+shall be filed as an Exhibit to such Statement. Each of the undersigned hereby agrees that, unless differentiated, this Statement is filed
+on behalf of each of the parties.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: justify">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: justify">This Agreement may be executed in any number of
+counterparts, each of which shall be deemed an original.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: justify">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: justify"><FONT STYLE="font-family: Times New Roman, Times, Serif">EXECUTED
+as of this </FONT>14th day of February, 2024.&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: justify">&nbsp;&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="font: 10pt Times New Roman, Times, Serif; width: 100%; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>FRANKLIN SQUARE HOLDINGS, L.P.</B></FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">By:</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: black 1pt solid; vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">/s/ Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="width: 50%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; width: 5%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; width: 5%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Name:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; width: 40%; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Title:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Chief Executive Officer</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding: 0.25pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="text-transform: uppercase"><B>FSH Seed Capital Vehicle
+    I LLC </B></FONT></P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="text-transform: uppercase"><B>&nbsp;</B></FONT></P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">By: Franklin Square Holdings, L.P., as Sole Member</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">By:</FONT></TD>
+    <TD COLSPAN="2" STYLE="padding: 0.25pt; vertical-align: bottom">
+    <P STYLE="border-bottom: black 0.75pt solid; font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">/s/ Michael C. Forman</P></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Name:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Title:</FONT></TD>
+    <TD STYLE="vertical-align: bottom; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Chief Executive Officer</FONT></TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="border-bottom: black 1pt solid; vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">/s/ Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Michael C. Forman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="border-bottom: black 1pt solid; vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">/s/ David J. Adelman</FONT></TD></TR>
+  <TR>
+    <TD STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt">&nbsp;</TD>
+    <TD COLSPAN="3" STYLE="vertical-align: top; padding-top: 0.25pt; padding-right: 0.25pt; padding-left: 0.25pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">David J. Adelman</FONT></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;&nbsp;</P>
+
+<!-- Field: Page; Sequence: 9; Options: Last -->
+    <DIV STYLE="border-bottom: Black 1pt solid; margin-top: 12pt; margin-bottom: 6pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+
+
+</BODY>
+</HTML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

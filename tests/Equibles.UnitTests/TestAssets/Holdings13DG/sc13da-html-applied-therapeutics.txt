@@ -1,0 +1,528 @@
+<SEC-DOCUMENT>0001104659-24-089780.txt : 20240814
+<SEC-HEADER>0001104659-24-089780.hdr.sgml : 20240814
+<ACCEPTANCE-DATETIME>20240814185246
+ACCESSION NUMBER:		0001104659-24-089780
+CONFORMED SUBMISSION TYPE:	SC 13D/A
+PUBLIC DOCUMENT COUNT:		1
+FILED AS OF DATE:		20240814
+DATE AS OF CHANGE:		20240814
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Applied Therapeutics, Inc.
+		CENTRAL INDEX KEY:			0001697532
+		STANDARD INDUSTRIAL CLASSIFICATION:	PHARMACEUTICAL PREPARATIONS [2834]
+		ORGANIZATION NAME:           	03 Life Sciences
+		IRS NUMBER:				000000000
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-91017
+		FILM NUMBER:		241210088
+
+	BUSINESS ADDRESS:	
+		STREET 1:		545 FIFTH AVENUE, SUITE 1400
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10017
+		BUSINESS PHONE:		212-220-9226
+
+	MAIL ADDRESS:	
+		STREET 1:		545 FIFTH AVENUE, SUITE 1400
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10017
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Applied Therapeutics Inc.
+		DATE OF NAME CHANGE:	20170208
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Shendelman Shoshana
+		CENTRAL INDEX KEY:			0001775490
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D/A
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O APPLIED THERAPEUTICS, INC.
+		STREET 2:		340 MADISON AVENUE, 19TH FLOOR
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10173
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13D/A
+<SEQUENCE>1
+<FILENAME>tm2421639d1_sc13da.htm
+<DESCRIPTION>SC 13D/A
+<TEXT>
+<HTML>
+<HEAD>
+     <TITLE></TITLE>
+</HEAD>
+<BODY STYLE="font: 10pt Times New Roman, Times, Serif">
+
+<P STYLE="margin: 0"></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"></P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin-top: 0pt; margin-bottom: 0pt; width: 100%"><DIV STYLE="font-size: 1pt; border-top: Black 2pt solid; border-bottom: Black 1pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>UNITED STATES<BR>
+SECURITIES AND EXCHANGE<BR>
+COMMISSION</B></P>
+
+<P STYLE="text-align: center; font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt; text-align: center"><B>Washington, D.C. 20549</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="text-align: center; font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"></P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin: 3pt auto; width: 25%"><DIV STYLE="font-size: 1pt; border-top: Black 1pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: center; margin-top: 0pt; margin-bottom: 0pt">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt; text-align: center"><B>SCHEDULE 13D/A<BR>
+(Amendment. No.&nbsp;9)</B></P>
+
+<P STYLE="text-align: center; font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt; text-align: center"><B>Under the Securities Exchange Act of 1934</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt; text-align: center"><B>&nbsp;</B></P>
+
+<P STYLE="text-align: center; font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"></P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin: 3pt auto; width: 25%"><DIV STYLE="font-size: 1pt; border-top: Black 1pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: center; margin-top: 0pt; margin-bottom: 0pt">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="width: 100%; font: 10pt Times New Roman, Times, Serif; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="width: 100%; border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 14pt"><B>APPLIED THERAPEUTICS,&nbsp;INC.</B></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">(Name of Issuer)</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>COMMON STOCK, PAR VALUE $0.0001 PER SHARE</B></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">(Title of Class&nbsp;of Securities)</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>03828A 101</B></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">(CUSIP Number)</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Shoshana Shendelman<BR>
+Applied Therapeutics,&nbsp;Inc.<BR>
+545 Fifth Avenue, Suite&nbsp;1400<BR>
+New York, New York 10017<BR>
+Telephone: (212) 220-9226</B></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">(Name, Address and Telephone Number of Person<BR>
+Authorized to Receive Notices and Communications)</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>August&nbsp;12, 2024</B></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; font-size: 10pt; text-align: center"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">(Date of Event Which Requires Filing of this Statement)</FONT></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin-top: 0pt; margin-right: 0; margin-bottom: 0pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">If
+the filing person has previously filed a statement on Schedule 13G to report the acquisition that is the subject of this Schedule 13D,
+and is filing this schedule because of &sect;&sect;240.13d-1(e), 240.13d-1(f)&nbsp;or 240.13d-1(g), check the following box <FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT>.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt"><B>Note:</B></FONT>
+Schedules filed in paper format shall include a signed original and five copies of the schedule, including all exhibits. See &sect;240.13d-7
+for other parties to whom copies are to be sent.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">* The remainder of this cover page&nbsp;shall be filled out for a reporting
+person&rsquo;s initial filing on this form with respect to the subject class of securities, and for any subsequent amendment containing
+information which would alter disclosures provided in a prior cover page.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">The information required on the remainder of this cover page&nbsp;shall
+not be deemed to be &ldquo;filed&rdquo; for the purpose of Section&nbsp;18 of the Securities Exchange Act of 1934 (&ldquo;Act&rdquo;)
+or otherwise subject to the liabilities of that section of the Act but shall be subject to all other provisions of the Act (however, see
+the Notes).</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin-top: 0pt; margin-bottom: 0pt; width: 100%"><DIV STYLE="font-size: 1pt; border-top: Black 1pt solid; border-bottom: Black 2pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 1 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLSPACING="0" CELLPADDING="0" STYLE="width: 100%; font: 10pt Times New Roman, Times, Serif; border-collapse: collapse">
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">1.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Names of Reporting Persons</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Shoshana Shendelman</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">2.</FONT></TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Check the Appropriate Box if a Member of a Group (See Instructions)</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">(a)&#8239;&#8239;&#8239;&#8239;<FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">(b)&#8239;&#8239;&#8239;&#8239;<FONT STYLE="font-family: Wingdings">&#168;</FONT></FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">3.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">SEC Use Only</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">4.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Source of Funds (See Instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">PF</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">5.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Check if Disclosure of Legal Proceedings Is Required Pursuant to Items 2(d)&nbsp;or 2(e)&nbsp;</FONT><FONT STYLE="font-family: Wingdings">&#168;</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">6.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Citizenship or Place of Organization</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">United States of America</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR>
+    <TD ROWSPAN="7" STYLE="width: 14%; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Number of</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Shares</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Beneficially</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Owned by</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Each</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Reporting</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Person</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">With:</P></TD>
+    <TD STYLE="vertical-align: top; width: 2%; padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">7.</FONT></TD>
+    <TD STYLE="vertical-align: top; width: 84%; border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Sole Voting Power<BR>
+6,020,981(1)</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="border-top: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD>
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">8.</FONT></TD>
+    <TD STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Shared Voting Power</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">1,782,374(2)</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD>
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">9.</FONT></TD>
+    <TD STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Sole Dispositive Power</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">6,020,981(1)</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD>
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">10.</FONT></TD>
+    <TD STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Shared Dispositive Power</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">1,782,374(2)</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">11.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Aggregate Amount Beneficially Owned by Each Reporting Person</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">7,803,355</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: center">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">12.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">Check if the Aggregate Amount in Row (11) Excludes Certain Shares (See Instructions) </FONT><FONT STYLE="font-family: Wingdings">&#168;</FONT></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">13.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Percent of Class&nbsp;Represented by Amount in Row (11)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">6.6%(3)</P></TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="padding-right: 5.4pt; padding-left: 5.4pt">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: top">
+    <TD STYLE="padding-right: 5.4pt; padding-left: 5.4pt; text-align: right"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">14.</FONT></TD>
+    <TD COLSPAN="2" STYLE="border-bottom: Black 1pt solid; padding-right: 5.4pt; padding-left: 5.4pt">
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Type of Reporting Person (See Instructions)</P>
+    <P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">IN</P></TD></TR>
+  </TABLE>
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Rule-Page --><DIV STYLE="margin-top: 3pt; margin-bottom: 3pt; width: 25%"><DIV STYLE="font-size: 1pt; border-top: Black 1pt solid">&nbsp;</DIV></DIV><!-- Field: /Rule-Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 0.25in">(1)</TD><TD STYLE="text-align: left">Includes (a)&nbsp;88,397 shares held by Clearpoint Strategy Group LLC, of which Dr.&nbsp;Shendelman is the sole owner, (b)&nbsp;747,886
+shares held by Trust under the Sycamore 2022 GRAT, over which Dr.&nbsp;Shendelman holds sole voting and dispositive power over such shares
+as the Investment Advisor, (c)&nbsp;86,988 shares of Common Stock underlying restricted stock units that will vest within 60 days of August&nbsp;14,
+2024 and (d)&nbsp;3,079,734 shares of Common Stock underlying outstanding options that are immediately exercisable or will be immediately
+exercisable within 60 days of August&nbsp;14, 2024.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 0.25in">(2)</TD><TD STYLE="text-align: left">Represents (a)&nbsp;1,492,094 shares held by Sycamore Family I LLC, of which Dr.&nbsp;Shendelman is the sole manager and (b)&nbsp;290,280
+shares held by Ginko Family LLC, of which Dr.&nbsp;Shendelman is the sole manager.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" WIDTH="100%" STYLE="font: 10pt Times New Roman, Times, Serif; margin-top: 0pt; margin-bottom: 0pt"><TR STYLE="vertical-align: top">
+<TD STYLE="width: 0"></TD><TD STYLE="width: 0.25in">(3)</TD><TD>Based upon 114,846,271 shares of Common Stock outstanding as of August&nbsp;6, 2024. See also footnote 1 above.</TD></TR></TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 2; Options: NewSection; Value: 2 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="font-size: 10pt; text-align: center; margin-top: 0pt; margin-bottom: 0pt"><!-- Field: Sequence; Type: Arabic; Name: PageNo -->2<!-- Field: /Sequence --></P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center">Explanatory Note</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">This Amendment No.&nbsp;9 (this &ldquo;<B><I>Amendment</I></B>&rdquo;)
+to Schedule 13D relates to the common stock, par value $0.0001 per share (&ldquo;<B><I>Common Stock</I></B>&rdquo;), of Applied Therapeutics,&nbsp;Inc.,
+a Delaware corporation (the &ldquo;<B><I>Issuer</I></B>&rdquo;), and amends the initial statement on Schedule 13D filed on May&nbsp;29,
+2019 (the &ldquo;<B><I>Original Schedule 13D</I></B>&rdquo;) as amended by that certain Amendment No.&nbsp;1 filed on June&nbsp;1, 2020
+(&ldquo;<B><I>Amendment No.&nbsp;1</I></B>&rdquo;), that certain Amendment No.&nbsp;2 filed on August&nbsp;14, 2020 (&ldquo;<B><I>Amendment
+No.&nbsp;2</I></B>&rdquo;), that certain Amendment No.&nbsp;3 filed on April&nbsp;16, 2021 (&ldquo;<B><I>Amendment No.&nbsp;3</I></B>&rdquo;),
+that certain Amendment No.&nbsp;4 filed on January&nbsp;28, 2022 (&ldquo;<B><I>Amendment No.&nbsp;4</I></B>&rdquo;), and that certain
+Amendment No.&nbsp;5 filed on October&nbsp;14, 2022 (&ldquo;<B><I>Amendment No.&nbsp;5</I></B>&rdquo;), that certain Amendment No.&nbsp;6
+filed on April&nbsp;28, 2023 (&ldquo;<B><I>Amendment No.&nbsp;6</I></B>&rdquo;), that certain Amendment No.&nbsp;7 filed on November&nbsp;13,
+2023 (&ldquo;<B><I>Amendment No.&nbsp;7</I></B>&rdquo;) and that certain Amendment No.&nbsp;8 filed on March&nbsp;5, 2024 (&ldquo;<B><I>Amendment
+No.&nbsp;8</I></B>&rdquo; and, together with the Original Schedule 13D, Amendment No.&nbsp;1, Amendment No.&nbsp;2, Amendment No.&nbsp;3,
+Amendment No.&nbsp;4, Amendment No.&nbsp;5, Amendment No.&nbsp;6 and Amendment No.&nbsp;7, the &ldquo;<B><I>Schedule 13D</I></B>&rdquo;).
+Capitalized terms used but not defined in this Amendment shall have the same meanings ascribed to them in the Schedule 13D. This Amendment
+amends the disclosures in the text of Items 4 and 5 to update information about the Reporting Person.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><B>Item 4. Purpose of Transaction.</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">The information contained in Item 4 of the Schedule
+13D is hereby amended and supplemented to include the following:</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">As a result of: (i)&nbsp;the Reporting Person&rsquo;s
+sales of certain shares of Common Stock as detailed in Item 5(c)&nbsp;below, (ii)&nbsp;certain warrant holders&rsquo; exercises of warrants
+to purchase shares of Common Stock, (iii)&nbsp;the Reporting Person&rsquo;s sales of certain shares of Common Stock to cover tax withholding
+obligations in connection with the vesting and settlement of compensatory restricted stock units and (iv)&nbsp;certain restricted stock
+units and options to purchase shares of Common Stock vesting from 61 days following the date of Amendment No.&nbsp;8 through 60 days from
+the date of this Amendment, the Reporting Person&rsquo;s beneficial ownership of Common Stock has changed by more than one percent of
+the outstanding shares of Common Stock since the date of Amendment No.&nbsp;8.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><B>Item 5. Interest in Securities of the Issuer</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">The information contained in Item 5 of the Schedule
+13D is hereby amended and restated in its entirety as follows:</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">The
+information </FONT>below is based on 114,846,271 shares of Common Stock outstanding as of August&nbsp;6, 2024.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; margin: 0pt 0; text-indent: 0.5in">(a)&nbsp;See rows (11) and (13) of the cover pages&nbsp;to
+this Schedule 13D for the aggregate number of shares of Common Stock and percentages of the shares of Common Stock beneficially owned
+by the Reporting Person.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">The securities beneficially owned by the Reporting
+Person include (i)&nbsp;86,988 shares of Common Stock underlying restricted stock units that will vest within 60 days of August&nbsp;14,
+2024 and (ii)&nbsp;3,079,734 shares of Common Stock underlying outstanding options that are immediately exercisable or will be immediately
+exercisable within 60 days of August&nbsp;14, 2024.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="text-align: left; font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">(b)&nbsp;See rows (7)&nbsp;through (10)&nbsp;of
+the cover pages&nbsp;to this Schedule 13D for the number of shares of Common Stock as to which the Reporting Person has the sole or shared
+power to vote or direct the vote and sole or shared power to dispose or to direct the disposition.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">(c)&nbsp;Except for the following transactions,
+the Reporting Person did not engage in any transaction during the past 60 days involving shares of the Issuer&rsquo;s Common Stock.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%; font: 10pt Times New Roman, Times, Serif">
+  <TR STYLE="vertical-align: bottom">
+    <TD STYLE="white-space: nowrap; border-bottom: Black 1pt solid; font: 10pt Times New Roman, Times, Serif">Date of Transaction</TD><TD STYLE="white-space: nowrap; padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif">&nbsp;</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="white-space: nowrap; border-bottom: Black 1pt solid; font: 10pt Times New Roman, Times, Serif; text-align: center">Transaction Type</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; text-align: center; padding-bottom: 1pt">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="white-space: nowrap; border-bottom: Black 1pt solid; font: 10pt Times New Roman, Times, Serif; text-align: center">Number of Shares <BR>
+of Common Stock<BR>
+ Sold</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; text-align: center; padding-bottom: 1pt">&nbsp;</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; text-align: center; padding-bottom: 1pt">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="white-space: nowrap; border-bottom: Black 1pt solid; font: 10pt Times New Roman, Times, Serif; text-align: center">Maximum Price per<BR>
+ Share</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; text-align: center; padding-bottom: 1pt">&nbsp;</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; text-align: center; padding-bottom: 1pt">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="white-space: nowrap; border-bottom: Black 1pt solid; font: 10pt Times New Roman, Times, Serif; text-align: center">Minimum Price per<BR>
+ Share</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; text-align: center; padding-bottom: 1pt">&nbsp;</TD><TD STYLE="white-space: nowrap; font: 10pt Times New Roman, Times, Serif; text-align: center; padding-bottom: 1pt">&nbsp;</TD>
+    <TD COLSPAN="2" STYLE="white-space: nowrap; border-bottom: Black 1pt solid; font: 10pt Times New Roman, Times, Serif; text-align: center">Weighted Average<BR>
+ Price per Share*</TD><TD STYLE="white-space: nowrap; padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: bottom; background-color: rgb(204,238,255)">
+    <TD STYLE="font: 10pt Times New Roman, Times, Serif; width: 20%; text-align: left"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">August&nbsp;12, 2024</FONT></TD><TD STYLE="width: 1%; padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="width: 1%; font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="font: 10pt Times New Roman, Times, Serif; width: 15%; text-align: left; padding-bottom: 1pt">Open Market Sale</TD><TD STYLE="width: 1%; font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; width: 1%; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="padding-bottom: 1pt; width: 10%; font: 10pt Times New Roman, Times, Serif; text-align: right">300,000</TD><TD STYLE="width: 1%; padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="width: 1%; font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; width: 1%; font: 10pt Times New Roman, Times, Serif; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; width: 10%; font: 10pt Times New Roman, Times, Serif; text-align: right">6.205</TD><TD STYLE="width: 1%; padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="width: 1%; font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; width: 1%; font: 10pt Times New Roman, Times, Serif; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; width: 10%; font: 10pt Times New Roman, Times, Serif; text-align: right">5.57</TD><TD STYLE="width: 1%; padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="width: 1%; font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; width: 1%; font: 10pt Times New Roman, Times, Serif; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; width: 10%; font: 10pt Times New Roman, Times, Serif; text-align: right">5.98</TD><TD STYLE="width: 1%; padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: bottom; background-color: White">
+    <TD STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">August&nbsp;13, 2024</FONT></TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; padding-bottom: 1pt">Open Market Sale</TD><TD STYLE="font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: right">357,423</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: right">6.39</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: right">5.82</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: right">6.18</TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD></TR>
+  <TR STYLE="vertical-align: bottom; background-color: rgb(204,238,255)">
+    <TD STYLE="font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt; text-align: left"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">August&nbsp;14, 2024</FONT></TD><TD STYLE="padding-bottom: 1pt; font: 10pt Times New Roman, Times, Serif; text-align: left">&nbsp;</TD><TD STYLE="font: 10pt Times New Roman, Times, Serif; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="font: 10pt Times New Roman, Times, Serif; text-align: left; padding-bottom: 1pt">Open Market Sale</TD><TD STYLE="font-size: 10pt; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">&nbsp;</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: right">119,591</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">&nbsp;</TD><TD STYLE="font-size: 10pt; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: right">6.265</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">&nbsp;</TD><TD STYLE="font-size: 10pt; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: right">5.825</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">&nbsp;</TD><TD STYLE="font-size: 10pt; padding-bottom: 1pt">&nbsp;</TD>
+    <TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">$</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: right">5.93</TD><TD STYLE="padding-bottom: 1pt; font-size: 10pt; text-align: left">&nbsp;</TD></TR>
+  </TABLE>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"><FONT STYLE="font-family: Times New Roman, Times, Serif; font-size: 10pt">*</FONT>
+The Reporting Person hereby undertakes to provide upon request by the staff of the Securities and Exchange Commission full information
+regarding the number of shares sold at each separate price.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">(d)&nbsp;Except as described in this statement,
+no person has the power to direct the receipt of dividends on or the proceeds of sales of, the shares of Common Stock owned by the Reporting
+Person.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">(e)&nbsp;Not applicable.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0"></P>
+
+<!-- Field: Page; Sequence: 3; Value: 2 -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="font-size: 10pt; text-align: center; margin-top: 0pt; margin-bottom: 0pt"><!-- Field: Sequence; Type: Arabic; Name: PageNo -->3<!-- Field: /Sequence --></P></DIV>
+    <DIV STYLE="break-before: page; margin-top: 6pt; margin-bottom: 12pt"><P STYLE="margin: 0pt">&nbsp;</P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-align: center"><B>SIGNATURE</B></P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0; text-indent: 0.5in">After reasonable inquiry and to the best of my
+knowledge and belief,&nbsp;I certify that the information set forth in this statement is true, complete and correct.</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">Dated: August&nbsp;14, 2024</P>
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<TABLE CELLPADDING="0" CELLSPACING="0" STYLE="border-collapse: collapse; width: 100%">
+  <TR STYLE="vertical-align: bottom">
+    <TD STYLE="font-size: 10pt; width: 50%"><FONT STYLE="font-size: 10pt">&nbsp;</FONT></TD>
+    <TD STYLE="border-bottom: Black 1pt solid; font: 10pt Times New Roman, Times, Serif; width: 50%"><FONT STYLE="font-size: 10pt">/s/
+    Shoshana Shendelman</FONT></TD></TR>
+  <TR STYLE="font-size: 10pt; vertical-align: bottom">
+    <TD STYLE="font-size: 10pt"><FONT STYLE="font-size: 10pt">&nbsp;</FONT></TD>
+    <TD STYLE="font: bold 10pt Times New Roman, Times, Serif"><FONT STYLE="font-size: 10pt">Shoshana Shendelman</FONT></TD></TR>
+  </TABLE>
+
+
+<P STYLE="font: 10pt Times New Roman, Times, Serif; margin: 0pt 0">&nbsp;</P>
+
+<P STYLE="margin: 0"></P>
+
+<!-- Field: Page; Sequence: 4; Options: Last -->
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid"><P STYLE="font-size: 10pt; text-align: center; margin-top: 0pt; margin-bottom: 0pt"></P></DIV>
+    <!-- Field: /Page -->
+
+<P STYLE="margin: 0">&nbsp;</P>
+
+</BODY>
+</HTML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
