@@ -476,10 +476,14 @@ public class Realtime13FIngestionService
                     entry.AccessionNumber,
                     entry.Cik
                 );
-                return new EntryImport(
-                    EntryImportOutcome.Imported,
-                    false,
-                    HoldingsImportFailureReason.NoTrackedPositions
+                return await Completed(
+                    entry,
+                    new EntryImport(
+                        EntryImportOutcome.Imported,
+                        false,
+                        HoldingsImportFailureReason.NoTrackedPositions
+                    ),
+                    cancellationToken
                 );
             }
             // Nothing to store: a NEW HOLDINGS amendment adds no tracked position whatever the
@@ -500,10 +504,14 @@ public class Realtime13FIngestionService
                     entry.Cik,
                     filing.Holdings.Count
                 );
-                return new EntryImport(
-                    EntryImportOutcome.Imported,
-                    importResult.HoldingsUntouched,
-                    UntrackedClosure(filing)
+                return await Completed(
+                    entry,
+                    new EntryImport(
+                        EntryImportOutcome.Imported,
+                        importResult.HoldingsUntouched,
+                        UntrackedClosure(filing)
+                    ),
+                    cancellationToken
                 );
             }
             if (importResult.UntrackedPositionsOnly)
@@ -544,7 +552,27 @@ public class Realtime13FIngestionService
             return new EntryImport(EntryImportOutcome.Failed, false);
         }
 
-        return new EntryImport(EntryImportOutcome.Imported, false);
+        return await Completed(
+            entry,
+            new EntryImport(EntryImportOutcome.Imported, false),
+            cancellationToken
+        );
+    }
+
+    // A filing replayed after its ledger row closed (a rescan's realtime replay, a recovery tail)
+    // restates that row, so a closure reason never stands beside the holdings a later write stored.
+    // A row still pending is untouched here; recovery's Resolve names its reason afterwards.
+    private async Task<EntryImport> Completed(
+        EdgarDailyIndexEntry entry,
+        EntryImport result,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>()
+            .RestateResolved(entry.AccessionNumber, result.ClosedWithoutRows, cancellationToken);
+        return result;
     }
 
     // A confidential-treatment original publishes only placeholder rows; its positions arrive in

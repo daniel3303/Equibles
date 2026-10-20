@@ -1077,17 +1077,24 @@ public class HoldingsAggregateRefreshService
     // prod scale — while this shape is one index-only scan plus two hash aggregates (~8x
     // faster), and a rebuild runs on every dirty-quarter drain. Internal so the translation
     // test can pin that the chained-GroupBy shape stays translatable on the Npgsql provider.
+    // A missing position proves an exit only when its filer reported a 13F for the current
+    // quarter, so a prior row counts only for those filers; a confidential quarter is no sale.
     internal static IQueryable<MarketWideStockChurn> BuildChurnQuery(
         EquiblesFinancialDbContext dbContext,
         DateOnly reportDate,
         DateOnly previousReportDate
-    ) =>
-        dbContext
+    )
+    {
+        var filedCurrent = dbContext.Filed13FHolderIds(reportDate);
+        return dbContext
             .Set<InstitutionalHolding>()
+            // The date pair stays its own conjunct so Postgres keeps the ReportDate index scan
+            // and probes the filer set as one hashed subplan.
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
                 && h.Issuer.Presentation.Listing.Active
+                && (h.ReportDate == reportDate || filedCurrent.Contains(h.InstitutionalHolderId))
             )
             .GroupBy(h => new { h.EquityIssuerId, h.InstitutionalHolderId })
             .Select(g => new
@@ -1103,6 +1110,7 @@ public class HoldingsAggregateRefreshService
                 NewFilerCount = g.Count(p => p.HasCurrent == 1 && p.HasPrevious == 0),
                 SoldOutFilerCount = g.Count(p => p.HasPrevious == 1 && p.HasCurrent == 0),
             });
+    }
 }
 
 // Ad hoc row of LoadListingConcentration. Public and unsealed because the lazy-loading proxy

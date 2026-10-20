@@ -248,6 +248,36 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
             .BeTrue("an empty restatement still dates a quarter");
     }
 
+    // Shape of a confidential-treatment original (Norges Bank, 2026-03-31): the filer published a
+    // full book the quarter before, but its 13F for this quarter is one placeholder row, so the
+    // quarter holds no row and no rollup for it.
+    [Fact]
+    public async Task RebuildQuarterAsync_QuarterWithoutAPublished13F_IsNoSale()
+    {
+        var before = new DateOnly(2025, 12, 31);
+        var confidential = new DateOnly(2026, 3, 31);
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
+        EquityIssuer msft = await SeedStock(seed, "MSFT", industry);
+        var withheld = await SeedHolder(seed, "1374170");
+        var seller = await SeedHolder(seed, "H002");
+        seed.AddRange(
+            MakeHolding(aapl, withheld, before, 100_000, "acc-w-before"),
+            MakeHolding(aapl, seller, before, 100_000, "acc-s-before"),
+            MakeHolding(msft, seller, confidential, 100_000, "acc-s-confidential")
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(confidential, CancellationToken.None);
+
+        await using var read = FreshContext();
+        var row = await read.Set<StockQuarterlyActivity>()
+            .SingleAsync(s => s.EquityIssuerId == aapl.Id && s.ReportDate == confidential);
+        row.SoldOutFilerCount.Should()
+            .Be(1, "only the filer that reported the quarter without AAPL sold it");
+    }
+
     [Fact]
     public async Task RebuildQuarterAsync_PreservesExactListingShareBreakdown()
     {
