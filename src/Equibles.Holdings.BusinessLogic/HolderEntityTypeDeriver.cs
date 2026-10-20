@@ -7,8 +7,8 @@ namespace Equibles.Holdings.BusinessLogic;
 /// Decides a holder's entity type from its stored regulatory evidence, strongest source first:
 /// its own Form ADV listing, its SEC SIC code, its recent 13D/13G self-report, then an N-CEN
 /// registrant report. No current evidence means Unknown; nothing is ever read from a name.
-/// A parent holding company (13D/13G code HC) is the weakest self-report: an operating code the
-/// holder states beside it on any current 13D/13G decides instead.
+/// A parent holding company (13D/13G code HC) is the weakest evidence: any current operating
+/// type, from any source, decides instead.
 /// </summary>
 public static class HolderEntityTypeDeriver
 {
@@ -98,15 +98,16 @@ public static class HolderEntityTypeDeriver
                 .Select(item => item.Fact.SourceKey)
                 .Distinct()
                 .Count() > 1;
-        // A fact implying only HoldingCompany decides only when no other fact of its rank implies
-        // an operating type, even an older one or the other half of the same filing (an HC
-        // cover page beside an FI Item 3).
+        // A fact implying only HoldingCompany decides only when no current fact of any source
+        // implies an operating type: not an older 13D/13G, not the other half of the same filing
+        // (an HC cover page beside an FI Item 3), not a lower-ranked N-CEN registrant report.
+        var operating = current.Where(item => !IsHoldingCompanyOnly(item.Types)).ToList();
+        var candidates = operating.Count > 0 ? operating : current;
         var decisive = Precedence
             .Select(source =>
-                current
+                candidates
                     .Where(item => Rank(item.Fact.Source) == source)
-                    .OrderBy(item => IsHoldingCompanyOnly(item.Types))
-                    .ThenBy(item => item.Fact.MatchedOn)
+                    .OrderBy(item => item.Fact.MatchedOn)
                     .ThenByDescending(item => item.Fact.AsOf)
                     .ThenByDescending(item => item.Fact.SourceKey, StringComparer.Ordinal)
                     .FirstOrDefault()

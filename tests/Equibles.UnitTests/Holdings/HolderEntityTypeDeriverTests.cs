@@ -330,6 +330,26 @@ public class HolderEntityTypeDeriverTests
     }
 
     [Fact]
+    public void HoldingCompanyOnly13G_YieldsToACurrentNCenRegistrant()
+    {
+        var decision = HolderEntityTypeDeriver.Derive(
+            [
+                SelfReport(
+                    ReportingPersonTypes.ParentHoldingCompany,
+                    Today,
+                    HolderEvidenceSource.Schedule13G
+                ),
+                Registrant("N-1A", Today.AddMonths(-3)),
+            ],
+            Context
+        );
+
+        decision.EntityType.Should().Be(HolderEntityType.RegisteredFund);
+        decision.Source.Should().Be(HolderEvidenceSource.NCenRegistrant);
+        decision.HasConflictingEvidence.Should().BeFalse();
+    }
+
+    [Fact]
     public void HoldingCompany_StillFlagsTwoOperatingCodesBesideIt()
     {
         var decision = HolderEntityTypeDeriver.Derive(
