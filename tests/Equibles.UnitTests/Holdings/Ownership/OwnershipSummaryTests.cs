@@ -206,6 +206,20 @@ public class OwnershipSummaryTests
     }
 
     [Fact]
+    public void Insider_NamedOnlyByAnExited13DWithA13FFiler_StillCounted()
+    {
+        // The group's exit filing reports no shares, so it no longer ties the insider to the filer.
+        var filer = Form13F("100", 3_000);
+        var insider = Insider("400", 2_000);
+        var exited = Schedule13D("100", 0, new DateOnly(2026, 8, 1), "100", "400");
+
+        var summary = Summarize([filer, insider, exited]);
+
+        summary.Insiders.Shares.Should().Be(2_000);
+        insider.Has(StockHolderRowFlags.NotSummed).Should().BeFalse();
+    }
+
+    [Fact]
     public void PercentUnavailable_LeavesSharesAndDropsPercent()
     {
         // A foreign private issuer's count is in ordinary shares, a different unit from the 13F

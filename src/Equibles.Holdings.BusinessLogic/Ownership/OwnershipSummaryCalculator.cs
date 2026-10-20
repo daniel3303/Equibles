@@ -146,8 +146,8 @@ public static class OwnershipSummaryCalculator
 
     /// <summary>
     /// The CIKs whose shares a 13F report of the listing already holds: its 13F filers, holders a
-    /// filer's report contains, and, until nothing changes, every person of a 13D or 13G whose
-    /// filer or any named person is already covered, since they all report the same block.
+    /// filer's report contains, and, until nothing changes, every person of a 13D or 13G holding
+    /// shares whose filer or any named person is already covered, since they report one block.
     /// </summary>
     internal static HashSet<string> Covered(IReadOnlyList<StockHolderRow> rows)
     {
@@ -157,7 +157,9 @@ public static class OwnershipSummaryCalculator
             )
             .Select(row => row.Cik)
             .ToHashSet(StringComparer.Ordinal);
-        var schedules = rows.Where(row => IsSchedule(row.Source)).ToList();
+        // A filing reporting no shares (an exit) no longer shows a group holding a block together;
+        // a filing older than its filer's 13F still does, so only the exit is left out.
+        var schedules = rows.Where(row => IsSchedule(row.Source) && row.Shares > 0).ToList();
         bool added;
         do
         {
