@@ -262,6 +262,101 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             );
     }
 
+    /// <summary>
+    /// Every Schedule 13D and 13G row of the exact listed security, left-joined to its cover-page
+    /// filing by accession (the detail sync fills filings newest first, so some have none). A
+    /// primary listing reads rows with no listed ticker or its own.
+    /// </summary>
+    public IQueryable<Schedule13DGPosition> GetSchedule13DGHistoryByListing(
+        EquityIssuer stock,
+        string listedTicker
+    )
+    {
+        var isPrimary = string.Equals(
+            listedTicker,
+            stock.Presentation.Listing.Ticker,
+            StringComparison.OrdinalIgnoreCase
+        );
+        var primaryTicker = stock.Presentation.Listing.Ticker;
+        var rows = GetAll()
+            .Where(h =>
+                h.FilingType == FilingType.Schedule13D || h.FilingType == FilingType.Schedule13G
+            )
+            .Where(h => h.EquityIssuerId == stock.Id)
+            .Where(h =>
+                isPrimary
+                    ? h.ListedTicker == null || h.ListedTicker == primaryTicker
+                    : h.ListedTicker == listedTicker
+            );
+        return from h in rows
+            join f in DbContext.Set<BeneficialOwnershipFiling>()
+                on h.AccessionNumber equals f.AccessionNumber
+                into filings
+            from f in filings.DefaultIfEmpty()
+            select new Schedule13DGPosition
+            {
+                HoldingId = h.Id,
+                InstitutionalHolderId = h.InstitutionalHolderId,
+                HolderCik = h.InstitutionalHolder.Cik,
+                HolderName = h.InstitutionalHolder.Name,
+                HolderStateOrCountry = h.InstitutionalHolder.StateOrCountry,
+                FilingType = h.FilingType,
+                EventDate = h.ReportDate,
+                FilingDate = h.FilingDate,
+                AccessionNumber = h.AccessionNumber,
+                IsAmendment = h.IsAmendment,
+                Shares = h.Shares,
+                PercentOfClass = h.PercentOfClass,
+                ListedTicker = h.ListedTicker,
+                HasCoverPage = f != null,
+                Rules = f == null ? Schedule13GRules.None : f.Rules,
+                FilingPersonTypes = f == null ? ReportingPersonTypes.None : f.FilingPersonTypes,
+            };
+    }
+
+    /// <summary>
+    /// Each filer's latest Schedule 13D or 13G for the exact listed security, by event date, then
+    /// filing date, then accession, with the filer's previous one as the prior position. A stock
+    /// carries at most a few hundred such rows, so they are ranked in memory.
+    /// </summary>
+    public async Task<List<Schedule13DGPosition>> GetSchedule13DGByListing(
+        EquityIssuer stock,
+        string listedTicker,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var rows = await GetSchedule13DGHistoryByListing(stock, listedTicker)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        return rows.GroupBy(row => row.InstitutionalHolderId)
+            .Select(group =>
+            {
+                var ordered = group
+                    .OrderByDescending(row => row.EventDate)
+                    .ThenByDescending(row => row.FilingDate)
+                    .ThenByDescending(row => row.AccessionNumber, StringComparer.Ordinal)
+                    .ThenByDescending(row => row.HoldingId)
+                    .ToList();
+                var latest = ordered[0];
+                if (ordered.Count > 1)
+                {
+                    latest.PriorShares = ordered[1].Shares;
+                    latest.PriorEventDate = ordered[1].EventDate;
+                    latest.PriorFilingType = ordered[1].FilingType;
+                }
+                return latest;
+            })
+            .ToList();
+    }
+
+    /// <summary>The reporting persons of these Schedule 13D and 13G accessions, in filed order.</summary>
+    public IQueryable<BeneficialOwnershipReportingPerson> GetBeneficialOwnershipPersons(
+        IReadOnlyCollection<string> accessionNumbers
+    ) =>
+        DbContext
+            .Set<BeneficialOwnershipReportingPerson>()
+            .Where(person => accessionNumbers.Contains(person.Filing.AccessionNumber));
+
     public IQueryable<InstitutionalHolding> GetHistoryByHolder(InstitutionalHolder holder)
     {
         return GetAll().Where(h => h.InstitutionalHolderId == holder.Id);

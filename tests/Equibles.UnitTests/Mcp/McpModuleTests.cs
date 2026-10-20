@@ -5,6 +5,7 @@ using Equibles.Congress.Mcp.Tools;
 using Equibles.FdaCatalysts.Mcp.Tools;
 using Equibles.Finra.Mcp.Tools;
 using Equibles.Fred.Mcp.Tools;
+using Equibles.Holdings.Mcp.Extensions;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.Mcp;
@@ -134,7 +135,7 @@ public class McpModuleInterfaceTests
         new()
         {
             typeof(AssemblyMcpModule<FredTools>),
-            typeof(AssemblyMcpModule<InstitutionalHoldingsTools>),
+            typeof(HoldingsMcpModule),
             typeof(AssemblyMcpModule<InsiderTradingTools>),
             typeof(AssemblyMcpModule<RagSearchTools>),
             typeof(AssemblyMcpModule<CboeTools>),
@@ -279,6 +280,9 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetInstitutionQuarterlyActivity");
         toolNames.Should().Contain("CompareInstitutionPortfolios");
         toolNames.Should().Contain("GetInstitutionConsensusHoldings");
+        toolNames.Should().Contain("GetAllHolders");
+        toolNames.Should().Contain("GetOwnershipSummary");
+        toolNames.Should().Contain("GetBeneficialOwnership");
     }
 
     // ── InsiderTrading module specific ──────────────────────────────────
@@ -386,6 +390,9 @@ public class McpModuleToolDiscoveryTests
                     "CompareInstitutionPortfolios",
                     "GetInstitutionConsensusHoldings",
                     "GetInstitutionCloneBacktest",
+                    "GetAllHolders",
+                    "GetOwnershipSummary",
+                    "GetBeneficialOwnership",
                 }
             },
             {

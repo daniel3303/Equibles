@@ -65,6 +65,9 @@ public class HolderRollupReader : IHolderRollupReader
             .ToListAsync(cancellationToken);
     }
 
+    public Task<DateTime?> GetComputedAt(CancellationToken cancellationToken = default) =>
+        _repository.GetRollupsComputedAt(cancellationToken);
+
     public async Task<IReadOnlyDictionary<string, FundSeriesHolderLink>> GetFundSeriesLinks(
         IEnumerable<string> seriesIds,
         CancellationToken cancellationToken = default
