@@ -40,17 +40,20 @@ internal static class RegisteredSeriesTickers
             )
             .Select(series => new
             {
-                IssuerId = series.EquityIssuerId.Value,
+                series.EquityIssuerId,
                 series.SeriesId,
                 series.ClassTickers,
             })
             .ToListAsync(cancellationToken);
 
-        return Build(
-            rows.Select(row =>
-                (row.IssuerId, row.SeriesId, (IReadOnlyCollection<string>)row.ClassTickers)
-            )
-        );
+        var owned =
+            new List<(Guid IssuerId, string SeriesId, IReadOnlyCollection<string> ClassTickers)>();
+        foreach (var row in rows)
+        {
+            if (row.EquityIssuerId is { } issuerId)
+                owned.Add((issuerId, row.SeriesId, row.ClassTickers));
+        }
+        return Build(owned);
     }
 
     /// <summary>
