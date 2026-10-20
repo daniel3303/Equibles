@@ -64,6 +64,13 @@ public class ImportContext
     // a stale symbol after a primary rename (unknown basis — the row stays pending).
     public Dictionary<Guid, List<string>> SecondaryTickers { get; set; } = [];
 
+    // CommonStockId → listed ticker → SEC fund series id. A split of another series of the same
+    // trust cannot move a position's count (see RegisteredSeriesTickers).
+    public Dictionary<
+        Guid,
+        IReadOnlyDictionary<string, string>
+    > RegisteredSeriesByTicker { get; set; } = [];
+
     // Issuer size: CommonStockId → (shares outstanding, market capitalization). Used only to
     // reject a position larger than the company it is in (ImpossiblePositionGuard); a stock
     // missing here is simply not judged.
