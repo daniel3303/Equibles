@@ -30,7 +30,7 @@ internal static class EquityDirectoryListingInputValidator
             && (!Enum.IsDefined(input.SecurityType.Value) || input.SecurityType.Value == 0)
         )
             return false;
-        if (input.ListedOn == DateOnly.MinValue)
+        if (input.ListedOn == DateOnly.MinValue || input.ProvenSecurityId == Guid.Empty)
             return false;
         if (input.Isin != null && !InternationalSecurityIdentifiers.IsValidIsin(input.Isin))
             return false;

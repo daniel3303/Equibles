@@ -12,6 +12,10 @@ public class EquityDirectoryListingInput
     // Supply both when the source identifies instruments without ISINs or publishes separate currency counters.
     public string SourceSecurityIdentifier { get; set; }
     public string SourceListingIdentifier { get; set; }
+
+    // An existing security the source proved is this same share, such as an interlisted line's home-market
+    // security; the listing joins it, and any identifier naming another security or issuer refuses the row.
+    public Guid? ProvenSecurityId { get; set; }
     public string IssuerName { get; set; }
     public List<string> IssuerNameAliases { get; set; } = [];
 

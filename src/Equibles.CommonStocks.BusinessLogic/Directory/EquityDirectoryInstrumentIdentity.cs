@@ -7,7 +7,8 @@ namespace Equibles.CommonStocks.BusinessLogic.Directory;
 internal sealed class EquityDirectoryInstrumentIdentity(
     EquityDirectoryListingInput input,
     EquitySecuritySourceIdentifier securityIdentifier,
-    EquityListingSourceIdentifier listingIdentifier
+    EquityListingSourceIdentifier listingIdentifier,
+    EquitySecurity proven
 )
 {
     public IEnumerable<Guid> IssuerIds
@@ -18,6 +19,8 @@ internal sealed class EquityDirectoryInstrumentIdentity(
                 yield return securityIdentifier.Security.EquityIssuerId;
             if (listingIdentifier != null)
                 yield return listingIdentifier.Listing.Security.EquityIssuerId;
+            if (proven != null)
+                yield return proven.EquityIssuerId;
         }
     }
 
@@ -27,8 +30,17 @@ internal sealed class EquityDirectoryInstrumentIdentity(
         CancellationToken token
     )
     {
+        var proven =
+            input.ProvenSecurityId == null
+                ? null
+                : await repository
+                    .GetSecurities()
+                    .SingleOrDefaultAsync(row => row.Id == input.ProvenSecurityId.Value, token)
+                    ?? throw new InvalidDataException(
+                        "The security the source proved this share to be no longer exists."
+                    );
         if (input.SourceSecurityIdentifier == null)
-            return new(input, null, null);
+            return new(input, null, null, proven);
         var security = await repository
             .GetSecurityIdentifiers()
             .Include(row => row.Security)
@@ -46,7 +58,7 @@ internal sealed class EquityDirectoryInstrumentIdentity(
                     row.Source == input.Source && row.Identifier == input.SourceListingIdentifier,
                 token
             );
-        return new(input, security, listing);
+        return new(input, security, listing, proven);
     }
 
     public EquitySecurity Security(EquityIssuer issuer)
@@ -55,7 +67,7 @@ internal sealed class EquityDirectoryInstrumentIdentity(
             input.Isin == null
                 ? null
                 : issuer.Securities.SingleOrDefault(row => row.Isin == input.Isin);
-        var security = securityIdentifier?.Security ?? byIsin;
+        var security = securityIdentifier?.Security ?? proven ?? byIsin;
         if (security != null && ConflictsWithSecurity(security, byIsin, issuer.Id))
             throw new InvalidDataException(
                 "Directory security identifiers conflict with the recorded instrument."
@@ -121,6 +133,8 @@ internal sealed class EquityDirectoryInstrumentIdentity(
         if (security.EquityIssuerId != issuerId)
             return true;
         if (byIsin != null && byIsin.Id != security.Id)
+            return true;
+        if (proven != null && proven.Id != security.Id)
             return true;
         return security.Isin != null
             && input.Isin != null

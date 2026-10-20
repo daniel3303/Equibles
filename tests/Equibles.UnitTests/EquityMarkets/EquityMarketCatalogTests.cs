@@ -180,6 +180,10 @@ public class EquityMarketCatalogTests
     [InlineData("shanghai", "XSHG", "CN", "CNY", ".SS", "SHH", "Asia/Shanghai")]
     [InlineData("shenzhen", "XSHE", "CN", "CNY", ".SZ", "SHZ", "Asia/Shanghai")]
     [InlineData("hong-kong", "XHKG", "HK", "HKD", ".HK", "HKG", "Asia/Hong_Kong")]
+    [InlineData("tsx", "XTSE", "CA", "CAD", ".TO", "TOR", "America/Toronto")]
+    [InlineData("tsx-venture", "XTSX", "CA", "CAD", ".V", "VAN", "America/Toronto")]
+    [InlineData("cse", "XCNQ", "CA", "CAD", ".CN", "CNQ", "America/Toronto")]
+    [InlineData("cboe-canada", "NEOE", "CA", "CAD", ".NE", "NEO", "America/Toronto")]
     public void NativeMarketsRequireHostDirectoryEvidenceWithoutFirds(
         string code,
         string mic,
@@ -297,5 +301,21 @@ public class EquityMarketCatalogTests
         market.SessionOpen.Should().Be(new TimeOnly(openHour, openMinute));
         market.SessionClose.Should().Be(new TimeOnly(closeHour, closeMinute));
         market.ClosingAuctionEnd.Should().Be(new TimeOnly(auctionHour, auctionMinute));
+    }
+
+    // Pinned to the first and last one-minute prints of 2026-10-16 in Toronto time: every venue trades
+    // continuously until 15:59, and TSX's closing call prints at 16:00.
+    [Theory]
+    [InlineData("tsx")]
+    [InlineData("tsx-venture")]
+    [InlineData("cse")]
+    [InlineData("cboe-canada")]
+    public void CanadianSessions_MatchTheVenuesOwnPrints(string code)
+    {
+        var market = EquityMarketCatalog.TryGet(code);
+        market.SessionOpen.Should().Be(new TimeOnly(9, 30));
+        market.SessionClose.Should().Be(new TimeOnly(16, 0));
+        market.ClosingAuctionEnd.Should().Be(new TimeOnly(16, 0));
+        market.DelayedTradeSource.Should().BeNull();
     }
 }
