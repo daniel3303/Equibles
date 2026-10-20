@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Data.Models;
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
+using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
 
@@ -51,6 +53,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
                     new DateOnly(2024, 12, 31),
                     new List<InstitutionalHolding> { holding },
                     splits,
+                    new Dictionary<HolderSecurityKey, HolderPositionFacts>(),
                     0,
                     1,
                     1,
@@ -122,6 +125,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
             targetDate,
             holdings,
             splitsByStock,
+            new Dictionary<HolderSecurityKey, HolderPositionFacts>(),
             0, // offset
             holdings.Count, // totalRows
             holdings.Count, // totalPositions

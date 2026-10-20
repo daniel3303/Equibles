@@ -1,6 +1,8 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Data.Models;
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
+using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
 
@@ -52,6 +54,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclos
                     new DateOnly(2026, 3, 31),
                     holdings,
                     new Dictionary<Guid, List<StockSplit>>(),
+                    new Dictionary<HolderSecurityKey, HolderPositionFacts>(),
                     0,
                     holdings.Count,
                     holdings.Count,
