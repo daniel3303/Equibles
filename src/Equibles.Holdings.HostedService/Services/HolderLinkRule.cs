@@ -13,7 +13,7 @@ namespace Equibles.Holdings.HostedService.Services;
 internal static class HolderLinkRule
 {
     /// <summary>Stamped on every rollup; bump when the rules change.</summary>
-    internal const int Version = 1;
+    internal const int Version = 2;
 
     /// <summary>A parent chain stops after this many parents.</summary>
     internal const int MaxDepth = 4;
@@ -180,17 +180,19 @@ internal static class HolderLinkRule
         foreach (var notice in latestNotices)
             Filed(CikNormalizer.Canonicalize(notice.FilerCik), notice.ReportDate);
         Confirm(stored, soleNotices);
-        var reporting = ReportingParents(stored, newestOwnFiling);
-        var gleifUltimate = GleifParents(stored, HolderLinkKind.GleifUltimateParent);
-        var gleifDirect = GleifParents(stored, HolderLinkKind.GleifDirectParent);
+        var tiers = new Tiers(
+            GleifParents(stored, HolderLinkKind.GleifUltimateParent),
+            GleifParents(stored, HolderLinkKind.GleifDirectParent),
+            ReportingParents(stored, newestOwnFiling)
+        );
 
         var rollups = holderCiks
             .Values.Concat(stored.Select(row => row.ChildCik))
             .Concat(stored.Where(row => row.ParentCik != null).Select(row => row.ParentCik))
             .Distinct(StringComparer.Ordinal)
-            .Select(cik => Rollup(cik, reporting, gleifUltimate, gleifDirect, HolderId))
+            .Select(cik => Rollup(cik, tiers, HolderId))
             .ToList();
-        var fundLinks = FundSeriesLinks(holders, seriesAdvisers, index, reporting, HolderId);
+        var fundLinks = FundSeriesLinks(holders, seriesAdvisers, index, tiers, HolderId);
         return new HolderLinkSet(stored, rollups, fundLinks);
     }
 
@@ -282,39 +284,26 @@ internal static class HolderLinkRule
                 StringComparer.Ordinal
             );
 
-    private static HolderRollup Rollup(
-        string cik,
-        IReadOnlyDictionary<string, Decision> reporting,
-        IReadOnlyDictionary<string, Decision> gleifUltimate,
-        IReadOnlyDictionary<string, Decision> gleifDirect,
-        Func<string, Guid?> holderId
-    )
+    private static HolderRollup Rollup(string cik, Tiers tiers, Func<string, Guid?> holderId)
     {
-        var reportingParent = reporting.GetValueOrDefault(cik)?.Parent;
-        var (ultimate, basis, conflict) = (cik, HolderRollupBasis.Self, false);
-        if (gleifUltimate.TryGetValue(cik, out var ultimateDecision))
+        var (own, basis) = tiers.Choose(cik);
+        var (ultimate, conflict) = (cik, false);
+        if (own != null)
         {
-            if (ultimateDecision.Conflict)
+            // A cycle anywhere above leaves the filer on itself, as a same-tier conflict does.
+            var top = own.Conflict ? null : Top(cik, tiers.ParentOf);
+            if (top == null)
                 conflict = true;
             else
-                (ultimate, basis) = (
-                    ultimateDecision.Parent,
-                    HolderRollupBasis.GleifUltimateParent
-                );
+                ultimate = top;
         }
-        else if (gleifDirect.ContainsKey(cik))
-            (ultimate, basis, conflict) = Chain(
-                cik,
-                gleifDirect,
-                HolderRollupBasis.GleifDirectParent
-            );
-        else if (reporting.ContainsKey(cik))
-            (ultimate, basis, conflict) = Chain(cik, reporting, HolderRollupBasis.ReportingParent);
 
+        var reportingParent = tiers.Reporting.GetValueOrDefault(cik)?.Parent;
         return new HolderRollup
         {
             Cik = cik,
             ReportingParentCik = reportingParent,
+            ReportingTopCik = reportingParent == null ? null : Top(cik, tiers.ReportingParentOf),
             UltimateCik = ultimate,
             UltimateHolderId = holderId(ultimate),
             Basis = ultimate == cik ? HolderRollupBasis.Self : basis,
@@ -323,27 +312,14 @@ internal static class HolderLinkRule
         };
     }
 
-    // Follows one tier's parents from the start, which rolls to itself on a conflict or a cycle.
-    private static (string Top, HolderRollupBasis Basis, bool Conflict) Chain(
-        string start,
-        IReadOnlyDictionary<string, Decision> parents,
-        HolderRollupBasis basis
-    )
-    {
-        if (parents[start].Conflict)
-            return (start, HolderRollupBasis.Self, true);
-        var top = Top(start, parents);
-        return top == null ? (start, HolderRollupBasis.Self, true) : (top, basis, false);
-    }
-
     // The last parent reached within MaxDepth, the start itself without one, or null on a cycle.
-    private static string Top(string start, IReadOnlyDictionary<string, Decision> parents)
+    private static string Top(string start, Func<string, string> parentOf)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal) { start };
         var current = start;
         for (var depth = 0; depth < MaxDepth; depth++)
         {
-            if (parents.GetValueOrDefault(current)?.Parent is not { } next)
+            if (parentOf(current) is not { } next)
                 break;
             if (!seen.Add(next))
                 return null;
@@ -358,7 +334,7 @@ internal static class HolderLinkRule
         IReadOnlyCollection<LinkHolder> holders,
         IReadOnlyCollection<SeriesAdviserRow> seriesAdvisers,
         IdentifierIndex index,
-        IReadOnlyDictionary<string, Decision> reporting,
+        Tiers tiers,
         Func<string, Guid?> holderId
     )
     {
@@ -406,7 +382,7 @@ internal static class HolderLinkRule
             else
                 continue;
 
-            var top = Top(adviserCik, reporting) ?? adviserCik;
+            var top = Top(adviserCik, tiers.ReportingParentOf) ?? adviserCik;
             if (holderId(top) is not { } holder)
                 continue;
             links.Add(
@@ -428,6 +404,31 @@ internal static class HolderLinkRule
     }
 
     private sealed record Decision(string Parent, bool Conflict);
+
+    /// <summary>
+    /// Each filer's parent by tier. The first tier with evidence for a filer decides its parent,
+    /// even on a conflict; a GLEIF parent whose LEI maps to no CIK is no evidence.
+    /// </summary>
+    private sealed record Tiers(
+        IReadOnlyDictionary<string, Decision> GleifUltimate,
+        IReadOnlyDictionary<string, Decision> GleifDirect,
+        IReadOnlyDictionary<string, Decision> Reporting
+    )
+    {
+        internal (Decision Decision, HolderRollupBasis Basis) Choose(string cik) =>
+            GleifUltimate.TryGetValue(cik, out var ultimate)
+                ? (ultimate, HolderRollupBasis.GleifUltimateParent)
+            : GleifDirect.TryGetValue(cik, out var direct)
+                ? (direct, HolderRollupBasis.GleifDirectParent)
+            : Reporting.TryGetValue(cik, out var reporting)
+                ? (reporting, HolderRollupBasis.ReportingParent)
+            : (null, HolderRollupBasis.Self);
+
+        /// <summary>The filer's chosen parent; null without one or on a conflict.</summary>
+        internal string ParentOf(string cik) => Choose(cik).Decision?.Parent;
+
+        internal string ReportingParentOf(string cik) => Reporting.GetValueOrDefault(cik)?.Parent;
+    }
 
     /// <summary>
     /// Maps a filed 13F file number or CRD to the one CIK it belongs to. A filer's own numbers (its

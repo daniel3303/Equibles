@@ -3296,6 +3296,10 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("ReportingTopCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("UltimateCik")
                         .IsRequired()
                         .HasMaxLength(16)

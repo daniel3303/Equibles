@@ -65,6 +65,30 @@ public class StockOwnershipPrecedenceTests
     }
 
     [Fact]
+    public void SubsidiaryGNests_UnderItsReportingTopWhateverGleifSays()
+    {
+        // Two GLEIF parents leave the subsidiary's ultimate parent on itself, and its direct
+        // reporting parent files only a notice, yet FMR's 13F at the top of its reporting chain
+        // still holds its shares.
+        var parent = Form13F(Fmr, 50_000);
+        var subsidiary = Schedule13G("35368", 9_000, new DateOnly(2026, 8, 1));
+        var rollup = new HolderRollup
+        {
+            Cik = "35368",
+            ReportingParentCik = "1000",
+            ReportingTopCik = Fmr,
+            UltimateCik = "35368",
+            Basis = HolderRollupBasis.Self,
+            HasConflictingEvidence = true,
+        };
+
+        var tops = Arrange([parent, subsidiary], null, rollup);
+
+        tops.Should().ContainSingle().Which.Should().BeSameAs(parent);
+        subsidiary.Covering13FCik.Should().Be(Fmr);
+    }
+
+    [Fact]
     public void SubsidiaryGNests_A13GOlderThanTheParentsQuarterIsStale()
     {
         var parent = Form13F(Fmr, 50_000);
