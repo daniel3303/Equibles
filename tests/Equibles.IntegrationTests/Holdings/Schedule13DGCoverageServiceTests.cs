@@ -470,12 +470,21 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
         (await SubmissionReads(fmr)).Should().Be(2);
     }
 
-    [Fact]
-    public async Task ImportParsedFiling_UnresolvedCusip_MapsThroughTheSubjectCompanysOnlyCommonSecurity()
+    // NVIDIA's shares outstanding, which Vanguard's 2,266,625,855 shares at 9.32% agree with.
+    private const long NvidiaSharesOutstanding = 24_300_000_000;
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("000000000")]
+    [InlineData("67066G105")]
+    [InlineData("N/A")]
+    public async Task ImportParsedFiling_NoUsableCusip_MapsThroughTheSubjectCompanysOnlyCommonSecurity(
+        string filedCusip
+    )
     {
-        await SeedCommonIssuer("NVDA", "1045810", NvidiaCusip);
+        await SeedCommonIssuer("NVDA", "1045810", NvidiaCusip, NvidiaSharesOutstanding);
         var filing = ParseVanguardNvidia();
-        filing.IssuerCusip = "000000000";
+        filing.IssuerCusip = filedCusip;
 
         (await Ingestion().ImportParsedFiling(filing, MinReportDate, CancellationToken.None))
             .Should()
@@ -488,7 +497,7 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
         // The details keep the CUSIP as filed.
         (await verify.Set<BeneficialOwnershipFiling>().SingleAsync())
             .IssuerCusip.Should()
-            .Be("000000000");
+            .Be(filedCusip);
     }
 
     [Theory]
@@ -504,6 +513,7 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
             "NVDA",
             "1045810",
             NvidiaCusip,
+            NvidiaSharesOutstanding,
             registration,
             siblingTicker == null ? [] : [siblingTicker]
         );
@@ -518,11 +528,101 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
         (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
     }
 
+    // A tenth of the shares is what a depositary share standing for ten ordinary shares looks like;
+    // no shares outstanding, or no stated percent, cannot confirm the security at all.
+    [Theory]
+    [InlineData(2_430_000_000L, false)]
+    [InlineData(0L, false)]
+    [InlineData(NvidiaSharesOutstanding, true)]
+    public async Task ImportParsedFiling_AmountThatDisagreesWithTheSecuritysSharesOutstanding_StaysUnresolved(
+        long sharesOutstanding,
+        bool dropPercent
+    )
+    {
+        await SeedCommonIssuer("NVDA", "1045810", NvidiaCusip, sharesOutstanding);
+        var filing = ParseVanguardNvidia();
+        filing.IssuerCusip = null;
+        if (dropPercent)
+            filing.ReportingPersons.ForEach(person => person.PercentOfClass = null);
+
+        (await Ingestion().ImportParsedFiling(filing, MinReportDate, CancellationToken.None))
+            .Should()
+            .Be(Schedule13DGImportOutcome.Incomplete);
+
+        await using var verify = FreshContext();
+        (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
+    }
+
+    // Real filings on a security the directory does not hold, whose issuer's one tracked security
+    // is its common line: ordinary shares behind a depositary share (IperionX, VNET) and a
+    // preferred (PIMCO Municipal Income Fund II). A well-formed filed CUSIP that resolves to
+    // nothing is never re-pointed at the subject company, now or on a later retry.
+    [Theory]
+    [InlineData(
+        "sc13ga-fmr-iperionx-ordinary-shares.xml",
+        "0000315066-25-000774",
+        "315066",
+        "IPX",
+        "1898601",
+        "44916E100",
+        36_224_016L
+    )]
+    [InlineData(
+        "sc13da-vnet-class-a-ordinary-shares.xml",
+        "0000950170-25-042308",
+        "1758419",
+        "VNET",
+        "1508475",
+        "90138A103",
+        285_233_278L
+    )]
+    [InlineData(
+        "sc13da-pimco-municipal-preferred.xml",
+        "0001140361-24-050098",
+        "70858",
+        "PML",
+        "1170299",
+        "72200W106",
+        125_468_000L
+    )]
+    public async Task ImportParsedFiling_WellFormedCusipOfAnUntrackedSecurity_StaysUnresolved(
+        string asset,
+        string accession,
+        string filerCik,
+        string ticker,
+        string issuerCik,
+        string commonCusip,
+        long sharesOutstanding
+    )
+    {
+        await SeedCommonIssuer(ticker, issuerCik, commonCusip, sharesOutstanding);
+        var filing = new Filing13DGXmlParser().ParseFiling(
+            Asset(asset),
+            accession,
+            filerCik,
+            new DateOnly(2025, 3, 20)
+        );
+        filing.IssuerCik.Should().Be(issuerCik);
+        filing.IssuerCusip.Should().NotBe(commonCusip);
+
+        (await Ingestion().ImportParsedFiling(filing, MinReportDate, CancellationToken.None))
+            .Should()
+            .Be(Schedule13DGImportOutcome.Incomplete);
+        await AgeDetails(TimeSpan.FromDays(2));
+        (await Coverage().RetryResolvable(10, TimeSpan.FromDays(1), MinReportDate, default))
+            .Should()
+            .Be(0);
+
+        await using var verify = FreshContext();
+        (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
+        _edgar.ReceivedCalls().Should().BeEmpty();
+    }
+
     [Fact]
     public async Task ImportParsedFiling_AmendmentMappedThroughTheSubjectCompany_RestatesOnlyThatSecurity()
     {
-        await SeedCommonIssuer("NVDA", "1045810", NvidiaCusip);
-        await SeedCommonIssuer("IOSP", "1054905", InnospecCusip);
+        await SeedCommonIssuer("NVDA", "1045810", NvidiaCusip, NvidiaSharesOutstanding);
+        await SeedCommonIssuer("IOSP", "1054905", InnospecCusip, 25_000_000);
         // The same filer's same-day stake in another security must survive the restatement.
         var other = ParseVanguardNvidia();
         other.AccessionNumber = "0000102909-26-000001";
@@ -548,7 +648,8 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
     {
         const string blackRock = "0001086364-24-003191";
         const string sunOptaCusip = "8676EP108";
-        await SeedCommonIssuer("STKL", "351834", sunOptaCusip);
+        // 9,984,820 shares at 8.4%.
+        await SeedCommonIssuer("STKL", "351834", sunOptaCusip, 118_000_000);
         ListForm(new DateOnly(2024, 1, 25), blackRock, "SC 13G/A", "351834", "1364742");
         ServeSubmission(blackRock, "sc13ga-text-blackrock-sedol.txt");
 
@@ -578,7 +679,8 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
         await Coverage().BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
         (await Positions(texasPacificCusip)).Should().BeEmpty();
 
-        await SeedCommonIssuer("TPL", "1811074", texasPacificCusip);
+        // 4,502 shares at 0.06%.
+        await SeedCommonIssuer("TPL", "1811074", texasPacificCusip, 7_690_000);
         await AgeDetails(TimeSpan.FromDays(2));
         var imported = await Coverage()
             .RetryResolvable(10, TimeSpan.FromDays(1), MinReportDate, CancellationToken.None);
@@ -674,6 +776,7 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
         string ticker,
         string cik,
         string cusip,
+        long sharesOutstanding,
         ListedSecurityType registration = ListedSecurityType.CommonShares,
         params string[] siblingTickers
     )
@@ -687,6 +790,7 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
                     Name: ticker,
                     Cik: cik,
                     Cusip: cusip,
+                    SharesOutStanding: sharesOutstanding,
                     ListedSecurityType: registration,
                     SecondaryTickers: [.. siblingTickers]
                 )

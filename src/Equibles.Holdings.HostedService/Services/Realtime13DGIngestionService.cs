@@ -217,8 +217,9 @@ public class Realtime13DGIngestionService
         return Schedule13DGImportOutcome.Imported;
     }
 
-    // The filed CUSIP, or the subject company's only listed common security when the filed one
-    // resolves to nothing; null leaves the filing unresolved, as before.
+    // The filed CUSIP when it resolves; for a filing with no usable CUSIP, the subject company's
+    // only listed common security when the lead person's figures agree with it; else null, which
+    // leaves the filing unresolved.
     private async Task<string> ResolvePositionCusip(
         Parsed13DGFiling filing,
         CancellationToken cancellationToken
@@ -226,10 +227,13 @@ public class Realtime13DGIngestionService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var issuers = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        var lead = Realtime13DGArchiveBuilder.SelectLeadPerson(filing);
         var cusip = await Schedule13DGPositionResolver.ResolvePositionCusip(
             issuers,
             filing.IssuerCusip,
             filing.IssuerCik,
+            lead?.AggregateAmountOwned,
+            lead?.PercentOfClass,
             cancellationToken
         );
         if (
@@ -237,7 +241,7 @@ public class Realtime13DGIngestionService
             && !string.Equals(cusip, filing.IssuerCusip?.Trim(), StringComparison.OrdinalIgnoreCase)
         )
             _logger.LogInformation(
-                "{Form} {Accession}: filed CUSIP {Filed} resolves to nothing; subject company CIK {Cik} maps it to {Cusip}",
+                "{Form} {Accession}: no usable CUSIP ({Filed}); subject company CIK {Cik} maps it to {Cusip}",
                 filing.SubmissionType,
                 filing.AccessionNumber,
                 filing.IssuerCusip ?? "(none)",

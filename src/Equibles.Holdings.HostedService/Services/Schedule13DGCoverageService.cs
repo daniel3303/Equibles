@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Xml;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
@@ -487,16 +488,26 @@ public class Schedule13DGCoverageService
                     .Any(processed => processed.AccessionNumber == filing.AccessionNumber)
             );
 
-        var keys = await unstored
-            .Select(filing => new { Cusip = filing.IssuerCusip.ToUpper(), filing.IssuerCik })
-            .Distinct()
+        // The unstored set is small (positions that could not be resolved), so each row's
+        // position is decided in memory.
+        var rows = await unstored
+            .Select(filing => new
+            {
+                filing.AccessionNumber,
+                Cusip = filing.IssuerCusip.ToUpper(),
+                filing.IssuerCik,
+                Lead = filing
+                    .ReportingPersons.Where(person => person.IsLead)
+                    .Select(person => new { person.AggregateAmountOwned, person.PercentOfClass })
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
-        if (keys.Count == 0)
+        if (rows.Count == 0)
             return [];
 
         var issuers = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-        var cusips = keys.Where(key => key.Cusip != null)
-            .Select(key => key.Cusip)
+        var cusips = rows.Where(row => !Schedule13DGPositionResolver.NeedsSubjectCompany(row.Cusip))
+            .Select(row => row.Cusip)
             .Distinct()
             .ToList();
         var resolvable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -511,28 +522,47 @@ public class Schedule13DGCoverageService
             resolvable.UnionWith(HoldingCusipResolution.Resolve(claims, []).Keys);
         }
 
-        // A filed CUSIP that resolves to nothing falls back to the subject company.
-        var subjectCusips = await Schedule13DGPositionResolver.SubjectCompanyCusips(
+        // Only a filing with no usable CUSIP falls back to the subject company.
+        var subjectSecurities = await Schedule13DGPositionResolver.SubjectCompanySecurities(
             issuers,
-            keys.Where(key =>
-                    key.IssuerCik != null && (key.Cusip == null || !resolvable.Contains(key.Cusip))
+            rows.Where(row =>
+                    row.IssuerCik != null
+                    && Schedule13DGPositionResolver.NeedsSubjectCompany(row.Cusip)
                 )
-                .Select(key => key.IssuerCik)
+                .Select(row => row.IssuerCik)
                 .Distinct()
                 .ToList(),
             cancellationToken
         );
-        if (resolvable.Count == 0 && subjectCusips.Count == 0)
+
+        var positions = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            if (!Schedule13DGPositionResolver.NeedsSubjectCompany(row.Cusip))
+            {
+                if (resolvable.Contains(row.Cusip))
+                    positions[row.AccessionNumber] = row.Cusip;
+                continue;
+            }
+            var cik = CikNormalizer.Canonicalize(row.IssuerCik);
+            if (
+                cik != null
+                && subjectSecurities.TryGetValue(cik, out var security)
+                && Schedule13DGPositionResolver.AgreesWithSharesOutstanding(
+                    row.Lead?.AggregateAmountOwned,
+                    row.Lead?.PercentOfClass,
+                    security.SharesOutstanding
+                )
+            )
+                positions[row.AccessionNumber] = security.Cusip;
+        }
+        if (positions.Count == 0)
             return [];
 
-        var resolvableCusips = resolvable.Select(cusip => cusip.ToUpperInvariant()).ToList();
-        var subjectCiks = subjectCusips.Keys.ToList();
+        var accessions = positions.Keys.ToList();
         // Chronological, so an original is retried before its amendment.
         var candidates = await unstored
-            .Where(filing =>
-                resolvableCusips.Contains(filing.IssuerCusip.ToUpper())
-                || subjectCiks.Contains(filing.IssuerCik)
-            )
+            .Where(filing => accessions.Contains(filing.AccessionNumber))
             .OrderBy(filing => filing.FilingDate)
             .ThenBy(filing => filing.AccessionNumber)
             .Select(filing => new Schedule13DGRetryCandidate(
@@ -553,10 +583,7 @@ public class Schedule13DGCoverageService
             .Select(candidate =>
                 candidate with
                 {
-                    PositionCusip =
-                        candidate.IssuerCusip != null && resolvable.Contains(candidate.IssuerCusip)
-                            ? candidate.IssuerCusip
-                            : subjectCusips.GetValueOrDefault(candidate.IssuerCik ?? string.Empty),
+                    PositionCusip = positions[candidate.AccessionNumber],
                 }
             )
             .ToList();
