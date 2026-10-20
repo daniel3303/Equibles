@@ -354,7 +354,7 @@ This self-hosted build exposes 68 tools over MCP. The hosted server at `https://
 - GetAllHolders — every disclosed holder of a stock in one list (13F, 13D/13G, insiders, funds), one row per holder with its other filings and contained disclosures nested, or grouped by ultimate parent
 - GetOwnershipSummary — who owns a stock: institutions, insiders, 13D/G-only blocks and the remaining float as % of shares outstanding, with funds shown but never summed
 - GetBeneficialOwnership — a stock's Schedule 13D and 13G filers, each latest filing with every reporting person
-- GetHolderMix — who holds a stock by holder type, measured style, turnover, horizon, book size, client base, private funds or location, with each bucket's like-for-like change
+- GetHolderMix — who holds a stock by holder type, measured style, turnover, horizon, book size, client base, private funds or location, with each bucket's like-for-like change; or registered funds by N-CEN fund type (index funds, index ETFs, active ETFs, active funds) as a share of shares outstanding
 - GetHolderTypeFlows — market-wide money in and out of US equities by kind of 13F filer for a closed quarter, optionally split by sector, with net flow as a share of each bucket's prior book
 - GetInstitutionPortfolio — an institution's 13F portfolio
 - SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, position count, and holder type

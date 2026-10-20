@@ -16,6 +16,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.BusinessLogic.Advisers;
 using Equibles.Holdings.BusinessLogic.Contracts;
+using Equibles.Holdings.BusinessLogic.FundOwnership;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
@@ -90,6 +91,7 @@ public class InstitutionalHoldingsTools
     private readonly MarketActivityShareRestater _marketActivityShareRestater;
     private readonly InstitutionPortfolioSummaryProvider _summaryProvider;
     private readonly HolderMixReader _holderMixReader;
+    private readonly FundOwnershipReader _fundOwnershipReader;
     private readonly McpToolRunner _runner;
 
     // Injected as a sequence so the dependency stays optional: a deployment without a stated-strategy
@@ -109,10 +111,12 @@ public class InstitutionalHoldingsTools
         InstitutionPortfolioSummaryProvider summaryProvider = null,
         MarketActivityShareRestater marketActivityShareRestater = null,
         HolderMixReader holderMixReader = null,
-        IEnumerable<IHolderStrategyStatements> strategyStatements = null
+        IEnumerable<IHolderStrategyStatements> strategyStatements = null,
+        FundOwnershipReader fundOwnershipReader = null
     )
     {
         _strategyStatements = strategyStatements?.FirstOrDefault();
+        _fundOwnershipReader = fundOwnershipReader;
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
         _commonStockRepository = commonStockRepository;
@@ -304,7 +308,7 @@ public class InstitutionalHoldingsTools
                 if (styleFilter == null)
                     await LoadStyleBands(holdings, styleAsOf);
 
-                return RenderAdjustedTopHoldersTable(
+                var table = RenderAdjustedTopHoldersTable(
                     stock,
                     ticker,
                     targetDate,
@@ -321,10 +325,62 @@ public class InstitutionalHoldingsTools
                     filterDescription,
                     styleAsOf
                 );
+                var advisedNote = await AdvisedFundsNote(
+                    stock,
+                    listedTicker,
+                    exactListingScope,
+                    targetDate,
+                    holdings
+                );
+                return advisedNote == null ? table : $"{table.TrimEnd()}\n\n{advisedNote}\n";
             },
             "GetTopHolders",
             $"ticker: {ticker}, reportDate: {reportDate}, offset: {offset}, holderTypes: {JoinTokens(holderTypes)}, styles: {JoinTokens(styles)}"
         );
+    }
+
+    // The registered funds inside the shown filers' positions, a floor: only series whose sole
+    // investment adviser is the filer or reports through it, counted for the same quarter.
+    private async Task<string> AdvisedFundsNote(
+        EquityIssuer stock,
+        string listedTicker,
+        bool exactListing,
+        DateOnly reportDate,
+        List<TopHolderRow> holdings
+    )
+    {
+        if (_fundOwnershipReader == null)
+            return null;
+        var holderIds = holdings
+            .Where(holding => holding.OptionType == null)
+            .Select(holding => holding.InstitutionalHolderId)
+            .Distinct()
+            .ToList();
+        var advised = await _fundOwnershipReader.ReadAdvisedFundShares(
+            stock,
+            listedTicker,
+            exactListing,
+            reportDate,
+            holderIds
+        );
+        if (advised.Count == 0)
+            return null;
+        var names = holdings
+            .GroupBy(holding => holding.InstitutionalHolderId)
+            .ToDictionary(group => group.Key, group => group.First().InstitutionName);
+        var parts = holderIds
+            .Where(advised.ContainsKey)
+            .Select(holderId =>
+            {
+                var funds = advised[holderId];
+                var index =
+                    funds.IndexFundShares > 0
+                        ? $", at least {McpFormat.WholeNumber(funds.IndexFundShares)} in index funds and index ETFs"
+                        : "";
+                return $"{MarkdownTable.EscapeCell(names[holderId])}: at least {McpFormat.WholeNumber(funds.FundShares)} of its {McpFormat.WholeNumber(funds.HolderShares)} shares{index} ({McpFormat.WholeNumber(funds.SeriesCount)} series)";
+            })
+            .ToList();
+        return $"Registered funds inside these 13F positions, {FormatDate(reportDate)} (a floor from Form NPORT-P, counting only series whose sole investment adviser is the filer or reports through it, capped at the 13F position): {string.Join("; ", parts)}.";
     }
 
     private static string DescribeTopHolderFilters(
@@ -706,12 +762,12 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetHolderMix", Title = "13F Holder Mix", ReadOnly = true)]
     [Description(
-        "Who holds a stock or ETF listing, by kind of 13F filer, quarter by quarter: each bucket's share of 13F common shares, its like-for-like change, and new and exited filers. Split by holder type (regulatory records, never names), measured style, turnover, horizon, 13F book size, client base, private funds or location. Also gives the active holders' like-for-like change, which leaves index-like books out."
+        "Who holds a stock or ETF listing, by kind of 13F filer, quarter by quarter: each bucket's share of 13F common shares, its like-for-like change, and new and exited filers. Split by holder type (regulatory records, never names), measured style, turnover, horizon, 13F book size, client base, private funds or location. Also gives the active holders' like-for-like change, which leaves index-like books out. The fundtype dimension instead splits registered funds' Form NPORT-P positions by their Form N-CEN fund type (index funds, index ETFs, active ETFs, active funds, unclassified) as a share of shares outstanding; fund positions sit inside their advisers' 13F reports, so they are never added to 13F totals."
     )]
     public Task<string> GetHolderMix(
         [Description("Listed security ticker (e.g., NVDA, VOO)")] string ticker,
         [Description(
-            "How to split the holders: type (holder type, default), style, turnover, horizon, aum (13F book size), client (client base), pf (private funds), country (filer location)"
+            "How to split the holders: type (holder type, default), style, turnover, horizon, aum (13F book size), client (client base), pf (private funds), country (filer location), fundtype (registered funds by N-CEN fund type, from N-PORT, as a share of shares outstanding)"
         )]
             string dimension = "type",
         [Description("Quarters to show, newest last (default 4, clamped to 1-12)")]
@@ -721,7 +777,9 @@ public class InstitutionalHoldingsTools
         return _runner.Execute(
             async () =>
             {
-                var (parsed, dimensionError) = HolderBucketTokens.ParseMixDimension(dimension);
+                var (parsed, fundType, dimensionError) = HolderBucketTokens.ParseHolderMixDimension(
+                    dimension
+                );
                 if (dimensionError != null)
                     return dimensionError;
                 var mixDimension = parsed ?? HolderMixDimension.EntityType;
@@ -729,6 +787,13 @@ public class InstitutionalHoldingsTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
+                if (fundType)
+                {
+                    if (_fundOwnershipReader == null)
+                        return "Registered-fund ownership by fund type is not available on this server.";
+                    var funds = await _fundOwnershipReader.ReadRecent(stock, ticker, maxPeriods);
+                    return funds.Unavailable ?? RenderFundOwnership(stock, ticker, funds);
+                }
                 var history = await _holderMixReader.ReadRecent(stock, ticker, maxPeriods);
                 return history.Unavailable ?? RenderHolderMix(stock, ticker, mixDimension, history);
             },
@@ -843,7 +908,77 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine();
         result.AppendLine(
-            $"_Shares are 13F common shares restated to today's split basis; options and principal amounts are left out. The change compares only filers with an observed 13F in both quarters and keeps each filer in its bucket of the later quarter on both sides; a filer that continues under a new CIK is compared through its successor. Holder type is each filer's current regulatory profile, never its name; client base and private funds come from the Form ADV roster current at the column's quarter end (rosters from December 2019, so an earlier column reads Unknown); style, turnover, horizon and book size are measured from each filer's 13F book in the newest measured quarter on or before the column, and Not measured means none was. Other dimensions: {HolderBucketTokens.MixDimensionTokenList}._"
+            $"_Shares are 13F common shares restated to today's split basis; options and principal amounts are left out. The change compares only filers with an observed 13F in both quarters and keeps each filer in its bucket of the later quarter on both sides; a filer that continues under a new CIK is compared through its successor. Holder type is each filer's current regulatory profile, never its name; client base and private funds come from the Form ADV roster current at the column's quarter end (rosters from December 2019, so an earlier column reads Unknown); style, turnover, horizon and book size are measured from each filer's 13F book in the newest measured quarter on or before the column, and Not measured means none was. Other dimensions: {HolderBucketTokens.HolderMixDimensionTokenList}._"
+        );
+        return result.ToString();
+    }
+
+    private static string RenderFundOwnership(
+        EquityIssuer stock,
+        string ticker,
+        FundOwnershipHistory history
+    )
+    {
+        var quarters = history.Quarters;
+        var latest = history.Latest;
+        if (quarters.All(quarter => quarter.Total.SeriesCount == 0))
+            return $"No registered fund reported a share position in {ticker} on its Form NPORT-P in the computed quarters ({FormatDate(quarters[0].ReportDate)} to {FormatDate(latest.ReportDate)}).";
+        var previous = quarters.Count > 1 ? quarters[^2] : null;
+        var percent = quarters.All(quarter => quarter.Total.PercentOfOutstanding != null);
+
+        string Cell(FundOwnershipBucketShare share) =>
+            percent
+                ? $"{McpFormat.Invariant(share.PercentOfOutstanding.Value, "F2")}%"
+                : McpFormat.WholeNumber(share.Shares);
+        string Change(FundOwnershipBucketShare current, FundOwnershipBucketShare before) =>
+            before is { Shares: > 0 } ? FormatShareChange(current.Shares, before.Shares)
+            : current.Shares > 0 && before != null ? "new"
+            : "—";
+        string Dates(FundOwnershipBucketShare share) =>
+            share.OldestReportPeriod is { } oldest && share.NewestReportPeriod is { } newest
+                ? oldest == newest
+                    ? FormatDate(newest)
+                    : $"{FormatDate(oldest)} to {FormatDate(newest)}"
+                : "—";
+
+        var header =
+            $"| Fund type | {string.Join(" | ", quarters.Select(quarter => FormatDate(quarter.ReportDate)))} | Chg (QoQ) | Series | Report dates |";
+        var separator = $"|---|{string.Join("|", quarters.Select(_ => "---"))}|---|---|---|";
+        var result = MarkdownTable.Start(
+            $"Registered-fund ownership of {StockListingLabel(stock, ticker)} by N-CEN fund type: each bucket's shares {(percent ? "as % of shares outstanding" : "(shares outstanding unknown, so share counts)")}",
+            header,
+            separator
+        );
+        string Row(string label, Func<FundOwnershipQuarter, FundOwnershipBucketShare> pick) =>
+            $"| {label} | {string.Join(" | ", quarters.Select(quarter => Cell(pick(quarter))))} | {Change(pick(latest), previous == null ? null : pick(previous))} | {McpFormat.WholeNumber(pick(latest).SeriesCount)} | {Dates(pick(latest))} |";
+        foreach (var bucket in FundOwnershipBuckets.Ordered)
+            result.AppendLine(Row(bucket.Label, quarter => quarter.Bucket(bucket.Value)));
+        result.AppendLine(Row(latest.Total.Label, quarter => quarter.Total));
+
+        result.AppendLine();
+        var indexPart = latest.IndexPercentOfOutstanding is { } indexPercent
+            ? $"; index funds and index ETFs hold {McpFormat.Invariant(indexPercent, "F2")}% of shares outstanding"
+            : "";
+        result.AppendLine(
+            $"{FormatDate(latest.ReportDate)}: {McpFormat.WholeNumber(latest.Total.Shares)} shares worth ${FormatMillions(latest.Total.Value)}M as filed, across {McpFormat.WholeNumber(latest.Total.SeriesCount)} series{indexPart}."
+        );
+        var unclassified = latest.Bucket(FundOwnershipBucket.Unclassified);
+        if (unclassified.Shares > 0 && latest.Total.Shares > 0)
+            result.AppendLine(
+                $"Unclassified holds {FormatPercent((double)unclassified.Shares / latest.Total.Shares * 100)}% of these fund shares: series with no Form N-CEN fund report on or before the quarter end, such as unit investment trusts (their N-CEN reports no fund type) and new series before their first N-CEN."
+            );
+        if (quarters.Any(quarter => quarter.SplitUnresolved))
+            result.AppendLine(
+                "A split after a quarter end could not be attributed to this listing, so share counts stay on that quarter end's basis and no percentage of shares outstanding is given."
+            );
+        if (latest.Total.SplitUnresolvedShares > 0)
+            result.AppendLine(
+                $"{McpFormat.WholeNumber(latest.Total.SplitUnresolvedShares)} shares are kept as filed because a split between a fund's report date and the quarter end could not be attributed."
+            );
+
+        result.AppendLine();
+        result.AppendLine(
+            $"_Each series counts its latest Form NPORT-P with a portfolio date inside the calendar quarter, long share positions only, restated to today's split basis{(history.SharesOutstanding is { } outstanding ? $" and divided by today's {McpFormat.WholeNumber(outstanding)} shares outstanding" : "")}. Fund type is the series' latest Form N-CEN answer on or before the quarter end, never its name: an index fund checked the Index Fund box (a fund seeking only a multiple or the inverse of an index is not counted as one), and an ETF checked the ETF box or lists on an exchange. Value is as each fund filed it at its own report date. Registered funds hold their positions inside their advisers' 13F reports, so these shares are never added to 13F totals. Other dimensions: {HolderBucketTokens.MixDimensionTokenList}._"
         );
         return result.ToString();
     }

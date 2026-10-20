@@ -196,4 +196,30 @@ public class HolderBucketTokensTests
 
         error.Should().Be("Unknown groupBy 'industry'. Use one of: none, sector.");
     }
+
+    [Theory]
+    [InlineData("fundtype")]
+    [InlineData(" FundType ")]
+    public void ParseHolderMixDimension_FundTypeIsNo13FDimension(string token)
+    {
+        HolderBucketTokens.ParseHolderMixDimension(token).Should().Be((null, true, null));
+    }
+
+    [Fact]
+    public void ParseHolderMixDimension_ReadsThe13FDimensionsAndNamesFundTypeOnError()
+    {
+        HolderBucketTokens
+            .ParseHolderMixDimension("style")
+            .Should()
+            .Be((HolderMixDimension.Style, false, null));
+        HolderBucketTokens.ParseHolderMixDimension(null).Should().Be((null, false, null));
+        HolderBucketTokens
+            .ParseHolderMixDimension("sector")
+            .Error.Should()
+            .Be(
+                "Unknown dimension 'sector'. Use one of: type, style, turnover, horizon, aum, client, pf, country, fundtype."
+            );
+        // Flows split 13F filers only, so their parser still refuses the fund-type token.
+        HolderBucketTokens.ParseMixDimension("fundtype").Error.Should().NotBeNull();
+    }
 }

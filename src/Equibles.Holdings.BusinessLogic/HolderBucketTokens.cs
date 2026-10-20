@@ -76,6 +76,48 @@ public static class HolderBucketTokens
             : (match.Value, null);
     }
 
+    /// <summary>
+    /// The holder-mix dimension that reads registered funds' Form NPORT-P positions by their Form
+    /// N-CEN fund type instead of splitting 13F filers. It is no <see cref="HolderMixDimension"/>:
+    /// funds sit inside their advisers' 13F reports, so its shares are never 13F totals.
+    /// </summary>
+    public const string FundTypeDimensionToken = "fundtype";
+
+    public const string FundTypeDimensionLabel = "Registered fund type";
+
+    /// <summary>Every token the holder mix accepts: the 13F dimensions, then the fund-type one.</summary>
+    public static string HolderMixDimensionTokenList =>
+        $"{MixDimensionTokenList}, {FundTypeDimensionToken}";
+
+    /// <summary>
+    /// Parses a holder-mix dimension token the way <see cref="ParseMixDimension"/> does, and also
+    /// accepts <see cref="FundTypeDimensionToken"/>, returned as <c>FundType</c> with no 13F dimension.
+    /// </summary>
+    public static (
+        HolderMixDimension? Dimension,
+        bool FundType,
+        string Error
+    ) ParseHolderMixDimension(string token)
+    {
+        if (
+            token != null
+            && string.Equals(
+                token.Trim(),
+                FundTypeDimensionToken,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+            return (null, true, null);
+        var (dimension, error) = ParseMixDimension(token);
+        return error == null
+            ? (dimension, false, null)
+            : (
+                null,
+                false,
+                $"Unknown dimension '{token.Trim()}'. Use one of: {HolderMixDimensionTokenList}."
+            );
+    }
+
     private static readonly (
         string Token,
         HolderFlowGrouping Value,
