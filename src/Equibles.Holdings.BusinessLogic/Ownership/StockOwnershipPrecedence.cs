@@ -229,10 +229,8 @@ public static class StockOwnershipPrecedence
         var pending = new Queue<string>([cik]);
         while (pending.TryDequeue(out var current))
         {
-            foreach (var successor in successors.GetValueOrDefault(current) ?? [])
+            foreach (var successor in (successors.GetValueOrDefault(current) ?? []).Where(seen.Add))
             {
-                if (!seen.Add(successor))
-                    continue;
                 pending.Enqueue(successor);
                 yield return successor;
             }
