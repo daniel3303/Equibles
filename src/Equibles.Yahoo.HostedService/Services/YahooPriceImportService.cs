@@ -446,20 +446,25 @@ public class YahooPriceImportService
             -Math.Max(1, _scraperOptions.HistoricalBackfillRetryDays)
         );
         var historyFloor = PriceHistoryFloor();
+        var prices = scope
+            .ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>()
+            .GetAllSeries();
+        var ownedPrices = prices.YahooOwned();
 
         var listings = stockRepository
             .GetAll()
             .SelectMany(issuer => issuer.Securities)
             .SelectMany(security => security.Listings)
             .Where(listing => listing.MarketCountryCode == "US");
+        // A symbol another issuer holds (EquityIssuerRepository.GetForeignSymbolClaims, inlined
+        // here per row) is never fetched for this listing; it is selected only while it still
+        // stores a bar the purge may remove: one dated after its delisting, or one written after
+        // it retired on a date the holder also has a bar (PurgePricesAfterHistoricalCutoff then
+        // removes them only when, as a whole, they copy the holder's series).
         var candidates = stockRepository
             .GetDelistedListings()
             .Where(evidence =>
                 evidence.DelistedOn >= historyFloor
-                && (
-                    evidence.HistoricalPriceBackfillAttemptedAt == null
-                    || evidence.HistoricalPriceBackfillAttemptedAt <= retryBefore
-                )
                 && listings.Count(listing =>
                     listing.Security.EquityIssuerId == evidence.EquityIssuerId
                     && listing.Ticker == evidence.ListedTicker
@@ -472,9 +477,49 @@ public class YahooPriceImportService
                         && listing.Ticker == evidence.ListedTicker
                         && !listing.Active
                         && listing.DelistedOn == evidence.DelistedOn
-                        && !listing.PriceHistoryBackfilled
                     ),
                 (evidence, listing) => new { Evidence = evidence, Listing = listing }
+            )
+            .Select(row => new
+            {
+                row.Evidence,
+                row.Listing,
+                Claimed = listings.Any(claim =>
+                    claim.Ticker == row.Evidence.ListedTicker
+                    && claim.Security.EquityIssuerId != row.Evidence.EquityIssuerId
+                    && (
+                        claim.Active
+                        || claim.DelistedOn == null
+                        || claim.DelistedOn >= row.Evidence.DelistedOn
+                    )
+                ),
+                HoldsClaimedBars = listings.Any(claim =>
+                    claim.Ticker == row.Evidence.ListedTicker
+                    && claim.Security.EquityIssuerId != row.Evidence.EquityIssuerId
+                    && (
+                        claim.Active
+                        || claim.DelistedOn == null
+                        || claim.DelistedOn >= row.Evidence.DelistedOn
+                    )
+                    && ownedPrices.Any(own =>
+                        own.EquityListingId == row.Listing.Id
+                        && (
+                            own.Date > row.Evidence.DelistedOn
+                            || DateOnly.FromDateTime(own.CreationTime)
+                                > row.Evidence.DelistedOn.AddDays(LiveWriteGraceDays)
+                                && prices.Any(theirs =>
+                                    theirs.EquityListingId == claim.Id && theirs.Date == own.Date
+                                )
+                        )
+                    )
+                ),
+            })
+            .Where(row =>
+                (row.Claimed ? row.HoldsClaimedBars : !row.Listing.PriceHistoryBackfilled)
+                && (
+                    row.Evidence.HistoricalPriceBackfillAttemptedAt == null
+                    || row.Evidence.HistoricalPriceBackfillAttemptedAt <= retryBefore
+                )
             );
         return await candidates
             .OrderBy(row => row.Evidence.HistoricalPriceBackfillAttemptedAt ?? DateTime.MinValue)
@@ -495,10 +540,58 @@ public class YahooPriceImportService
             .ToListAsync(cancellationToken);
     }
 
+    // Yahoo serves a bare U.S. symbol as the series of whoever holds it now, so while another
+    // issuer's listing holds this retired symbol no fetch of it is this listing's own history.
+    private static IQueryable<EquityListing> ForeignSymbolClaims(
+        EquityIssuerRepository stockRepository,
+        PriceSeriesTarget target
+    ) =>
+        stockRepository.GetForeignSymbolClaims(
+            target.EquityIssuerId,
+            target.Ticker,
+            target.HistoryEndDate!.Value
+        );
+
+    // Bars a listing receives while it trades can land a little after its last session (the
+    // grouped file's lookback, a delayed confirm). Only a bar written later than this after the
+    // delisting can be a copy of a later holder's series; nothing written while the listing
+    // traded is ever purged as one.
+    private const int LiveWriteGraceDays = 14;
+
+    private async Task<bool> HasForeignSymbolClaim(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!target.IsHistorical)
+            return false;
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        return await ForeignSymbolClaims(stockRepository, target).AnyAsync(cancellationToken);
+    }
+
+    // Stamps the attempt instead of fetching, so the queue moves on; the purge already removed
+    // any bars stored from inside the holder's window.
+    private async Task<bool> RefuseForeignSymbolClaim(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!await HasForeignSymbolClaim(target, cancellationToken))
+            return false;
+        _logger.LogInformation(
+            "Skipped the historical price fetch for retired {Ticker}: another issuer's listing holds the symbol, so the provider series is not this listing's",
+            target.Ticker
+        );
+        await StampHistoricalBackfillAttempt(target, cancellationToken);
+        return true;
+    }
+
     private static async Task<LockedPriceSeries?> LockPriceSeries(
         EquityIssuerRepository stockRepository,
         PriceSeriesTarget target,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool admitForeignSymbolClaim = false
     )
     {
         if (!target.IsUs)
@@ -539,6 +632,12 @@ public class YahooPriceImportService
                     target.Ticker,
                     StringComparison.OrdinalIgnoreCase
                 )
+            )
+                return null;
+            // Every price write revalidates here, so a claim that appears mid-fetch still refuses it.
+            if (
+                !admitForeignSymbolClaim
+                && await ForeignSymbolClaims(stockRepository, target).AnyAsync(cancellationToken)
             )
                 return null;
         }
@@ -872,7 +971,12 @@ public class YahooPriceImportService
             IsolationLevel.ReadCommitted,
             cancellationToken
         );
-        var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+        var lockedSeries = await LockPriceSeries(
+            stockRepo,
+            target,
+            cancellationToken,
+            admitForeignSymbolClaim: true
+        );
         if (lockedSeries?.HistoricalListing == null)
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -1094,7 +1198,7 @@ public class YahooPriceImportService
         if (target.IsHistorical)
         {
             await PurgePricesAfterHistoricalCutoff(target, cancellationToken);
-            if (historyEndDate < floor)
+            if (historyEndDate < floor || await RefuseForeignSymbolClaim(target, cancellationToken))
                 return;
         }
 
@@ -1807,20 +1911,122 @@ public class YahooPriceImportService
             IsolationLevel.ReadCommitted,
             cancellationToken
         );
-        if (await LockPriceSeries(stockRepo, target, cancellationToken) == null)
+        var lockedSeries = await LockPriceSeries(
+            stockRepo,
+            target,
+            cancellationToken,
+            admitForeignSymbolClaim: true
+        );
+        if (lockedSeries == null)
         {
             await transaction.RollbackAsync(cancellationToken);
             return;
         }
 
-        var recycledRows = await repo.GetByListing(target.EquityListingId)
+        // A bar dated after the delisting is never this listing's own. Inside its window, bars
+        // written after it retired go only when, as a whole, they copy one holder listing's
+        // series (CopiedBarEvidence); a few sessions that happen to agree prove nothing, so
+        // everything else is kept.
+        var cutoff = target.HistoryEndDate!.Value;
+        var retiredBy = cutoff
+            .AddDays(LiveWriteGraceDays)
+            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var candidates = await repo.GetByListing(target.EquityListingId)
             .YahooOwned()
-            .Where(price => price.Date > target.HistoryEndDate!.Value)
+            .Where(price => price.Date > cutoff || price.CreationTime > retiredBy)
             .ToListAsync(cancellationToken);
+        var recycledRows = candidates.Where(price => price.Date > cutoff).ToList();
+        var inWindow = candidates.Where(price => price.Date <= cutoff).ToList();
+        if (inWindow.Count > 0)
+        {
+            var claims = await ForeignSymbolClaims(stockRepo, target)
+                .Select(claim => new { claim.Id, claim.Security.EquityIssuerId })
+                .ToListAsync(cancellationToken);
+            var claimIds = claims.Select(claim => claim.Id).ToList();
+            var claimIssuerIds = claims.Select(claim => claim.EquityIssuerId).Distinct().ToList();
+            var firstDate = inWindow.Min(price => price.Date);
+            var holderSeries = (
+                await repo.GetAllSeries()
+                    .Where(price =>
+                        claimIds.Contains(price.EquityListingId)
+                        && price.Date >= firstDate
+                        && price.Date <= cutoff
+                    )
+                    .Select(price => new
+                    {
+                        price.EquityListingId,
+                        price.Date,
+                        price.Open,
+                        price.High,
+                        price.Low,
+                        price.Close,
+                    })
+                    .ToListAsync(cancellationToken)
+            ).GroupBy(
+                price => price.EquityListingId,
+                price => new CopiedBarEvidence.Bar(
+                    price.Date,
+                    price.Open,
+                    price.High,
+                    price.Low,
+                    price.Close
+                )
+            );
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var factors = CopiedBarEvidence.BasisFactors(
+                (
+                    await scope
+                        .ServiceProvider.GetRequiredService<StockSplitRepository>()
+                        .GetAll()
+                        .Where(split =>
+                            claimIssuerIds.Contains(split.EquityIssuerId)
+                            && split.EffectiveDate <= today
+                        )
+                        .Select(split => new
+                        {
+                            split.EffectiveDate,
+                            split.Numerator,
+                            split.Denominator,
+                        })
+                        .ToListAsync(cancellationToken)
+                ).Select(split => (split.EffectiveDate, split.Numerator, split.Denominator))
+            );
+            var ownBars = inWindow
+                .Select(price => new CopiedBarEvidence.Bar(
+                    price.Date,
+                    price.Open,
+                    price.High,
+                    price.Low,
+                    price.Close
+                ))
+                .ToList();
+            var copiedDates = holderSeries
+                .SelectMany(series =>
+                    CopiedBarEvidence.CopiedDates(ownBars, series.ToList(), factors)
+                )
+                .ToHashSet();
+            recycledRows.AddRange(inWindow.Where(price => copiedDates.Contains(price.Date)));
+        }
         if (recycledRows.Count > 0)
         {
             repo.Delete(recycledRows);
             await repo.SaveChanges();
+        }
+
+        // The bars came from the holder's series, so the history this listing kept is not complete.
+        var copiedRows = recycledRows.Count(price => price.Date <= cutoff);
+        if (copiedRows > 0)
+        {
+            lockedSeries
+                .Value.Stock.Securities.SelectMany(security => security.Listings)
+                .Single(listing => listing.Id == target.EquityListingId)
+                .PriceHistoryBackfilled = false;
+            await stockRepo.SaveChanges();
+            _logger.LogWarning(
+                "Purged {Count} bars from retired {Ticker}: they copy another issuer's series under the same symbol",
+                copiedRows,
+                target.Ticker
+            );
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -2008,11 +2214,11 @@ public class YahooPriceImportService
                     cancellationToken
                 );
         }
-        // A current quote cannot establish the denomination of a retired symbol's history.
-        if (
-            target.IsHistorical
-            || !YahooQuotationIdentity.HasUsDollarEvidence(target.Ticker, identity)
-        )
+        // A current quote cannot establish the denomination of a retired symbol's history, and a
+        // symbol another issuer holds serves that issuer's series, so its splits are not this listing's.
+        if (target.IsHistorical)
+            return !await HasForeignSymbolClaim(target, cancellationToken);
+        if (!YahooQuotationIdentity.HasUsDollarEvidence(target.Ticker, identity))
             return true;
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
@@ -2128,7 +2334,11 @@ public class YahooPriceImportService
         var chartEnd = target.HistoryEndDate is { } delisted && delisted < today ? delisted : today;
         var settledAsOf = target.IsHistorical ? chartEnd.AddDays(1) : today;
         if (target.IsHistorical)
+        {
             await PurgePricesAfterHistoricalCutoff(target, cancellationToken);
+            if (await RefuseForeignSymbolClaim(target, cancellationToken))
+                return NoFetchNeeded;
+        }
         var startDate = await ResolveStartDate(target, settledAsOf, cancellationToken);
         if (!HasFetchWindow(target, startDate, settledAsOf))
             return NoFetchNeeded;

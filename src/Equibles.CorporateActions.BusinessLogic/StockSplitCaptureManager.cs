@@ -119,6 +119,19 @@ public class StockSplitCaptureManager
             return 0;
         }
 
+        // A retired symbol another issuer holds was served as that holder's series, so its
+        // splits are the holder's. Checked under the directory lock a new claim is written under.
+        if (
+            expectedDelistedOn.HasValue
+            && await _stockRepository
+                .GetForeignSymbolClaims(commonStockId, listing.Ticker, expectedDelistedOn.Value)
+                .AnyAsync(cancellationToken)
+        )
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return 0;
+        }
+
         if (
             expectedSourceBinding != null
             && (
