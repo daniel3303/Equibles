@@ -61,6 +61,11 @@
       CopyToOutputDirectory="PreserveNewest"
     />
     <Content
+      Include="../Equibles.UnitTests/TestAssets/InsiderTrading/form4-nvidia-ceo-vehicles.xml"
+      Link="TestAssets/InsiderTrading/form4-nvidia-ceo-vehicles.xml"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
       Include="../Equibles.UnitTests/TestAssets/EquityMarkets/Firds/*.xml"
       Link="TestAssets/EquityMarkets/Firds/%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"

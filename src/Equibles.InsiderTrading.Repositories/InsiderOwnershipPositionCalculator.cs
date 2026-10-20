@@ -91,9 +91,8 @@ public class InsiderOwnershipPositionCalculator
     }
 
     /// <summary>
-    /// One insider's position from one filing's rows. A multi-row filing lists intermediate
-    /// balances per bucket, so only each (security title, direct/indirect) bucket's last row in
-    /// filing order is its closing balance; those are restated onto today's split basis and summed
+    /// One insider's position from one filing's rows: the closing row of each balance the filing
+    /// reports (<see cref="InsiderPositionBalances"/>), restated onto today's split basis and summed
     /// per nature. The anchor is the filing's overall last row.
     /// </summary>
     public static InsiderOwnershipPosition Build(
@@ -108,25 +107,17 @@ public class InsiderOwnershipPositionCalculator
             .ThenByDescending(t => t.Id)
             .ToList();
 
+        var balances = InsiderPositionBalances.Resolve(rows);
         long direct = 0;
         long indirect = 0;
-        var ambiguous = false;
-        foreach (
-            var bucket in ordered.GroupBy(t => (Title: t.SecurityTitle ?? "", t.OwnershipNature))
-        )
+        foreach (var closing in balances.Rows)
         {
-            if (
-                bucket.Key.OwnershipNature != OwnershipNature.Direct
-                && bucket.Select(t => t.SharesOwnedAfter).Distinct().Skip(1).Any()
-            )
-                ambiguous = true;
-            var closing = bucket.First();
             var adjusted = SplitAdjustment.AdjustShareCount(
                 closing.SharesOwnedAfter,
                 closing.TransactionDate,
                 splits
             );
-            if (bucket.Key.OwnershipNature == OwnershipNature.Direct)
+            if (closing.OwnershipNature == OwnershipNature.Direct)
                 direct += adjusted;
             else
                 indirect += adjusted;
@@ -134,7 +125,7 @@ public class InsiderOwnershipPositionCalculator
 
         return new InsiderOwnershipPosition(ordered[0], direct, indirect)
         {
-            IndirectBalancesAmbiguous = ambiguous,
+            IndirectBalancesAmbiguous = balances.IndirectAmbiguous,
         };
     }
 }

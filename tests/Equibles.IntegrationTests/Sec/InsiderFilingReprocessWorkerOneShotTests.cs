@@ -1,5 +1,6 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Core.Configuration;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
@@ -16,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
@@ -112,7 +114,8 @@ public class InsiderFilingReprocessWorkerOneShotTests : ParadeDbMcpTestBase
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
+            ),
+            Options.Create(new WorkerOptions())
         );
 
         await RunCycle(worker);
