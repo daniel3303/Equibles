@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020034636_AddHolderBenchmarkActiveShare")]
+    [Migration("20261020061048_AddHolderBenchmarkActiveShare")]
     partial class AddHolderBenchmarkActiveShare
     {
         /// <inheritdoc />
@@ -4452,6 +4452,10 @@ namespace Equibles.Migrations.Migrations
                     b.Property<bool?>("IsRule10b5One")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("NatureOfOwnership")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.PrimitiveCollection<List<string>>("Notes")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -4466,6 +4470,12 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("OwnershipNature")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("OwnershipNatureFootnoteIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<int>("ParserVersion")
                         .HasColumnType("integer");
