@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020021655_AddHolderParentLinks")]
+    [Migration("20261020024414_AddHolderParentLinks")]
     partial class AddHolderParentLinks
     {
         /// <inheritdoc />
@@ -2974,6 +2974,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<string>("ChildLei")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("Confirmed")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Kind")
                         .HasColumnType("integer");

@@ -34,6 +34,7 @@ public class HolderLinkRuleTests
         rollup.UltimateHolderId.Should().Be(parent);
         rollup.Basis.Should().Be(HolderRollupBasis.ReportingParent);
         rollup.HasConflictingEvidence.Should().BeFalse();
+        links.Evidence.Should().OnlyContain(row => row.Confirmed);
         links
             .Evidence.Should()
             .OnlyContain(row => row.ChildHolderId == child && row.ParentHolderId == parent);
@@ -160,6 +161,40 @@ public class HolderLinkRuleTests
                 ("2012383", "1766904", HolderLinkKind.IncludedInParentReport),
                 ("1766904", "2012383", HolderLinkKind.ChildCoverReportsBy),
             ]);
+        links.Evidence.Should().OnlyContain(row => !row.Confirmed);
+    }
+
+    [Fact]
+    public void ListingAnotherFilersNumber_IsNeverConfirmed()
+    {
+        // Shaped on Russell, whose 13F includes "BlackRock Financial Management" under BlackRock,
+        // Inc.'s own 13F file number; BlackRock's cover names Russell only by name.
+        var russell = Holder("1692234");
+        var blackRock = Holder("2012383", fileNumber: "028-24466");
+        Included(russell, Q2, "r-q2", Manager(fileNumber: "028-24466"));
+        Cover(blackRock, Q2, "b-q2", NameOnly("RUSSELL FRANK CO"));
+
+        var links = Derive();
+
+        var row = links.Evidence.Should().ContainSingle().Subject;
+        (row.ChildCik, row.ParentCik, row.Confirmed).Should().Be(("2012383", "1692234", false));
+        Rollup(links, "2012383").ReportingParentCik.Should().BeNull();
+    }
+
+    [Fact]
+    public void EveryQuarterConfirmsOnItsOwn()
+    {
+        Holder("100");
+        Holder("200");
+        Holder("300");
+        Notice("300", Q1, "c-q1", [Manager(cik: "100")]);
+        Notice("300", Q2, "c-q2", [Manager(cik: "200")]);
+
+        var links = Derive();
+
+        // The older quarter stays contained in its own parent; the newest decides the parent.
+        links.Evidence.Should().OnlyContain(row => row.Confirmed);
+        Rollup(links, "300").ReportingParentCik.Should().Be("200");
     }
 
     [Fact]
@@ -177,6 +212,25 @@ public class HolderLinkRuleTests
     }
 
     [Fact]
+    public void IncludedEdgeConfirmedByTheChildsCover_ConfirmsBothRows()
+    {
+        var parent = Holder("100");
+        var child = Holder("200");
+        Included(parent, Q2, "p-q2", Manager(cik: "200"));
+        Cover(child, Q2, "c-q2", Manager(cik: "100"));
+        // A cover naming the parent another quarter confirms nothing here.
+        Cover(child, Q1, "c-q1", Manager(cik: "100"));
+
+        var links = Derive();
+
+        links
+            .Evidence.Where(row => row.Confirmed)
+            .Select(row => row.SourceKey)
+            .Should()
+            .BeEquivalentTo(["p-q2", "c-q2"]);
+    }
+
+    [Fact]
     public void NoticeNamingAnUnidentifiedSecondReporter_IsNotSole()
     {
         Holder("100");
@@ -186,7 +240,9 @@ public class HolderLinkRuleTests
         var links = Derive();
 
         Rollup(links, "300").ReportingParentCik.Should().BeNull();
-        links.Evidence.Should().ContainSingle().Which.ParentCik.Should().Be("100");
+        var row = links.Evidence.Should().ContainSingle().Subject;
+        row.ParentCik.Should().Be("100");
+        row.Confirmed.Should().BeFalse();
     }
 
     [Fact]

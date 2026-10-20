@@ -15,9 +15,11 @@ public interface IHolderRollupReader
     );
 
     /// <summary>
-    /// The 13F reporting evidence that puts a child's holdings inside this holder's report for the
-    /// quarter: evidence is valid for its own quarter and the next quarter end. GLEIF ownership is
-    /// never containment, and every row keeps its kind, since a cover listing is a partial report.
+    /// The confirmed 13F reporting evidence that puts a child's holdings inside this holder's report
+    /// for the quarter: the child's notice names this holder alone, or this holder includes the
+    /// child and the child's own cover or notice names it in the same quarter. A one-sided listing
+    /// never counts. Evidence is valid for its own quarter and the next quarter end; GLEIF ownership
+    /// is never containment, and every row keeps its kind, since a cover listing is a partial report.
     /// </summary>
     Task<IReadOnlyList<HolderLinkEvidence>> GetContainedChildren(
         InstitutionalHolder holder,

@@ -45,11 +45,22 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
         var spunOut = Holder("777", null);
         Notice("so-q1", "777", new DateOnly(2026, 3, 31), crd: null, reporters: ["315066"]);
         Rollup(spunOut, "so-q2", Q2);
+        // Shaped on Russell: its 13F lists BlackRock, Inc.'s file number under another name, and
+        // BlackRock never names Russell.
+        var russell = Holder("1692234", null);
+        Rollup(russell, "ru-q2", Q2);
+        Included("ru-q2", 1, fileNumber: "028-24466");
+        // Shaped on Cary Street: its 13F lists BlackRock, Inc. both as included and as reporting
+        // for it, and BlackRock confirms neither.
+        var caryStreet = Holder("1766904", null);
+        Rollup(caryStreet, "cs-q2", Q2);
+        Included("cs-q2", 1, cik: "2012383");
+        Listed("cs-q2", 1, OtherManagerDirection.ReportsForFiler, cik: "2012383");
         AddFundReport("S000004310", "36405", 105247);
         AddFundReport("S000006037", "35315", 108281);
         await DbContext.SaveChangesAsync();
 
-        (await Sut().Run(Today, CancellationToken.None)).Should().Be(6);
+        (await Sut().Run(Today, CancellationToken.None)).Should().Be(9);
 
         await using var verify = Fixture.CreateDbContext();
         var rollups = await verify.Set<HolderRollup>().ToDictionaryAsync(rollup => rollup.Cik);
@@ -62,6 +73,8 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
         rollups["777"].ReportingParentCik.Should().BeNull();
         rollups["777"].UltimateCik.Should().Be("777");
         rollups["2012383"].UltimateCik.Should().Be("2012383");
+        rollups["2012383"].ReportingParentCik.Should().BeNull();
+        rollups["1766904"].ReportingParentCik.Should().BeNull();
         rollups.Should().NotContainKey("1364742");
         rollups
             .Values.Should()
@@ -78,18 +91,30 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
 
         var reader = new HolderRollupReader(new InstitutionalHolderRepository(verify));
         (await reader.GetRollups(["0001006249", "999"])).Keys.Should().BeEquivalentTo(["1006249"]);
+        // Only a child that confirms the listing is contained: neither the unconfirmed 913414 nor
+        // Cary Street, whose cover alone names BlackRock.
         (await reader.GetContainedChildren(blackRock, Q2))
             .Select(evidence => (evidence.ChildCik, evidence.Kind))
             .Should()
             .BeEquivalentTo([
                 ("1006249", HolderLinkKind.IncludedInParentReport),
                 ("1006249", HolderLinkKind.NoticeReportedBy),
-                ("913414", HolderLinkKind.IncludedInParentReport),
+            ]);
+        (await reader.GetContainedChildren(russell, Q2)).Should().BeEmpty();
+        (await reader.GetContainedChildren(caryStreet, Q2)).Should().BeEmpty();
+        // The spun-out filer's first-quarter notice still covers the quarter end after it.
+        (await reader.GetContainedChildren(fmr, Q2))
+            .Select(evidence => (evidence.ChildCik, evidence.Kind))
+            .Should()
+            .BeEquivalentTo([
+                ("35368", HolderLinkKind.IncludedInParentReport),
+                ("35368", HolderLinkKind.NoticeReportedBy),
+                ("777", HolderLinkKind.NoticeReportedBy),
             ]);
         // Evidence holds for its own quarter and the next quarter end, never later.
         (await reader.GetContainedChildren(blackRock, new DateOnly(2026, 9, 30)))
             .Should()
-            .HaveCount(3);
+            .HaveCount(2);
         (await reader.GetContainedChildren(blackRock, new DateOnly(2026, 12, 31)))
             .Should()
             .BeEmpty();
@@ -181,12 +206,21 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
         string cik = null,
         string fileNumber = null,
         string crd = null
+    ) => Listed(accession, sequence, OtherManagerDirection.IncludedInReport, cik, fileNumber, crd);
+
+    private void Listed(
+        string accession,
+        int sequence,
+        OtherManagerDirection direction,
+        string cik = null,
+        string fileNumber = null,
+        string crd = null
     ) =>
         DbContext.Add(
             new FilingOtherManager
             {
                 AccessionNumber = accession,
-                Direction = OtherManagerDirection.IncludedInReport,
+                Direction = direction,
                 SequenceNumber = sequence,
                 Cik = cik,
                 Form13FFileNumber = fileNumber,

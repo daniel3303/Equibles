@@ -51,4 +51,11 @@ public class HolderLinkEvidence
 
     /// <summary>When the statement was filed or fetched.</summary>
     public DateOnly AsOf { get; set; }
+
+    /// <summary>
+    /// The child confirms its holdings are inside the parent's report that quarter: its 13F notice
+    /// names the parent alone, or the parent includes it and its own cover or notice names the
+    /// parent. Set on every 13F row of such a pair; an unconfirmed row is a one-sided listing.
+    /// </summary>
+    public bool Confirmed { get; set; }
 }

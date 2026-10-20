@@ -57,7 +57,7 @@ public class HolderRollupReader : IHolderRollupReader
             HoldingsCorpusCoverage.PreviousQuarterEnd(quarterEnd),
         ];
         return await _repository
-            .GetLinkEvidenceByParent(parentCik, ReportingKinds.ToList(), reportDates)
+            .GetConfirmedLinkEvidenceByParent(parentCik, ReportingKinds.ToList(), reportDates)
             .AsNoTracking()
             .OrderBy(evidence => evidence.ChildCik)
             .ThenByDescending(evidence => evidence.ReportDate)

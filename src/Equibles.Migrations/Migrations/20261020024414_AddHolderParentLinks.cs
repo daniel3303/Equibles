@@ -41,7 +41,8 @@ namespace Equibles.Migrations.Migrations
                     Kind = table.Column<int>(type: "integer", nullable: false),
                     SourceKey = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     ReportDate = table.Column<DateOnly>(type: "date", nullable: true),
-                    AsOf = table.Column<DateOnly>(type: "date", nullable: false)
+                    AsOf = table.Column<DateOnly>(type: "date", nullable: false),
+                    Confirmed = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {

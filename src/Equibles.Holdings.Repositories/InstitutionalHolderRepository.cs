@@ -505,8 +505,11 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     public IQueryable<HolderRollup> GetRollups(IReadOnlyCollection<string> canonicalCiks) =>
         DbContext.Set<HolderRollup>().Where(rollup => canonicalCiks.Contains(rollup.Cik));
 
-    /// <summary>The link evidence naming this canonical CIK as parent, of these kinds, for these quarters.</summary>
-    public IQueryable<HolderLinkEvidence> GetLinkEvidenceByParent(
+    /// <summary>
+    /// The confirmed link evidence naming this canonical CIK as parent, of these kinds, for these
+    /// quarters.
+    /// </summary>
+    public IQueryable<HolderLinkEvidence> GetConfirmedLinkEvidenceByParent(
         string canonicalParentCik,
         IReadOnlyCollection<HolderLinkKind> kinds,
         IReadOnlyCollection<DateOnly> reportDates
@@ -515,6 +518,7 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .Set<HolderLinkEvidence>()
             .Where(evidence =>
                 evidence.ParentCik == canonicalParentCik
+                && evidence.Confirmed
                 && kinds.Contains(evidence.Kind)
                 && evidence.ReportDate != null
                 && reportDates.Contains(evidence.ReportDate.Value)

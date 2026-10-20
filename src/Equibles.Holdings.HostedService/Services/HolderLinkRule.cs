@@ -165,8 +165,7 @@ internal static class HolderLinkRule
             .Where(notice => notice.Reporters.Count == 1)
             .Select(notice => notice.AccessionNumber)
             .ToHashSet(StringComparer.Ordinal);
-        // The quarter of each filer's newest own 13F report or notice in the window; its parent is
-        // read there alone, so an older notice never outlives a later report of its own.
+        // The quarter of each filer's newest own 13F report or notice in the window.
         var newestOwnFiling = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
         void Filed(string cik, DateOnly quarter)
         {
@@ -180,7 +179,8 @@ internal static class HolderLinkRule
             Filed(holderCiks.GetValueOrDefault(holderId), quarter);
         foreach (var notice in latestNotices)
             Filed(CikNormalizer.Canonicalize(notice.FilerCik), notice.ReportDate);
-        var reporting = ReportingParents(stored, soleNotices, newestOwnFiling);
+        Confirm(stored, soleNotices);
+        var reporting = ReportingParents(stored, newestOwnFiling);
         var gleifUltimate = GleifParents(stored, HolderLinkKind.GleifUltimateParent);
         var gleifDirect = GleifParents(stored, HolderLinkKind.GleifDirectParent);
 
@@ -197,41 +197,55 @@ internal static class HolderLinkRule
     private static bool IsGleif(HolderLinkKind kind) =>
         kind is HolderLinkKind.GleifDirectParent or HolderLinkKind.GleifUltimateParent;
 
-    // Each child's 13F reporting parent in the quarter of its newest own report or notice: a
-    // notice naming exactly one manager, or an included edge the child's cover or notice confirms.
+    // A child's holdings are inside a parent's report for a quarter only when the child says so:
+    // its notice names that manager alone, or the parent includes it and the child's own cover or
+    // notice names the parent that quarter. Every 13F row of such a pair is confirmed.
+    private static void Confirm(
+        IReadOnlyCollection<HolderLinkEvidence> evidence,
+        IReadOnlySet<string> soleNotices
+    )
+    {
+        foreach (
+            var pair in evidence
+                .Where(row => row.ReportDate != null && !IsGleif(row.Kind))
+                .GroupBy(row => (row.ChildCik, row.ParentCik, row.ReportDate))
+        )
+        {
+            var soleNotice = pair.Any(row =>
+                row.Kind == HolderLinkKind.NoticeReportedBy && soleNotices.Contains(row.SourceKey)
+            );
+            var confirmedInclusion =
+                pair.Any(row => row.Kind == HolderLinkKind.IncludedInParentReport)
+                && pair.Any(row =>
+                    row.Kind
+                        is HolderLinkKind.ChildCoverReportsBy
+                            or HolderLinkKind.NoticeReportedBy
+                );
+            if (!soleNotice && !confirmedInclusion)
+                continue;
+            foreach (var row in pair)
+                row.Confirmed = true;
+        }
+    }
+
+    // Each child's 13F reporting parent: the confirmed parents in the quarter of its newest own
+    // report or notice, so an older notice never outlives a later report of its own.
     private static Dictionary<string, Decision> ReportingParents(
         IReadOnlyCollection<HolderLinkEvidence> evidence,
-        IReadOnlySet<string> soleNotices,
         IReadOnlyDictionary<string, DateOnly> newestOwnFiling
     )
     {
         var decisions = new Dictionary<string, Decision>(StringComparer.Ordinal);
         foreach (
             var child in evidence
-                .Where(row => row.ReportDate != null && !IsGleif(row.Kind))
+                .Where(row => row.Confirmed)
                 .GroupBy(row => row.ChildCik, StringComparer.Ordinal)
         )
         {
             if (!newestOwnFiling.TryGetValue(child.Key, out var quarter))
                 continue;
-            var rows = child.Where(row => row.ReportDate == quarter).ToList();
-            var confirming = rows.Where(row =>
-                    row.Kind
-                        is HolderLinkKind.ChildCoverReportsBy
-                            or HolderLinkKind.NoticeReportedBy
-                )
-                .Select(row => row.ParentCik)
-                .ToHashSet(StringComparer.Ordinal);
-            var candidates = rows.Where(row =>
-                    (
-                        row.Kind == HolderLinkKind.NoticeReportedBy
-                        && soleNotices.Contains(row.SourceKey)
-                    )
-                    || (
-                        row.Kind == HolderLinkKind.IncludedInParentReport
-                        && confirming.Contains(row.ParentCik)
-                    )
-                )
+            var candidates = child
+                .Where(row => row.ReportDate == quarter)
                 .Select(row => row.ParentCik)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
