@@ -1,6 +1,7 @@
 using System.IO;
 using System.IO.Compression;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using Equibles.Core.AutoWiring;
@@ -563,6 +564,35 @@ public class SecEdgarClient : ISecEdgarClient
         return await response.Content.ReadAsStreamAsync();
     }
 
+    public async Task<SecByteRange> DownloadRange(
+        string url,
+        long offset,
+        int count,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+        using var response = await SendWithRetryAsync(
+            url,
+            HttpCompletionOption.ResponseContentRead,
+            cancellationToken,
+            request => request.Headers.Range = new RangeHeaderValue(offset, offset + count - 1)
+        );
+        response.EnsureSuccessStatusCode();
+        var range = response.Content.Headers.ContentRange;
+        if (
+            response.StatusCode != HttpStatusCode.PartialContent
+            || range?.From != offset
+            || range.Length is not { } totalLength
+        )
+            throw new InvalidDataException($"SEC did not serve the requested byte range of {url}.");
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        if (bytes.Length != Math.Min(count, totalLength - offset))
+            throw new InvalidDataException($"SEC served a truncated byte range of {url}.");
+        return new SecByteRange(bytes, totalLength);
+    }
+
     public async Task<List<EdgarRecentFilingEntry>> GetRecentFilings(
         int start = 0,
         int count = 100,
@@ -919,7 +949,8 @@ public class SecEdgarClient : ISecEdgarClient
     private async Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
         HttpCompletionOption completionOption,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Action<HttpRequestMessage> configureRequest = null
     )
     {
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
@@ -930,7 +961,14 @@ public class SecEdgarClient : ISecEdgarClient
             HttpResponseMessage response;
             try
             {
-                response = await _httpClient.GetAsync(url, completionOption, cancellationToken);
+                // A request message is single-use, so each attempt builds its own.
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                configureRequest?.Invoke(request);
+                response = await _httpClient.SendAsync(
+                    request,
+                    completionOption,
+                    cancellationToken
+                );
             }
             catch (HttpRequestException ex)
                 when (IsTransientNetworkError(ex) && attempt < MaxRetries)

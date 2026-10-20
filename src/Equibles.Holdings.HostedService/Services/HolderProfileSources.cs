@@ -28,13 +28,17 @@ internal sealed class HolderProfileSources
         new(StringComparer.Ordinal);
     internal Dictionary<int, AdvisedSeriesSummary> AdvisedSeriesByCrd { get; } = [];
 
+    /// <summary>Each adviser's newest Schedule D 7.B.(1) filing from SEC's archive.</summary>
+    internal Dictionary<int, FormAdvPrivateFundFiling> PrivateFundFilingsByCrd { get; } = [];
+
     internal static HolderProfileSources Build(
         IEnumerable<FormAdvAdviser> advisers,
         IEnumerable<FormAdvAdviserClientType> clientTypes,
         IEnumerable<SecFilerProfile> filerProfiles,
         IEnumerable<BeneficialOwnershipEvidenceRow> beneficialOwnership,
         IEnumerable<NCenRegistrantRow> registrants,
-        IEnumerable<AdvisedSeriesRow> advisedSeries
+        IEnumerable<AdvisedSeriesRow> advisedSeries,
+        IEnumerable<FormAdvPrivateFundFiling> privateFundFilings = null
     )
     {
         var sources = new HolderProfileSources();
@@ -110,6 +114,18 @@ internal sealed class HolderProfileSources
 
         foreach (var summary in HolderIdentifierRules.SummarizeAdvisedSeries(advisedSeries))
             sources.AdvisedSeriesByCrd[summary.Key] = summary.Value;
+
+        foreach (
+            var filing in (privateFundFilings ?? [])
+                .GroupBy(filing => filing.Crd)
+                .Select(group =>
+                    group
+                        .OrderByDescending(filing => filing.FiledOn)
+                        .ThenByDescending(filing => filing.FilingId)
+                        .First()
+                )
+        )
+            sources.PrivateFundFilingsByCrd[filing.Crd] = filing;
 
         return sources;
     }

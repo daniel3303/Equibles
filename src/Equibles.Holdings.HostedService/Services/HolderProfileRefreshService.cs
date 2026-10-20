@@ -1,6 +1,7 @@
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Advisers;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
@@ -63,7 +64,8 @@ public class HolderProfileRefreshService
                 .ToListAsync(cancellationToken),
             await LoadBeneficialOwnership(today, cancellationToken),
             await LoadRegistrants(today, cancellationToken),
-            await AdvisedSeriesLoader.Load(_dbContext, today, cancellationToken)
+            await AdvisedSeriesLoader.Load(_dbContext, today, cancellationToken),
+            await LoadPrivateFundFilings(today, cancellationToken)
         );
         var context = new HolderEvidenceContext(
             today,
@@ -126,7 +128,23 @@ public class HolderProfileRefreshService
         _dbContext.ChangeTracker.Clear();
     }
 
-    // The newest roster SEC published of each kind; until the ledger has one, the newest listing.
+    // Schedule D filings recent enough to decide a private-fund focus.
+    private Task<List<FormAdvPrivateFundFiling>> LoadPrivateFundFilings(
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
+    {
+        var since = today.AddMonths(-AdviserPrivateFundFocus.ScheduleDLookbackMonths);
+        return _dbContext
+            .Set<FormAdvPrivateFundFiling>()
+            .AsNoTracking()
+            .Where(filing => filing.FiledOn >= since && filing.FiledOn <= today)
+            .ToListAsync(cancellationToken);
+    }
+
+    // The newest roster the current adviser view imported of each kind; until the ledger has
+    // one, the newest listing. A roster the history walk listed but the current view has not
+    // imported yet must not make every adviser read as former.
     private async Task<DateOnly?> LatestRoster(
         FormAdvRegistration registration,
         IReadOnlyCollection<FormAdvAdviser> advisers,
@@ -134,7 +152,7 @@ public class HolderProfileRefreshService
     ) =>
         await _dbContext
             .Set<FormAdvRosterImport>()
-            .Where(import => import.Registration == registration)
+            .Where(import => import.Registration == registration && import.ParserVersion > 0)
             .MaxAsync(import => (DateOnly?)import.ReportDate, cancellationToken)
         ?? advisers
             .Where(adviser => adviser.Registration == registration)

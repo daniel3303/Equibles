@@ -4,6 +4,7 @@ using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.Data.Models;
 
 namespace Equibles.IntegrationTests.Holdings;
 
@@ -113,6 +114,96 @@ public class HolderMixReaderPostgresTests(ParadeDbFixture fixture) : IAsyncLifet
             .Single(b => b.Token == "adv")
             .Shares.Should()
             .Be(1_200);
+    }
+
+    [Fact]
+    public async Task Read_BucketsEachQuarterByTheFormAdvRosterCurrentAtItsEnd()
+    {
+        // The adviser served pooled vehicles in September and individuals by December, so each
+        // quarter reads its own roster; neither borrows today's profile.
+        var earlier = new DateOnly(2025, 6, 30);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "PIT",
+            Name: "Point in time"
+        );
+        var adviser = new InstitutionalHolder { Cik = "5", Name = "Adviser" };
+        await using (var seed = fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, adviser);
+            seed.AddRange(
+                new InstitutionalHolderProfile
+                {
+                    InstitutionalHolderId = adviser.Id,
+                    EntityType = HolderEntityType.RegisteredAdviser,
+                    AdviserCrd = 111,
+                    ClientBase = HolderClientBase.Corporations,
+                },
+                Roster(new DateOnly(2025, 9, 1)),
+                Roster(new DateOnly(2025, 12, 1)),
+                Version(
+                    new DateOnly(2025, 9, 1),
+                    (FormAdvClientType.PooledInvestmentVehicles, 900),
+                    (FormAdvClientType.Individuals, 100)
+                ),
+                Version(
+                    new DateOnly(2025, 12, 1),
+                    (FormAdvClientType.PooledInvestmentVehicles, 100),
+                    (FormAdvClientType.Individuals, 900)
+                ),
+                Holding(stock, adviser, earlier, 100),
+                Holding(stock, adviser, Prior, 100),
+                Holding(stock, adviser, Current, 100)
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        await using var db = fixture.CreateDbContext();
+        var mix = await new HolderMixReader(
+            new(db),
+            new(db),
+            new(db),
+            new StockCombinedQuarterService(new(db), new(db)),
+            HoldingsCorpusCoverage.Default
+        ).Read(stock, [earlier, Prior, Current], []);
+
+        string ClientBase(HolderMixQuarter quarter) =>
+            quarter.Dimensions[HolderMixDimension.ClientBase].Single(b => b.Shares > 0).Token;
+        mix.Select(quarter => (quarter.ReportDate, ClientBase(quarter)))
+            .Should()
+            .Equal((Prior, "pooled"), (Current, "ind"));
+    }
+
+    private static FormAdvRosterImport Roster(DateOnly reportDate) =>
+        new()
+        {
+            Registration = FormAdvRegistration.Registered,
+            ReportDate = reportDate,
+            AdviserCount = 1,
+            VersionedAt = DateTime.UtcNow,
+        };
+
+    private static FormAdvAdviserVersion Version(
+        DateOnly reportDate,
+        params (FormAdvClientType Type, long Aum)[] clientTypes
+    )
+    {
+        var version = new FormAdvAdviserVersion
+        {
+            Crd = 111,
+            Registration = FormAdvRegistration.Registered,
+            ReportDate = reportDate,
+            LastSeenReportDate = reportDate,
+            ContentHash = reportDate.ToString("O"),
+        };
+        version.ClientTypes = clientTypes
+            .Select(type => new FormAdvClientTypeAum
+            {
+                FormAdvAdviserVersionId = version.Id,
+                ClientType = type.Type,
+                RegulatoryAum = type.Aum,
+            })
+            .ToList();
+        return version;
     }
 
     private static InstitutionalHolding Holding(

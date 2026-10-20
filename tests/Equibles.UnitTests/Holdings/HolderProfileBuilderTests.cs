@@ -270,6 +270,51 @@ public class HolderProfileBuilderTests
     }
 
     [Fact]
+    public void Build_RecentScheduleD_DecidesTheFocusByGrossAssetsWithItsFilingDate()
+    {
+        // The roster counts mostly hedge funds, but the filed gross assets sit in private equity.
+        var adviser = Adviser(160108);
+        adviser.AdvisesPrivateFunds = true;
+        adviser.PrivateFundCount = 4;
+        adviser.HedgeFundCount = 3;
+        adviser.PrivateEquityFundCount = 1;
+        var filed = Today.AddMonths(-6);
+        var scheduleD = new FormAdvPrivateFundFiling
+        {
+            Crd = 160108,
+            FiledOn = filed,
+            FundCount = 4,
+            GrossAssets = 1_000,
+            HedgeFundCount = 3,
+            HedgeFundGrossAssets = 100,
+            PrivateEquityFundCount = 1,
+            PrivateEquityFundGrossAssets = 900,
+        };
+        var older = new FormAdvPrivateFundFiling
+        {
+            Crd = 160108,
+            FiledOn = filed.AddYears(-1),
+            FundCount = 1,
+            GrossAssets = 10,
+            HedgeFundCount = 1,
+            HedgeFundGrossAssets = 10,
+        };
+
+        var profile = Build(
+            Holder(crd: "160108"),
+            HolderProfileSources.Build([adviser], [], [], [], [], [], [older, scheduleD])
+        );
+        var rosterOnly = Build(Holder(crd: "160108"), Sources(advisers: [adviser]));
+
+        profile.PrivateFundFocus.Should().Be(PrivateFundFocus.PrivateEquity);
+        profile.PrivateFundFocusBasis.Should().Be(PrivateFundFocusBasis.GrossAssets);
+        profile.PrivateFundFocusAsOf.Should().Be(filed);
+        rosterOnly.PrivateFundFocus.Should().Be(PrivateFundFocus.Hedge);
+        rosterOnly.PrivateFundFocusBasis.Should().Be(PrivateFundFocusBasis.FundCount);
+        rosterOnly.PrivateFundFocusAsOf.Should().Be(Roster);
+    }
+
+    [Fact]
     public void Build_FormerListing_FillsNoAdviserFacts()
     {
         var adviser = Adviser(160108);
@@ -335,70 +380,6 @@ public class HolderProfileBuilderTests
 
         profile.Sic.Should().Be("6211");
         profile.EntityType.Should().Be(HolderEntityType.Unknown);
-    }
-
-    [Fact]
-    public void ClientBase_GroupsIndividualsAndNeedsHalfTheAssets()
-    {
-        var (clientBase, share, pooled) = HolderProfileBuilder.ClientBase([
-            ClientType(1, FormAdvClientType.Individuals, 30),
-            ClientType(1, FormAdvClientType.HighNetWorthIndividuals, 20),
-            ClientType(1, FormAdvClientType.PensionAndProfitSharingPlans, 49),
-            ClientType(1, FormAdvClientType.Other, 1),
-        ]);
-
-        clientBase.Should().Be(HolderClientBase.Individuals);
-        share.Should().Be(0.5m);
-        pooled.Should().Be(0m);
-    }
-
-    [Fact]
-    public void ClientBase_WithoutAMajorityGroup_IsDiversified()
-    {
-        var (clientBase, share, pooled) = HolderProfileBuilder.ClientBase([
-            ClientType(1, FormAdvClientType.Individuals, 40),
-            ClientType(1, FormAdvClientType.PooledInvestmentVehicles, 35),
-            ClientType(1, FormAdvClientType.Corporations, 25),
-        ]);
-
-        clientBase.Should().Be(HolderClientBase.Diversified);
-        share.Should().BeNull();
-        pooled.Should().Be(0.35m);
-    }
-
-    [Fact]
-    public void ClientBase_WithoutReportedAssets_IsUnknown()
-    {
-        var (clientBase, share, pooled) = HolderProfileBuilder.ClientBase([
-            ClientType(1, FormAdvClientType.Individuals, null),
-        ]);
-
-        clientBase.Should().Be(HolderClientBase.Unknown);
-        share.Should().BeNull();
-        pooled.Should().BeNull();
-        HolderProfileBuilder.ClientBase([]).Base.Should().Be(HolderClientBase.Unknown);
-    }
-
-    [Theory]
-    [InlineData(3, 2, 0, PrivateFundFocus.Hedge)]
-    [InlineData(2, 2, 0, PrivateFundFocus.Mixed)]
-    [InlineData(0, 0, 1, PrivateFundFocus.Other)]
-    [InlineData(0, 0, 0, PrivateFundFocus.None)]
-    public void Focus_IsTheTypeHoldingMoreThanHalfThePrivateFunds(
-        int hedge,
-        int privateEquity,
-        int other,
-        PrivateFundFocus expected
-    )
-    {
-        var adviser = new FormAdvAdviser
-        {
-            HedgeFundCount = hedge,
-            PrivateEquityFundCount = privateEquity,
-            OtherPrivateFundCount = other,
-        };
-
-        HolderProfileBuilder.Focus(adviser).Should().Be(expected);
     }
 
     [Fact]

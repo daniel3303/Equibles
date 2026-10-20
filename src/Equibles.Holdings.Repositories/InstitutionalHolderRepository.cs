@@ -3,6 +3,7 @@ using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
+using Equibles.Sec.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Repositories;
@@ -411,6 +412,16 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         DbContext
             .Set<InstitutionalHolderProfile>()
             .Where(profile => profile.InstitutionalHolderId == holder.Id);
+
+    // The Form ADV history a profile's adviser CRD links to, for point-in-time client bases.
+    public IQueryable<FormAdvAdviserVersion> GetAdviserVersions() =>
+        DbContext.Set<FormAdvAdviserVersion>();
+
+    public IQueryable<FormAdvPrivateFundFiling> GetPrivateFundFilings() =>
+        DbContext.Set<FormAdvPrivateFundFiling>();
+
+    public IQueryable<FormAdvRosterImport> GetAdviserRosters() =>
+        DbContext.Set<FormAdvRosterImport>();
 
     // The holder's measured quarters, one row per closed quarter the intelligence drain computed.
     public IQueryable<HolderQuarterlyMetrics> GetQuarterlyMetrics(InstitutionalHolder holder) =>

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Holdings.BusinessLogic.Advisers;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Repositories;
@@ -161,30 +162,40 @@ public class HolderFlowReader
             }
         );
 
-    // The quarter's measurements with each filer's current profile and filed address code.
+    // The quarter's measurements with each filer's profile as of the quarter end (current entity
+    // type, client base and private funds from the Form ADV roster current then, as the holder
+    // mix reads them) and filed address code.
     private async Task<List<HolderFlowHolder>> LoadHolders(
         DateOnly reportDate,
         CancellationToken cancellationToken
     )
     {
-        var profiles = await _holderRepository
+        var profileRows = await _holderRepository
             .GetProfilesMeasuredIn(reportDate)
             .AsNoTracking()
             .Select(profile => new
             {
                 profile.InstitutionalHolderId,
-                Profile = new HolderMixProfile(
-                    profile.EntityType,
-                    profile.ClientBase,
-                    profile.AdvisesPrivateFunds,
-                    profile.PrivateFundFocus
-                ),
+                profile.EntityType,
+                profile.AdviserCrd,
             })
-            .ToDictionaryAsync(
-                profile => profile.InstitutionalHolderId,
-                profile => profile.Profile,
-                cancellationToken
-            );
+            .ToListAsync(cancellationToken);
+        var advisers = await AdviserHistory.FactsAt(
+            _holderRepository,
+            AdviserHistory.Crds(profileRows.Select(profile => profile.AdviserCrd)),
+            [reportDate],
+            cancellationToken
+        );
+        var profiles = profileRows.ToDictionary(
+            profile => profile.InstitutionalHolderId,
+            profile =>
+                HolderMixProfile.At(
+                    profile.EntityType,
+                    profile.AdviserCrd is { } crd
+                        ? advisers.GetValueOrDefault((crd, reportDate))
+                        : null
+                )
+        );
         var metrics = await _holderRepository
             .GetQuarterlyMetrics(reportDate)
             .AsNoTracking()

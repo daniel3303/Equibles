@@ -32,7 +32,23 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
         _fixture = fixture;
     }
 
-    public async Task InitializeAsync() => await _fixture.ResetAsync();
+    public async Task InitializeAsync()
+    {
+        await _fixture.ResetAsync();
+        // The Schedule D archive has its own tests; here it counts as already imported.
+        await using var seed = _fixture.CreateDbContext();
+        foreach (var registration in Enum.GetValues<FormAdvRegistration>())
+            seed.Set<FormAdvFilingArchiveImport>()
+                .Add(
+                    new FormAdvFilingArchiveImport
+                    {
+                        Registration = registration,
+                        ArchiveEndDate = FormAdvPrivateFundArchiveImporter.ArchiveEndDate,
+                        ParserVersion = FormAdvPrivateFundArchiveImporter.ParserVersion,
+                    }
+                );
+        await seed.SaveChangesAsync();
+    }
 
     public Task DisposeAsync()
     {
@@ -107,6 +123,11 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            new FormAdvPrivateFundArchiveImporter(
+                CreateScopeFactory(),
+                secEdgarClient,
+                Substitute.For<ILogger<FormAdvPrivateFundArchiveImporter>>()
             )
         );
     }
@@ -228,8 +249,16 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
     [Fact]
     public async Task Import_SnapshotsAlreadyImportedByThisParser_DoesNotDownloadArchives()
     {
-        await SeedLedger(FormAdvRegistration.Registered, FormAdvImportService.ParserVersion);
-        await SeedLedger(FormAdvRegistration.ExemptReporting, FormAdvImportService.ParserVersion);
+        await SeedLedger(
+            FormAdvRegistration.Registered,
+            FormAdvImportService.ParserVersion,
+            versioned: true
+        );
+        await SeedLedger(
+            FormAdvRegistration.ExemptReporting,
+            FormAdvImportService.ParserVersion,
+            versioned: true
+        );
         var client = Substitute.For<ISecEdgarClient>();
 
         await CreateSut(SampleCsv, client).Import(CancellationToken.None);
@@ -245,7 +274,11 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
         // Advisers stored before the ledger existed carry the current month but none of the
         // roster detail; the version lever re-reads that same snapshot.
         await SeedLedger(FormAdvRegistration.Registered, FormAdvImportService.ParserVersion - 1);
-        await SeedLedger(FormAdvRegistration.ExemptReporting, FormAdvImportService.ParserVersion);
+        await SeedLedger(
+            FormAdvRegistration.ExemptReporting,
+            FormAdvImportService.ParserVersion,
+            versioned: true
+        );
         var client = Substitute.For<ISecEdgarClient>();
 
         await CreateSut(SampleCsv, client).Import(CancellationToken.None);
@@ -310,17 +343,17 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
     {
         var csv = SampleCsv.Replace(",Registered,", ",ERA,");
 
-        await CreateSut(csv).Import(CancellationToken.None);
+        var act = () => CreateSut(csv).Import(CancellationToken.None);
 
+        // The history walk refuses a roster it reads no adviser from instead of skipping it.
+        await act.Should().ThrowAsync<InvalidDataException>();
         await using var verify = _fixture.CreateDbContext();
         (await verify.Set<FormAdvAdviser>().AnyAsync(a => a.Crd == 111)).Should().BeFalse();
-        (
-            await verify
-                .Set<FormAdvRosterImport>()
-                .AnyAsync(i => i.Registration == FormAdvRegistration.Registered)
-        )
-            .Should()
-            .BeFalse("a roster that imported nothing is retried");
+        var ledger = await verify
+            .Set<FormAdvRosterImport>()
+            .SingleAsync(i => i.Registration == FormAdvRegistration.Registered);
+        ledger.ParserVersion.Should().Be(0, "a roster that imported nothing is retried");
+        ledger.VersionedAt.Should().BeNull();
     }
 
     [Fact]
@@ -359,7 +392,11 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
             .Be(2, "the older roster must not delete the newer roster's client types");
     }
 
-    private async Task SeedLedger(FormAdvRegistration registration, int parserVersion)
+    private async Task SeedLedger(
+        FormAdvRegistration registration,
+        int parserVersion,
+        bool versioned = false
+    )
     {
         await using var seed = _fixture.CreateDbContext();
         seed.Set<FormAdvRosterImport>()
@@ -370,6 +407,7 @@ public class FormAdvImportServiceFullPipelineTests : IAsyncLifetime
                     ReportDate = new DateOnly(2026, 9, 1),
                     ParserVersion = parserVersion,
                     AdviserCount = 1,
+                    VersionedAt = versioned ? DateTime.UtcNow : null,
                 }
             );
         await seed.SaveChangesAsync();

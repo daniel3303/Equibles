@@ -67,6 +67,19 @@ public interface ISecEdgarClient
     Task<Stream> DownloadStream(string url);
 
     /// <summary>
+    /// Downloads <paramref name="count"/> bytes of a sec.gov file from <paramref name="offset"/>
+    /// with the same rate limiting and retries, and returns them with the file's total length, so
+    /// a caller can read a few entries of a large archive without downloading all of it. Throws
+    /// when SEC answers without honouring the range.
+    /// </summary>
+    Task<SecByteRange> DownloadRange(
+        string url,
+        long offset,
+        int count,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Fetches SEC EDGAR's daily form index for a single calendar day — every
     /// submission accepted that day, by any filer. Returns an empty list for
     /// non-publishing days (weekends/holidays → 404), so callers can sweep a

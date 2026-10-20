@@ -14,6 +14,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Advisers;
 using Equibles.Holdings.BusinessLogic.Contracts;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
@@ -26,6 +27,7 @@ using Equibles.Holdings.Repositories.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Helpers;
+using Equibles.Sec.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -1159,7 +1161,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Search the tracked 13F filer set by institution name or SEC CIK. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified brand aliases such as Fidelity, Vanguard, and BlackRock include their current flagship CIK. Results are largest within the recently-active filing bucket first and include latest report date, tracked 13F position value, and position count so same-name filers can be compared before calling an institution tool. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Scoped institution tools remain strict and never discard an unmatched word. Each result shows its entity type from regulatory records, and holderTypes filters by it."
+        "Search the tracked 13F filer set by institution name or SEC CIK. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified brand aliases such as Fidelity, Vanguard, and BlackRock include their current flagship CIK. Results are largest within the recently-active filing bucket first and include latest report date, tracked 13F position value, and position count so same-name filers can be compared before calling an institution tool. Values use report-date closing prices, may fall back to filer values, and can be zero when unvalued. Scoped institution tools remain strict and never discard an unmatched word. Each result shows its entity type from regulatory records, and holderTypes filters by it."
     )]
     public Task<string> SearchInstitutions(
         [Description("Search query — institution name, partial name, or CIK")] string query,
@@ -2023,7 +2025,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetMostHeldStocks", Title = "Most Widely Held Stocks", ReadOnly = true)]
     [Description(
-        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a quarter. Rank by filer count (default), quarter-over-quarter filer-count change, or total published position value. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Includes Δ filers, total value, Δ value, and share of the 13F universe. The first complete report quarter is published; earlier rankings and boundary-quarter deltas are unavailable. Only currently-held stocks rank; sold-out names use GetMarketWide13FActivity. During the newest quarter's open filing window, non-filers carry prior-quarter positions (noted in output)."
+        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a quarter. Rank by filer count (default), quarter-over-quarter filer-count change, or total published position value. Values use report-date closing prices, may fall back to filer values, and can be zero when unvalued. Includes Δ filers, total value, Δ value, and share of the 13F universe. The first complete report quarter is published; earlier rankings and boundary-quarter deltas are unavailable. Only currently-held stocks rank; sold-out names use GetMarketWide13FActivity. During the newest quarter's open filing window, non-filers carry prior-quarter positions (noted in output)."
     )]
     public Task<string> GetMostHeldStocks(
         [Description(
@@ -2189,7 +2191,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, the parent 13F filer that reports its holdings, and earlier or later CIKs its 13F reports continue under, then any strategy the firm states in its own filed brochure (quoted, dated, linked), then its style, turnover and horizon bands measured from its filed book. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
+        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI) with roster history and dated Schedule D private funds, registered funds it advises, the parent 13F filer that reports its holdings, and earlier or later CIKs its 13F reports continue under, then any strategy the firm states in its own filed brochure (quoted, dated, linked), then its style, turnover and horizon bands measured from its filed book. Values use report-date closing prices, may fall back to filer values, and can be zero when unvalued. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
     )]
     public Task<string> GetInstitutionSummary(
         [Description(
@@ -2221,6 +2223,15 @@ public class InstitutionalHoldingsTools
                     .GetProfile(holder)
                     .AsNoTracking()
                     .FirstOrDefaultAsync();
+                var adviserHistory = profile?.AdviserCrd is { } adviserCrd
+                    ? RenderAdviserHistory(
+                        adviserCrd,
+                        AdviserHistory.Changes(
+                            await AdviserHistory.Timeline(_holderRepository, adviserCrd)
+                        ),
+                        await AdviserHistory.LatestPrivateFundFiling(_holderRepository, adviserCrd)
+                    )
+                    : "";
                 var links = await LoadHolderLinks(holder);
                 var reportingParent = await LoadReportingParent(holder);
                 var style = await _holderRepository
@@ -2242,6 +2253,7 @@ public class InstitutionalHoldingsTools
                         links,
                         reportingParent
                     )
+                    + adviserHistory
                     + RenderStatedStrategy(statedStrategy)
                     + RenderStyleBlock(style, targetDate);
             },
@@ -2267,6 +2279,111 @@ public class InstitutionalHoldingsTools
             .ToListAsync();
 
     // The firm's own description from the documents it filed, kept apart from the measured bands.
+    internal const int AdviserHistoryRows = 12;
+
+    // The adviser's roster history as visible changes, newest first, then its newest Schedule D
+    // private funds with their filing date; SEC's bulk archive of those ends with 2024 filings.
+    internal static string RenderAdviserHistory(
+        int crd,
+        IReadOnlyList<AdviserFacts> changes,
+        FormAdvPrivateFundFiling scheduleD
+    )
+    {
+        if (changes.Count == 0 && scheduleD == null)
+            return "";
+        var result = new StringBuilder();
+        if (changes.Count > 0)
+        {
+            result.AppendLine();
+            result.AppendLine(
+                $"**Form ADV history** (CRD {crd}; each row is a run of monthly rosters with the same figures, newest first):"
+            );
+            result.AppendLine();
+            result.AppendLine(
+                "| Rosters | Roster | Regulatory assets | Client base | Pooled vehicles | Private funds |"
+            );
+            result.AppendLine(
+                "|---------|--------|-------------------|-------------|-----------------|---------------|"
+            );
+            foreach (var facts in changes.Take(AdviserHistoryRows))
+                result.AppendLine(
+                    $"| {FormatDate(facts.Since)} to {FormatDate(facts.Until)} | {facts.Registration.NameForHumans()} | {(facts.RegulatoryAum is { } aum ? $"${McpFormat.WholeNumber(aum)}" : "—")} | {(facts.ClientBase == HolderClientBase.Unknown ? "—" : $"{facts.ClientBase.NameForHumans()}{(facts.ClientBaseAumShare is { } share ? $" {McpFormat.Invariant(share * 100, "F1")}%" : "")}")} | {(facts.PooledVehicleAumShare is { } pooled ? $"{McpFormat.Invariant(pooled * 100, "F1")}%" : "—")} | {RosterPrivateFunds(facts)} |"
+                );
+            if (changes.Count > AdviserHistoryRows)
+                result.AppendLine(
+                    $"_{changes.Count - AdviserHistoryRows} earlier changes not shown._"
+                );
+            result.AppendLine(
+                "_The history starts with SEC's December 2019 roster (February 2024 for exempt reporting advisers)._"
+            );
+        }
+        if (scheduleD != null)
+        {
+            result.AppendLine();
+            result.AppendLine(
+                $"**Private funds on Schedule D 7.B.(1)**, as filed {FormatDate(scheduleD.FiledOn)} (SEC's bulk Form ADV archive ends with 2024 filings): {ScheduleDFunds(scheduleD)}"
+            );
+        }
+        return result.ToString();
+    }
+
+    private static string RosterPrivateFunds(AdviserFacts facts) =>
+        facts.AdvisesPrivateFunds switch
+        {
+            false => "None reported",
+            null => "—",
+            true => facts.PrivateFundCount is { } count
+                ? $"{McpFormat.WholeNumber(count)} funds{(facts.PrivateFundGrossAssets is { } gross ? $", ${McpFormat.WholeNumber(gross)} gross assets" : "")}"
+                : "Advises private funds",
+        };
+
+    private static string ScheduleDFunds(FormAdvPrivateFundFiling filing)
+    {
+        if (filing.FundCount == 0)
+            return "no private funds listed.";
+        (FormAdvPrivateFundType Type, int Count, long Assets)[] types =
+        [
+            (FormAdvPrivateFundType.Hedge, filing.HedgeFundCount, filing.HedgeFundGrossAssets),
+            (
+                FormAdvPrivateFundType.PrivateEquity,
+                filing.PrivateEquityFundCount,
+                filing.PrivateEquityFundGrossAssets
+            ),
+            (
+                FormAdvPrivateFundType.VentureCapital,
+                filing.VentureCapitalFundCount,
+                filing.VentureCapitalFundGrossAssets
+            ),
+            (
+                FormAdvPrivateFundType.RealEstate,
+                filing.RealEstateFundCount,
+                filing.RealEstateFundGrossAssets
+            ),
+            (
+                FormAdvPrivateFundType.Liquidity,
+                filing.LiquidityFundCount,
+                filing.LiquidityFundGrossAssets
+            ),
+            (
+                FormAdvPrivateFundType.Securitized,
+                filing.SecuritizedAssetFundCount,
+                filing.SecuritizedAssetFundGrossAssets
+            ),
+            (
+                FormAdvPrivateFundType.Other,
+                filing.OtherPrivateFundCount,
+                filing.OtherPrivateFundGrossAssets
+            ),
+        ];
+        var byType = types
+            .Where(type => type.Count > 0)
+            .OrderByDescending(type => type.Assets)
+            .Select(type =>
+                $"{type.Type.NameForHumans()} ${McpFormat.WholeNumber(type.Assets)} ({McpFormat.WholeNumber(type.Count)})"
+            );
+        return $"{McpFormat.WholeNumber(filing.FundCount)} funds, ${McpFormat.WholeNumber(filing.GrossAssets)} gross assets; {string.Join(", ", byType)}.";
+    }
+
     private static string RenderStatedStrategy(IReadOnlyList<HolderStatedStrategy> strategies)
     {
         var result = new StringBuilder();

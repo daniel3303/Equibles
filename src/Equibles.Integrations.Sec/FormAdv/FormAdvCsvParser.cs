@@ -4,11 +4,13 @@ using Equibles.Integrations.Sec.Models;
 namespace Equibles.Integrations.Sec.FormAdv;
 
 /// <summary>
-/// Parses the SEC's bulk Form ADV CSV (one adviser per row) into <see cref="FormAdvAdviserData"/>.
+/// Parses the SEC's bulk Form ADV roster (one adviser per row) into <see cref="FormAdvAdviserData"/>.
 /// Columns are located by their header names rather than fixed positions, so the parser keeps
 /// working when the SEC adds or reorders columns between monthly releases, and serves both the
 /// registered and the exempt reporting adviser rosters (the exempt one has no Item 5). Rows
-/// without a usable Organization CRD number are skipped, since an adviser cannot be keyed.
+/// without a usable Organization CRD number are skipped, since an adviser cannot be keyed. The
+/// records come from a CSV or, for the 2019 to 2025 rosters SEC published as spreadsheets, from
+/// <see cref="XlsxRecordReader"/>; a column a layout lacks reads as not reported.
 /// </summary>
 public static class FormAdvCsvParser
 {
@@ -43,9 +45,17 @@ public static class FormAdvCsvParser
     private const string PrivateFundGrossAssetsHeader = "Total Gross Assets of Private Funds";
     private const string ClientTypeLetters = "abcdefghijklmn";
 
-    public static IEnumerable<FormAdvAdviserData> Parse(TextReader reader)
+    // Excel serials for 1980-01-01 and 2099-12-31, so a stray count never reads as a date.
+    private const int MinExcelSerial = 29221;
+    private const int MaxExcelSerial = 73050;
+
+    public static IEnumerable<FormAdvAdviserData> Parse(TextReader reader) =>
+        Parse(CsvRecordReader.Read(reader));
+
+    /// <summary>Parses roster records, the header first.</summary>
+    public static IEnumerable<FormAdvAdviserData> Parse(IEnumerable<List<string>> source)
     {
-        using var records = CsvRecordReader.Read(reader).GetEnumerator();
+        using var records = source.GetEnumerator();
 
         if (!records.MoveNext())
         {
@@ -250,14 +260,23 @@ public static class FormAdvCsvParser
     private static bool? ParseOptionalYesNo(string value) =>
         value == null ? null : ParseYesNo(value);
 
-    private static DateOnly? ParseDate(string value) =>
-        DateOnly.TryParseExact(
-            value,
-            "MM/dd/yyyy",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var date
+    // Spreadsheet rosters store dates as Excel serial numbers (43761 is 2019-10-23).
+    private static DateOnly? ParseDate(string value)
+    {
+        if (
+            DateOnly.TryParseExact(
+                value,
+                "MM/dd/yyyy",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var date
+            )
         )
-            ? date
+            return date;
+        return
+            int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var serial)
+            && serial is >= MinExcelSerial and <= MaxExcelSerial
+            ? DateOnly.FromDateTime(DateTime.FromOADate(serial))
             : null;
+    }
 }
