@@ -68,6 +68,93 @@ public class GleifLegalEntityTests
         await lookup.Should().ThrowAsync<InvalidDataException>();
     }
 
+    private const string ToyotaLei = "5493006W3QUS5LMH6R84";
+
+    private static Task<string> Toyota(string name) =>
+        File.ReadAllTextAsync(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Gleif",
+                "toyota-" + name + ".json"
+            )
+        );
+
+    [Fact]
+    public async Task IsinsForLeiReadsTheEntityThenEveryIsinGleifRelatesToIt()
+    {
+        var handler = new EuronextDirectoryTestHandler([
+            await Toyota("lei-record"),
+            await Toyota("isins"),
+        ]);
+        using var http = new HttpClient(handler);
+
+        var identity = await new GleifIdentityClient(
+            http,
+            NullLogger<GleifIdentityClient>.Instance
+        ).GetIsinsForLei(ToyotaLei);
+
+        handler
+            .Requests.Select(request => request.Url.AbsoluteUri)
+            .Should()
+            .Equal(
+                "https://api.gleif.org/api/v1/lei-records/" + ToyotaLei,
+                "https://api.gleif.org/api/v1/lei-records/"
+                    + ToyotaLei
+                    + "/isins?page%5Bsize%5D=200"
+            );
+        identity.LegalEntityIdentifier.Should().Be(ToyotaLei);
+        identity.EntityStatus.Should().Be("ACTIVE");
+        identity.RelatedIsinCount.Should().Be(22);
+        identity.RelatedIsins.Should().HaveCount(22).And.Contain("JP3633400001");
+    }
+
+    [Fact]
+    public async Task IsinsForLeiStatesNoneWhenGleifRelatesNone()
+    {
+        var page = JsonNode.Parse(await Toyota("isins"));
+        page["meta"]["pagination"]["total"] = 0;
+        page["data"] = new JsonArray();
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([await Toyota("lei-record"), page.ToJsonString()])
+        );
+
+        var identity = await new GleifIdentityClient(
+            http,
+            NullLogger<GleifIdentityClient>.Instance
+        ).GetIsinsForLei(ToyotaLei);
+
+        identity.RelatedIsins.Should().BeEmpty();
+        identity.RelatedIsinCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("other-lei")]
+    [InlineData("short-total")]
+    [InlineData("other-link")]
+    public async Task IsinsForLeiRefusesAPageThatIsNotTheEntitysOwn(string scenario)
+    {
+        var record = JsonNode.Parse(await Toyota("lei-record"));
+        var page = JsonNode.Parse(await Toyota("isins"));
+        if (scenario == "other-lei")
+            page["data"][0]["attributes"]["lei"] = Lei;
+        if (scenario == "short-total")
+            page["meta"]["pagination"]["total"] = 23;
+        if (scenario == "other-link")
+            record["data"]["relationships"]["isins"]["links"]["related"] =
+                "https://api.gleif.org/api/v1/lei-records/" + Lei + "/isins";
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([record.ToJsonString(), page.ToJsonString()])
+        );
+
+        var lookup = () =>
+            new GleifIdentityClient(http, NullLogger<GleifIdentityClient>.Instance).GetIsinsForLei(
+                ToyotaLei
+            );
+
+        await lookup.Should().ThrowAsync<InvalidDataException>();
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("743700W8ZIJAMXWWWD27")]

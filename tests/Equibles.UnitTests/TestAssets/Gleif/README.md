@@ -19,3 +19,6 @@
 - On the same day, GLEIF's full-text search for "Google" did not return GOOGLE LLC (`7ZW8QJWVPR4P1J1KQY45`) in its first ten records, while autocomplete suggested it first.
 - Captured unchanged on 2026-10-20 for `GleifEntityClient.GetRegistered`:
   - `toyota-registered-as.json` comes from `https://api.gleif.org/api/v1/lei-records?filter[entity.registeredAs]=1803-01-018771&page[size]=10`. Its one record is Toyota Motor Corporation (`5493006W3QUS5LMH6R84`), filed in Japan's commercial register (`RA000412`) under 1803-01-018771, which is Toyota's corporate number `1180301018771` without its leading check digit.
+- Captured unchanged on 2026-10-20 for `GleifIdentityClient.GetIsinsForLei`:
+  - `toyota-lei-record.json` comes from `https://api.gleif.org/api/v1/lei-records/5493006W3QUS5LMH6R84`.
+  - `toyota-isins.json` comes from `/api/v1/lei-records/5493006W3QUS5LMH6R84/isins?page[size]=200`. It relates 22 ISINs to Toyota Motor: its ordinary share `JP3633400001`, eleven other Japanese ISINs and ten US ones.
