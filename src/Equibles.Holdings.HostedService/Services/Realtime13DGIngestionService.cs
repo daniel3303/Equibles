@@ -1,4 +1,5 @@
 using System.Text;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
@@ -140,6 +141,7 @@ public class Realtime13DGIngestionService
     )
     {
         await _detailWriter.TryWrite(filing, cancellationToken);
+        filing.PositionCusip = await ResolvePositionCusip(filing, cancellationToken);
 
         if (await IsSupersededByStoredFiling(filing, cancellationToken))
         {
@@ -215,6 +217,40 @@ public class Realtime13DGIngestionService
         return Schedule13DGImportOutcome.Imported;
     }
 
+    // The filed CUSIP when it resolves; for a filing with no usable CUSIP, the subject company's
+    // only listed common security when the lead person's figures agree with it; else null, which
+    // leaves the filing unresolved.
+    private async Task<string> ResolvePositionCusip(
+        Parsed13DGFiling filing,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var issuers = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        var lead = Realtime13DGArchiveBuilder.SelectLeadPerson(filing);
+        var cusip = await Schedule13DGPositionResolver.ResolvePositionCusip(
+            issuers,
+            filing.IssuerCusip,
+            filing.IssuerCik,
+            lead?.AggregateAmountOwned,
+            lead?.PercentOfClass,
+            cancellationToken
+        );
+        if (
+            cusip != null
+            && !string.Equals(cusip, filing.IssuerCusip?.Trim(), StringComparison.OrdinalIgnoreCase)
+        )
+            _logger.LogInformation(
+                "{Form} {Accession}: no usable CUSIP ({Filed}); subject company CIK {Cik} maps it to {Cusip}",
+                filing.SubmissionType,
+                filing.AccessionNumber,
+                filing.IssuerCusip ?? "(none)",
+                filing.IssuerCik,
+                cusip
+            );
+        return cusip;
+    }
+
     /// <summary>Why a parsed filing holds no importable position, or null when it does.</summary>
     internal static string RejectionReason(Parsed13DGFiling filing) =>
         filing.DateOfEvent == DateOnly.MinValue ? "unparseable event date"
@@ -228,9 +264,10 @@ public class Realtime13DGIngestionService
         CancellationToken cancellationToken
     )
     {
+        var cusip = filing.PositionCusip ?? filing.IssuerCusip;
         if (
             string.IsNullOrWhiteSpace(filing.FilerCik)
-            || string.IsNullOrWhiteSpace(filing.IssuerCusip)
+            || string.IsNullOrWhiteSpace(cusip)
             || filing.DateOfEvent == DateOnly.MinValue
         )
             return false;
@@ -241,7 +278,7 @@ public class Realtime13DGIngestionService
             .LaterStoredFilings(
                 dbContext,
                 filing.FilerCik,
-                filing.IssuerCusip,
+                cusip,
                 filing.FilingType,
                 filing.DateOfEvent,
                 filing.FilingDate,

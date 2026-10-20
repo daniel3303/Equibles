@@ -11,12 +11,12 @@ public class Holdings13DGCoverageWorkerComputeWalkWindowTests
     }
 
     [Fact]
-    public void ComputeWalkWindow_NoCursor_StartsAtTheFirstVoluntaryXmlFilingsAndStopsBeforeTheRealtimeWindow()
+    public void ComputeWalkWindow_NoCursor_StartsWithThePreXmlFilingsAndStopsBeforeTheRealtimeWindow()
     {
         Holdings13DGCoverageWorker
             .ComputeWalkWindow(null, new DateOnly(2026, 10, 20))
             .Should()
-            .Be((new DateOnly(2023, 12, 18), new DateOnly(2026, 10, 5)));
+            .Be((new DateOnly(2023, 10, 20), new DateOnly(2026, 10, 5)));
     }
 
     [Fact]

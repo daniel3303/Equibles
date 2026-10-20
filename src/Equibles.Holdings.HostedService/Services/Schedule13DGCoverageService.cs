@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Xml;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
@@ -14,17 +15,28 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
-/// Makes every machine-readable 13D/13G on EDGAR reach the holdings tables once its security is
-/// tracked. The realtime sweep only looks back a few days, so a filing it missed (a failed import,
-/// a fix deployed later, an issuer seeded after the window) stays missing without this pass.
+/// Makes every 13D/13G on EDGAR reach the holdings tables once its security is tracked: the XML
+/// filings and the pre-XML text and HTML ones (forms SC 13D and SC 13G). The realtime sweep only
+/// looks back a few days, so a filing it missed (a failed import, a fix deployed later, an issuer
+/// seeded after the window) stays missing without this pass.
 /// </summary>
 [Service]
 public class Schedule13DGCoverageService
 {
     private const string PrimaryDocument = "primary_doc.xml";
 
+    // Daily-index forms the walk reads: the XML schedules and their pre-XML predecessors, each
+    // matched with its amendment by prefix.
+    internal static readonly string[] CoverageFormPrefixes =
+    [
+        .. Realtime13DGIngestionService.ScheduleFormPrefixes,
+        "SC 13D",
+        "SC 13G",
+    ];
+
     private readonly ISecEdgarClient _edgarClient;
     private readonly Filing13DGXmlParser _parser;
+    private readonly Filing13DGTextParser _textParser;
     private readonly Realtime13DGIngestionService _ingestion;
     private readonly BeneficialOwnershipDetailWriter _detailWriter;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -33,6 +45,7 @@ public class Schedule13DGCoverageService
     public Schedule13DGCoverageService(
         ISecEdgarClient edgarClient,
         Filing13DGXmlParser parser,
+        Filing13DGTextParser textParser,
         Realtime13DGIngestionService ingestion,
         BeneficialOwnershipDetailWriter detailWriter,
         IServiceScopeFactory scopeFactory,
@@ -41,6 +54,7 @@ public class Schedule13DGCoverageService
     {
         _edgarClient = edgarClient;
         _parser = parser;
+        _textParser = textParser;
         _ingestion = ingestion;
         _detailWriter = detailWriter;
         _scopeFactory = scopeFactory;
@@ -112,6 +126,9 @@ public class Schedule13DGCoverageService
                 candidate.FilerCik ?? candidate.IssuerCik,
                 candidate.AccessionNumber,
                 candidate.FilingDate,
+                candidate.ParserVersion == null
+                    ? null
+                    : TextFormType(candidate.FilingType, candidate.IsAmendment),
                 cancellationToken
             );
             if (read.Status == Schedule13DGReadStatus.Outage)
@@ -121,6 +138,12 @@ public class Schedule13DGCoverageService
                     imported
                 );
                 break;
+            }
+
+            if (read.Status == Schedule13DGReadStatus.Refused)
+            {
+                await _detailWriter.WriteRefused(read.Refusal, cancellationToken);
+                continue;
             }
 
             if (read.Status != Schedule13DGReadStatus.Parsed)
@@ -165,7 +188,7 @@ public class Schedule13DGCoverageService
         {
             indexEntries = await _edgarClient.GetDailyIndexForForms(
                 day,
-                Realtime13DGIngestionService.ScheduleFormPrefixes,
+                CoverageFormPrefixes,
                 cancellationToken
             );
         }
@@ -192,6 +215,7 @@ public class Schedule13DGCoverageService
 
         var documents = 0;
         var imported = 0;
+        var refused = 0;
         foreach (
             var entry in entries
                 .Where(entry => !known.Contains(entry.AccessionNumber))
@@ -203,6 +227,7 @@ public class Schedule13DGCoverageService
                 entry.Cik,
                 entry.AccessionNumber,
                 entry.DateFiled,
+                IsTextForm(entry.FormType) ? entry.FormType : null,
                 cancellationToken
             );
             if (read.Status == Schedule13DGReadStatus.Outage)
@@ -217,6 +242,12 @@ public class Schedule13DGCoverageService
             documents++;
             if (read.Status == Schedule13DGReadStatus.Failed)
                 continue;
+            if (read.Status == Schedule13DGReadStatus.Refused)
+            {
+                refused++;
+                await _detailWriter.WriteRefused(read.Refusal, cancellationToken);
+                continue;
+            }
             if (read.Status == Schedule13DGReadStatus.NotServed)
             {
                 // A document EDGAR does not serve never changes; recording it stops a re-read.
@@ -252,18 +283,22 @@ public class Schedule13DGCoverageService
 
         if (documents > 0)
             _logger.LogInformation(
-                "13D/13G coverage read {Documents} filings from {Day:yyyy-MM-dd} and imported {Imported}",
+                "13D/13G coverage read {Documents} filings from {Day:yyyy-MM-dd}, imported {Imported} and parked {Refused} the text reader refused",
                 documents,
                 day,
-                imported
+                imported,
+                refused
             );
         return new Schedule13DGBackfillDay(true, documents, imported);
     }
 
+    // A pre-XML filing (textFormType set) is read from its complete submission, which carries
+    // the SGML header with the filer and subject company CIKs; an XML one from primary_doc.xml.
     private async Task<Schedule13DGDocumentRead> ReadDocument(
         string cik,
         string accessionNumber,
         DateOnly filingDate,
+        string textFormType,
         CancellationToken cancellationToken
     )
     {
@@ -276,7 +311,7 @@ public class Schedule13DGCoverageService
             bytes = await _edgarClient.GetDocumentFileBytes(
                 cik,
                 accessionNumber,
-                PrimaryDocument,
+                textFormType == null ? PrimaryDocument : $"{accessionNumber}.txt",
                 cancellationToken
             );
         }
@@ -307,6 +342,25 @@ public class Schedule13DGCoverageService
         if (bytes == null || bytes.Length == 0)
             return new Schedule13DGDocumentRead(null, Schedule13DGReadStatus.NotServed);
 
+        if (textFormType != null)
+        {
+            var parse = _textParser.Parse(
+                DecodeSubmission(bytes),
+                accessionNumber,
+                filingDate,
+                textFormType
+            );
+            if (!parse.IsRefused)
+                return new Schedule13DGDocumentRead(parse.Filing, Schedule13DGReadStatus.Parsed);
+            _logger.LogInformation(
+                "13D/13G {Accession} parked: the text reader v{Version} refused it ({Reason})",
+                accessionNumber,
+                Filing13DGTextParser.Version,
+                parse.RefusalReason
+            );
+            return new Schedule13DGDocumentRead(null, Schedule13DGReadStatus.Refused, parse);
+        }
+
         try
         {
             return new Schedule13DGDocumentRead(
@@ -325,6 +379,26 @@ public class Schedule13DGCoverageService
             // every accession with nothing on file again.
             _logger.LogWarning(exception, "13D/13G {Accession} cannot be parsed", accessionNumber);
             return new Schedule13DGDocumentRead(null, Schedule13DGReadStatus.Failed);
+        }
+    }
+
+    internal static bool IsTextForm(string formType) =>
+        formType?.TrimStart().StartsWith("SC 13", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string TextFormType(FilingType filingType, bool isAmendment) =>
+        (filingType == FilingType.Schedule13G ? "SC 13G" : "SC 13D") + (isAmendment ? "/A" : "");
+
+    // EDGAR serves most submissions as UTF-8; older filer software sends Latin-1 bytes, whose
+    // checkbox glyphs would otherwise decode to replacement characters.
+    internal static string DecodeSubmission(byte[] bytes)
+    {
+        try
+        {
+            return new UTF8Encoding(false, true).GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            return Encoding.Latin1.GetString(bytes);
         }
     }
 
@@ -354,10 +428,17 @@ public class Schedule13DGCoverageService
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        // A refusal parked under an older text reader is read again.
         known.UnionWith(
             await dbContext
                 .Set<BeneficialOwnershipFiling>()
-                .Where(filing => accessions.Contains(filing.AccessionNumber))
+                .Where(filing =>
+                    accessions.Contains(filing.AccessionNumber)
+                    && !(
+                        filing.RefusalReason != null
+                        && filing.ParserVersion < Filing13DGTextParser.Version
+                    )
+                )
                 .Select(filing => filing.AccessionNumber)
                 .ToListAsync(cancellationToken)
         );
@@ -395,7 +476,7 @@ public class Schedule13DGCoverageService
             .Where(filing =>
                 !filing.IsUnreadable
                 && filing.FilingType != FilingType.Form13F
-                && filing.IssuerCusip != null
+                && (filing.IssuerCusip != null || filing.IssuerCik != null)
                 && filing.DateOfEvent >= minReportDate
                 && filing.ReadAt < readBefore
                 && filing.ReportingPersons.Any()
@@ -407,27 +488,81 @@ public class Schedule13DGCoverageService
                     .Any(processed => processed.AccessionNumber == filing.AccessionNumber)
             );
 
-        var cusips = await unstored
-            .Select(filing => filing.IssuerCusip.ToUpper())
-            .Distinct()
+        // The unstored set is small (positions that could not be resolved), so each row's
+        // position is decided in memory.
+        var rows = await unstored
+            .Select(filing => new
+            {
+                filing.AccessionNumber,
+                Cusip = filing.IssuerCusip.ToUpper(),
+                filing.IssuerCik,
+                Lead = filing
+                    .ReportingPersons.Where(person => person.IsLead)
+                    .Select(person => new { person.AggregateAmountOwned, person.PercentOfClass })
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
-        if (cusips.Count == 0)
+        if (rows.Count == 0)
             return [];
 
         var issuers = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-        var claims = await HoldingCusipResolution.Load(
+        var cusips = rows.Where(row => !Schedule13DGPositionResolver.NeedsSubjectCompany(row.Cusip))
+            .Select(row => row.Cusip)
+            .Distinct()
+            .ToList();
+        var resolvable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (cusips.Count > 0)
+        {
+            var claims = await HoldingCusipResolution.Load(
+                issuers,
+                issuers.GetAll(),
+                cusips,
+                cancellationToken
+            );
+            resolvable.UnionWith(HoldingCusipResolution.Resolve(claims, []).Keys);
+        }
+
+        // Only a filing with no usable CUSIP falls back to the subject company.
+        var subjectSecurities = await Schedule13DGPositionResolver.SubjectCompanySecurities(
             issuers,
-            issuers.GetAll(),
-            cusips,
+            rows.Where(row =>
+                    row.IssuerCik != null
+                    && Schedule13DGPositionResolver.NeedsSubjectCompany(row.Cusip)
+                )
+                .Select(row => row.IssuerCik)
+                .Distinct()
+                .ToList(),
             cancellationToken
         );
-        var resolvable = HoldingCusipResolution.Resolve(claims, []).Keys.ToList();
-        if (resolvable.Count == 0)
+
+        var positions = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            if (!Schedule13DGPositionResolver.NeedsSubjectCompany(row.Cusip))
+            {
+                if (resolvable.Contains(row.Cusip))
+                    positions[row.AccessionNumber] = row.Cusip;
+                continue;
+            }
+            var cik = CikNormalizer.Canonicalize(row.IssuerCik);
+            if (
+                cik != null
+                && subjectSecurities.TryGetValue(cik, out var security)
+                && Schedule13DGPositionResolver.AgreesWithSharesOutstanding(
+                    row.Lead?.AggregateAmountOwned,
+                    row.Lead?.PercentOfClass,
+                    security.SharesOutstanding
+                )
+            )
+                positions[row.AccessionNumber] = security.Cusip;
+        }
+        if (positions.Count == 0)
             return [];
 
+        var accessions = positions.Keys.ToList();
         // Chronological, so an original is retried before its amendment.
-        return await unstored
-            .Where(filing => resolvable.Contains(filing.IssuerCusip.ToUpper()))
+        var candidates = await unstored
+            .Where(filing => accessions.Contains(filing.AccessionNumber))
             .OrderBy(filing => filing.FilingDate)
             .ThenBy(filing => filing.AccessionNumber)
             .Select(filing => new Schedule13DGRetryCandidate(
@@ -438,10 +573,20 @@ public class Schedule13DGCoverageService
                 filing.DateOfEvent.Value,
                 filing.FilerCik,
                 filing.IssuerCik,
-                filing.IssuerCusip
+                filing.IssuerCusip,
+                filing.ParserVersion
             ))
             .Take(maxFilings)
             .ToListAsync(cancellationToken);
+
+        return candidates
+            .Select(candidate =>
+                candidate with
+                {
+                    PositionCusip = positions[candidate.AccessionNumber],
+                }
+            )
+            .ToList();
     }
 
     private async Task<bool> IsSuperseded(
@@ -449,7 +594,10 @@ public class Schedule13DGCoverageService
         CancellationToken cancellationToken
     )
     {
-        if (string.IsNullOrWhiteSpace(candidate.FilerCik))
+        if (
+            string.IsNullOrWhiteSpace(candidate.FilerCik)
+            || string.IsNullOrWhiteSpace(candidate.PositionCusip)
+        )
             return false;
 
         await using var scope = _scopeFactory.CreateAsyncScope();
@@ -458,7 +606,7 @@ public class Schedule13DGCoverageService
             .LaterStoredFilings(
                 dbContext,
                 candidate.FilerCik,
-                candidate.IssuerCusip,
+                candidate.PositionCusip,
                 candidate.FilingType,
                 candidate.DateOfEvent,
                 candidate.FilingDate,

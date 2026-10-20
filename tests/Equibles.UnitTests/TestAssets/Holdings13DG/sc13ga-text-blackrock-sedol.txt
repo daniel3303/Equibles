@@ -1,0 +1,492 @@
+<SEC-DOCUMENT>0001086364-24-003191.txt : 20240125
+<SEC-HEADER>0001086364-24-003191.hdr.sgml : 20240125
+<ACCEPTANCE-DATETIME>20240125134849
+ACCESSION NUMBER:		0001086364-24-003191
+CONFORMED SUBMISSION TYPE:	SC 13G/A
+PUBLIC DOCUMENT COUNT:		1
+FILED AS OF DATE:		20240125
+DATE AS OF CHANGE:		20240125
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			SunOpta Inc.
+		CENTRAL INDEX KEY:			0000351834
+		STANDARD INDUSTRIAL CLASSIFICATION:	WHOLESALE-FARM PRODUCT RAW MATERIALS [5150]
+		ORGANIZATION NAME:           	07 Trade & Services
+		IRS NUMBER:				000000000
+		STATE OF INCORPORATION:			Z4
+		FISCAL YEAR END:			1230
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-59617
+		FILM NUMBER:		24561003
+
+	BUSINESS ADDRESS:	
+		STREET 1:		7078 SHADY OAK ROAD
+		CITY:			EDEN PRAIRIE
+		STATE:			MN
+		ZIP:			55344
+		BUSINESS PHONE:		952-820-2518
+
+	MAIL ADDRESS:	
+		STREET 1:		7078 SHADY OAK ROAD
+		CITY:			EDEN PRAIRIE
+		STATE:			MN
+		ZIP:			55344
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	SUNOPTA INC
+		DATE OF NAME CHANGE:	20031107
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	STAKE TECHNOLOGY LTD
+		DATE OF NAME CHANGE:	19940901
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			BlackRock Inc.
+		CENTRAL INDEX KEY:			0001364742
+		STANDARD INDUSTRIAL CLASSIFICATION:	SECURITY BROKERS, DEALERS & FLOTATION COMPANIES [6211]
+		ORGANIZATION NAME:           	02 Finance
+		IRS NUMBER:				320174431
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+
+	BUSINESS ADDRESS:	
+		STREET 1:		50 HUDSON YARDS
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10001
+		BUSINESS PHONE:		212-810-5300
+
+	MAIL ADDRESS:	
+		STREET 1:		50 HUDSON YARDS
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10001
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	BlackRock, Inc.
+		DATE OF NAME CHANGE:	20060929
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	New BlackRock, Inc.
+		DATE OF NAME CHANGE:	20060601
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13G/A
+<SEQUENCE>1
+<FILENAME>ca8676ep1086_012524.txt
+<TEXT>
+ca8676ep1086_012524.txt
+
+SECURITIES AND EXCHANGE COMMISSION
+
+Washington, D.C. 20549
+
+SCHEDULE 13G
+
+Under the Securities Exchange Act of 1934
+
+(Amendment No:  1)
+
+SunOpta Inc.
+--------------------------------------------------------
+(Name of Issuer)
+
+ Common Stock
+--------------------------------------------------------
+(Title of Class of Securities)
+
+2836634
+--------------------------------------------------------
+(SEDOL Number)
+
+December 31, 2023
+--------------------------------------------------------
+(Date of Event Which Requires Filing of this Statement)
+
+Check the appropriate box to designate the rule pursuant to
+which this Schedule is filed:
+
+[X] Rule 13d-1(b)
+[ ] Rule 13d-1(c)
+[ ] Rule 13d-1(d)
+
+
+*The remainder of this cover page shall be filled out
+for a reporting person's initial filing on this form with
+respect to the subject class of securities, and for any
+subsequent amendment containing information which
+would alter the disclosures provided in a prior cover page.
+
+The information required in the remainder of this cover
+page shall not be deemed to be "filed" for the purpose
+of Section 18 of the Securities Exchange Act of 1934
+("Act") or otherwise subject to the liabilities of that
+section of the Act but shall be subject to all other
+provisions of the Act (however, see the Notes).
+
+
+
+
+
+SEDOL No.   2836634
+
+(1)Names of reporting persons. BlackRock, Inc.
+
+
+(2) Check the appropriate box if a member of a group
+(a) [  ]
+(b) [X]
+
+
+(3) SEC use only
+
+(4) Citizenship or place of organization
+
+Delaware
+
+Number of shares beneficially owned by each reporting person with:
+
+(5) Sole voting power
+
+ 9608187
+
+(6) Shared voting power
+
+ 0
+
+(7) Sole dispositive power
+
+ 9984820
+
+(8) Shared dispositive power
+
+ 0
+
+(9) Aggregate amount beneficially owned by each reporting person
+
+ 9984820
+
+(10) Check if the aggregate amount in Row (9) excludes certain shares
+
+(11) Percent of class represented by amount in Row 9
+
+ 8.4%
+
+(12) Type of reporting person
+
+HC
+
+
+
+
+
+Item 1.
+
+Item 1(a) Name of issuer:
+-----------------------------------------------------------------------
+
+SunOpta Inc.
+
+Item 1(b) Address of issuer's principal executive offices:
+-----------------------------------------------------------------------
+
+7078 SHADY OAK ROAD
+EDEN PRAIRIE MN 55344
+
+
+Item 2.
+
+
+2(a) Name of person filing:
+----------------------------------------------------------------------
+BlackRock, Inc.
+
+
+2(b) Address or principal business office or, if none, residence:
+-----------------------------------------------------------------------
+BlackRock, Inc.
+50 Hudson Yards
+New York, NY 10001
+
+
+2(c) Citizenship:
+--------------------------------------------------------------------
+ See Item 4 of Cover Page
+
+
+2(d) Title of class of securities:
+-------------------------------------------------------------------
+
+ Common Stock
+
+2(e) SEDOL No.:
+See Cover Page
+
+
+
+
+
+
+Item 3.
+
+If this statement is filed pursuant to Rules 13d-1(b), or 13d-2(b) or (c),
+check whether the person filing is a:
+[ ] Broker or dealer registered under Section 15 of the Act;
+[ ] Bank as defined in Section 3(a)(6) of the Act;
+[ ] Insurance company as defined in Section 3(a)(19) of the Act;
+[ ] Investment company registered under Section 8 of the
+Investment Company Act of 1940;
+[ ] An investment adviser in accordance with Rule 13d-1(b)(1)(ii)(E);
+[ ] An employee benefit plan or endowment fund in accordance with
+            Rule 13d-1(b)(1)(ii)(F);
+[X] A parent holding company or control person in accordance with
+            Rule 13d-1(b)(1)(ii)(G);
+[ ] A savings associations as defined in Section 3(b) of the Federal
+            Deposit Insurance Act (12 U.S.C. 1813);
+[ ] A church plan that is excluded from the definition of an
+            investment company under section 3(c)(14) of the Investment Company
+            Act of 1940;
+[ ] A non-U.S. institution in accordance with
+            Rule 240.13d-1(b)(1)(ii)(J);
+[ ] Group, in accordance with Rule 240.13d-1(b)(1)(ii)(K). If filing
+            as a non-U.S. institution in accordance with
+            Rule 240.13d-1(b)(1)(ii)(J), please specify the type of
+            institution:
+
+
+Item 4. Ownership
+
+Provide the following information regarding the aggregate number
+and percentage of the class of securities of the issuer identified in Item 1.
+
+
+Amount beneficially owned:
+
+  9984820
+
+Percent of class
+
+8.4%
+
+Number of shares as to which such person has:
+
+Sole power to vote or to direct the vote
+
+  9608187
+
+Shared power to vote or to direct the vote
+
+  0
+
+Sole power to dispose or to direct the disposition of
+
+  9984820
+
+Shared power to dispose or to direct the disposition of
+
+  0
+
+
+
+
+
+
+
+
+
+Item 5.
+
+Ownership of 5 Percent or Less of a Class. If this statement is being
+filed to report the fact that as of the date hereof the reporting person
+has ceased to be the beneficial owner of more than 5 percent of the
+class of securities, check the following [  ].
+
+
+Item 6. Ownership of More than 5 Percent on Behalf of Another Person
+
+  If any other person is known to have the right to receive or the power
+  to direct the receipt of dividends from, or the proceeds from the sale
+  of, such securities, a statement to that effect should be included in
+  response to this item and, if such interest relates to more than 5 percent
+  of the class, such person should be identified. A listing of the
+  shareholders of an investment company registered under the Investment
+  Company Act of 1940 or the beneficiaries of employee benefit plan,
+  pension fund or endowment fund is not required.
+
+  Various persons have the right to receive or the power to direct
+   the receipt of dividends from, or the proceeds from the sale of
+   the common stock of
+   SunOpta Inc..
+   No one person's interest in the common stock of
+   SunOpta Inc.
+   is more than five percent of the total outstanding common shares.
+
+Item 7. Identification and Classification of the Subsidiary Which
+Acquired the Security Being Reported on by the Parent Holding
+Company or Control Person.
+
+
+See Exhibit A
+
+
+Item 8. Identification and Classification of Members of the Group
+
+
+If a group has filed this schedule pursuant to Rule 13d-1(b)(ii)(J),
+so indicate under Item 3(j) and attach an exhibit stating the identity
+and Item 3 classification of each member of the group. If a group
+has filed this schedule pursuant to Rule 13d-1(c) or Rule 13d-1(d),
+attach an exhibit stating the identity of each member of the group.
+
+
+Item 9. Notice of Dissolution of Group
+
+Notice of dissolution of a group may be furnished as an exhibit
+stating the date of the dissolution and that all further filings with
+respect to transactions in the security reported on will be filed,
+if required, by members of the group, in their individual capacity.
+
+See Item 5.
+
+Item 10. Certifications
+By signing below I certify that, to the best of my knowledge and
+belief, the securities referred to above were acquired and are
+held in the ordinary course of business and were not acquired
+and are not held for the purpose of or with the effect of changing
+or influencing the control of the issuer of the securities and were
+not acquired and are not held in connection with or as a participant
+in any transaction having that purpose or effect.
+
+Signature.
+
+After reasonable inquiry and to the best of my knowledge and
+belief, I certify that the information set forth in this statement
+is true, complete and correct.
+
+
+Dated: January 25, 2024
+BlackRock, Inc.
+
+Signature:  Spencer Fleming
+
+
+
+-------------------------------------------
+
+Name/Title Attorney-In-Fact
+
+
+The original statement shall be signed by each person on whose
+behalf the statement is filed or his authorized representative.
+If the statement is signed on behalf of a person by his authorized
+representative other than an executive officer or general partner
+of the filing person, evidence of the representative's authority to
+sign on behalf of such person shall be filed with the statement,
+provided, however, that a power of attorney for this purpose
+which is already on file with the Commission may be incorporated
+by reference. The name and any title of each person who
+signs the statement shall be typed or printed beneath his signature.
+
+
+
+Attention: Intentional misstatements or omissions of fact constitute
+Federal criminal violations (see 18 U.S.C. 1001).
+
+
+Exhibit A
+
+
+
+Subsidiary
+
+
+ BlackRock Advisors, LLC
+ Aperio Group, LLC
+ BlackRock Institutional Trust Company, National Association
+ BlackRock Asset Management Ireland Limited
+ BlackRock Financial Management, Inc.
+ BlackRock Japan Co., Ltd.
+ BlackRock Asset Management Schweiz AG
+ BlackRock Investment Management, LLC
+ BlackRock Investment Management (UK) Limited
+ BlackRock Asset Management Canada Limited
+ BlackRock (Luxembourg) S.A.
+ BlackRock Investment Management (Australia) Limited
+ BlackRock Fund Advisors
+ BlackRock Fund Managers Ltd
+
+
+
+*Entity beneficially owns 5% or greater of the outstanding
+shares of the security class being reported on this
+Schedule 13G.
+
+
+Exhibit B
+
+
+POWER OF ATTORNEY
+
+The undersigned, BlackRock, Inc., a corporation duly organized under the laws
+of the State of Delaware, United States (the "Company"), does hereby make,
+constitute and appoint each of Eric Andruczyk, Richard Cundiff,
+R. Andrew Dickson, III, Spencer Fleming, Daniel Goldmintz, Laura Hildner,
+Elizabeth Kogut, David Maryles, Christopher Meade, Una Neary, Charles Park,
+Daniel Riemer, David Rothenberg and Brenda Schulz, acting severally, as its
+true and lawful attorneys-in-fact, for the purpose of, from time to
+time, executing, in its name and on its behalf and on behalf of its direct
+and indirect subsidiaries, any and all documents, certificates, instruments,
+statements, filings, agreements and amendments (collectively, "documents")
+determined by such person to be necessary or appropriate to comply with
+ownership or control-person reporting requirements imposed by any
+United States or non-United States governmental or regulatory authority,
+including, without limitation, Schedules 13D and 13G and Forms 3, 4, 5, 13F
+and 13H and any amendments to any of the foregoing as may be required to be
+filed with the Securities and Exchange Commission, and delivering, furnishing
+or filing any such documents with the appropriate governmental or regulatory
+authority or other person, and giving and granting to each such
+attorney-in-fact full power and authority to do and perform any and every act
+and thing whatsoever requisite, necessary or proper to be done in the exercise
+of any of the rights and powers herein granted, as fully and to all intents
+and purposes as the Company and/or its direct and indirect subsidiaries, as
+applicable, might or could do if personally present by one of its authorized
+signatories, hereby ratifying and confirming all that said attorney-in-fact
+shall lawfully do or cause to be done by virtue hereof. Any such determination
+by an attorney-in-fact named herein shall be conclusively evidenced by such
+person's execution, delivery, furnishing or filing of the applicable document.
+
+This power of attorney shall expressly revoke the power of attorney dated 2nd
+day of January, 2019 in respect of the subject matter hereof, shall be valid
+from the date hereof and shall remain in full force and effect until either
+revoked in writing by the Company, or, in respect of any attorney-in-fact
+named herein, until such person ceases to be an employee of the Company or
+one of its affiliates.
+
+IN WITNESS WHEREOF, the undersigned has caused this power of attorney to be
+executed as of this 30th day of April, 2023.
+
+BlackRock, Inc.
+
+
+By: /s/ R. Andrew Dickson, III
+Name:  R. Andrew Dickson, III
+Title: Corporate Secretary
+
+
+
+
+
+
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
