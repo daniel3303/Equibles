@@ -180,6 +180,7 @@ public class EquityMarketCatalogTests
     [InlineData("shanghai", "XSHG", "CN", "CNY", ".SS", "SHH", "Asia/Shanghai")]
     [InlineData("shenzhen", "XSHE", "CN", "CNY", ".SZ", "SHZ", "Asia/Shanghai")]
     [InlineData("hong-kong", "XHKG", "HK", "HKD", ".HK", "HKG", "Asia/Hong_Kong")]
+    [InlineData("tokyo", "XTKS", "JP", "JPY", ".T", "JPX", "Asia/Tokyo")]
     [InlineData("tsx", "XTSE", "CA", "CAD", ".TO", "TOR", "America/Toronto")]
     [InlineData("tsx-venture", "XTSX", "CA", "CAD", ".V", "VAN", "America/Toronto")]
     [InlineData("cse", "XCNQ", "CA", "CAD", ".CN", "CNQ", "America/Toronto")]
@@ -301,6 +302,26 @@ public class EquityMarketCatalogTests
         market.SessionOpen.Should().Be(new TimeOnly(openHour, openMinute));
         market.SessionClose.Should().Be(new TimeOnly(closeHour, closeMinute));
         market.ClosingAuctionEnd.Should().Be(new TimeOnly(auctionHour, auctionMinute));
+    }
+
+    // Pinned to Yahoo's regular trading period for 7203.T, 6758.T and 9984.T on 2026-10-20 (09:00 to 15:30 Tokyo
+    // time) and their last continuous one-minute print at 15:24; the closing auction uncrosses at 15:30.
+    [Fact]
+    public void TokyoSession_MatchesTheVenuesOwnPrints()
+    {
+        var market = EquityMarketCatalog.TryGet("tokyo");
+        market.SessionOpen.Should().Be(new TimeOnly(9, 0));
+        market.SessionClose.Should().Be(new TimeOnly(15, 25));
+        market.ClosingAuctionEnd.Should().Be(new TimeOnly(15, 30));
+        market.DelayedTradeSource.Should().BeNull();
+        EquityMarketCatalog.ByMarketIdentifierCode("XTKS").Should().BeSameAs(market);
+    }
+
+    [Fact]
+    public void Tokyo_PrecedesLondonSoATokyoLineHoldsThePresentation()
+    {
+        var codes = EquityMarketCatalog.All.Select(market => market.Code).ToList();
+        codes.IndexOf("tokyo").Should().BeLessThan(codes.IndexOf("lse"));
     }
 
     // Pinned to the first and last one-minute prints of 2026-10-16 in Toronto time: every venue trades
