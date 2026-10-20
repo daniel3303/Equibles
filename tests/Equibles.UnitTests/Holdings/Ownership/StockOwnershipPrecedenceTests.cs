@@ -27,6 +27,31 @@ public class StockOwnershipPrecedenceTests
             }
         );
 
+    private static List<StockHolderRow> ArrangeWithSuccessors(
+        IReadOnlyList<StockHolderRow> rows,
+        KeyValuePair<string, IReadOnlyList<string>> successions,
+        KeyValuePair<string, IReadOnlyList<string>>? laterSuccessions = null,
+        Func<string, DateOnly, bool> filedOwn13F = null,
+        params HolderRollup[] rollups
+    ) =>
+        StockOwnershipPrecedence.Arrange(
+            rows,
+            new StockOwnershipPrecedence.Context
+            {
+                Rollups = rollups.ToDictionary(rollup => rollup.Cik),
+                FiledOwn13F = filedOwn13F ?? ((_, _) => false),
+                Successors = new[] { successions }
+                    .Concat(laterSuccessions is { } later ? [later] : [])
+                    .ToDictionary(pair => pair.Key, pair => pair.Value),
+                Today = Today,
+            }
+        );
+
+    private static KeyValuePair<string, IReadOnlyList<string>> Succeeds(
+        string predecessor,
+        params string[] successors
+    ) => new(predecessor, successors);
+
     [Fact]
     public void Newer13DGWins_TheHoldersFresher13GLeadsAndIts13FNests()
     {
@@ -154,6 +179,75 @@ public class StockOwnershipPrecedenceTests
 
         tops.Should().ContainSingle().Which.Should().BeSameAs(fmr);
         spunOut.Covering13FCik.Should().Be(Fmr);
+    }
+
+    [Fact]
+    public void PredecessorGNests_UnderTheLargestSuccessorHoldingTheListing()
+    {
+        // Vanguard Group's 13F reports continue under several successors after its split; its
+        // last 13G, filed before the split, is already inside their reports.
+        var predecessor = Schedule13G("102909", 2_045, new DateOnly(2023, 12, 29));
+        var capital = Form13F("2100119", 1_540);
+        var portfolio = Form13F("2100121", 517);
+
+        var tops = ArrangeWithSuccessors(
+            [predecessor, capital, portfolio],
+            Succeeds("102909", "2100121", "2100119", "1680208")
+        );
+
+        tops.Should().Equal(capital, portfolio);
+        predecessor.ParentRowKey.Should().Be(capital.RowKey);
+        predecessor.Covering13FCik.Should().Be("2100119");
+        predecessor.Has(StockHolderRowFlags.Stale).Should().BeTrue();
+    }
+
+    [Fact]
+    public void PredecessorGNests_ThroughASuccessionChain()
+    {
+        var predecessor = Schedule13G("1364742", 1_805, new DateOnly(2023, 12, 31));
+        var successor = Form13F(BlackRock, 1_941);
+
+        var tops = ArrangeWithSuccessors(
+            [predecessor, successor],
+            Succeeds("1364742", "500"),
+            Succeeds("500", BlackRock)
+        );
+
+        tops.Should().ContainSingle().Which.Should().BeSameAs(successor);
+        predecessor.Covering13FCik.Should().Be(BlackRock);
+    }
+
+    [Fact]
+    public void PredecessorThatFiledItsOwn13FForTheQuarter_IsItsOwnHolder()
+    {
+        var predecessor = Schedule13G("102909", 2_045, new DateOnly(2026, 8, 1));
+        var successor = Form13F("2100119", 1_540);
+
+        var tops = ArrangeWithSuccessors(
+            [predecessor, successor],
+            Succeeds("102909", "2100119"),
+            filedOwn13F: (cik, quarter) => cik == "102909" && quarter == Q2
+        );
+
+        tops.Should().HaveCount(2);
+        predecessor.ParentRowKey.Should().BeNull();
+        predecessor.Covering13FCik.Should().BeNull();
+    }
+
+    [Fact]
+    public void ReportingRollup_LeadsASuccession()
+    {
+        var parent = Form13F(Fmr, 50_000);
+        var successor = Form13F("2100119", 1_540);
+        var subsidiary = Schedule13G("35368", 9_000, new DateOnly(2026, 8, 1));
+
+        ArrangeWithSuccessors(
+            [parent, successor, subsidiary],
+            Succeeds("35368", "2100119"),
+            rollups: ReportsThrough("35368", Fmr)
+        );
+
+        subsidiary.Covering13FCik.Should().Be(Fmr);
     }
 
     [Fact]
