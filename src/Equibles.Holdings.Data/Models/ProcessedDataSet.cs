@@ -91,9 +91,11 @@ public class ProcessedDataSet
     /// filer wrote each position's dollar value into SSHPRNAMT and its share
     /// count into VALUE (Swapped13FColumnRepairer). Read as filed, those books
     /// derived values inflated by the share price wherever the sanity guard's
-    /// cap did not catch them (a $0.11B book stored as $2.63B), and every
+    /// cap did not catch them (a $223M book stored as $2.63B), and every
     /// holder trade, turnover and flow built on them inherited the error. The
     /// re-import re-derives the affected filings from the corrected columns.
+    /// Open-quarter latency, as in version 8: realtime-swept accessions heal
+    /// only when their bulk quarterly data set lands.
     /// </summary>
     public const int CurrentParserVersion = 10;
 
