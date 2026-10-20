@@ -69,6 +69,7 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
         rollups["1006249"].Basis.Should().Be(HolderRollupBasis.ReportingParent);
         rollups["35368"].UltimateCik.Should().Be("315066");
         rollups["35368"].ReportingParentCik.Should().Be("315066");
+        rollups["35368"].ReportingTopCik.Should().Be("315066");
         rollups["913414"].Basis.Should().Be(HolderRollupBasis.Self);
         rollups["777"].ReportingParentCik.Should().BeNull();
         rollups["777"].UltimateCik.Should().Be("777");

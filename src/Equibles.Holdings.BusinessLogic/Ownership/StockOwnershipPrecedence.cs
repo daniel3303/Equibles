@@ -178,11 +178,22 @@ public static class StockOwnershipPrecedence
     /// <summary>
     /// The 13F filers whose reports contain a holder's shares by its rollup: the direct reporting
     /// parent, then the top of the 13F reporting chain. A GLEIF parent states ownership, never that
-    /// a report contains the holder, and conflicting evidence leaves the holder on its own.
+    /// a report contains the holder, so neither GLEIF evidence nor a GLEIF conflict changes these.
     /// </summary>
     public static IEnumerable<string> ReportingParentCandidates(HolderRollup rollup)
     {
-        if (rollup == null || rollup.HasConflictingEvidence)
+        if (rollup == null)
+            yield break;
+        if (rollup.ReportingTopCik != null)
+        {
+            if (rollup.ReportingParentCik != null)
+                yield return rollup.ReportingParentCik;
+            yield return rollup.ReportingTopCik;
+            yield break;
+        }
+        // A rollup derived before the reporting top was stored, when only the 13F chain could
+        // decide its ultimate parent.
+        if (rollup.HasConflictingEvidence)
             yield break;
         if (rollup.ReportingParentCik != null)
             yield return rollup.ReportingParentCik;
