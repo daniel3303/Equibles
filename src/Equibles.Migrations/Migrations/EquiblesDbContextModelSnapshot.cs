@@ -4084,6 +4084,18 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("SoldOutFilerCount")
                         .HasColumnType("integer");
 
+                    b.Property<long>("UnmatchedCurrentShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedCurrentValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousValue")
+                        .HasColumnType("bigint");
+
                     b.HasKey("EquityIssuerId", "ReportDate");
 
                     b.HasIndex("ReportDate");
@@ -4128,6 +4140,18 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("SoldOutFilerCount")
                         .HasColumnType("integer");
+
+                    b.Property<long>("UnmatchedCurrentShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedCurrentValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousValue")
+                        .HasColumnType("bigint");
 
                     b.HasKey("EquityIssuerId", "ReportDate");
 
@@ -4176,6 +4200,12 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<long?>("TopTenValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedCurrentShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousShares")
                         .HasColumnType("bigint");
 
                     b.HasKey("EquityIssuerId", "ReportDate", "IsCombined", "PriceSeriesTicker");

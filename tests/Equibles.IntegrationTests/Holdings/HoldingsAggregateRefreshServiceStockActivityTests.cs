@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -293,6 +294,33 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
                 1,
                 "only the filer that reported the quarter before without AAPL bought it; the withheld book and the first-time filer's book did not"
             );
+
+        // The movers keep the same positions apart: the withheld book is no sale, and on the way
+        // back neither it nor the first-time filer's book is a buy.
+        (
+            exits.UnmatchedPreviousShares,
+            exits.UnmatchedPreviousValue,
+            exits.UnmatchedCurrentShares
+        )
+            .Should()
+            .Be((1_000L, 100_000L, 0L));
+        exits.ToActivity().DeltaShares.Should().Be(-1_000, "only the trader sold");
+        (
+            entries.UnmatchedCurrentShares,
+            entries.UnmatchedCurrentValue,
+            entries.UnmatchedPreviousShares
+        )
+            .Should()
+            .Be((2_000L, 200_000L, 0L));
+        entries.ToActivity().DeltaShares.Should().Be(1_000, "only the trader bought");
+        entries.ToActivity().DeltaValue.Should().Be(100_000);
+        var listing = await read.Set<StockQuarterlyListingActivity>()
+            .SingleAsync(row =>
+                row.EquityIssuerId == aapl.Id && row.ReportDate == after && !row.IsCombined
+            );
+        (listing.UnmatchedCurrentShares, listing.UnmatchedPreviousShares)
+            .Should()
+            .Be((2_000L, 0L), "the listing breakdown restates the same split");
     }
 
     [Fact]

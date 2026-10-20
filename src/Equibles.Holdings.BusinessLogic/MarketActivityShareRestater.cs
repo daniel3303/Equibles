@@ -67,21 +67,48 @@ public class MarketActivityShareRestater
                     $"Cannot restate holdings activity for {primaryTicker} without listing-share snapshots."
                 );
 
-            row.CurrentShares = RestateListingTotal(
-                row.ListingShares,
-                listing => listing.CurrentShares,
-                currentReportDate,
-                primaryTicker,
-                splits
-            );
-            row.PreviousShares = RestateListingTotal(
-                row.ListingShares,
-                listing => listing.PreviousShares,
-                previousReportDate,
-                primaryTicker,
-                splits
-            );
+            RestateRow(row, currentReportDate, previousReportDate, primaryTicker, splits);
         }
+    }
+
+    // The unmatched parts restate on the same bases as the totals, so the matched delta stays a
+    // difference of like-for-like share counts.
+    internal static void RestateRow(
+        MarketWideStockActivity row,
+        DateOnly currentReportDate,
+        DateOnly previousReportDate,
+        string primaryTicker,
+        IReadOnlyList<StockSplit> splits
+    )
+    {
+        row.CurrentShares = RestateListingTotal(
+            row.ListingShares,
+            listing => listing.CurrentShares,
+            currentReportDate,
+            primaryTicker,
+            splits
+        );
+        row.PreviousShares = RestateListingTotal(
+            row.ListingShares,
+            listing => listing.PreviousShares,
+            previousReportDate,
+            primaryTicker,
+            splits
+        );
+        row.UnmatchedCurrentShares = RestateListingTotal(
+            row.ListingShares,
+            listing => listing.UnmatchedCurrentShares,
+            currentReportDate,
+            primaryTicker,
+            splits
+        );
+        row.UnmatchedPreviousShares = RestateListingTotal(
+            row.ListingShares,
+            listing => listing.UnmatchedPreviousShares,
+            previousReportDate,
+            primaryTicker,
+            splits
+        );
     }
 
     public async Task RestateStockActivity(

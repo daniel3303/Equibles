@@ -127,8 +127,8 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         row.CurrentValue.Should().Be(700_000);
         row.PreviousShares.Should().Be(0);
         row.PreviousValue.Should().Be(0);
-        row.DeltaShares.Should().Be(350);
-        row.DeltaValue.Should().Be(700_000);
+        (row.CurrentShares - row.PreviousShares).Should().Be(350);
+        (row.CurrentValue - row.PreviousValue).Should().Be(700_000);
     }
 
     [Fact]
@@ -158,7 +158,8 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         row.CurrentFilerCount.Should().Be(3);
         row.PreviousValue.Should().Be(300_000);
         row.CurrentValue.Should().Be(495_000);
-        row.DeltaValue.Should().Be(195_000);
+        (row.CurrentValue - row.PreviousValue).Should().Be(195_000);
+        row.DeltaValue.Should().Be(140_000, "the movers leave out h3's first 13F");
     }
 
     [Fact]
