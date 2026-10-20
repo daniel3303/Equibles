@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13g" xmlns:com="http://www.sec.gov/edgar/common">
+<schemaVersion>X0202</schemaVersion>
+<headerData>
+<submissionType>SCHEDULE 13G/A</submissionType>
+<filerInfo>
+<filer>
+<filerCredentials>
+<cik>0000102909</cik>
+<ccc>XXXXXXXX</ccc>
+</filerCredentials>
+</filer>
+<liveTestFlag>LIVE</liveTestFlag>
+</filerInfo>
+</headerData>
+<formData>
+<coverPageHeader>
+<amendmentNo>14</amendmentNo>
+<securitiesClassTitle>Common Stock</securitiesClassTitle>
+<eventDateRequiresFilingThisStatement>03/13/2026</eventDateRequiresFilingThisStatement>
+<issuerInfo>
+<issuerCik>0001045810</issuerCik>
+<issuerName>NVIDIA Corp</issuerName>
+<issuerCusips>
+<issuerCusipNumber>67066G104</issuerCusipNumber>
+</issuerCusips>
+<issuerPrincipalExecutiveOfficeAddress>
+<com:street1>2788 San Tomas Expressway</com:street1>
+<com:city>Santa Clara</com:city>
+<com:stateOrCountry>CA</com:stateOrCountry>
+<com:zipCode>95051</com:zipCode>
+</issuerPrincipalExecutiveOfficeAddress>
+</issuerInfo>
+<designateRulesPursuantThisScheduleFiled>
+<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>
+</designateRulesPursuantThisScheduleFiled>
+</coverPageHeader>
+<coverPageHeaderReportingPersonDetails>
+<reportingPersonName>The Vanguard Group</reportingPersonName>
+<citizenshipOrOrganization>PA</citizenshipOrOrganization>
+<reportingPersonBeneficiallyOwnedNumberOfShares>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>0</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>0</sharedDispositivePower>
+</reportingPersonBeneficiallyOwnedNumberOfShares>
+<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>0</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+<classPercent>0</classPercent>
+<typeOfReportingPerson>IA</typeOfReportingPerson>
+<comments>
+On January 12, 2026, The Vanguard Group, Inc. went through an internal realignment. In accordance with SEC Release No. 34-39538 (January 12, 1998), certain subsidiaries or business divisions of subsidiaries of The Vanguard Group, Inc., that formerly had, or were deemed to have, beneficial ownership with The Vanguard Group, Inc., will report beneficial ownership separately (on a disaggregated basis) from The Vanguard Group, Inc. in reliance on such release. These subsidiaries and/or business divisions pursue the same investment strategies as previously pursued by The Vanguard Group, Inc. prior to the realignment. Further in accordance with SEC Release No. 34-39538 (January 12, 1998), The Vanguard Group, Inc. no longer has, or is deemed to have, beneficial ownership over securities beneficially owned by such subsidiaries and/or business divisions.
+
+</comments>
+</coverPageHeaderReportingPersonDetails>
+<items>
+<item1>
+<issuerName>NVIDIA Corp</issuerName>
+<issuerPrincipalExecutiveOfficeAddress>2788 San Tomas Expressway, Santa Clara, CA, 95051</issuerPrincipalExecutiveOfficeAddress>
+</item1>
+<item2>
+<filingPersonName>The Vanguard Group</filingPersonName>
+<principalBusinessOfficeOrResidenceAddress>100 Vanguard Blvd.,, Malvern, PA, 19355</principalBusinessOfficeOrResidenceAddress>
+<citizenship>PA</citizenship>
+</item2>
+<item3>
+<notApplicableFlag>N</notApplicableFlag>
+<typeOfPersonFiling>IA</typeOfPersonFiling>
+</item3>
+<item4>
+<amountBeneficiallyOwned>0</amountBeneficiallyOwned>
+<classPercent>0</classPercent>
+<numberOfSharesPersonHas>
+<solePowerOrDirectToVote>0</solePowerOrDirectToVote>
+<sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>
+<solePowerOrDirectToDispose>0</solePowerOrDirectToDispose>
+<sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>
+</numberOfSharesPersonHas>
+</item4>
+<item5>
+<notApplicableFlag>N</notApplicableFlag>
+<classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>
+</item5>
+<item6>
+<notApplicableFlag>N</notApplicableFlag>
+<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>The Vanguard Group, including investment companies registered under the Investment Company Act of 1940 and other managed accounts, have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, the securities reported herein.No one other person's interest in the securities reported herein is more than 5%.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>
+</item6>
+<item7>
+<notApplicableFlag>Y</notApplicableFlag>
+</item7>
+<item8>
+<notApplicableFlag>Y</notApplicableFlag>
+</item8>
+<item9>
+<notApplicableFlag>Y</notApplicableFlag>
+</item9>
+<item10>
+<notApplicableFlag>N</notApplicableFlag>
+<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.</certifications>
+</item10>
+</items>
+<signatureInformation>
+<reportingPersonName>The Vanguard Group</reportingPersonName>
+<signatureDetails>
+<signature>Ashley Grim</signature>
+<title>Head of Global Fund Administration</title>
+<date>03/26/2026</date>
+</signatureDetails>
+</signatureInformation>
+</formData>
+</edgarSubmission>
