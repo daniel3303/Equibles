@@ -11,7 +11,9 @@ using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services.Benchmarks;
+using Equibles.Holdings.HostedService.Services.Signals;
 using Equibles.Holdings.Repositories;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -20,10 +22,12 @@ namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
 /// Rebuilds one closed quarter's <see cref="HolderQuarterlyMetrics"/>,
-/// <see cref="HolderQuarterlySectorFlow"/> and <see cref="HolderQuarterlyBenchmarkActiveShare"/>
-/// rows from Form 13F rows, a few hundred filers at a time, and keeps each filer's
-/// <see cref="HolderStockPresence"/> bit for the quarter current. A changed presence bit re-dirties
-/// every later quarter, whose tenure reads it.
+/// <see cref="HolderQuarterlySectorFlow"/>, <see cref="HolderQuarterlyBenchmarkActiveShare"/>,
+/// <see cref="StockQuarterlyHolderSignals"/> and <see cref="StockQuarterlyHolderOverlap"/> rows from
+/// Form 13F rows, a few hundred filers at a time, and keeps each filer's
+/// <see cref="HolderStockPresence"/> bit and <see cref="HolderPositionCostBasis"/> slot for the
+/// quarter current. A changed presence bit or cost slot re-dirties every later quarter, whose
+/// tenure and carried cost read it.
 /// </summary>
 [Service]
 public class HolderIntelligenceRefreshService
@@ -40,8 +44,17 @@ public class HolderIntelligenceRefreshService
     /// active share is stored, and a filer that alone continues one predecessor's 13F reports trades
     /// against that predecessor's book (<see cref="HolderQuarterlyMetrics.ComparedHolderId"/>), which
     /// heals small- and mid-cap trackers read as active and successors' first quarters with no trades.
+    /// 7: each position's estimated cost per share is carried quarter to quarter
+    /// (<see cref="HolderCostBasisCalculator"/>), and per-security holder signals and holder-overlap
+    /// peers are published with the quarter (<see cref="HolderCostBasisCalculator.FirstVersion"/>).
     /// </summary>
-    public const int CalculationVersion = 6;
+    public const int CalculationVersion = 7;
+
+    /// <summary>
+    /// Holder-overlap peers are computed and kept for this many newest closed quarters only; the
+    /// shareholder targets and cards read the newest.
+    /// </summary>
+    public const int OverlapQuarters = 4;
 
     /// <summary>A stamp this old is past the drain's cooldown and is picked up on its next tick.</summary>
     public static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
@@ -58,6 +71,8 @@ public class HolderIntelligenceRefreshService
     private readonly HoldingsCorpusCoverage _corpusCoverage;
     private readonly IEnumerable<IHolderBenchmarkProvider> _benchmarkProviders;
     private readonly decimal _minimumBenchmarkCoverage;
+    private readonly SharesOutstandingAsOfReader _sharesReader;
+    private readonly HolderCostBasisStore _costBasis;
     private readonly ILogger<HolderIntelligenceRefreshService> _logger;
 
     public HolderIntelligenceRefreshService(
@@ -65,6 +80,7 @@ public class HolderIntelligenceRefreshService
         HoldingsCorpusCoverage corpusCoverage,
         IEnumerable<IHolderBenchmarkProvider> benchmarkProviders,
         IOptions<HolderBenchmarkOptions> benchmarkOptions,
+        SharesOutstandingAsOfReader sharesReader,
         ILogger<HolderIntelligenceRefreshService> logger
     )
     {
@@ -72,6 +88,8 @@ public class HolderIntelligenceRefreshService
         _corpusCoverage = corpusCoverage;
         _benchmarkProviders = benchmarkProviders;
         _minimumBenchmarkCoverage = Math.Clamp(benchmarkOptions.Value.MinimumCoverage, 0, 1);
+        _sharesReader = sharesReader;
+        _costBasis = new HolderCostBasisStore(dbContext);
         _logger = logger;
     }
 
@@ -89,6 +107,25 @@ public class HolderIntelligenceRefreshService
         reportDate >= FirstComputableQuarter
         && HolderTenureCalculator.QuarterIndex(reportDate) != null
         && reportDate <= CombinedQuarterHelper.CompletedReportDateCutoff(today);
+
+    /// <summary>The newest quarter end whose 13F filing window has closed.</summary>
+    public static DateOnly LatestClosedQuarter(DateOnly today)
+    {
+        var cutoff = CombinedQuarterHelper.CompletedReportDateCutoff(today);
+        var quarterEnd = HoldingsCorpusCoverage.FirstQuarterEndOnOrAfter(cutoff);
+        return quarterEnd == cutoff
+            ? quarterEnd
+            : HoldingsCorpusCoverage.PreviousQuarterEnd(quarterEnd);
+    }
+
+    /// <summary>The oldest quarter whose holder-overlap peers are kept on <paramref name="today"/>.</summary>
+    public static DateOnly FirstOverlapQuarter(DateOnly today)
+    {
+        var quarter = LatestClosedQuarter(today);
+        for (var step = 1; step < OverlapQuarters; step++)
+            quarter = HoldingsCorpusCoverage.PreviousQuarterEnd(quarter);
+        return quarter;
+    }
 
     /// <summary>
     /// Replaces the quarter's metrics in one transaction. Returns false, writing nothing, for a
@@ -149,14 +186,28 @@ public class HolderIntelligenceRefreshService
                 )
                 : [];
 
+        var latest = LatestClosedQuarter(today);
+        var measuresTopScored = reportDate == latest;
+        var computesOverlap = reportDate >= FirstOverlapQuarter(today);
+        var privateFundAdvisers = await StockHolderSignalsInputsLoader.PrivateFundAdvisers(
+            _dbContext,
+            cancellationToken
+        );
+        var topScored = measuresTopScored
+            ? await StockHolderSignalsInputsLoader.TopScored(_dbContext, cancellationToken)
+            : [];
+        var signals = new StockHolderSignalsCalculator();
+        var overlap = computesOverlap ? new HolderOverlapCalculator() : null;
+
         var presenceChanged = await ClearNonFilers(reportDate, bit, cancellationToken);
+        var costChanged = false;
 
         var metrics = new List<HolderQuarterlyMetrics>(filers.Count);
         var sectorFlows = new List<HolderQuarterlySectorFlow>();
         var benchmarkRows = new List<HolderQuarterlyBenchmarkActiveShare>();
         foreach (var batch in filers.Chunk(HolderBatchSize))
         {
-            var (results, presenceIds) = await BuildBatch(
+            var (results, presenceIds, costRows) = await BuildBatch(
                 batch,
                 reportDate,
                 previous,
@@ -176,6 +227,23 @@ public class HolderIntelligenceRefreshService
             benchmarkRows.AddRange(
                 results.SelectMany(result => result.Result.BenchmarkActiveShares)
             );
+            foreach (var (holderId, result) in results)
+            {
+                signals.Add(
+                    new HolderSignalsContribution
+                    {
+                        InstitutionalHolderId = holderId,
+                        Book = result.Book,
+                        EquityAum = result.Metrics.EquityAum,
+                        StyleBand = result.Metrics.StyleBand,
+                        TurnoverBand = result.Metrics.TurnoverBand,
+                        AdvisesPrivateFunds = privateFundAdvisers.Contains(holderId),
+                        IsTopScored = topScored.Contains(holderId),
+                    }
+                );
+                if (overlap != null && HolderOverlapCalculator.Counts(result.Metrics.StyleBand))
+                    overlap.Add(result.Book.Current);
+            }
             presenceChanged |= await WritePresence(
                 results,
                 presenceIds,
@@ -183,16 +251,45 @@ public class HolderIntelligenceRefreshService
                 bit,
                 cancellationToken
             );
+            costChanged |= await WriteCostSlots(
+                results,
+                costRows,
+                reportDate,
+                quarter,
+                cancellationToken
+            );
         }
 
+        var inputs = await StockHolderSignalsInputsLoader.LoadQuarter(
+            _dbContext,
+            _sharesReader,
+            reportDate,
+            filers,
+            measuresTopScored,
+            cancellationToken
+        );
+        var signalRows = signals.Build(reportDate, inputs);
+        var overlapRows = overlap?.Build(reportDate) ?? [];
+
         await BeforePublish(reportDate);
-        await Publish(reportDate, metrics, sectorFlows, benchmarkRows, cancellationToken);
+        await Publish(
+            reportDate,
+            metrics,
+            sectorFlows,
+            benchmarkRows,
+            signalRows,
+            overlapRows,
+            FirstOverlapQuarter(today),
+            cancellationToken
+        );
 
         _logger.LogInformation(
-            "Holder intelligence for {ReportDate}: {Count} filers, {SectorFlows} sector flow rows, {Benchmarks} benchmarks ({BenchmarkKeys}), {Priced} securities at their quarter average price, {Advised} filers with N-CEN series, {Compared} compared with a predecessor, presence changed: {Changed}",
+            "Holder intelligence for {ReportDate}: {Count} filers, {SectorFlows} sector flow rows, {Signals} security signal rows, {Overlap} overlap peer rows, {Benchmarks} benchmarks ({BenchmarkKeys}), {Priced} securities at their quarter average price, {Advised} filers with N-CEN series, {Compared} compared with a predecessor, presence changed: {Changed}, cost slots changed: {CostChanged}",
             reportDate,
             metrics.Count,
             sectorFlows.Count,
+            signalRows.Count,
+            overlapRows.Count,
             benchmarks.Count,
             string.Join(", ", benchmarks.Select(benchmark => benchmark.Key)),
             averagePrices.Count,
@@ -200,14 +297,16 @@ public class HolderIntelligenceRefreshService
             metrics.Count(row =>
                 row.ComparedHolderId != null && row.ComparedHolderId != row.InstitutionalHolderId
             ),
-            presenceChanged
+            presenceChanged,
+            costChanged
         );
         return true;
     }
 
     private async Task<(
         List<(Guid HolderId, HolderQuarterResult Result)> Results,
-        Dictionary<PresenceKey, Guid> PresenceIds
+        Dictionary<PresenceKey, Guid> PresenceIds,
+        List<HolderCostBasisStore.CostRow> CostRows
     )> BuildBatch(
         Guid[] holderIds,
         DateOnly reportDate,
@@ -268,6 +367,15 @@ public class HolderIntelligenceRefreshService
             })
             .ToListAsync(cancellationToken);
         var presence = await LoadPresence(holderIds, cancellationToken);
+        var quarter = HolderTenureCalculator.QuarterIndex(reportDate).Value;
+        // Each filer's own rows hold this quarter's slots; a compared predecessor's hold the
+        // slots it carries in.
+        var costRows = await _costBasis.Load(
+            [.. holderIds, .. predecessorIds],
+            quarter,
+            cancellationToken
+        );
+        var costRowsByHolder = costRows.ToLookup(row => row.InstitutionalHolderId);
         var firstQuarter = FirstComputableQuarter;
         var filed = await _dbContext
             .Set<InstitutionalFiling>()
@@ -322,6 +430,9 @@ public class HolderIntelligenceRefreshService
                         : null,
                     ComparedHolderId = comparedId,
                     PreviousShareFactors = factors,
+                    PreviousCostSlots = comparedId is { } costed
+                        ? HolderCostBasisStore.PreviousSlots(costRowsByHolder[costed])
+                        : new Dictionary<HolderSecurityKey, HolderCostSlot>(),
                     Presence = presenceByHolder[holderId]
                         .ToDictionary(row => row.Key.Security, row => row.HeldMask),
                     FiledMask = filedByHolder[holderId]
@@ -353,7 +464,12 @@ public class HolderIntelligenceRefreshService
                 return (holderId, HolderQuarterMetricsBuilder.Build(input, CalculationVersion));
             })
             .ToList();
-        return (results, presence.ToDictionary(row => row.Key, row => row.Id));
+        var holderSet = holderIds.ToHashSet();
+        return (
+            results,
+            presence.ToDictionary(row => row.Key, row => row.Id),
+            costRows.Where(row => holderSet.Contains(row.InstitutionalHolderId)).ToList()
+        );
     }
 
     // The adviser whose N-CEN series describe each filer: the Form ADV adviser behind its profile,
@@ -522,6 +638,30 @@ public class HolderIntelligenceRefreshService
         return true;
     }
 
+    // Moves the batch's stored cost slots for the quarter to the computed ones; a changed slot and
+    // the stamp of the later quarters that carry it forward commit together.
+    private async Task<bool> WriteCostSlots(
+        List<(Guid HolderId, HolderQuarterResult Result)> results,
+        List<HolderCostBasisStore.CostRow> stored,
+        DateOnly reportDate,
+        int quarter,
+        CancellationToken cancellationToken
+    )
+    {
+        var writes = HolderCostBasisStore.Diff(
+            results.ToDictionary(result => result.HolderId, result => result.Result.Book.CostSlots),
+            stored.ToLookup(row => row.InstitutionalHolderId)
+        );
+        if (writes.Count == 0)
+            return false;
+        await using var transaction = await BeginTransaction(cancellationToken);
+        await _costBasis.Apply(writes, quarter, cancellationToken);
+        await DirtyLaterQuarters(reportDate, null, cancellationToken);
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     // New presence rows start empty; a row a concurrent rebuild inserted first is kept.
     private Task InsertPresence(List<PresenceKey> keys, CancellationToken cancellationToken) =>
         _dbContext
@@ -594,14 +734,18 @@ public class HolderIntelligenceRefreshService
         return cleared > 0;
     }
 
-    // Replaces the quarter's metrics, sector flows and benchmark active shares in one transaction,
-    // saved a batch at a time. A changed filer set re-dirties every later quarter (tenure bridges
-    // unfiled quarters); a changed turnover the three whose trailing sum reads it.
+    // Replaces the quarter's metrics, sector flows, benchmark active shares, stock signals and
+    // overlap peers in one transaction, saved a batch at a time, and drops peers older than the
+    // kept window. A changed filer set re-dirties every later quarter (tenure bridges unfiled
+    // quarters); a changed turnover the three whose trailing sum reads it.
     private async Task Publish(
         DateOnly reportDate,
         List<HolderQuarterlyMetrics> metrics,
         List<HolderQuarterlySectorFlow> sectorFlows,
         List<HolderQuarterlyBenchmarkActiveShare> benchmarkRows,
+        List<StockQuarterlyHolderSignals> signalRows,
+        List<StockQuarterlyHolderOverlap> overlapRows,
+        DateOnly firstOverlapQuarter,
         CancellationToken cancellationToken
     )
     {
@@ -628,9 +772,19 @@ public class HolderIntelligenceRefreshService
                 .Set<HolderQuarterlyBenchmarkActiveShare>()
                 .Where(row => row.ReportDate == reportDate)
                 .ExecuteDeleteAsync(cancellationToken);
+            await _dbContext
+                .Set<StockQuarterlyHolderSignals>()
+                .Where(row => row.ReportDate == reportDate)
+                .ExecuteDeleteAsync(cancellationToken);
+            await _dbContext
+                .Set<StockQuarterlyHolderOverlap>()
+                .Where(row => row.ReportDate == reportDate || row.ReportDate < firstOverlapQuarter)
+                .ExecuteDeleteAsync(cancellationToken);
             await AddInBatches(metrics, cancellationToken);
             await AddInBatches(sectorFlows, cancellationToken);
             await AddInBatches(benchmarkRows, cancellationToken);
+            await AddInBatches(signalRows, cancellationToken);
+            await AddInBatches(overlapRows, cancellationToken);
 
             var filersChanged =
                 stored.Count != metrics.Count

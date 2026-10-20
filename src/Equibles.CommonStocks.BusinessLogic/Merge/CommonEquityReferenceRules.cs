@@ -32,6 +32,10 @@ public static class CommonEquityReferenceRules
         new("HoldingLabelConvergenceState") { OnCollision = EquityReferenceCollision.KeepSurvivor },
         // A presence mask is derived from holdings; the next rebuild of each quarter restores a dropped bit.
         new("HolderStockPresence") { OnCollision = EquityReferenceCollision.KeepSurvivor },
+        // Cost slots, signals and overlap peers are derived the same way and rebuilt with their quarter.
+        new("HolderPositionCostBasis") { OnCollision = EquityReferenceCollision.KeepSurvivor },
+        new("StockQuarterlyHolderSignals") { OnCollision = EquityReferenceCollision.KeepSurvivor },
+        new("StockQuarterlyHolderOverlap") { OnCollision = EquityReferenceCollision.KeepSurvivor },
         new("HoldingsCusipRescan"),
         // A collision here means two records disagree about the same filing or listing; an operator decides.
         new("EquityListingRetirementEvidence"),

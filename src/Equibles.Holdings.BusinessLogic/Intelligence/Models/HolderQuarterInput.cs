@@ -29,6 +29,13 @@ public sealed record HolderQuarterInput
     public IReadOnlyDictionary<HolderSecurityKey, decimal> AveragePrices { get; init; } =
         new Dictionary<HolderSecurityKey, decimal>();
 
+    /// <summary>
+    /// The compared filer's cost slots at the quarter before, per security held then; a security
+    /// missing here while held then has no carried estimate.
+    /// </summary>
+    public IReadOnlyDictionary<HolderSecurityKey, HolderCostSlot> PreviousCostSlots { get; init; } =
+        new Dictionary<HolderSecurityKey, HolderCostSlot>();
+
     /// <summary>The filer's stored presence masks, per security.</summary>
     public IReadOnlyDictionary<HolderSecurityKey, long> Presence { get; init; } =
         new Dictionary<HolderSecurityKey, long>();

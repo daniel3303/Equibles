@@ -62,6 +62,7 @@ public static class HolderQuarterMetricsBuilder
             );
         var toSet = new List<HolderSecurityKey>();
         var tenures = new List<(decimal Value, HolderTenure Tenure)>();
+        var tenureBySecurity = new Dictionary<HolderSecurityKey, HolderTenure>(held.Count);
         foreach (var (security, value) in held)
         {
             var mask = input.Presence.GetValueOrDefault(security);
@@ -77,7 +78,10 @@ public static class HolderQuarterMetricsBuilder
                 ) is
                 { } run
             )
+            {
                 tenures.Add((value, run));
+                tenureBySecurity[security] = run;
+            }
         }
         var toClear = input
             .Presence.Where(pair => (pair.Value & bit) != 0 && !held.ContainsKey(pair.Key))
@@ -174,7 +178,24 @@ public static class HolderQuarterMetricsBuilder
                 Coverage = Math.Clamp(row.Benchmark.Coverage, 0, 1),
             })
             .ToList();
-        return new HolderQuarterResult(metrics, toSet, toClear, sectorFlows, benchmarkRows);
+        var costSlots = HolderCostBasisCalculator.Advance(
+            current,
+            previous,
+            input.PreviousCostSlots,
+            input.PreviousShareFactors,
+            unresolved,
+            input.AveragePrices
+        );
+        var book = new HolderQuarterBook
+        {
+            Current = current,
+            Previous = previous,
+            UnresolvedBasis = unresolved,
+            Tenures = tenureBySecurity,
+            CostSlots = costSlots,
+            SecurityTrades = trades.SecurityTrades,
+        };
+        return new HolderQuarterResult(metrics, toSet, toClear, sectorFlows, benchmarkRows, book);
     }
 
     // Every benchmark the book can be measured against; an empty book measures none. One pass
