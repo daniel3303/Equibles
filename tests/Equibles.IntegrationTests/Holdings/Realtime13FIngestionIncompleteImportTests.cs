@@ -216,6 +216,13 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
             .Be(!retainedBook);
         var failure = await verify.Set<HoldingsImportFailure>().SingleAsync();
         failure.ResolvedAt.HasValue.Should().Be(!retainedBook);
+        failure
+            .Reason.Should()
+            .Be(
+                retainedBook
+                    ? HoldingsImportFailureReason.Incomplete
+                    : HoldingsImportFailureReason.NoTrackedPositions
+            );
         var holdings = await verify.Set<InstitutionalHolding>().ToListAsync();
         holdings.Should().HaveCount(retainedBook ? 1 : 0);
         if (retainedBook)

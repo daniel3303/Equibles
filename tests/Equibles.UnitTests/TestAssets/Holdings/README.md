@@ -41,6 +41,15 @@
 - The restatement corrects a filing submitted under the wrong manager; the complete submission verifies one row with explicit zero shares, value, and votes.
 - Its empty book must replace the original without falling back to the prior quarter or treating missing quantities as zero.
 
+# Confidential-treatment original
+
+- Source: https://www.sec.gov/Archives/edgar/data/1374170/000137417026000023/0001374170-26-000023.txt
+- Captured: 2026-10-20; original bytes retained without edits.
+- SHA-256: `476cf57c08bdc41e69eefe1e6dccab7fe39e108f5594f304ee8b8545ad8bcab3`.
+- The cover declares 1,507 rows and 864,690,921,985 with `isConfidentialOmitted` true; the public information table holds one all-zero `000000000` placeholder row.
+- The filer publishes the positions in a 13F-HR/A once confidential treatment lapses, about a year later; that amendment imports as its own filing.
+- Recovery closes the original as withheld under confidential treatment, storing no row and no rollup.
+
 # Information tables with swapped share-count and value columns
 
 - `SwappedColumns/<accession>.json` holds one 13F information table's share rows (`sshPrnAmt` and `value` as filed) and each security's quarter-end close on the filing's share basis.

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
@@ -305,6 +306,14 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
             .Be(expectComplete);
         var failure = await verify.Set<HoldingsImportFailure>().SingleAsync();
         failure.ResolvedAt.HasValue.Should().Be(expectComplete);
+        failure
+            .Reason.Should()
+            .Be(
+                expectComplete
+                    ? HoldingsImportFailureReason.NoTrackedPositions
+                    : HoldingsImportFailureReason.Incomplete,
+                "a row closed without storing anything names why there was nothing to store"
+            );
         var holdings = await verify.Set<InstitutionalHolding>().ToListAsync();
         holdings.Should().HaveCount(retainedBook ? 1 : 0, "nothing tracked is ever written");
         if (retainedBook)
@@ -320,5 +329,259 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
                     expectComplete ? 2 : 1,
                     "the offered filing's marker is kept, never re-imported"
                 );
+    }
+
+    // A row closed as NoTrackedPositions reopens once the directory learns one of its CUSIPs. Both
+    // rescan paths (a retained bulk data set reopens the ledger row; a filing newer than every bulk
+    // archive is replayed through the realtime sweep) must leave the row saying holdings were written.
+    [Theory]
+    [InlineData("bulk-rescan")]
+    [InlineData("realtime-replay")]
+    public async Task ClosedUntrackedFiling_ThatLaterWrites_NoLongerReadsAsNoTrackedPosition(
+        string path
+    )
+    {
+        const string learnedCusip = "594918104";
+        var cover = Cover("13F-HR", null, 1, 1);
+        var table = Table(learnedCusip, 1, 1000);
+        using var db = FreshContext();
+        db.Add(
+            EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "AAPL",
+                Name: "Apple",
+                Cusip: "037833100"
+            )
+        );
+        await db.SaveChangesAsync();
+        var failures = new HoldingsImportFailureRepository(db);
+        await failures.Record(
+            Accession,
+            Cik,
+            Filed,
+            Report,
+            HoldingsImportFailureReason.Incomplete,
+            CancellationToken.None
+        );
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetDocumentContent(Accession, Cik, Arg.Any<CancellationToken>())
+            .Returns(Submission("13F-HR", cover, table));
+        edgar
+            .GetCompanyFilings(Cik, null, Filed, Arg.Any<DateOnly?>())
+            .Returns([
+                new FilingData
+                {
+                    AccessionNumber = Accession,
+                    Form = "13F-HR",
+                    FilingDate = Filed,
+                    ReportDate = Report,
+                },
+            ]);
+        edgar
+            .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+                [
+                    new EdgarDailyIndexEntry
+                    {
+                        FormType = "13F-HR",
+                        CompanyName = "UNTRACKED FUND",
+                        Cik = Cik,
+                        DateFiled = Filed,
+                        AccessionNumber = Accession,
+                    },
+                ]
+            );
+        var prices = Substitute.For<IStockPriceProvider>();
+        prices
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromResult(new Dictionary<(Guid, string, DateOnly), decimal>()));
+        var scopes = CreateScopeFactory();
+        Realtime13FIngestionService Ingestion() =>
+            new(
+                edgar,
+                new Filing13FXmlParser(),
+                new Realtime13FArchiveBuilder(),
+                new HoldingsImportService(
+                    scopes,
+                    Substitute.For<ILogger<HoldingsImportService>>(),
+                    Options.Create(new WorkerOptions()),
+                    prices,
+                    Substitute.For<MassTransit.IBus>()
+                ),
+                scopes,
+                Substitute.For<ILogger<Realtime13FIngestionService>>()
+            );
+        Task Recover() =>
+            new HoldingsImportRecoveryService(
+                failures,
+                new InstitutionalHoldingRepository(db),
+                edgar,
+                Ingestion(),
+                Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+            ).Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        await Recover();
+        using (var closed = FreshContext())
+            (await closed.Set<HoldingsImportFailure>().SingleAsync())
+                .Reason.Should()
+                .Be(HoldingsImportFailureReason.NoTrackedPositions);
+
+        db.Add(
+            EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "MSFT",
+                Name: "Microsoft",
+                Cusip: learnedCusip
+            )
+        );
+        await db.SaveChangesAsync();
+        if (path == "bulk-rescan")
+        {
+            await failures.EnqueueRecovery(
+                Accession,
+                Cik,
+                Filed,
+                CancellationToken.None,
+                supersedesActiveAttempt: true
+            );
+            await Recover();
+        }
+        else
+        {
+            // The scraper rewinds the sweep and drops the filing's processed marker before the sweep.
+            await db.Set<ProcessedFiling>()
+                .Where(p => p.AccessionNumber == Accession)
+                .ExecuteDeleteAsync();
+            await Ingestion()
+                .IngestRecentFilings(
+                    today: Filed,
+                    lookbackDays: 1,
+                    minReportDate: new DateOnly(2020, 1, 1),
+                    CancellationToken.None
+                );
+        }
+
+        using var verify = FreshContext();
+        (await verify.Set<InstitutionalHolding>().SingleAsync())
+            .AccessionNumber.Should()
+            .Be(Accession);
+        var failure = await verify.Set<HoldingsImportFailure>().SingleAsync();
+        failure.ResolvedAt.Should().NotBeNull();
+        failure
+            .Reason.Should()
+            .Be(
+                HoldingsImportFailureReason.PendingRecovery,
+                "a resolved row under a closure reason would say the stored holdings do not exist"
+            );
+    }
+
+    // Recorded source: TestAssets/Holdings/13f-confidential-treatment-submission.txt (see README).
+    [Fact]
+    public async Task ConfidentialTreatmentOriginal_ClosesAsWithheld_WithoutStoringARowOrRollup()
+    {
+        const string cik = "1374170";
+        const string accession = "0001374170-26-000023";
+        var filed = new DateOnly(2026, 5, 11);
+        var report = new DateOnly(2026, 3, 31);
+        using var db = FreshContext();
+        db.Add(
+            EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "AAPL",
+                Name: "Apple",
+                Cusip: "037833100"
+            )
+        );
+        await db.SaveChangesAsync();
+        var failures = new HoldingsImportFailureRepository(db);
+        await failures.Record(
+            accession,
+            cik,
+            filed,
+            report,
+            HoldingsImportFailureReason.Incomplete,
+            CancellationToken.None
+        );
+        var submission = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Holdings",
+                "13f-confidential-treatment-submission.txt"
+            )
+        );
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar.GetDocumentContent(accession, cik, Arg.Any<CancellationToken>()).Returns(submission);
+        // The declared totals disagree with the public table, so the importer reads the standalone
+        // artifacts the envelope names; EDGAR serves them with the envelope's XML bodies.
+        foreach (
+            Match artifact in Regex.Matches(
+                submission,
+                @"<FILENAME>(?<name>\S+)\s*<TEXT>\s*<XML>\s*(?<xml>.*?)\s*</XML>",
+                RegexOptions.Singleline
+            )
+        )
+            edgar
+                .GetDocumentFileBytes(
+                    cik,
+                    accession,
+                    artifact.Groups["name"].Value,
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(System.Text.Encoding.UTF8.GetBytes(artifact.Groups["xml"].Value));
+        edgar
+            .GetCompanyFilings(cik, null, filed, Arg.Any<DateOnly?>())
+            .Returns([
+                new FilingData
+                {
+                    AccessionNumber = accession,
+                    Form = "13F-HR",
+                    FilingDate = filed,
+                    ReportDate = report,
+                },
+            ]);
+        var scopes = CreateScopeFactory();
+        var importer = new HoldingsImportService(
+            scopes,
+            Substitute.For<ILogger<HoldingsImportService>>(),
+            Options.Create(new WorkerOptions()),
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
+        );
+        var ingestion = new Realtime13FIngestionService(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            importer,
+            scopes,
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        var recovery = new HoldingsImportRecoveryService(
+            failures,
+            new InstitutionalHoldingRepository(db),
+            edgar,
+            ingestion,
+            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+        );
+
+        await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        using var verify = FreshContext();
+        var failure = await verify.Set<HoldingsImportFailure>().SingleAsync();
+        failure.ResolvedAt.Should().NotBeNull("the public table holds only a placeholder row");
+        failure
+            .Reason.Should()
+            .Be(
+                HoldingsImportFailureReason.ConfidentialTreatment,
+                "the positions are withheld, not lost, and arrive with the later amendment"
+            );
+        (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<InstitutionalFiling>().AnyAsync())
+            .Should()
+            .BeFalse("an empty rollup would read as the filer selling its whole declared book");
     }
 }

@@ -86,14 +86,15 @@
             @{
                 var churnBoards = new[]
                 {
-                    new { Label = "New Positions", Rows = Model.NewPositions, BadgeCss = "badge-info", FilerLabel = "# Filers Initiated", FilerSelector = (Func<HoldingsActivityRow, int>)(r => r.NewFilerCount), TestId = "activity-new-positions" },
-                    new { Label = "Sold-Out Positions", Rows = Model.SoldOutPositions, BadgeCss = "badge-warning", FilerLabel = "# Filers Exited", FilerSelector = (Func<HoldingsActivityRow, int>)(r => r.SoldOutFilerCount), TestId = "activity-sold-out-positions" },
+                    new { Label = "New Positions", Rows = Model.NewPositions, BadgeCss = "badge-info", FilerLabel = "# Filers Initiated", FilerSelector = (Func<HoldingsActivityRow, int>)(r => r.NewFilerCount), TestId = "activity-new-positions", Note = "Counts filers that also reported a 13F for the prior quarter; a first-time filer's book is not a new position." },
+                    new { Label = "Sold-Out Positions", Rows = Model.SoldOutPositions, BadgeCss = "badge-warning", FilerLabel = "# Filers Exited", FilerSelector = (Func<HoldingsActivityRow, int>)(r => r.SoldOutFilerCount), TestId = "activity-sold-out-positions", Note = "Counts filers that also reported a 13F for this quarter; a filer that has not filed, or withheld its positions under confidential treatment, has not sold." },
                 };
             }
             @foreach (var board in churnBoards) {
                 <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
                     <div class="card-body p-4">
                         <partial name="_SectionHeading" model='(Title: board.Label, BadgeClass: board.BadgeCss, BadgeContent: board.Rows.Count.ToString("N0"))' />
+                        <div class="text-xs text-base-content/50 mb-2" data-testid="@(board.TestId)-note">@board.Note</div>
                         @if (board.Rows.Count == 0) {
                             <div class="text-xs text-base-content/50">No stocks in this bucket for the selected quarter.</div>
                         } else {

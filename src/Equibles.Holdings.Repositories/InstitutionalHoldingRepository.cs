@@ -965,12 +965,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // (in current, not in prior) and how many exited (in prior, not in current).
     // Implemented as two NOT-EXISTS subqueries against the same table — EF Core
     // translates the `!DbContext.Set<>().Any(...)` form to a SQL `NOT EXISTS` clause.
+    // A missing position proves an entry or exit only when its filer reported a 13F for the
+    // other quarter, so only filers of both quarters count: a first-time filer's book is no buy
+    // and a confidential quarter is no sale.
     public IQueryable<MarketWideStockChurn> GetQuarterlyNewSoldOutPositions(
         DateOnly current,
         DateOnly previous
     )
     {
+        var filedCurrent = DbContext.Filed13FHolderIds(current);
+        var filedPrevious = DbContext.Filed13FHolderIds(previous);
         return BothQuarters(current, previous)
+            // One OR per side keeps each filer set a hashed subplan (see BuildChurnQuery).
+            .Where(h =>
+                (h.ReportDate == current || filedCurrent.Contains(h.InstitutionalHolderId))
+                && (h.ReportDate == previous || filedPrevious.Contains(h.InstitutionalHolderId))
+            )
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockChurn
             {
@@ -1280,6 +1290,13 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var carried = previous
             .Where(row => !filedPreviousHolders.Contains(row.InstitutionalHolderId))
             .ToList();
+        // A missing prior position proves an entry only for a filer that reported that quarter.
+        var newcomers = currentHolders.Where(id => !previousHolders.Contains(id)).ToList();
+        var entrants =
+            newcomers.Count == 0
+                ? []
+                : await GetFiledHolderIdsAmong(previousReportDate, newcomers)
+                    .ToListAsync(cancellationToken);
 
         var liveListingShares = await GetLiveListingShareActivity(
             currentReportDate,
@@ -1308,7 +1325,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 .Union(carried.Select(row => row.InstitutionalHolderId))
                 .Count(),
             PreviousFilerCount = previousHolders.Count,
-            NewFilerCount = currentHolders.Count(id => !previousHolders.Contains(id)),
+            NewFilerCount = entrants.Count,
             SoldOutFilerCount = filedPreviousHolders.Count(id => !currentHolders.Contains(id)),
             ListingShares = liveListingShares,
         };
@@ -1364,6 +1381,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(row => row.PreviousPositionCount > 0)
             .Select(row => row.InstitutionalHolderId)
             .ToHashSet();
+        // A missing position proves an entry or exit only for a filer that reported the other
+        // quarter; a stock's first quarter compares against the calendar quarter before.
+        var newcomers = currentHolders.Except(previousHolders).ToList();
+        var entrants =
+            newcomers.Count == 0
+                ? []
+                : await GetFiledHolderIdsAmong(
+                        previousReportDate
+                            ?? currentReportDate.AddDays(1).AddMonths(-3).AddDays(-1),
+                        newcomers
+                    )
+                    .ToListAsync(cancellationToken);
+        var leavers = previousHolders.Except(currentHolders).ToList();
+        var exits =
+            leavers.Count == 0
+                ? []
+                : await GetFiledHolderIdsAmong(currentReportDate, leavers)
+                    .ToListAsync(cancellationToken);
         var listingShares = activity
             .GroupBy(row => row.ListedTicker ?? stock.Presentation.Listing.Ticker)
             .Select(group => new StockQuarterlyListingActivity
@@ -1387,8 +1422,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             PreviousValue = activity.Sum(row => row.PreviousValue),
             CurrentFilerCount = currentHolders.Count,
             PreviousFilerCount = previousHolders.Count,
-            NewFilerCount = currentHolders.Except(previousHolders).Count(),
-            SoldOutFilerCount = previousHolders.Except(currentHolders).Count(),
+            NewFilerCount = entrants.Count,
+            SoldOutFilerCount = exits.Count,
             ListingShares = listingShares,
         };
     }
@@ -1933,6 +1968,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var pctPassthroughIds = splitAffectedStockIds is { Count: > 0 }
             ? splitAffectedStockIds.ToList()
             : null;
+        var filedCurrent = DbContext.Filed13FHolderIds(current);
+        var filedPrevious = DbContext.Filed13FHolderIds(previous);
         var aggregated = BothQuarters(current, previous)
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new
@@ -1949,8 +1986,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
                     .Count(),
+                // An entry or exit counts only from a filer that reported the other quarter.
                 NewFilerCount = g.Where(h =>
                         h.ReportDate == current
+                        && filedPrevious.Contains(h.InstitutionalHolderId)
                         && !DbContext
                             .Set<InstitutionalHolding>()
                             .Any(p =>
@@ -1965,6 +2004,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Count(),
                 SoldOutFilerCount = g.Where(h =>
                         h.ReportDate == previous
+                        && filedCurrent.Contains(h.InstitutionalHolderId)
                         && !DbContext
                             .Set<InstitutionalHolding>()
                             .Any(c =>
@@ -2458,15 +2498,17 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly previous
     )
     {
+        var filedPrevious = DbContext.Filed13FHolderIds(previous);
         return BothQuarters(current, previous)
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockChurn
             {
                 CommonStockId = g.Key,
-                // New: in current quarter and not in previous (only actual current-quarter filers
-                // can introduce genuinely new positions).
+                // New: in current quarter and not in previous, from a filer that reported the
+                // previous quarter (a first-time filer's book is no buy).
                 NewFilerCount = g.Where(h =>
                         h.ReportDate == current
+                        && filedPrevious.Contains(h.InstitutionalHolderId)
                         && !DbContext
                             .Set<InstitutionalHolding>()
                             .Any(p =>
