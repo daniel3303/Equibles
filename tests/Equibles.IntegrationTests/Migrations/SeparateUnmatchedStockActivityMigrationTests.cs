@@ -29,7 +29,11 @@ public class SeparateUnmatchedStockActivityMigrationTests : ParadeDbMcpTestBase
                 "StockQuarterlyActivity.UnmatchedCurrentValue",
                 "StockQuarterlyActivity.UnmatchedPreviousValue",
                 "StockQuarterlyListingActivity.UnmatchedCurrentShares",
-                "StockQuarterlyListingActivity.UnmatchedPreviousShares"
+                "StockQuarterlyListingActivity.UnmatchedPreviousShares",
+                "StockQuarterlyActivityCombined.UnmatchedCurrentShares",
+                "StockQuarterlyActivityCombined.UnmatchedPreviousShares",
+                "StockQuarterlyActivityCombined.UnmatchedCurrentValue",
+                "StockQuarterlyActivityCombined.UnmatchedPreviousValue"
             );
         operations.Last().Should().BeOfType<SqlOperation>()
             .Which.Sql.Should().Be(SeparateUnmatchedStockActivity.RepairSql);

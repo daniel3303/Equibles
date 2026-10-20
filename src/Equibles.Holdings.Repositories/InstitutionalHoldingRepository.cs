@@ -855,8 +855,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly previous
     )
     {
-        var filedCurrent = DbContext.Filed13FHolderIds(current);
-        var filedPrevious = DbContext.Filed13FHolderIds(previous);
+        var comparedCurrent = DbContext.Compared13FHolderIds(current, previous);
+        var comparedPrevious = DbContext.Compared13FHolderIds(previous, current);
         return BothQuarters(current, previous)
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockActivity
@@ -867,22 +867,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
                 PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
                 UnmatchedCurrentShares = g.Sum(h =>
-                    h.ReportDate == current && !filedPrevious.Contains(h.InstitutionalHolderId)
+                    h.ReportDate == current && !comparedCurrent.Contains(h.InstitutionalHolderId)
                         ? h.Shares
                         : 0L
                 ),
                 UnmatchedPreviousShares = g.Sum(h =>
-                    h.ReportDate == previous && !filedCurrent.Contains(h.InstitutionalHolderId)
+                    h.ReportDate == previous && !comparedPrevious.Contains(h.InstitutionalHolderId)
                         ? h.Shares
                         : 0L
                 ),
                 UnmatchedCurrentValue = g.Sum(h =>
-                    h.ReportDate == current && !filedPrevious.Contains(h.InstitutionalHolderId)
+                    h.ReportDate == current && !comparedCurrent.Contains(h.InstitutionalHolderId)
                         ? h.Value
                         : 0L
                 ),
                 UnmatchedPreviousValue = g.Sum(h =>
-                    h.ReportDate == previous && !filedCurrent.Contains(h.InstitutionalHolderId)
+                    h.ReportDate == previous && !comparedPrevious.Contains(h.InstitutionalHolderId)
                         ? h.Value
                         : 0L
                 ),
@@ -922,6 +922,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Select(f => f.InstitutionalHolderId)
             );
     }
+
+    // The filers whose reportDate positions the buy and sell movers compare against
+    // comparedDate (Compared13FHolderIds), for callers that sum the movers themselves.
+    public IQueryable<Guid> GetCompared13FHolderIds(DateOnly reportDate, DateOnly comparedDate) =>
+        DbContext.Compared13FHolderIds(reportDate, comparedDate);
 
     // Snapshot-first denominator for public most-held rankings. Closed-quarter AUM snapshots
     // already materialise the exact 13F filer universe, avoiding a corpus-wide DISTINCT that
@@ -1368,6 +1373,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             PreviousShares = snapshot.PreviousShares,
             CurrentValue = snapshot.CurrentValue,
             PreviousValue = snapshot.PreviousValue,
+            UnmatchedCurrentShares = snapshot.UnmatchedCurrentShares,
+            UnmatchedPreviousShares = snapshot.UnmatchedPreviousShares,
+            UnmatchedCurrentValue = snapshot.UnmatchedCurrentValue,
+            UnmatchedPreviousValue = snapshot.UnmatchedPreviousValue,
             CurrentFilerCount = snapshot.CurrentFilerCount,
             PreviousFilerCount = snapshot.PreviousFilerCount,
             NewFilerCount = snapshot.NewFilerCount,
@@ -1694,8 +1703,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
         if (!combined)
         {
-            var filedCurrent = DbContext.Filed13FHolderIds(current);
-            var filedPrevious = DbContext.Filed13FHolderIds(previous);
+            var comparedCurrent = DbContext.Compared13FHolderIds(current, previous);
+            var comparedPrevious = DbContext.Compared13FHolderIds(previous, current);
             return await GetAll()
                 .Where(Is13F)
                 .Where(holding =>
@@ -1728,13 +1737,13 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     ),
                     UnmatchedCurrentShares = group.Sum(row =>
                         row.Holding.ReportDate == current
-                        && !filedPrevious.Contains(row.Holding.InstitutionalHolderId)
+                        && !comparedCurrent.Contains(row.Holding.InstitutionalHolderId)
                             ? row.Holding.Shares
                             : 0L
                     ),
                     UnmatchedPreviousShares = group.Sum(row =>
                         row.Holding.ReportDate == previous
-                        && !filedCurrent.Contains(row.Holding.InstitutionalHolderId)
+                        && !comparedPrevious.Contains(row.Holding.InstitutionalHolderId)
                             ? row.Holding.Shares
                             : 0L
                     ),
@@ -1742,6 +1751,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 .ToListAsync(cancellationToken);
         }
 
+        // Unmatched current shares follow GetQuarterlyActivityCombined: a filed row of a filer
+        // without a previous 13F, or a moved predecessor's carried row.
+        var comparedCurrentCombined = DbContext.Compared13FHolderIds(current, previous);
+        var movedPredecessors = DbContext
+            .ComparableSuccessionsAcross(current, previous)
+            .Select(succession => succession.PredecessorHolderId);
         var currentRows = await GetCombinedQuarter(current, previous)
             .Where(holding => commonStockIds.Contains(holding.EquityIssuerId))
             .Join(
@@ -1765,6 +1780,18 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 group.Key.PriceSeriesTicker,
                 group.Key.SourceReportDate,
                 Shares = group.Sum(row => row.Holding.Shares),
+                UnmatchedShares = group.Sum(row =>
+                    (
+                        row.Holding.ReportDate == current
+                        && !comparedCurrentCombined.Contains(row.Holding.InstitutionalHolderId)
+                    )
+                    || (
+                        row.Holding.ReportDate == previous
+                        && movedPredecessors.Contains(row.Holding.InstitutionalHolderId)
+                    )
+                        ? row.Holding.Shares
+                        : 0L
+                ),
             })
             .ToListAsync(cancellationToken);
         var previousRows = await GetAll()
@@ -1801,6 +1828,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         )
             .GroupBy(split => split.EquityIssuerId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<StockSplit>)group.ToList());
+        // Each source quarter's shares restated onto the current basis, the total and its
+        // unmatched part alike.
         var currentLookup = currentRows
             .GroupBy(row => new
             {
@@ -1811,16 +1840,23 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .ToDictionary(
                 group => (group.Key.EquityIssuerId, group.Key.PriceSeriesTicker),
                 group =>
-                    group.Sum(row =>
+                {
+                    long Restate(long shares, DateOnly sourceReportDate) =>
                         RestateShareCountBetween(
-                            row.Shares,
-                            row.SourceReportDate,
+                            shares,
+                            sourceReportDate,
                             current,
                             group.Key.PrimaryTicker,
                             group.Key.PriceSeriesTicker,
                             splitsByStock.GetValueOrDefault(group.Key.EquityIssuerId) ?? []
+                        );
+                    return (
+                        Shares: group.Sum(row => Restate(row.Shares, row.SourceReportDate)),
+                        Unmatched: group.Sum(row =>
+                            Restate(row.UnmatchedShares, row.SourceReportDate)
                         )
-                    )
+                    );
+                }
             );
         var previousLookup = previousRows.ToDictionary(
             row => (row.EquityIssuerId, row.PriceSeriesTicker),
@@ -1834,8 +1870,9 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 ReportDate = current,
                 IsCombined = true,
                 PriceSeriesTicker = key.PriceSeriesTicker,
-                CurrentShares = currentLookup.GetValueOrDefault(key),
+                CurrentShares = currentLookup.GetValueOrDefault(key).Shares,
                 PreviousShares = previousLookup.GetValueOrDefault(key),
+                UnmatchedCurrentShares = currentLookup.GetValueOrDefault(key).Unmatched,
             })
             .ToList();
     }
@@ -2430,11 +2467,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // the combined view (current filers + previous-quarter fallback for non-filers).
     // The "previous" side uses the actual previous quarter for delta comparison. For
     // non-filers the combined shares equal their previous shares, so the delta is zero.
+    // Unmatched current: a filed row whose filer has no 13F for the previous quarter (a
+    // first-time filer's book is no buy) and, the one carried row it takes, a predecessor's
+    // book carried forward although its comparable successor already filed: the successor's
+    // book then compares with the predecessor's previous one instead of counting twice. Every
+    // previous-quarter position is matched: a filer that has not filed yet is carried forward.
     public IQueryable<MarketWideStockActivity> GetQuarterlyActivityCombined(
         DateOnly current,
         DateOnly previous
     )
     {
+        var comparedCurrent = DbContext.Compared13FHolderIds(current, previous);
+        var movedPredecessors = DbContext
+            .ComparableSuccessionsAcross(current, previous)
+            .Select(succession => succession.PredecessorHolderId);
         return BothQuarters(current, previous)
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockActivity
@@ -2484,6 +2530,51 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         .Sum(h => (long?)h.Value)
                     ?? 0L,
                 PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
+                UnmatchedCurrentShares = g.Sum(h =>
+                    (h.ReportDate == current && !comparedCurrent.Contains(h.InstitutionalHolderId))
+                    || (
+                        h.ReportDate == previous
+                        && movedPredecessors.Contains(h.InstitutionalHolderId)
+                        && !DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(c =>
+                                c.ReportDate == current
+                                && c.FilingType == FilingType.Form13F
+                                && c.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                        && !Zero13FRestatements()
+                            .Any(f =>
+                                f.ReportDate == current
+                                && f.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                    )
+                        ? h.Shares
+                        : 0L
+                ),
+                UnmatchedCurrentValue = g.Sum(h =>
+                    (h.ReportDate == current && !comparedCurrent.Contains(h.InstitutionalHolderId))
+                    || (
+                        h.ReportDate == previous
+                        && movedPredecessors.Contains(h.InstitutionalHolderId)
+                        && !DbContext
+                            .Set<InstitutionalHolding>()
+                            .Any(c =>
+                                c.ReportDate == current
+                                && c.FilingType == FilingType.Form13F
+                                && c.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                        && !Zero13FRestatements()
+                            .Any(f =>
+                                f.ReportDate == current
+                                && f.InstitutionalHolderId == h.InstitutionalHolderId
+                            )
+                    )
+                        ? h.Value
+                        : 0L
+                ),
+                // Carried forward or filed, every previous-quarter position has a current side.
+                UnmatchedPreviousShares = 0L,
+                UnmatchedPreviousValue = 0L,
                 CurrentFilerCount = g.Where(h =>
                         h.ReportDate == current
                         || (

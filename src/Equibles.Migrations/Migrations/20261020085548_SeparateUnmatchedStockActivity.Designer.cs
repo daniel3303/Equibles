@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020074641_SeparateUnmatchedStockActivity")]
+    [Migration("20261020085548_SeparateUnmatchedStockActivity")]
     partial class SeparateUnmatchedStockActivity
     {
         /// <inheritdoc />
@@ -2502,8 +2502,15 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<int?>("ParserVersion")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("ReadAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefusalReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<int>("Rules")
                         .HasColumnType("integer");
@@ -4131,6 +4138,18 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("SoldOutFilerCount")
                         .HasColumnType("integer");
 
+                    b.Property<long>("UnmatchedCurrentShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedCurrentValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UnmatchedPreviousValue")
+                        .HasColumnType("bigint");
+
                     b.HasKey("EquityIssuerId", "ReportDate");
 
                     b.HasIndex("ReportDate");
@@ -4445,6 +4464,12 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("AcquiredDisposed")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("BalanceFootnoteIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");

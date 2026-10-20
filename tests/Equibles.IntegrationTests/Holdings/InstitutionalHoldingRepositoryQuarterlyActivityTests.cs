@@ -230,6 +230,41 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
         buyers.Should().BeEmpty("the first-time filer's 9,000 shares are no buy");
     }
 
+    // A CIK move whose two books are comparable is one holder across the quarter: the successor's
+    // first book compares with the predecessor's last, neither left out nor counted as new.
+    [Fact]
+    public async Task GetQuarterlyActivity_ComparableCikMove_ComparesTheSuccessorWithThePredecessor()
+    {
+        await using var seed = FreshContext();
+        EquityIssuer stock = await SeedStock(seed, ticker: "MSFT");
+        var predecessor = await SeedHolder(seed, cik: "21");
+        var successor = await SeedHolder(seed, cik: "22");
+        seed.Add(MakeHolding(stock, predecessor, Prior, shares: 5_000, value: 500_000));
+        seed.Add(MakeHolding(stock, successor, Current, shares: 5_500, value: 550_000));
+        seed.Add(
+            new HolderSuccession
+            {
+                PredecessorHolderId = predecessor.Id,
+                SuccessorHolderId = successor.Id,
+                PredecessorLastReportDate = Prior,
+                SuccessorFirstReportDate = Current,
+                Basis = HolderSuccessionBasis.NoticeReportedBy,
+                PredecessorGroupValue = 500_000,
+                SuccessorGroupValue = 550_000,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var row = await new InstitutionalHoldingRepository(read)
+            .GetQuarterlyActivity(Current, Prior)
+            .SingleAsync(a => a.CommonStockId == stock.Id);
+
+        (row.UnmatchedCurrentShares, row.UnmatchedPreviousShares).Should().Be((0L, 0L));
+        row.DeltaShares.Should().Be(500);
+        row.DeltaValue.Should().Be(50_000);
+    }
+
     private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker

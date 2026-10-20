@@ -56,13 +56,17 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         builder.Entity<StockQuarterlyListingActivity>().Ignore(row => row.TopFiveValue);
         builder.Entity<StockQuarterlyListingActivity>().Ignore(row => row.TopTenValue);
 
-        // Added by 20261020074641_SeparateUnmatchedStockActivity.
+        // Added by 20261020085548_SeparateUnmatchedStockActivity.
         builder.Entity<StockQuarterlyActivity>().Ignore(row => row.UnmatchedCurrentShares);
         builder.Entity<StockQuarterlyActivity>().Ignore(row => row.UnmatchedPreviousShares);
         builder.Entity<StockQuarterlyActivity>().Ignore(row => row.UnmatchedCurrentValue);
         builder.Entity<StockQuarterlyActivity>().Ignore(row => row.UnmatchedPreviousValue);
         builder.Entity<StockQuarterlyListingActivity>().Ignore(row => row.UnmatchedCurrentShares);
         builder.Entity<StockQuarterlyListingActivity>().Ignore(row => row.UnmatchedPreviousShares);
+        builder.Entity<StockQuarterlyActivityCombined>().Ignore(row => row.UnmatchedCurrentShares);
+        builder.Entity<StockQuarterlyActivityCombined>().Ignore(row => row.UnmatchedPreviousShares);
+        builder.Entity<StockQuarterlyActivityCombined>().Ignore(row => row.UnmatchedCurrentValue);
+        builder.Entity<StockQuarterlyActivityCombined>().Ignore(row => row.UnmatchedPreviousValue);
 
         // Added by 20261015133022_DocumentAsFiledPdf.
         builder.Entity<Document>().Ignore(document => document.AsFiledPdfContent);

@@ -4,6 +4,7 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -129,6 +130,87 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         listing.CurrentShares.Should().Be(2_000);
         listing.PreviousShares.Should().Be(1_600);
         listing.ComputedAt.Should().Be(row.ComputedAt);
+    }
+
+    // Window open: a first-time filer's book is no buy, and a CIK move compares the successor's
+    // first book with the predecessor's last one instead of counting it as new beside the
+    // predecessor's carried-forward book. A move whose books differ too much to be one holder
+    // (a successor that took a slice) reads as a first-time filer beside a carried book.
+    [Fact]
+    public async Task RebuildQuarterAsync_WindowOpen_ComparesOnlyFilersWithAPriorQuarter()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        EquityIssuer stock = await SeedStock(seed, "MOVE", industry);
+        var both = await SeedHolder(seed, "H101"); // filed both quarters: 1,000 -> 1,200
+        var firstFiler = await SeedHolder(seed, "H102"); // first 13F: 9,000
+        var predecessor = await SeedHolder(seed, "H103"); // last 13F last quarter: 5,000
+        var successor = await SeedHolder(seed, "H104"); // its CIK move: 5,500
+        var slicedPredecessor = await SeedHolder(seed, "H105"); // 2,000, carried forward
+        var sliceSuccessor = await SeedHolder(seed, "H106"); // took a 600 slice
+        seed.AddRange(
+            MakeHolding(stock, both, OpenPrev, 100_000, "acc-both-prev"),
+            MakeHolding(stock, both, OpenCur, 120_000, "acc-both-cur"),
+            MakeHolding(stock, firstFiler, OpenCur, 900_000, "acc-first-cur"),
+            MakeHolding(stock, predecessor, OpenPrev, 500_000, "acc-pred-prev"),
+            MakeHolding(stock, successor, OpenCur, 550_000, "acc-succ-cur"),
+            MakeHolding(stock, slicedPredecessor, OpenPrev, 200_000, "acc-sliced-prev"),
+            MakeHolding(stock, sliceSuccessor, OpenCur, 60_000, "acc-slice-cur"),
+            Succession(predecessor, successor, 500_000, 550_000),
+            Succession(slicedPredecessor, sliceSuccessor, 200_000, 60_000)
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(OpenCur, CancellationToken.None);
+
+        await using var read = FreshContext();
+        var row = await read.Set<StockQuarterlyActivityCombined>()
+            .SingleAsync(s => s.EquityIssuerId == stock.Id && s.ReportDate == OpenCur);
+        // MakeHolding stores Shares = value / 100.
+        row.CurrentShares.Should()
+            .Be(23_300, "every filed book plus both predecessors carried forward");
+        row.PreviousShares.Should().Be(8_000);
+        row.UnmatchedCurrentShares.Should()
+            .Be(
+                14_600,
+                "the first filer's 9,000, the moved predecessor's carried 5,000 and the slice's 600"
+            );
+        row.UnmatchedCurrentValue.Should().Be(1_460_000);
+        row.UnmatchedPreviousShares.Should()
+            .Be(0, "a filer that has not filed yet is carried forward");
+        row.UnmatchedPreviousValue.Should().Be(0);
+        var listing = await read.Set<StockQuarterlyListingActivity>()
+            .SingleAsync(snapshot =>
+                snapshot.EquityIssuerId == stock.Id
+                && snapshot.ReportDate == OpenCur
+                && snapshot.IsCombined
+            );
+        listing.UnmatchedCurrentShares.Should().Be(14_600);
+        listing.UnmatchedPreviousShares.Should().Be(0);
+
+        var served = (
+            await new InstitutionalHoldingRepository(read).GetMarketActivitySnapshotBacked(
+                OpenCur,
+                OpenPrev,
+                combined: true
+            )
+        ).Single(a => a.CommonStockId == stock.Id);
+        served
+            .DeltaShares.Should()
+            .Be(700, "the filer of both quarters added 200 and the moved book grew 500");
+        served.DeltaValue.Should().Be(70_000);
+        var live = await new InstitutionalHoldingRepository(read)
+            .GetQuarterlyActivityCombined(OpenCur, OpenPrev)
+            .SingleAsync(a => a.CommonStockId == stock.Id);
+        live.UnmatchedCurrentShares.Should().Be(14_600);
+        live.DeltaShares.Should().Be(700);
+
+        // The as-filed snapshot of the same quarter pairs the move the same way: only the first
+        // filer, the slice and the sliced predecessor's unfiled book stay out.
+        var filed = await read.Set<StockQuarterlyActivity>()
+            .SingleAsync(s => s.EquityIssuerId == stock.Id && s.ReportDate == OpenCur);
+        (filed.UnmatchedCurrentShares, filed.UnmatchedPreviousShares).Should().Be((9_600L, 2_000L));
+        filed.ToActivity().DeltaShares.Should().Be(700, "both lanes agree on the matched change");
     }
 
     [Fact]
@@ -393,6 +475,25 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         await ctx.SaveChangesAsync();
         return stock;
     }
+
+    // A stored CIK move from last quarter's predecessor to this quarter's successor, stamped
+    // with its group's two book values as the succession refresh does.
+    private static HolderSuccession Succession(
+        InstitutionalHolder predecessor,
+        InstitutionalHolder successor,
+        long predecessorValue,
+        long successorValue
+    ) =>
+        new()
+        {
+            PredecessorHolderId = predecessor.Id,
+            SuccessorHolderId = successor.Id,
+            PredecessorLastReportDate = OpenPrev,
+            SuccessorFirstReportDate = OpenCur,
+            Basis = HolderSuccessionBasis.NoticeReportedBy,
+            PredecessorGroupValue = predecessorValue,
+            SuccessorGroupValue = successorValue,
+        };
 
     private static async Task<InstitutionalHolder> SeedHolder(
         Equibles.Data.EquiblesFinancialDbContext ctx,

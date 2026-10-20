@@ -12,6 +12,14 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(SuccessorHolderId))]
 public class HolderSuccession
 {
+    /// <summary>
+    /// The largest ratio between a group's two book values that a quarter-over-quarter
+    /// comparison still treats as one holder: complete successions keep their book within about
+    /// 20% across the quarter, while a successor that took a slice of the book, or a parent that
+    /// also reports other books, falls outside.
+    /// </summary>
+    public const double MaximumComparableBookRatio = 1.5;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid PredecessorHolderId { get; set; }

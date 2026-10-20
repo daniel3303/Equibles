@@ -10,9 +10,10 @@ namespace Equibles.Migrations.Migrations
         // The buy and sell movers compared every filer's position, so a filer without a 13F for
         // one quarter read as selling or buying its whole book. The new columns keep those
         // positions apart; stamping every quarter dirty lets AumSnapshotDrainWorker refill them
-        // one quarter at a time after its cooldown. Until then they read zero and the movers
-        // keep the old figures. The stamp replaces a pending one or an in-flight lease too, so a
-        // rebuild an old container runs during the rollout cannot clear it.
+        // one quarter at a time after its cooldown, the open window's combined lane with it.
+        // Until then they read zero and the movers keep the old figures. The stamp replaces a
+        // pending one or an in-flight lease too, so a rebuild an old container runs during the
+        // rollout cannot clear it.
         public const string RepairSql = """
             UPDATE "AumQuarterlySnapshot" SET "DirtyAt" = now();
             """;
@@ -30,6 +31,34 @@ namespace Equibles.Migrations.Migrations
             migrationBuilder.AddColumn<long>(
                 name: "UnmatchedPreviousShares",
                 table: "StockQuarterlyListingActivity",
+                type: "bigint",
+                nullable: false,
+                defaultValue: 0L);
+
+            migrationBuilder.AddColumn<long>(
+                name: "UnmatchedCurrentShares",
+                table: "StockQuarterlyActivityCombined",
+                type: "bigint",
+                nullable: false,
+                defaultValue: 0L);
+
+            migrationBuilder.AddColumn<long>(
+                name: "UnmatchedCurrentValue",
+                table: "StockQuarterlyActivityCombined",
+                type: "bigint",
+                nullable: false,
+                defaultValue: 0L);
+
+            migrationBuilder.AddColumn<long>(
+                name: "UnmatchedPreviousShares",
+                table: "StockQuarterlyActivityCombined",
+                type: "bigint",
+                nullable: false,
+                defaultValue: 0L);
+
+            migrationBuilder.AddColumn<long>(
+                name: "UnmatchedPreviousValue",
+                table: "StockQuarterlyActivityCombined",
                 type: "bigint",
                 nullable: false,
                 defaultValue: 0L);
@@ -75,6 +104,22 @@ namespace Equibles.Migrations.Migrations
             migrationBuilder.DropColumn(
                 name: "UnmatchedPreviousShares",
                 table: "StockQuarterlyListingActivity");
+
+            migrationBuilder.DropColumn(
+                name: "UnmatchedCurrentShares",
+                table: "StockQuarterlyActivityCombined");
+
+            migrationBuilder.DropColumn(
+                name: "UnmatchedCurrentValue",
+                table: "StockQuarterlyActivityCombined");
+
+            migrationBuilder.DropColumn(
+                name: "UnmatchedPreviousShares",
+                table: "StockQuarterlyActivityCombined");
+
+            migrationBuilder.DropColumn(
+                name: "UnmatchedPreviousValue",
+                table: "StockQuarterlyActivityCombined");
 
             migrationBuilder.DropColumn(
                 name: "UnmatchedCurrentShares",

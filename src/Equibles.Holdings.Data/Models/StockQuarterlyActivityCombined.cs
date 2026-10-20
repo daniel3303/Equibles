@@ -32,6 +32,14 @@ public class StockQuarterlyActivityCombined
     public long CurrentValue { get; set; }
     public long PreviousValue { get; set; }
 
+    // The part of the current totals the buy and sell movers leave out: a first-time filer's
+    // filed book, and a moved predecessor's book carried forward beside its successor's. The
+    // previous pair stays zero, since a filer that has not filed yet is carried forward.
+    public long UnmatchedCurrentShares { get; set; }
+    public long UnmatchedPreviousShares { get; set; }
+    public long UnmatchedCurrentValue { get; set; }
+    public long UnmatchedPreviousValue { get; set; }
+
     public int CurrentFilerCount { get; set; }
     public int PreviousFilerCount { get; set; }
     public int NewFilerCount { get; set; }

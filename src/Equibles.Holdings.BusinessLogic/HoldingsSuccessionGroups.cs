@@ -11,9 +11,7 @@ namespace Equibles.Holdings.BusinessLogic;
 /// </summary>
 public static class HoldingsSuccessionGroups
 {
-    // Complete successions keep their book within about 20% across the quarter; a successor
-    // that took a slice of the book, or a parent that also reports other books, falls outside.
-    public const double MaximumBookRatio = 1.5;
+    public const double MaximumBookRatio = HolderSuccession.MaximumComparableBookRatio;
 
     public static bool IsComparable(long predecessorValue, long successorValue) =>
         Math.Min(predecessorValue, successorValue) > 0
