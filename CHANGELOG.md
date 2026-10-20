@@ -141,6 +141,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Removed
 
+- `InstitutionalHolder.Classification` and the `FundClassification` enum, the name matcher's last trace. Migration `UnmapInstitutionalHolderClassification` drops only `IX_InstitutionalHolder_Classification`: the previous release still maps the column while the rollout replaces its containers, and the column's `NOT NULL DEFAULT 0` fills rows the new model inserts. The release after this one drops the column itself with raw SQL. `HolderNameClassificationRetirementTests` keeps failing on any new reader, writer or name classifier.
 - The name matcher behind `InstitutionalHolder.Classification`: `FundClassifierService`, the `BackfillHolderClassifications` pass at the start of every holdings cycle and `InstitutionalHolderRepository.GetUnclassified()`. It guessed a filer's type from words in its name ("SECURITIES" read as a broker-dealer, "ETF" as a mutual fund); holder types come only from `InstitutionalHolderProfile`. New holders keep `Classification` at `Unknown` and nothing reads it. The column and the `FundClassification` enum stay mapped for one release so hosts still running the previous build keep working, and `HolderNameClassificationRetirementTests` fails on any new reader, writer or name classifier.
 
 ### Fixed
