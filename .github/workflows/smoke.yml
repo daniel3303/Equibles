@@ -37,7 +37,7 @@ jobs:
         run: dotnet test tests/Equibles.SmokeTests/Equibles.SmokeTests.csproj --no-build -c Release --filter "Category=Live" --logger "trx;LogFileName=results.trx" --results-directory ./smoke-results
 
       - name: Test Report
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2  # v3
+        uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a  # v3
         if: success() || failure()
         with:
           name: Smoke Test Results
