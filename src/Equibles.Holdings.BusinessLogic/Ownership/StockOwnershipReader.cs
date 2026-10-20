@@ -314,12 +314,11 @@ public class StockOwnershipReader
         if (purposeSource == null || accessions.Count == 0)
             return;
         var purposes = await purposeSource.Read(accessions, cancellationToken);
-        foreach (var schedule in schedules13D)
-            if (
-                accessionOf(schedule) is { } accession
-                && purposes.TryGetValue(accession, out var purpose)
-            )
-                setPurpose(schedule, purpose);
+        var described = schedules13D.Where(schedule =>
+            accessionOf(schedule) is { } accession && purposes.ContainsKey(accession)
+        );
+        foreach (var schedule in described)
+            setPurpose(schedule, purposes[accessionOf(schedule)]);
     }
 
     private async Task<(long? Shares, string Unavailable)> SharesOutstanding(
