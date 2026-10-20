@@ -35,4 +35,11 @@ public enum HolderEntityType
 
     [Display(Name = "Non-US institution")]
     NonUsInstitution = 9,
+
+    /// <summary>
+    /// A parent holding company or control person by its 13D/13G self-report (code HC), with no
+    /// operating type (adviser, bank, insurer and so on) on its current records.
+    /// </summary>
+    [Display(Name = "Holding company")]
+    HoldingCompany = 10,
 }

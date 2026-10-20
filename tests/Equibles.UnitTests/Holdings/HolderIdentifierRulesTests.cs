@@ -1,3 +1,6 @@
+using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Models;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Sec.Data.Models;
@@ -6,6 +9,112 @@ namespace Equibles.UnitTests.Holdings;
 
 public class HolderIdentifierRulesTests
 {
+    private static readonly HolderEvidenceContext Context = new(
+        new DateOnly(2026, 10, 20),
+        new DateOnly(2026, 10, 1),
+        new DateOnly(2026, 10, 1)
+    );
+
+    [Fact]
+    public void MultiPerson13G_SingleItem3Code_13d1bOnly()
+    {
+        // FMR LLC's joint 13G with Abigail P. Johnson (HC and IN on the cover pages), filed under
+        // Rule 13d-1(b) alone, whose Item 3 checks HC.
+        var filing = Recorded(
+            "sc13g-fmr-joint-hc.xml",
+            "0000315066-26-002332",
+            "0000315066",
+            new DateOnly(2026, 10, 7)
+        );
+
+        filing.Persons.Should().HaveCount(2);
+        filing.Rules.Should().Be(Schedule13GRules.QualifiedInstitution);
+        var (cik, fact) = HolderIdentifierRules
+            .AttributeBeneficialOwnership(filing)
+            .Should()
+            .ContainSingle()
+            .Subject;
+        cik.Should().Be("315066");
+        fact.Source.Should().Be(HolderEvidenceSource.Schedule13G);
+        fact.Field.Should().Be(HolderEvidenceFields.TypeOfPersonFiling);
+        fact.Value.Should().Be(nameof(ReportingPersonTypes.ParentHoldingCompany));
+        fact.SourceKey.Should().Be("0000315066-26-002332");
+        fact.AsOf.Should().Be(new DateOnly(2026, 10, 7));
+        HolderEntityTypeDeriver
+            .Derive([fact], Context)
+            .EntityType.Should()
+            .Be(HolderEntityType.HoldingCompany);
+    }
+
+    [Theory]
+    [InlineData(Schedule13GRules.PassiveInvestor, ReportingPersonTypes.ParentHoldingCompany, null)]
+    [InlineData(
+        Schedule13GRules.QualifiedInstitution | Schedule13GRules.PassiveInvestor,
+        ReportingPersonTypes.ParentHoldingCompany,
+        null
+    )]
+    [InlineData(Schedule13GRules.None, ReportingPersonTypes.ParentHoldingCompany, null)]
+    [InlineData(
+        Schedule13GRules.QualifiedInstitution,
+        ReportingPersonTypes.ParentHoldingCompany | ReportingPersonTypes.InvestmentAdviser,
+        null
+    )]
+    [InlineData(Schedule13GRules.QualifiedInstitution, ReportingPersonTypes.None, null)]
+    [InlineData(
+        Schedule13GRules.QualifiedInstitution,
+        ReportingPersonTypes.ParentHoldingCompany,
+        "XX"
+    )]
+    public void MultiPerson13G_WithoutOneItem3CodeUnder13d1bAlone_SpeaksForNobody(
+        Schedule13GRules rules,
+        ReportingPersonTypes item3,
+        string unrecognized
+    )
+    {
+        var filing = Recorded(
+            "sc13g-fmr-joint-hc.xml",
+            "0000315066-26-002332",
+            "0000315066",
+            new DateOnly(2026, 10, 7)
+        ) with
+        {
+            Rules = rules,
+            FilingPersonTypes = item3,
+            UnrecognizedFilingPersonTypeCodes = unrecognized,
+        };
+
+        HolderIdentifierRules.AttributeBeneficialOwnership(filing).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SinglePerson13G_ParentHoldingCompany_ReadsHoldingCompany()
+    {
+        // BlackRock, Inc.'s 13G: one person, HC on its cover page and in Item 3.
+        var filing = Recorded(
+            "sc13g-blackrock-hc.xml",
+            "0002012383-26-003340",
+            "0002012383",
+            new DateOnly(2026, 10, 5)
+        );
+
+        var attributed = HolderIdentifierRules.AttributeBeneficialOwnership(filing).ToList();
+
+        attributed.Should().OnlyContain(item => item.Cik == "2012383");
+        attributed
+            .Select(item => item.Fact.Field)
+            .Should()
+            .Equal(
+                HolderEvidenceFields.TypeOfReportingPerson,
+                HolderEvidenceFields.TypeOfPersonFiling
+            );
+        var decision = HolderEntityTypeDeriver.Derive(
+            attributed.Select(item => item.Fact),
+            Context
+        );
+        decision.EntityType.Should().Be(HolderEntityType.HoldingCompany);
+        decision.HasConflictingEvidence.Should().BeFalse();
+    }
+
     [Theory]
     [InlineData("000160108", 160108)]
     [InlineData(" 105958 ", 105958)]
@@ -118,5 +227,37 @@ public class HolderIdentifierRulesTests
         ]);
 
         summaries.Should().BeEmpty();
+    }
+
+    // A recorded primary_doc.xml read the way the detail sync stores it and the profile refresh
+    // loads it back.
+    private static BeneficialOwnershipEvidenceRow Recorded(
+        string fixture,
+        string accessionNumber,
+        string cik,
+        DateOnly filingDate
+    )
+    {
+        var xml = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Holdings13DG", fixture)
+        );
+        var entity = BeneficialOwnershipDetailWriter.ToEntity(
+            new Filing13DGXmlParser().ParseFiling(xml, accessionNumber, cik, filingDate)
+        );
+        return new BeneficialOwnershipEvidenceRow(
+            entity.AccessionNumber,
+            entity.FilingType,
+            entity.FilingDate,
+            entity.FilerCik,
+            entity.FilingPersonTypes,
+            entity
+                .ReportingPersons.OrderBy(person => person.Ordinal)
+                .Select(person => (person.Cik, person.Types))
+                .ToList()
+        )
+        {
+            Rules = entity.Rules,
+            UnrecognizedFilingPersonTypeCodes = entity.UnrecognizedFilingPersonTypeCodes,
+        };
     }
 }

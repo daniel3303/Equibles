@@ -66,7 +66,7 @@ public class HolderEntityTypeDeriverTests
     [InlineData(ReportingPersonTypes.EmployeeBenefitPlan, HolderEntityType.BenefitPlan)]
     [InlineData(ReportingPersonTypes.ChurchPlan, HolderEntityType.BenefitPlan)]
     [InlineData(ReportingPersonTypes.NonUsInstitution, HolderEntityType.NonUsInstitution)]
-    [InlineData(ReportingPersonTypes.ParentHoldingCompany, HolderEntityType.Unknown)]
+    [InlineData(ReportingPersonTypes.ParentHoldingCompany, HolderEntityType.HoldingCompany)]
     [InlineData(ReportingPersonTypes.Corporation, HolderEntityType.Unknown)]
     [InlineData(ReportingPersonTypes.Partnership, HolderEntityType.Unknown)]
     [InlineData(ReportingPersonTypes.Individual, HolderEntityType.Unknown)]
@@ -250,6 +250,127 @@ public class HolderEntityTypeDeriverTests
         decision.SourceKey.Should().Be("a-2");
     }
 
+    [Theory]
+    [InlineData(ReportingPersonTypes.InvestmentAdviser, HolderEntityType.InvestmentAdviser)]
+    [InlineData(ReportingPersonTypes.Bank, HolderEntityType.Bank)]
+    [InlineData(ReportingPersonTypes.BrokerDealer, HolderEntityType.BrokerDealer)]
+    [InlineData(ReportingPersonTypes.NonUsInstitution, HolderEntityType.NonUsInstitution)]
+    [InlineData(ReportingPersonTypes.None, HolderEntityType.HoldingCompany)]
+    public void ParentHoldingCompany_OnlyWithoutOperatingCode(
+        ReportingPersonTypes operating,
+        HolderEntityType expected
+    )
+    {
+        // In one code list.
+        var together = HolderEntityTypeDeriver.Derive(
+            [SelfReport(ReportingPersonTypes.ParentHoldingCompany | operating, Today)],
+            Context
+        );
+        // A 13G whose cover page says HC and whose Item 3 says the operating category: two facts
+        // with one accession and date, the cover page's first.
+        var sameFiling = HolderEntityTypeDeriver.Derive(
+            [
+                SelfReport(
+                    ReportingPersonTypes.ParentHoldingCompany,
+                    Today,
+                    HolderEvidenceSource.Schedule13G
+                ),
+                SelfReport(
+                    operating,
+                    Today,
+                    HolderEvidenceSource.Schedule13G,
+                    field: HolderEvidenceFields.TypeOfPersonFiling
+                ),
+            ],
+            Context
+        );
+        // A newer filing that says only HC.
+        var newerHoldingCompany = HolderEntityTypeDeriver.Derive(
+            [
+                SelfReport(operating, Today.AddMonths(-6), accession: "a-1"),
+                SelfReport(ReportingPersonTypes.ParentHoldingCompany, Today, accession: "a-2"),
+            ],
+            Context
+        );
+
+        foreach (var decision in new[] { together, sameFiling, newerHoldingCompany })
+        {
+            decision.EntityType.Should().Be(expected);
+            decision.HasConflictingEvidence.Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public void HoldingCompanyBesideBank_NoConflict()
+    {
+        var bySic = HolderEntityTypeDeriver.Derive(
+            [
+                SelfReport(
+                    ReportingPersonTypes.ParentHoldingCompany,
+                    Today,
+                    HolderEvidenceSource.Schedule13G
+                ),
+                Sic("6022"),
+            ],
+            Context
+        );
+        var byAdv = HolderEntityTypeDeriver.Derive(
+            [
+                SelfReport(ReportingPersonTypes.ParentHoldingCompany, Today),
+                Adv(HolderEvidenceFields.AdvRegistered),
+            ],
+            Context
+        );
+
+        bySic.EntityType.Should().Be(HolderEntityType.Bank);
+        bySic.Source.Should().Be(HolderEvidenceSource.SecFilerProfile);
+        bySic.HasConflictingEvidence.Should().BeFalse();
+        byAdv.EntityType.Should().Be(HolderEntityType.RegisteredAdviser);
+        byAdv.HasConflictingEvidence.Should().BeFalse();
+    }
+
+    [Fact]
+    public void HoldingCompany_StillFlagsTwoOperatingCodesBesideIt()
+    {
+        var decision = HolderEntityTypeDeriver.Derive(
+            [
+                SelfReport(
+                    ReportingPersonTypes.ParentHoldingCompany
+                        | ReportingPersonTypes.Bank
+                        | ReportingPersonTypes.InvestmentAdviser,
+                    Today
+                ),
+            ],
+            Context
+        );
+
+        decision.EntityType.Should().Be(HolderEntityType.Bank);
+        decision.HasConflictingEvidence.Should().BeTrue();
+    }
+
+    [Fact]
+    public void HoldingCompanyOnSixTwoElevenSic_ReadsHoldingCompany()
+    {
+        // SIC 6211 decides nothing, so a parent filing under it reads as its 13G says.
+        var decision = HolderEntityTypeDeriver.Derive(
+            [
+                Sic("6211"),
+                SelfReport(
+                    ReportingPersonTypes.ParentHoldingCompany,
+                    Today,
+                    HolderEvidenceSource.Schedule13G,
+                    "0002012383-26-003340"
+                ),
+            ],
+            Context
+        );
+
+        decision.EntityType.Should().Be(HolderEntityType.HoldingCompany);
+        decision.Source.Should().Be(HolderEvidenceSource.Schedule13G);
+        decision.SourceKey.Should().Be("0002012383-26-003340");
+        decision.HasConflictingEvidence.Should().BeFalse();
+    }
+
     [Fact]
     public void ListingLinkedByTheCoverCrd_OutranksOneLinkedByCik()
     {
@@ -326,13 +447,14 @@ public class HolderEntityTypeDeriverTests
         ReportingPersonTypes types,
         DateOnly filed,
         HolderEvidenceSource source = HolderEvidenceSource.Schedule13D,
-        string accession = "0000950170-26-000001"
+        string accession = "0000950170-26-000001",
+        string field = HolderEvidenceFields.TypeOfReportingPerson
     ) =>
         new()
         {
             Source = source,
             MatchedOn = HolderEvidenceMatch.Cik,
-            Field = HolderEvidenceFields.TypeOfReportingPerson,
+            Field = field,
             Value = types.ToString(),
             SourceKey = accession,
             AsOf = filed,
