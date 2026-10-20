@@ -1,0 +1,1120 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-10-09</periodOfReport>
+
+    <issuer>
+        <issuerCik>0001571996</issuerCik>
+        <issuerName>Dell Technologies Inc.</issuerName>
+        <issuerTradingSymbol>DELL</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001672565</rptOwnerCik>
+            <rptOwnerName>Silver Lake Technology Investors IV, L.P.</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O SILVER LAKE</rptOwnerStreet1>
+            <rptOwnerStreet2>2775 SAND HILL ROAD, SUITE 100</rptOwnerStreet2>
+            <rptOwnerCity>MENLO PARK</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>94025</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>true</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001672566</rptOwnerCik>
+            <rptOwnerName>Silver Lake Technology Associates IV, L.P.</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O SILVER LAKE</rptOwnerStreet1>
+            <rptOwnerStreet2>2775 SAND HILL ROAD, SUITE 100</rptOwnerStreet2>
+            <rptOwnerCity>MENLO PARK</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>94025</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>true</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001672568</rptOwnerCik>
+            <rptOwnerName>SLTA IV (GP), L.L.C.</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O SILVER LAKE</rptOwnerStreet1>
+            <rptOwnerStreet2>2775 SAND HILL ROAD, SUITE 100</rptOwnerStreet2>
+            <rptOwnerCity>MENLO PARK</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>94025</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>true</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001418226</rptOwnerCik>
+            <rptOwnerName>Silver Lake Group, L.L.C.</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O SILVER LAKE</rptOwnerStreet1>
+            <rptOwnerStreet2>2775 SAND HILL ROAD, SUITE 100</rptOwnerStreet2>
+            <rptOwnerCity>MENLO PARK</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>94025</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>true</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001651403</rptOwnerCik>
+            <rptOwnerName>Durban Egon</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O SILVER LAKE</rptOwnerStreet1>
+            <rptOwnerStreet2>2775 SAND HILL ROAD, SUITE 100</rptOwnerStreet2>
+            <rptOwnerCity>MENLO PARK</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>94025</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>true</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>false</isTenPercentOwner>
+            <isOther>false</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>false</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>M</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+                <footnoteId id="F1"/>
+                <footnoteId id="F2"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>995</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <footnoteId id="F1"/>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>995</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>44</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>572.87</value>
+                    <footnoteId id="F10"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>951</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>20</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>574.71</value>
+                    <footnoteId id="F11"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>931</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>115</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>575.42</value>
+                    <footnoteId id="F12"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>816</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>49</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>576.34</value>
+                    <footnoteId id="F13"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>767</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>56</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>577.25</value>
+                    <footnoteId id="F14"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>711</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>31</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>578.28</value>
+                    <footnoteId id="F15"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>681</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>33</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>579.58</value>
+                    <footnoteId id="F16"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>648</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>27</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>580.37</value>
+                    <footnoteId id="F17"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>621</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>54</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>581.59</value>
+                    <footnoteId id="F18"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>568</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>35</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>582.49</value>
+                    <footnoteId id="F19"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>533</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>51</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>583.44</value>
+                    <footnoteId id="F20"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>481</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>41</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>584.46</value>
+                    <footnoteId id="F21"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>440</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>112</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>585.54</value>
+                    <footnoteId id="F22"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>328</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>147</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>586.53</value>
+                    <footnoteId id="F23"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>181</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>66</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>587.26</value>
+                    <footnoteId id="F24"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>115</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>48</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>588.66</value>
+                    <footnoteId id="F25"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>67</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>67</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>589.28</value>
+                    <footnoteId id="F26"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>0</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>305</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Group, L.L.C.</value>
+                    <footnoteId id="F4"/>
+                    <footnoteId id="F5"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>277</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>See footnote</value>
+                    <footnoteId id="F6"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>283752</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>See footnote</value>
+                    <footnoteId id="F7"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>1404569</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                    <footnoteId id="F8"/>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>52295</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>See footnote</value>
+                    <footnoteId id="F9"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Class C Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>51591</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>See footnote</value>
+                    <footnoteId id="F27"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+    </nonDerivativeTable>
+
+    <derivativeTable>
+        <derivativeTransaction>
+            <securityTitle>
+                <value>Class B Common Stock</value>
+            </securityTitle>
+            <conversionOrExercisePrice>
+                <footnoteId id="F2"/>
+            </conversionOrExercisePrice>
+            <transactionDate>
+                <value>2026-10-09</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>M</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+                <footnoteId id="F1"/>
+                <footnoteId id="F2"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>995</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <exerciseDate>
+                <footnoteId id="F2"/>
+            </exerciseDate>
+            <expirationDate>
+                <footnoteId id="F2"/>
+            </expirationDate>
+            <underlyingSecurity>
+                <underlyingSecurityTitle>
+                    <value>Class C Common Stock</value>
+                </underlyingSecurityTitle>
+                <underlyingSecurityShares>
+                    <value>995</value>
+                </underlyingSecurityShares>
+            </underlyingSecurity>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>239027</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>Held through Silver Lake Technology Investors IV, L.P.</value>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </derivativeTransaction>
+        <derivativeHolding>
+            <securityTitle>
+                <value>Class B Common Stock</value>
+            </securityTitle>
+            <conversionOrExercisePrice>
+                <footnoteId id="F2"/>
+            </conversionOrExercisePrice>
+            <exerciseDate>
+                <footnoteId id="F2"/>
+            </exerciseDate>
+            <expirationDate>
+                <footnoteId id="F2"/>
+            </expirationDate>
+            <underlyingSecurity>
+                <underlyingSecurityTitle>
+                    <value>Class C Common Stock</value>
+                </underlyingSecurityTitle>
+                <underlyingSecurityShares>
+                    <value>40972828</value>
+                </underlyingSecurityShares>
+            </underlyingSecurity>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>40972828</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>See footnote</value>
+                    <footnoteId id="F28"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </derivativeHolding>
+    </derivativeTable>
+
+    <footnotes>
+        <footnote id="F1">Silver Lake Technology Investors V, L.P., SL SPV-2, L.P., Silver Lake Partners IV, L.P., Silver Lake Partners V DE (AIV), L.P., Silver Lake Technology Investors IV, L.P. and certain of their respective affiliates sold certain shares of Class C Common Stock, par value $0.01 per share (&quot;Class C Common Stock&quot;) of Dell Technologies Inc. (the &quot;Issuer&quot;) on October 9, 2026 and initiated in-kind distributions of shares of Class C Common Stock on October 9, 2026. The receipt of shares of Class C Common Stock by each of the Reporting Persons in connection with such distributions was exempt from reporting pursuant to Rule 16a-13 of the Exchange Act.</footnote>
+        <footnote id="F2">Each share of Class B Common Stock, par value $0.01 per share of the Issuer (the &quot;Class B Common Stock&quot;) is convertible into one share of Class C Common Stock at any time, at the election of the holder or automatically upon certain transfers, and has no expiration date. On October 9, 2026, certain of the Reporting Persons converted shares of Class B Common Stock into an equal number of shares of Class C Common Stock in connection with the sales and distributions described in footnote (1) above.</footnote>
+        <footnote id="F3">These securities are held by Silver Lake Technology Investors IV, L.P. The general partner of Silver Lake Technology Investors IV, L.P. is Silver Lake Technology Associates IV, L.P. and the general partner of Silver Lake Technology Associates IV, L.P. is SLTA IV (GP), L.L.C.</footnote>
+        <footnote id="F4">Silver Lake Group, L.L.C. (&quot;SLG&quot;) is the managing member of SLTA IV (GP), L.L.C. Egon Durban, who serves as a director of the Issuer, also serves as the CEO and a Managing Member of SLG. Each of the Reporting Persons may be deemed a director by deputization of the Issuer.</footnote>
+        <footnote id="F5">Reflects shares of Class C Common Stock held by SLG, including shares received in connection with the distribution of shares of Class C Common Stock described herein on October 9, 2026. The receipt of such shares of Class C Common Stock was exempt from reporting pursuant to Rule 16a-13 of the Exchange Act.</footnote>
+        <footnote id="F6">These shares of Class C Common Stock are held by entities in which Mr. Durban may be deemed to have an indirect pecuniary interest including shares received in connection with the distributions of shares of Class C Common Stock on October 9, 2026. The receipt of such shares of Class C Common Stock indirectly by Mr. Durban was exempt from reporting pursuant to Rule 16a-13 of the Exchange Act.</footnote>
+        <footnote id="F7">In connection with the distributions described in footnote (1) above, distributions of certain shares were initiated to certain employees and managing members of SLG or its affiliates, including Mr. Durban. This amount reflects 48,500, 148,194, 39,737 and 47,321 shares held by SLTA SPV-2, L.P., Silver Lake Technology Associates IV, L.P., Silver Lake Technology Associates V, L.P. and SLG, respectively, on behalf of such individuals, including shares distributed in the October 9, 2026 distributions. The receipt of such shares of Class C Common Stock was exempt from reporting pursuant to Rule 16a-13 of the Exchange Act.</footnote>
+        <footnote id="F8">Represents shares of Class C Common Stock held directly by Mr. Durban, including shares received by Mr. Durban in connection with the distribution of shares of Class C Common Stock on October 9, 2026. The deemed receipt of such shares of Class C Common Stock was exempt from reporting pursuant to Rule 16a-13 of the Exchange Act. Mr. Durban has filed a separate Form 4 reporting transactions in securities of the Issuer on October 9, 2026.</footnote>
+        <footnote id="F9">Represents shares of Class C Common Stock beneficially owned indirectly by Mr. Durban through a trust for the benefit of certain family members, including shares received in connection with the distributions of shares of Class C Common Stock on October 9, 2026. The receipt of such shares of Class C Common Stock indirectly by Mr. Durban was exempt from reporting pursuant to Rule 16a-13 of the Exchange Act.</footnote>
+        <footnote id="F10">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $572.6200 to $573.0800 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F11">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $573.8200 to $574.7900 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F12">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $574.8900 to $575.8809 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F13">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $575.8900 to $576.8800 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F14">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $576.9000 to $577.8500 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F15">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $577.9200 to $578.9000 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F16">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $579.0000 to $579.9300 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F17">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $580.0000 to $580.8200 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F18">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $581.0000 to $581.9900 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F19">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $582.0000 to $582.9000 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F20">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $583.0000 to $583.9800 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F21">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $584.0000 to $584.9900 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F22">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $585.0000 to $585.9949 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F23">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $586.0000 to $586.9976 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F24">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $587.0000 to $587.9960 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F25">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $588.0278 to $588.9900 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F26">The price reported in Column 4 is a weighted average price. These shares were sold in multiple transactions at prices ranging from $589.0000 to $589.8300 per share, inclusive. The Reporting Persons undertake to provide to the Issuer, any security holder of the Issuer, or the staff of the SEC, upon request, full information regarding the number of shares sold at each separate price within the range set forth in this footnote.</footnote>
+        <footnote id="F27">Following the transactions described in footnote (1), SL SPV-2, L.P. directly holds 21,486 shares of Class C Common Stock, Silver Lake Partners IV, L.P. directly holds 18,986 shares of Class C Common Stock, Silver Lake Partners V DE (AIV), L.P. directly holds 11,119 shares of Class C Common Stock and Silver Lake Technology Investors V, L.P. directly holds 0 shares of Class C Common Stock, which securities and transactions are reported on separate Form 4 filings.</footnote>
+        <footnote id="F28">Following the transactions described in footnote (1), SL SPV-2, L.P. directly holds 15,825,543 shares of Class B Common Stock, Silver Lake Partners IV, L.P. directly holds 16,245,713 shares of Class B Common Stock, Silver Lake Partners V DE (AIV), L.P. directly holds 8,793,784 shares of Class B Common Stock and Silver Lake Technology Investors V, L.P. directly holds 107,788 shares of Class B Common Stock, which securities and transactions are reported on separate Form 4 filings.</footnote>
+    </footnotes>
+
+    <remarks>The Reporting Persons are jointly filing this Form 4 pursuant to Rule 16a-3(j) under the Exchange Act. This filing shall not be deemed an admission that the Reporting Persons are beneficial owners of all securities covered by this filing for purposes of Section 16 of the Exchange Act or otherwise, and each Reporting Person disclaims beneficial ownership of these securities, except to the extent of such Reporting Person's pecuniary interest therein, if any. Due to certain reporting restrictions including that no more than 30 transactions can be listed on each Table of the Form 4 filing and no more than 10 reporting persons can file any one Form 4 through the Securities and Exchange Commission's EDGAR system, certain affiliates of the Reporting Persons have filed separate Forms 4 reporting additional transactions.</remarks>
+
+    <ownerSignature>
+        <signatureName>By: /s/ Justin G. Hamill, Chief Legal Officer of Silver Lake Group, L.L.C., managing member of SLTA IV (GP), L.L.C., gen. partner of Silver Lake Technology Associates IV, L.P., gen. partner of Silver Lake Technology Investors IV, L.P</signatureName>
+        <signatureDate>2026-10-14</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>By: /s/ Justin G. Hamill, Chief Legal Officer of Silver Lake Group, L.L.C., managing member of SLTA IV (GP), L.L.C., general partner of Silver Lake Technology Associates IV, L.P.</signatureName>
+        <signatureDate>2026-10-14</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>By: /s/ Justin G. Hamill, Chief Legal Officer of Silver Lake Group, L.L.C., managing member of SLTA IV (GP), L.L.C.</signatureName>
+        <signatureDate>2026-10-14</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>By: /s/ Justin G. Hamill, Chief Legal Officer of Silver Lake Group, L.L.C.</signatureName>
+        <signatureDate>2026-10-14</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>By: /s/ Justin G. Hamill, Attorney-in-fact for Egon Durban</signatureName>
+        <signatureDate>2026-10-14</signatureDate>
+    </ownerSignature>
+</ownershipDocument>

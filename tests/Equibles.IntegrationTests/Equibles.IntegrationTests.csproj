@@ -17,6 +17,11 @@
       CopyToOutputDirectory="PreserveNewest"
     />
     <Content
+      Include="../Equibles.UnitTests/TestAssets/Holdings/13f-confidential-treatment-submission.txt"
+      Link="TestAssets/Holdings/13f-confidential-treatment-submission.txt"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
       Include="../Equibles.UnitTests/TestAssets/Holdings/13f-notices/*.tsv"
       Link="TestAssets/Holdings/13f-notices/%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"
@@ -53,6 +58,11 @@
     <Content
       Include="../Equibles.UnitTests/TestAssets/InsiderTrading/InvalidDates/snex.xml"
       Link="TestAssets/snex-invalid-dates.xml"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
+      Include="../Equibles.UnitTests/TestAssets/InsiderTrading/form4-nvidia-ceo-vehicles.xml"
+      Link="TestAssets/InsiderTrading/form4-nvidia-ceo-vehicles.xml"
       CopyToOutputDirectory="PreserveNewest"
     />
     <Content

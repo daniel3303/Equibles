@@ -105,17 +105,31 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
             Name: "Microsoft Corp.",
             Cik: "C2"
         );
-        DbContext.AddRange(aapl, msft);
-        // AAPL gets 3 new filers (none in prior), MSFT gets 1 new filer.
+        EquityIssuer ko = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "KO",
+            Name: "Coca-Cola Co.",
+            Cik: "C3"
+        );
+        DbContext.AddRange(aapl, msft, ko);
+        // AAPL gets 3 new filers (each filed prior without it), MSFT gets 1 such filer plus 5
+        // first-time filers, whose books are not buys.
         for (var i = 0; i < 3; i++)
         {
             var h = new InstitutionalHolder { Cik = $"newAAPL{i}", Name = $"New AAPL {i}" };
             DbContext.Add(h);
+            DbContext.Add(MakeHolding(ko, h, prior, shares: 1, value: 100));
             DbContext.Add(MakeHolding(aapl, h, current, shares: 100, value: 10_000));
         }
         var msftNew = new InstitutionalHolder { Cik = "newMSFT", Name = "New MSFT" };
         DbContext.Add(msftNew);
+        DbContext.Add(MakeHolding(ko, msftNew, prior, shares: 1, value: 100));
         DbContext.Add(MakeHolding(msft, msftNew, current, shares: 100, value: 10_000));
+        for (var i = 0; i < 5; i++)
+        {
+            var h = new InstitutionalHolder { Cik = $"firstMSFT{i}", Name = $"First MSFT {i}" };
+            DbContext.Add(h);
+            DbContext.Add(MakeHolding(msft, h, current, shares: 100, value: 10_000));
+        }
         // Seed at least one prior-quarter row anywhere so the prior date exists in distinct dates.
         var anchor = new InstitutionalHolder { Cik = "anchor", Name = "Anchor" };
         DbContext.Add(anchor);
@@ -135,6 +149,8 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
             .IndexOf("AAPL", StringComparison.Ordinal)
             .Should()
             .BeLessThan(output.IndexOf("MSFT", StringComparison.Ordinal));
+        output.Should().Contain("| MSFT | Microsoft Corp. | 1 |");
+        output.Should().Contain("a first-time filer's book");
     }
 
     [Fact]

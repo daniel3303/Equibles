@@ -273,7 +273,8 @@ public class Realtime13FIngestionService
     {
         var replaying = false;
         var skipped = 0;
-        var attempts = new List<(string Accession, bool Imported)>();
+        var attempts =
+            new List<(string Accession, bool Imported, HoldingsImportFailureReason? Closure)>();
         foreach (var entry in sorted)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -291,7 +292,10 @@ public class Realtime13FIngestionService
             // An import that may have written reorders the book, so every later filing re-applies.
             if (!result.HoldingsUntouched)
                 replaying = true;
-            attempts.Add((entry.AccessionNumber, result.Outcome == EntryImportOutcome.Imported));
+            var imported = result.Outcome == EntryImportOutcome.Imported;
+            attempts.Add(
+                (entry.AccessionNumber, imported, imported ? result.ClosedWithoutRows : null)
+            );
         }
 
         // Mark only after the whole walk: a marker written before the replay behind it finished
@@ -306,13 +310,19 @@ public class Realtime13FIngestionService
         // A pending filing is settled once it and every later attempt in this pass imported; an
         // older filing that still fails stays pending and anchors the next pass before it.
         var resolvable = new List<string>();
+        var closedWithoutRows = new Dictionary<string, HoldingsImportFailureReason>(
+            StringComparer.OrdinalIgnoreCase
+        );
         var laterImported = true;
         for (var index = attempts.Count - 1; index >= 0; index--)
         {
-            var (accession, imported) = attempts[index];
+            var (accession, imported, closure) = attempts[index];
             laterImported &= imported;
-            if (laterImported && pendingAccessions.Contains(accession))
-                resolvable.Add(accession);
+            if (!laterImported || !pendingAccessions.Contains(accession))
+                continue;
+            resolvable.Add(accession);
+            if (closure is { } reason)
+                closedWithoutRows[accession] = reason;
         }
         resolvable.Reverse();
         return new RecoveryReplayResult(
@@ -321,11 +331,20 @@ public class Realtime13FIngestionService
             skipped,
             resolvable,
             Complete: laterImported
-        );
+        )
+        {
+            ClosedWithoutRows = closedWithoutRows,
+        };
     }
 
-    // HoldingsUntouched: the attempt returned before any holdings write.
-    internal readonly record struct EntryImport(EntryImportOutcome Outcome, bool HoldingsUntouched);
+    // HoldingsUntouched: the attempt returned before any holdings write. ClosedWithoutRows names
+    // the source proof when an Imported attempt stored nothing, so the ledger never reads as an
+    // import that wrote rows.
+    internal readonly record struct EntryImport(
+        EntryImportOutcome Outcome,
+        bool HoldingsUntouched,
+        HoldingsImportFailureReason? ClosedWithoutRows = null
+    );
 
     internal enum EntryImportOutcome
     {
@@ -457,7 +476,15 @@ public class Realtime13FIngestionService
                     entry.AccessionNumber,
                     entry.Cik
                 );
-                return new EntryImport(EntryImportOutcome.Imported, false);
+                return await Completed(
+                    entry,
+                    new EntryImport(
+                        EntryImportOutcome.Imported,
+                        false,
+                        HoldingsImportFailureReason.NoTrackedPositions
+                    ),
+                    cancellationToken
+                );
             }
             // Nothing to store: a NEW HOLDINGS amendment adds no tracked position whatever the
             // book holds, while an original or restatement completes only when the quarter retains
@@ -477,7 +504,15 @@ public class Realtime13FIngestionService
                     entry.Cik,
                     filing.Holdings.Count
                 );
-                return new EntryImport(EntryImportOutcome.Imported, importResult.HoldingsUntouched);
+                return await Completed(
+                    entry,
+                    new EntryImport(
+                        EntryImportOutcome.Imported,
+                        importResult.HoldingsUntouched,
+                        UntrackedClosure(filing)
+                    ),
+                    cancellationToken
+                );
             }
             if (importResult.UntrackedPositionsOnly)
                 _logger.LogInformation(
@@ -517,8 +552,35 @@ public class Realtime13FIngestionService
             return new EntryImport(EntryImportOutcome.Failed, false);
         }
 
-        return new EntryImport(EntryImportOutcome.Imported, false);
+        return await Completed(
+            entry,
+            new EntryImport(EntryImportOutcome.Imported, false),
+            cancellationToken
+        );
     }
+
+    // A filing replayed after its ledger row closed (a rescan's realtime replay, a recovery tail)
+    // restates that row, so a closure reason never stands beside the holdings a later write stored.
+    // A row still pending is untouched here; recovery's Resolve names its reason afterwards.
+    private async Task<EntryImport> Completed(
+        EdgarDailyIndexEntry entry,
+        EntryImport result,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>()
+            .RestateResolved(entry.AccessionNumber, result.ClosedWithoutRows, cancellationToken);
+        return result;
+    }
+
+    // A confidential-treatment original publishes only placeholder rows; its positions arrive in
+    // the amendment filed once the treatment lapses, which imports as its own filing.
+    internal static HoldingsImportFailureReason UntrackedClosure(Parsed13FFiling filing) =>
+        filing.ConfidentialOmitted
+            ? HoldingsImportFailureReason.ConfidentialTreatment
+            : HoldingsImportFailureReason.NoTrackedPositions;
 
     internal static bool IsSourceConfirmedZeroOriginal(Parsed13FFiling filing) =>
         Filing13FZeroPositionEvidence.IsOriginal(filing);

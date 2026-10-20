@@ -38,7 +38,12 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnCultureInvar
             Name: "Apple Inc.",
             Cik: "C1"
         );
-        DbContext.Add(aapl);
+        EquityIssuer ko = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "KO",
+            Name: "Coca-Cola Co.",
+            Cik: "C2"
+        );
+        DbContext.AddRange(aapl, ko);
 
         // Anchor the prior quarter so the date resolution finds current vs prior.
         var anchor = new InstitutionalHolder { Cik = "anchor", Name = "Anchor Fund" };
@@ -46,11 +51,13 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnCultureInvar
         DbContext.Add(MakeHolding(aapl, anchor, prior));
 
         // 1,000 distinct filers initiating AAPL this quarter (present at current, absent at
-        // prior) → NewFilerCount = 1,000, which must render as "1,000".
+        // prior, which each filed without AAPL) → NewFilerCount = 1,000, which must render as
+        // "1,000".
         for (var i = 0; i < 1_000; i++)
         {
             var holder = new InstitutionalHolder { Cik = $"new-{i}", Name = $"Fund {i}" };
             DbContext.Add(holder);
+            DbContext.Add(MakeHolding(ko, holder, prior));
             DbContext.Add(MakeHolding(aapl, holder, current));
         }
         await DbContext.SaveChangesAsync();

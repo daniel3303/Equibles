@@ -78,6 +78,8 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
         DbContext.Add(MakeHolding(stock, continuing, Previous, shares: 100, value: 1_000));
         DbContext.Add(MakeHolding(stock, carried, Previous, shares: 200, value: 2_000));
         DbContext.Add(MakeHolding(stock, exited, Previous, shares: 300, value: 3_000));
+        // D filed the previous quarter without this stock, so its current position is an entry.
+        DbContext.Add(MakeHolding(other, newcomer, Previous, shares: 7, value: 70));
 
         // Current quarter so far: A resized to 150, D new with 50; C filed — but only for the
         // OTHER stock, proving it dropped this one; B has not filed anything yet.

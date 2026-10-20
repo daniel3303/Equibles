@@ -1,0 +1,145 @@
+<SEC-DOCUMENT>0001374170-26-000023.txt : 20260511
+<SEC-HEADER>0001374170-26-000023.hdr.sgml : 20260511
+<ACCEPTANCE-DATETIME>20260511091318
+ACCESSION NUMBER:		0001374170-26-000023
+CONFORMED SUBMISSION TYPE:	13F-HR
+PUBLIC DOCUMENT COUNT:		2
+CONFORMED PERIOD OF REPORT:	20260331
+FILED AS OF DATE:		20260511
+DATE AS OF CHANGE:		20260511
+EFFECTIVENESS DATE:		20260511
+
+FILER:
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			NORGES BANK
+		CENTRAL INDEX KEY:			0001374170
+		ORGANIZATION NAME:           	
+		EIN:				000000000
+		STATE OF INCORPORATION:			Q8
+		FISCAL YEAR END:			1231
+		LEGAL ENTITY IDENTIFIER:    	549300O6E2WAK3IAXE34
+
+	FILING VALUES:
+		FORM TYPE:		13F-HR
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	028-12187
+		FILM NUMBER:		26961140
+
+	BUSINESS ADDRESS:	
+		ADDRESS IS A NON US LOCATION: 	YES
+		STREET 1:		BANKPLASSEN 2
+		STREET 2:		P.O BOX 1179 SENTRUM
+		CITY:			OSLO
+		PROVINCE COUNTRY:   	Q8
+		ZIP:			0107
+		BUSINESS PHONE:		47-24073000
+
+	MAIL ADDRESS:	
+		ADDRESS IS A NON US LOCATION: 	YES
+		STREET 1:		BANKPLASSEN 2
+		STREET 2:		P.O BOX 1179 SENTRUM
+		CITY:			OSLO
+		PROVINCE COUNTRY:   	Q8
+		ZIP:			0107
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Norges Bank
+		DATE OF NAME CHANGE:	20060829
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>13F-HR
+<SEQUENCE>1
+<FILENAME>primary_doc.xml
+<TEXT>
+<XML>
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xmlns="http://www.sec.gov/edgar/thirteenffiler" xmlns:com="http://www.sec.gov/edgar/common">
+  <schemaVersion>X0202</schemaVersion>
+  <headerData>
+    <submissionType>13F-HR</submissionType>
+    <filerInfo>
+      <liveTestFlag>LIVE</liveTestFlag>
+      <flags>
+        <confirmingCopyFlag>false</confirmingCopyFlag>
+        <returnCopyFlag>true</returnCopyFlag>
+        <overrideInternetFlag>false</overrideInternetFlag>
+      </flags>
+      <filer>
+        <credentials>
+          <cik>0001374170</cik>
+          <ccc>XXXXXXXX</ccc>
+        </credentials>
+      </filer>
+      <periodOfReport>03-31-2026</periodOfReport>
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPage>
+      <reportCalendarOrQuarter>03-31-2026</reportCalendarOrQuarter>
+      <filingManager>
+        <name>NORGES BANK</name>
+        <address>
+          <com:street1>BANKPLASSEN 2</com:street1>
+          <com:street2>P.O BOX 1179 SENTRUM</com:street2>
+          <com:city>OSLO</com:city>
+          <com:stateOrCountry>Q8</com:stateOrCountry>
+          <com:zipCode>0107</com:zipCode>
+        </address>
+      </filingManager>
+      <reportType>13F HOLDINGS REPORT</reportType>
+      <form13FFileNumber>028-12187</form13FFileNumber>
+      <provideInfoForInstruction5>Y</provideInfoForInstruction5>
+      <additionalInformation>Norges Bank has submitted its Form 13F to the Securities and Exchange Commission pursuant to a request for confidential treatment. This action is consistent with discussions between Norges Bank and the Staff of the Securities and Exchange Commission to coordinate the reporting required under Section 13(f) with the extensive public disclosure requirements under Norwegian law applying to Norges Bank. Collateral received through secured lending and borrowing transactions in the form of securities, where Norges Bank has the right to sell or pledge the security, is not recognized in its balance sheet unless reinvested. Correspondingly, such collateral is not reflected in our 13F reporting.</additionalInformation>
+    </coverPage>
+    <signatureBlock>
+      <name>Stanislav Boiadjiev</name>
+      <title>Lead Regulatory Compliance Advisor</title>
+      <phone>004724073142</phone>
+      <signature>Stanislav Boiadjiev</signature>
+      <city>Oslo</city>
+      <stateOrCountry>Q8</stateOrCountry>
+      <signatureDate>05-11-2026</signatureDate>
+    </signatureBlock>
+    <summaryPage>
+      <otherIncludedManagersCount>0</otherIncludedManagersCount>
+      <tableEntryTotal>1507</tableEntryTotal>
+      <tableValueTotal>864690921985</tableValueTotal>
+      <isConfidentialOmitted>true</isConfidentialOmitted>
+    </summaryPage>
+  </formData>
+</edgarSubmission>
+</XML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>INFORMATION TABLE
+<SEQUENCE>2
+<FILENAME>Q1_2026_0.xml
+<TEXT>
+<XML>
+<?xml version="1.0" encoding="UTF-8"?>
+<informationTable xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<infoTable>
+		<nameOfIssuer>NA</nameOfIssuer>
+		<titleOfClass>NA</titleOfClass>
+		<cusip>000000000</cusip>
+		<value>0</value>
+		<shrsOrPrnAmt>
+			<sshPrnamt>0</sshPrnamt>
+			<sshPrnamtType>SH</sshPrnamtType>
+		</shrsOrPrnAmt>
+		<investmentDiscretion>SOLE</investmentDiscretion>
+		<otherManager>0</otherManager>
+		<votingAuthority>
+			<Sole>0</Sole>
+			<Shared>0</Shared>
+			<None>0</None>
+		</votingAuthority>
+	</infoTable>
+
+</informationTable>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
