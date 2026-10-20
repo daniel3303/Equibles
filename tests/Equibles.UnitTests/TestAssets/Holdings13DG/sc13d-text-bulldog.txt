@@ -1,0 +1,503 @@
+<SEC-DOCUMENT>0001398344-24-000853.txt : 20240122
+<SEC-HEADER>0001398344-24-000853.hdr.sgml : 20240122
+<ACCEPTANCE-DATETIME>20240122170526
+ACCESSION NUMBER:		0001398344-24-000853
+CONFORMED SUBMISSION TYPE:	SC 13D
+PUBLIC DOCUMENT COUNT:		3
+FILED AS OF DATE:		20240122
+DATE AS OF CHANGE:		20240122
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Texas Pacific Land Corp
+		CENTRAL INDEX KEY:			0001811074
+		STANDARD INDUSTRIAL CLASSIFICATION:	OIL ROYALTY TRADERS [6792]
+		ORGANIZATION NAME:           	05 Real Estate & Construction
+		IRS NUMBER:				750279735
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-91958
+		FILM NUMBER:		24549634
+
+	BUSINESS ADDRESS:	
+		STREET 1:		1700 PACIFIC AVENUE
+		STREET 2:		SUITE 2900
+		CITY:			DALLAS
+		STATE:			TX
+		ZIP:			75201
+		BUSINESS PHONE:		214-969-5530
+
+	MAIL ADDRESS:	
+		STREET 1:		1700 PACIFIC AVENUE
+		STREET 2:		SUITE 2900
+		CITY:			DALLAS
+		STATE:			TX
+		ZIP:			75201
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Bulldog Investors, LLP
+		CENTRAL INDEX KEY:			0001504304
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				270926182
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13D
+
+	BUSINESS ADDRESS:	
+		STREET 1:		PARK 80 WEST - PLAZA TWO
+		STREET 2:		250 PEHLE AVE. SUITE 708
+		CITY:			SADDLE BROOK
+		STATE:			NJ
+		ZIP:			07663
+		BUSINESS PHONE:		201 556-0092
+
+	MAIL ADDRESS:	
+		STREET 1:		PARK 80 WEST - PLAZA TWO
+		STREET 2:		250 PEHLE AVE. SUITE 708
+		CITY:			SADDLE BROOK
+		STATE:			NJ
+		ZIP:			07663
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Bulldog Investors, LLC
+		DATE OF NAME CHANGE:	20130610
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Brooklyn Capital Management LLC
+		DATE OF NAME CHANGE:	20101026
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13D
+<SEQUENCE>1
+<FILENAME>fp0086902-1_sc13d.htm
+<TEXT>
+<HTML>
+<HEAD>
+     <TITLE></TITLE>
+</HEAD>
+<BODY STYLE="font: 11pt Times New Roman, Times, Serif">
+
+<pre>
+SCHEDULE 13D
+
+
+DATE OF EVENT WHICH REQUIRES FILING OF THIS STATEMENT
+1/17/2024
+
+
+1. NAME OF REPORTING PERSON
+Bulldog Investors, LLP
+
+
+2. CHECK THE BOX IF MEMBER OF A GROUP                  a[]
+
+                                                       b[]
+
+3. SEC USE ONLY
+
+4. SOURCE OF FUNDS
+WC
+
+
+5. CHECK BOX IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED
+PURSUANT TO ITEMS 2(d) AND 2(e)                        []
+
+6. CITIZENSHIP OR PLACE OF ORGANIZATION
+DE
+___________________________________________________________
+
+
+7. SOLE VOTING POWER
+102
+
+8. SHARED VOTING POWER
+4,400
+
+9. SOLE DISPOSITIVE POWER
+102
+_______________________________________________________
+
+10. SHARED DISPOSITIVE POWER
+4,400
+
+
+11. AGGREGATE AMOUNT OWNED BY EACH REPORTING PERSON
+4,502 (Footnote 1)
+
+12. CHECK IF THE AGGREGATE AMOUNT EXCLUDES CERTAIN SHARES
+
+[]
+___________________________________________________________
+
+
+13. PERCENT OF CLASS REPRESENTED BY ROW 11
+0.06%
+
+14. TYPE OF REPORTING PERSON
+
+IA
+
+___________________________________________________________
+
+
+1. NAME OF REPORTING PERSON
+Phillip Goldstein
+
+
+2. CHECK THE BOX IF MEMBER OF A GROUP                  a[]
+
+                                                       b[]
+
+3. SEC USE ONLY
+
+4. SOURCE OF FUNDS
+WC
+
+
+5. CHECK BOX IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED
+PURSUANT TO ITEMS 2(d) AND 2(e)                        []
+
+6. CITIZENSHIP OR PLACE OF ORGANIZATION
+USA
+___________________________________________________________
+
+
+7. SOLE VOTING POWER
+102
+
+8. SHARED VOTING POWER
+4,400
+
+9. SOLE DISPOSITIVE POWER
+102
+_______________________________________________________
+
+10. SHARED DISPOSITIVE POWER
+4,400
+
+
+11. AGGREGATE AMOUNT OWNED BY EACH REPORTING PERSON
+4,502 (Footnote 1)
+
+12. CHECK IF THE AGGREGATE AMOUNT EXCLUDES CERTAIN SHARES
+
+[]
+___________________________________________________________
+
+
+13. PERCENT OF CLASS REPRESENTED BY ROW 11
+
+0.06%
+
+
+
+14. TYPE OF REPORTING PERSON
+
+IN
+
+___________________________________________________________
+1. NAME OF REPORTING PERSON
+Andrew Dakos
+
+
+2. CHECK THE BOX IF MEMBER OF A GROUP                  a[]
+
+                                                       b[]
+
+3. SEC USE ONLY
+
+4. SOURCE OF FUNDS
+WC
+
+
+5. CHECK BOX IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED
+PURSUANT TO ITEMS 2(d) AND 2(e)                        []
+
+6. CITIZENSHIP OR PLACE OF ORGANIZATION
+USA
+___________________________________________________________
+
+
+7. SOLE VOTING POWER
+102
+
+8. SHARED VOTING POWER
+4,400
+
+9. SOLE DISPOSITIVE POWER
+102
+_______________________________________________________
+
+10. SHARED DISPOSITIVE POWER
+4,400
+
+
+11. AGGREGATE AMOUNT OWNED BY EACH REPORTING PERSON
+4,502 (Footnote 1)
+
+12. CHECK IF THE AGGREGATE AMOUNT EXCLUDES CERTAIN SHARES
+
+[]
+___________________________________________________________
+
+
+13. PERCENT OF CLASS REPRESENTED BY ROW 11
+
+0.06%
+
+
+
+14. TYPE OF REPORTING PERSON
+
+IN
+
+___________________________________________________________
+
+
+Item 1. SECURITY AND ISSUER
+
+This Schedule 13D relates to the shares of Common Stock
+of Texas Pacific Land Corp. ("TPL" or the "Issuer").
+
+The principal executive offices of TPZ are located at
+
+1700 Pacific Ave. Suite 2900
+Dallas, TX 75201
+
+
+
+Item 2. IDENTITY AND BACKGROUND
+(a) This statement is filed on behalf of Bulldog Investors,LLP (a Delaware
+Limited Liability Partnership), Phillip Goldstein, and Andrew Dakos.
+
+(b)  The business address of the reporting persons is Park 80 West-Plaza Two,
+250 Pehle Ave., Suite 708, Saddle Brook, NJ 07663.
+
+(c)  Bulldog Investors,LLP is a registered investment adviser.
+Messrs. Goldstein and Dakos are partners of Bulldog
+Investors,LLP.
+
+(d) n/a
+
+(e) n/a
+
+(f) Each of Messrs. Goldstein and Dakos is a citizen of the United States.
+
+
+
+ITEM 3. SOURCE AND AMOUNT OF FUNDS AND OTHER CONSIDERATIONS
+Shares of the Issuer have been accumulated on behalf of clients of
+Bulldog Investors,LLP, and on behalf of a registered closed-end investment
+company for which Messrs. Goldstein and Dakos have investment and voting
+authority.
+
+
+ITEM 4. PURPOSE OF TRANSACTION
+Letter was sent to the company. See exhibit B.
+
+
+ITEM 5. INTEREST IN SECURITIES OF THE ISSUER
+(a) As per the 10-Q filed 11/1/23 there were 7,674,867 shares of common
+stock outstanding as of 10/30/23. The percentages set forth herein were
+derived using such number. Phillip Goldstein and Andrew Dakos own Bulldog
+Investors, LLP, a registered investment advisor.
+
+As of January 19, 2024 Bulldog Investors, LLP is deemed to be the beneficial
+owner of 4,502 shares of TPL (representing 0.06% of TPL's outstanding
+shares) solely by virtue of Bulldog Investors LLP's power to direct the
+vote of,and dispose of, these shares.
+Such shares are also beneficially owned by clients of Bulldog Investors,
+LLP who are not members of any group.
+
+As of January 19,2024, each of Messrs. Goldstein and Dakos is deemed to be
+the beneficial owner of 4,502 shares of TPL (representing 0.06% of TPL's
+outstanding shares) by virtue of their power to direct the vote of, and
+dispose of, these shares.
+
+(b)Bulldog Investors,LLP has sole power to dispose of and vote 102 shares.
+Bulldog Investors, LLP has shared power to dispose of and vote 4,400
+shares. Certain of Bulldog Investors, LLP's clients (none of whom
+beneficially own more than 5% of TPL's shares) share this power with
+Bulldog Investors, LLP. Messrs. Goldstein and Dakos are partners of Bulldog
+Investors, LLP. Messrs. Goldstein and Dakos have sole power to dispose of and
+vote 102 shares, and shared power to dispose of and vote 4,400 shares.
+
+During the last 60 days no shares of TPL were traded.
+
+
+
+
+d) Clients of Bulldog Investors, LLP and a closed-end investment fund for
+which Messrs. Goldstein and Dakos have investment and voting authority
+are entitled to receive any dividends or sales proceeds.
+
+e) N/A
+
+ITEM 6. CONTRACTS,ARRANGEMENTS,UNDERSTANDINGS OR RELATIONSHIPS
+WITH RESPECT TO SECURITIES OF THE ISSUER.
+N/A
+
+
+ITEM 7. MATERIAL TO BE FILED AS EXHIBITS
+Exhibit A &amp; B
+
+
+After reasonable inquiry and to the best of my knowledge
+and belief, I certify that the information set forth in this
+statement is true, complete and correct.
+
+Dated: 1/22/2024
+
+By: /S/ Phillip Goldstein
+Name:   Phillip Goldstein
+
+By: /S/ Andrew Dakos
+Name:   Andrew Dakos
+
+Bulldog Investors, LLP
+By: /s/ Andrew Dakos
+Andrew Dakos, Partner
+
+Footnote 1: The reporting persons disclaim beneficial ownership except
+to the extent of any pecuniary interest therein.
+
+</pre>
+
+</BODY>
+</HTML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>EX-7.A
+<SEQUENCE>2
+<FILENAME>fp0086902-1_ex7a.htm
+<TEXT>
+<HTML>
+<HEAD>
+     <TITLE></TITLE>
+</HEAD>
+<BODY STYLE="font: 11pt Times New Roman, Times, Serif">
+
+<pre>
+Exhibit A:
+
+Agreement to Make Joint Filing
+
+	Agreement made as of the 22th day of January, 2024, by and among
+Bulldog Investors, LLP, Phillip Goldstein and Andrew Dakos.
+
+WHEREAS, Rule 13d-1(k)(1) under the Securities Exchange Act of 1934 provides
+that whenever two or more persons are required to file a statement containing
+the information required by Schedule 13D with respect to the same securities,
+only one such statement need be filed, so long as, among other things, such
+filing includes as an exhibit an agreement among such persons that such a
+statement is filed on behalf of each of them;
+
+WHEREAS, in connection with certain holdings of Texas Pacific Land Corp.(TPL),
+each of the parties to this Agreement is required to file a statement
+containing the information required by Schedule 13D with respect to the same
+holdings of TPL;
+
+NOW THEREFORE, the parties hereby agree that one statement containing the
+information required by Schedule 13D shall be filed on behalf of each party
+hereto.
+
+IN WITNESS WHEREOF, this Agreement has been duly executed by the parties
+hereto as of the day and year first written above.
+
+
+By:/s/ Phillip Goldstein	By:/s/ Andrew Dakos
+	Phillip Goldstein	Andrew Dakos
+
+
+BULLDOG INVESTORS, LLP
+By:/s/ Andrew Dakos
+	Andrew Dakos, Partner
+</pre>
+
+</BODY>
+</HTML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>EX-7.B
+<SEQUENCE>3
+<FILENAME>fp0086902-1_ex7b.htm
+<TEXT>
+<HTML>
+<HEAD>
+     <TITLE></TITLE>
+</HEAD>
+<BODY STYLE="font: 11pt Times New Roman, Times, Serif">
+
+<pre>
+Exhibit B:
+
+Special Opportunities Fund, Inc. 615 East Michigan Street,
+Milwaukee, WI 53202
+
+Texas Pacific Land Corporation
+1700 Pacific Avenue
+Suite 2900
+Dallas, TX 75201
+
+Attention: The Board of Directors
+
+						January 17, 2024
+
+Dear Directors;
+
+   Special Opportunities Fund is the beneficial owner of shares of Texas
+Pacific Land Corporation with a value in excess of $25,000.00. It has held
+these shares continuously for more than 12 months and plans to continue to
+hold them through the next meeting of shareholders.
+
+   We hereby submit the following proposal and supporting statement pursuant
+to rule 14a-8 of the Securities Exchange Act of 1934 for inclusion in
+management's proxy materials for the next meeting of stockholders for which
+this proposal is timely submitted. We are available to discuss our proposal
+ at any mutually convenient time.
+
+********
+RESOLVED: The stockholders urge the Board to seek stockholder approval of any
+transaction in which the consideration includes shares of the Company's stock,
+including any tender offer, exchange offer, share exchange, merger,
+consolidation, acquisition, business combination, sale, recapitalization, or
+restructuring if the Board has reason to believe that stockholders might not
+vote to approve such transaction.
+
+                       SUPPORTING STATEMENT
+
+In seeking stockholder approval in 2022 to issue additional shares, the Board
+stated that such additional shares "would enable the Company to act quickly as
+opportunities arise and to avoid the time-consuming and costly need to hold a
+special meeting of stockholders in every case to seek stockholder approval for
+the issuance of additional shares of Common Stock." That may be reasonable if
+the Board truly believes stockholders would approve a particular transaction.
+However, if the board believes that stockholders might not approve a
+transaction, it should seek stockholder approval before closing such
+transaction.
+
+						Very truly yours,
+
+					     /S/Phillip Goldstein
+
+					        Phillip Goldstein
+					        Chairman
+
+</pre>
+
+</BODY>
+</HTML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

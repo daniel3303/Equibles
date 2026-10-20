@@ -397,14 +397,225 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
             );
     }
 
-    private void List(DateOnly day, string accession, params string[] ciks)
+    [Fact]
+    public async Task BackfillDays_PreXmlFiling_ImportsTheLeadPositionFromTheCompleteSubmission()
+    {
+        const string blackRock = "0001086364-24-004712";
+        await SeedIssuer("NVDA", "0001045810", NvidiaCusip);
+        ListForm(new DateOnly(2024, 1, 26), blackRock, "SC 13G/A", "1045810", "1364742");
+        ServeSubmission(blackRock, "sc13ga-text-blackrock-nvidia.txt");
+
+        var result = await Coverage()
+            .BackfillDays(
+                new DateOnly(2024, 1, 26),
+                new DateOnly(2024, 1, 26),
+                MinReportDate,
+                100,
+                CancellationToken.None
+            );
+
+        result.Should().Be(new Schedule13DGBackfillResult(new DateOnly(2024, 1, 26), 1, 1, false));
+        (await Positions(NvidiaCusip))
+            .Should()
+            .Equal((blackRock, new DateOnly(2023, 12, 31), 180_593_555L, "1364742"));
+        (await SubmissionReads(blackRock)).Should().Be(1);
+        await using var verify = FreshContext();
+        var details = await verify
+            .Set<BeneficialOwnershipFiling>()
+            .Include(f => f.ReportingPersons)
+            .SingleAsync(f => f.AccessionNumber == blackRock);
+        details.ParserVersion.Should().Be(Filing13DGTextParser.Version);
+        details.RefusalReason.Should().BeNull();
+        details.Rules.Should().Be(Schedule13GRules.QualifiedInstitution);
+        details.ReportingPersons.Should().ContainSingle().Which.Cik.Should().Be("1364742");
+    }
+
+    [Fact]
+    public async Task BackfillDays_RefusedPreXmlFiling_IsParkedUntilANewerReaderVersion()
+    {
+        const string fmr = "0000315066-24-001331";
+        await SeedIssuer("NVDA", "0001045810", NvidiaCusip);
+        ListForm(new DateOnly(2024, 2, 9), fmr, "SC 13G/A", "1045810", "315066");
+        ServeSubmission(fmr, "sc13ga-text-fmr-nvidia-row-numbers.txt");
+        var day = new DateOnly(2024, 2, 9);
+
+        await Coverage().BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+        await Coverage().BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+
+        (await SubmissionReads(fmr)).Should().Be(1);
+        (await Positions(NvidiaCusip)).Should().BeEmpty();
+        await using (var verify = FreshContext())
+        {
+            var parked = await verify
+                .Set<BeneficialOwnershipFiling>()
+                .Include(f => f.ReportingPersons)
+                .SingleAsync(f => f.AccessionNumber == fmr);
+            parked.IsUnreadable.Should().BeTrue();
+            parked.RefusalReason.Should().NotBeNullOrEmpty();
+            parked.ParserVersion.Should().Be(Filing13DGTextParser.Version);
+            parked.FilingType.Should().Be(FilingType.Schedule13G);
+            parked.FilerCik.Should().Be("315066");
+            parked.IssuerCik.Should().Be("1045810");
+            parked.ReportingPersons.Should().BeEmpty();
+        }
+
+        // A refusal parked under an older reader is read again by the next walk.
+        await using (var age = FreshContext())
+            await age.Set<BeneficialOwnershipFiling>()
+                .ExecuteUpdateAsync(setters =>
+                    setters.SetProperty(f => f.ParserVersion, Filing13DGTextParser.Version - 1)
+                );
+        await Coverage().BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+
+        (await SubmissionReads(fmr)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ImportParsedFiling_UnresolvedCusip_MapsThroughTheSubjectCompanysOnlyCommonSecurity()
+    {
+        await SeedCommonIssuer("NVDA", "1045810", NvidiaCusip);
+        var filing = ParseVanguardNvidia();
+        filing.IssuerCusip = "000000000";
+
+        (await Ingestion().ImportParsedFiling(filing, MinReportDate, CancellationToken.None))
+            .Should()
+            .Be(Schedule13DGImportOutcome.Imported);
+
+        (await Positions(NvidiaCusip))
+            .Should()
+            .Equal((VanguardNvidia, new DateOnly(2025, 12, 31), 2_266_625_855L, "102909"));
+        await using var verify = FreshContext();
+        // The details keep the CUSIP as filed.
+        (await verify.Set<BeneficialOwnershipFiling>().SingleAsync())
+            .IssuerCusip.Should()
+            .Be("000000000");
+    }
+
+    [Theory]
+    [InlineData(ListedSecurityType.CommonShares, "NVDAB")]
+    [InlineData(ListedSecurityType.Unknown, null)]
+    [InlineData(ListedSecurityType.PreferredShares, null)]
+    public async Task ImportParsedFiling_SubjectCompanyWithoutOneCertainCommonSecurity_StaysUnresolved(
+        ListedSecurityType registration,
+        string siblingTicker
+    )
+    {
+        await SeedCommonIssuer(
+            "NVDA",
+            "1045810",
+            NvidiaCusip,
+            registration,
+            siblingTicker == null ? [] : [siblingTicker]
+        );
+        var filing = ParseVanguardNvidia();
+        filing.IssuerCusip = "000000000";
+
+        (await Ingestion().ImportParsedFiling(filing, MinReportDate, CancellationToken.None))
+            .Should()
+            .Be(Schedule13DGImportOutcome.Incomplete);
+
+        await using var verify = FreshContext();
+        (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ImportParsedFiling_AmendmentMappedThroughTheSubjectCompany_RestatesOnlyThatSecurity()
+    {
+        await SeedCommonIssuer("NVDA", "1045810", NvidiaCusip);
+        await SeedCommonIssuer("IOSP", "1054905", InnospecCusip);
+        // The same filer's same-day stake in another security must survive the restatement.
+        var other = ParseVanguardNvidia();
+        other.AccessionNumber = "0000102909-26-000001";
+        other.IsAmendment = false;
+        other.IssuerCik = "1054905";
+        other.IssuerCusip = InnospecCusip;
+        (await Ingestion().ImportParsedFiling(other, MinReportDate, CancellationToken.None))
+            .Should()
+            .Be(Schedule13DGImportOutcome.Imported);
+        var amendment = ParseVanguardNvidia();
+        amendment.IssuerCusip = "000000000";
+
+        (await Ingestion().ImportParsedFiling(amendment, MinReportDate, CancellationToken.None))
+            .Should()
+            .Be(Schedule13DGImportOutcome.Imported);
+
+        (await Positions(InnospecCusip)).Should().ContainSingle();
+        (await Positions(NvidiaCusip)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BackfillDays_PreXmlFilingWithoutACusip_MapsThroughTheSubjectCompany()
+    {
+        const string blackRock = "0001086364-24-003191";
+        const string sunOptaCusip = "8676EP108";
+        await SeedCommonIssuer("STKL", "351834", sunOptaCusip);
+        ListForm(new DateOnly(2024, 1, 25), blackRock, "SC 13G/A", "351834", "1364742");
+        ServeSubmission(blackRock, "sc13ga-text-blackrock-sedol.txt");
+
+        await Coverage()
+            .BackfillDays(
+                new DateOnly(2024, 1, 25),
+                new DateOnly(2024, 1, 25),
+                MinReportDate,
+                100,
+                CancellationToken.None
+            );
+
+        (await Positions(sunOptaCusip))
+            .Should()
+            .Equal((blackRock, new DateOnly(2023, 12, 31), 9_984_820L, "1364742"));
+    }
+
+    [Fact]
+    public async Task RetryResolvable_PreXmlFilingReadBeforeItsSubjectCompanyWasTracked_ImportsOnceItIs()
+    {
+        const string bulldog = "0001398344-24-000853";
+        const string texasPacificCusip = "88262P102";
+        await SeedIssuer("NVDA", "0001045810", NvidiaCusip);
+        ListForm(new DateOnly(2024, 1, 22), bulldog, "SC 13D", "1811074", "1504304");
+        ServeSubmission(bulldog, "sc13d-text-bulldog.txt");
+        var day = new DateOnly(2024, 1, 22);
+        await Coverage().BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+        (await Positions(texasPacificCusip)).Should().BeEmpty();
+
+        await SeedCommonIssuer("TPL", "1811074", texasPacificCusip);
+        await AgeDetails(TimeSpan.FromDays(2));
+        var imported = await Coverage()
+            .RetryResolvable(10, TimeSpan.FromDays(1), MinReportDate, CancellationToken.None);
+
+        imported.Should().Be(1);
+        (await SubmissionReads(bulldog)).Should().Be(2);
+        await using var verify = FreshContext();
+        var stored = await verify
+            .Set<InstitutionalHolding>()
+            .Include(h => h.InstitutionalHolder)
+            .SingleAsync();
+        stored.Cusip.Should().Be(texasPacificCusip);
+        stored.FilingType.Should().Be(FilingType.Schedule13D);
+        stored.ReportDate.Should().Be(new DateOnly(2024, 1, 17));
+        stored.Shares.Should().Be(4_502);
+        stored.InstitutionalHolder.Cik.Should().Be("1504304");
+    }
+
+    private Parsed13DGFiling ParseVanguardNvidia() =>
+        new Filing13DGXmlParser().ParseFiling(
+            Asset("sc13ga-vanguard-nvidia.xml"),
+            VanguardNvidia,
+            "102909",
+            new DateOnly(2026, 1, 30)
+        );
+
+    private void List(DateOnly day, string accession, params string[] ciks) =>
+        ListForm(day, accession, "SCHEDULE 13G/A", ciks);
+
+    private void ListForm(DateOnly day, string accession, string form, params string[] ciks)
     {
         if (!_index.TryGetValue(day, out var entries))
             _index[day] = entries = [];
         entries.AddRange(
             ciks.Select(cik => new EdgarDailyIndexEntry
             {
-                FormType = "SCHEDULE 13G/A",
+                FormType = form,
                 CompanyName = $"Company {cik}",
                 Cik = cik,
                 DateFiled = day,
@@ -423,6 +634,27 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
             )
             .Returns(Encoding.UTF8.GetBytes(Asset(asset)));
 
+    // A pre-XML filing is read from its complete submission, as EDGAR serves {accession}.txt.
+    private void ServeSubmission(string accession, string asset) =>
+        _edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                accession,
+                $"{accession}.txt",
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Encoding.UTF8.GetBytes(Asset(asset)));
+
+    private Task<int> SubmissionReads(string accession) =>
+        Task.FromResult(
+            _edgar
+                .ReceivedCalls()
+                .Count(call =>
+                    call.GetMethodInfo().Name == nameof(ISecEdgarClient.GetDocumentFileBytes)
+                    && (string)call.GetArguments()[2] == $"{accession}.txt"
+                )
+        );
+
     private static string Asset(string name) =>
         File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Holdings13DG", name)
@@ -435,6 +667,32 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
             "1890906",
             new DateOnly(2026, 10, 7)
         );
+
+    // An issuer whose one security is registered as common shares, plus a sibling class for each
+    // of siblingTickers.
+    private async Task SeedCommonIssuer(
+        string ticker,
+        string cik,
+        string cusip,
+        ListedSecurityType registration = ListedSecurityType.CommonShares,
+        params string[] siblingTickers
+    )
+    {
+        await using var seed = FreshContext();
+        seed.Set<EquityIssuer>()
+            .Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: ticker,
+                    Name: ticker,
+                    Cik: cik,
+                    Cusip: cusip,
+                    ListedSecurityType: registration,
+                    SecondaryTickers: [.. siblingTickers]
+                )
+            );
+        await seed.SaveChangesAsync();
+    }
 
     private async Task SeedIssuer(string ticker, string cik, string cusip)
     {
@@ -577,6 +835,7 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
         new(
             _edgar,
             new Filing13DGXmlParser(),
+            new Filing13DGTextParser(),
             Ingestion(),
             Writer(),
             CreateScopeFactory(),

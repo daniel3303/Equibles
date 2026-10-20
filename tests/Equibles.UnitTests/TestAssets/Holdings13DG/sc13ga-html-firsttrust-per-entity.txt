@@ -1,0 +1,502 @@
+<SEC-DOCUMENT>0001445546-24-006226.txt : 20240909
+<SEC-HEADER>0001445546-24-006226.hdr.sgml : 20240909
+<ACCEPTANCE-DATETIME>20240909105347
+ACCESSION NUMBER:		0001445546-24-006226
+CONFORMED SUBMISSION TYPE:	SC 13G/A
+PUBLIC DOCUMENT COUNT:		2
+FILED AS OF DATE:		20240909
+DATE AS OF CHANGE:		20240909
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			FIRST TRUST EXCHANGE-TRADED FUND VIII
+		CENTRAL INDEX KEY:			0001667919
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				000000000
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-90766
+		FILM NUMBER:		241286298
+
+	BUSINESS ADDRESS:	
+		STREET 1:		120 EAST LIBERTY DRIVE, SUITE 400
+		CITY:			WHEATON
+		STATE:			IL
+		ZIP:			60187
+		BUSINESS PHONE:		630-765-8000
+
+	MAIL ADDRESS:	
+		STREET 1:		120 EAST LIBERTY DRIVE, SUITE 400
+		CITY:			WHEATON
+		STATE:			IL
+		ZIP:			60187
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			FIRST TRUST PORTFOLIOS LP
+		CENTRAL INDEX KEY:			0001184765
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				000000000
+		STATE OF INCORPORATION:			IL
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+
+	BUSINESS ADDRESS:	
+		STREET 1:		12O EAST LIBERTY DRIVE
+		STREET 2:		SUITE 400
+		CITY:			WHEATON
+		STATE:			IL
+		ZIP:			60187
+		BUSINESS PHONE:		630-765-8000
+
+	MAIL ADDRESS:	
+		STREET 1:		12O EAST LIBERTY DRIVE
+		STREET 2:		SUITE 400
+		CITY:			WHEATON
+		STATE:			IL
+		ZIP:			60187
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13G/A
+<SEQUENCE>1
+<FILENAME>sc13g_3.txt
+<DESCRIPTION>AMENDED SCHEDULE 13G
+<TEXT>
+                                 UNITED STATES*
+                       SECURITIES AND EXCHANGE COMMISSION
+                             Washington, D.C. 20549
+
+                                  SCHEDULE 13G
+
+
+                   Under the Securities Exchange Act of 1934
+
+                             (Amendment No. 3)*
+
+
+                FT Vest U.S. Equity Moderate Buffer ETF - August
+    ------------------------------------------------------------------------
+                                (Name of Issuer)
+
+
+                                     Common
+                         ------------------------------
+                         (Title of Class of Securities)
+
+
+                                    33740U653
+                                 --------------
+                                 (CUSIP Number)
+
+
+                                August 31, 2024
+            -------------------------------------------------------
+            (Date of Event Which Requires Filing of this Statement)
+
+
+Check the appropriate box to designate the rule pursuant to which this
+Schedule is filed:
+
+          [ X ]     Rule 13d-1(b)
+
+          [   ]     Rule 13d-1(c)
+
+          [   ]     Rule 13d-1(d)
+
+
+*The remainder of this cover page shall be filled out for a reporting
+person's initial filing on this form with respect to the subject class
+of securities, and for any subsequent amendment containing information
+which would alter the disclosures provided in a prior cover page.
+
+The information required in the remainder of this cover page shall not be
+deemed to be "filed" for the purpose of Section 18 of the Securities
+Exchange Act of 1934 ("Act") or otherwise subject to the liabilities of
+that section of the Act but shall be subject to all other provisions of
+the Act (however, see the Notes).
+
+
+                                     - 1 -
+
+
+CUSIP No. 33740U653
+
+                1.  Names of Reporting Persons, I.R.S. Identification Nos.
+                    of above persons (entities only):
+
+                    First Trust Portfolios L.P.: 36-3768815
+
+                    First Trust Advisors L.P.:   36-3788904
+
+                    The Charger Corporation:     36-3772451
+
+
+                2.  Check the Appropriate Box if a Member of a Group
+                    (See Instructions)
+
+                    (a)  [   ]
+
+                    (b)  [   ]
+
+
+                3.  SEC Use Only
+
+
+                4.  Citizenship or Place of Organization of each
+
+                    Reporting Person:     Illinois, U.S.A.
+
+
+Number of       5.  Sole Voting Power:    0
+Shares Bene-
+ficially
+Owned by Each   6.  Shared Voting Power:
+Reporting           Such shares are held by the following entities in the
+Person With:        respective amounts listed:
+
+                    First Trust Portfolios L.P.: 0
+
+                    First Trust Advisors L.P.:   556,785
+
+                    The Charger Corporation:     556,785
+
+
+                7.  Sole Dispositive Power:      0
+
+                8.  Shared Dispositive Power:
+
+                    Such shares are held by the following entities in the
+                    respective amounts listed:
+
+                    First Trust Portfolios L.P.: 0
+
+                    First Trust Advisors L.P.:   556,785
+
+                    The Charger Corporation:     556,785
+
+
+
+                9.  Aggregate Amount Beneficially Owned by Each
+                    Reporting Person: 556,785
+
+
+               10.  Check if the Aggregate Amount in Row (9) Excludes
+                    Certain Shares (See Instructions)
+
+
+                                     - 2 -
+
+
+               11.  Percent of Class Represented by Amount in Row (9): 10.92%
+
+
+               12.  Type of Reporting Person (See Instructions)
+
+                         First Trust Portfolios L.P.      - BD
+
+                         First Trust Advisors L.P.        - IA
+
+                         The Charger Corporation          - HC
+
+
+ITEM 1.
+
+          (a)       Name of Issuer: FT Vest U.S. Equity Moderate Buffer ETF -
+                                    August
+
+          (b)       Address of Issuer's Principal Executive Offices
+
+                         Attn: Legal Department
+                         120 East Liberty Drive
+                         Suite 400
+                         Wheaton, IL 60187
+                         USA
+
+
+
+ITEM 2.
+
+          (a)       Name of Person Filing
+
+                         First Trust Portfolios L.P.
+                         First Trust Advisors L.P.
+                         The Charger Corporation
+
+
+          (b)       Address of Principal Business Office or, if none, Residence
+
+                         First Trust Portfolios L.P.
+                         120 East Liberty Drive, Suite 400
+                         Wheaton, Illinois 60187
+
+                         First Trust Advisors L.P.
+                         120 East Liberty Drive, Suite 400
+                         Wheaton, Illinois 60187
+
+                         The Charger Corporation
+                         120 East Liberty Drive, Suite 400
+                         Wheaton, Illinois 60187
+
+
+          (c)       Citizenship of each Reporting Person:
+
+                    Illinois, U.S.A.
+
+
+          (d)       Title of Class of Securities
+
+                    Common Stock
+
+
+          (e)       CUSIP Number  33740U653
+
+
+                                     - 3 -
+
+
+
+ITEM 3.   If this statement is filed pursuant to Sec. 240.13d-1(b) or
+          240.13d-2(b) or (c), check whether the person filing is a:
+
+          (a)   x   Broker or dealer registered under section 15 of the Act
+                    (15 U.S.C. 78o);
+
+          (b)       Bank as defined in section 3(a)(6) of the Act
+                    (15 U.S.C. 78c);
+
+          (c)       Insurance company as defined in section 3(a)(19) of the Act
+                    (15 U.S.C. 78c);
+
+          (d)       Investment company registered under section 8 of the
+                    Investment Company Act of 1940 (15 U.S.C. 80a-8);
+
+          (e)   x   An investment adviser in accordance with
+                    Sec. 240.13d-1(b)(1)(ii)(E);
+
+          (f)       An employee benefit plant or endowment fund in accordance
+                    with Sec. 240.13d-1(b)(1)(ii)(F);
+
+          (g)   x   A parent holding company or control person in accordance
+                    with Sec. 240.13d-1(b)(1)(ii)(G);
+
+          (h)       A savings associations as defined in Section 3(b) of the
+                    Federal Deposit Insurance Act (12 U.S.C. 1813);
+
+          (i)       A church plan that is excluded from the definition of an
+                    investment company under section 3(c)(14) of the Investment
+                    Company Act of 1940 (15 U.S.C. 80a-3);
+
+          (j)       A non-U.S. institution in accordance with
+                    Sec. 240.13d-1(b)(1)(ii)(J);
+
+          (k)       Group, in accordance with Sec. 240.13d-1(b)1(ii)(K).
+
+          If filing as a non-U.S. institution in accordance with Sec.
+          204.13d-1(b)(1)(ii)(J), please specify the type
+          of institution: _____________________________________________
+
+
+
+ITEM 4.   Ownership
+
+          Provide the following information regarding the aggregate number and
+          percentage of the class of securities of the issuer identified in
+          Item 1.
+
+          (a)   Amount beneficially owned:  556,785
+
+          (b)   Percent of class:           10.92%
+
+          (c)   Number of shares as to which the person has:
+
+                    (i)   Sole power to vote or to direct the vote:   0
+
+                   (ii)   Shared power to vote or to direct the vote: 556,785
+
+                  (iii)   Sole power to dispose or to direct the disposition
+
+                          of:  0
+
+                   (iv)   Shared power to dispose or to direct the disposition
+
+                          of:  556,785
+
+
+                                     - 4 -
+
+
+Instruction.  For computations regarding securities which represent a right to
+              acquire an underlying security see Sec. 204.13d-3(d)(1).
+
+ITEM 5.   Ownership of Five Percent or Less of a Class
+
+          If this statement is being filed to report the fact that as of the
+          date hereof the reporting person has ceased to be the beneficial owner
+          of more than five percent of the class of securities, check the
+          following [   ].
+
+
+
+Instruction:  Dissolution of a group requires a response to this item.
+
+ITEM 6.   Ownership of More than Five Percent on Behalf of Another Person
+
+This Schedule 13G filing is jointly filed by The Charger Corporation, First
+Trust Portfolios L.P. and First Trust Advisors L.P. pursuant to Rule
+13d-1(k)(1). The Charger Corporation is the General Partner of both First Trust
+Portfolios L.P. and First Trust Advisors L.P. First Trust Portfolios L.P. acts
+as sponsor of certain unit investment trusts which hold shares of the issuer.
+The total number of shares of the issuer held by these unit investment trusts
+is set forth in Row (8) above with respect to First Trust Portfolios L.P. No
+individual unit investment trust sponsored by First Trust Portfolios L.P. holds
+more than 3% of any registered investment company issuer's shares. First Trust
+Advisors L.P., an affiliate of First Trust Portfolios L.P., acts as portfolio
+supervisor of the unit investment trusts sponsored by First Trust Portfolios
+L.P., certain of which hold shares of the issuer. Neither First Trust Portfolios
+L.P., First Trust Advisors L.P. nor The Charger Corporation have the power to
+vote the shares of the issuer held by these unit investment trusts sponsored by
+First Trust Portfolios L.P. These shares are voted by the trustee of such unit
+investment trusts so as to insure that the shares are ordinarily voted as
+closely as possible in the same manner and in the same general proportion as
+are the shares held by owners other than such unit investment trusts.
+Subject to the requirements of Rule 12d1-4 under the Investment Company Act
+of 1940 and as further explained in the Standard Terms and Conditions of Trust
+and related Trust Agreements of the unit investment trusts, First Trust
+Portfolios L.P., on behalf of the unit investment trusts, may enter into an
+agreement with a deposited fund which may permit the shares of such fund to be
+voted in the best interest of unit holders at the discretion of First Trust
+Portfolios L.P. The difference, if any, between the aggregate amount of shares
+beneficially owned by each reporting person, as set forth in Row (9) above,
+and the number of shares of the issuer held by the unit investment trusts
+sponsored by First Trust Portfolios L.P. represents shares of the issuer
+which are either held in other registered investment companies, pooled
+investment vehicles and/or separately managed accounts for which First
+Trust Advisors L.P. serves as investment advisor and/or investment sub-advisor.
+Each of First Trust Portfolios L.P., First Trust Advisors L.P. and The Charger
+Corporation disclaims beneficial ownership of the shares of the issuer
+identified in this filing.
+
+
+
+ITEM 7.   Identification and Classification of the Subsidiary Which Acquired
+          the Security Being Reported on By the Parent Holding Company or
+          Control Person
+
+          See Item 6.
+
+
+
+ITEM 8.   Identification and Classification of Members of the Group
+
+          Not Applicable.
+
+
+
+                                     - 5 -
+
+
+
+ITEM 9.   Notice of Dissolution of Group
+
+          Not Applicable.
+
+
+
+ITEM 10.  Certifications
+
+     By signing below I certify that, to the best of my knowledge and belief,
+the securities referred to above were acquired and are held in the
+ordinary course of business and were not acquired and are not held for
+the purpose of or with the effect of changing or influencing the control
+of the issuer of the securities and were not acquired and are not held
+in connection with or as a participant in any transaction having that
+purpose or effect other than activities solely in connection with a nomination
+under Sec. 240.14a-11.
+
+
+
+                                   SIGNATURE
+
+     After reasonable inquiry and to the best of my knowledge and belief, I
+certify that the information set forth in this statement is true, complete
+and correct.
+
+                                  FIRST TRUST PORTFOLIOS L.P.,
+                                  FIRST TRUST ADVISORS L.P. and
+                                  THE CHARGER CORPORATION
+                                  Date: September 9, 2024
+
+
+                                  By: /s/ James M. Dykas
+                                      ---------------------------
+                                  Name:  James M. Dykas
+                                  Title: Chief Financial Officer of
+                                         First Trust Portfolios L.P. and
+                                         First Trust Advisors L.P., and
+                                         Chief Financial Officer and
+                                         Treasurer of The Charger
+                                         Corporation
+
+
+
+
+                                     - 6 -
+
+
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>EX-99.1
+<SEQUENCE>2
+<FILENAME>ex99_3.txt
+<DESCRIPTION>JOINT FILING AGREEMENT
+<TEXT>
+                                                                    Exhibit 99.1
+
+
+
+                     EXHIBIT 99.1 - JOINT FILING AGREEMENT
+
+
+
+The  undersigned  hereby  agree  that  they  are  filing  this statement jointly
+pursuant to Rule 13d-1(k)(1).  Each of them is responsible for the timely filing
+of  such  Schedule  13G and any amendments thereto, and for the completeness and
+accuracy  of  the information concerning such person contained therein; but none
+of  them  is  responsible  for  the  completeness or accuracy of the information
+concerning  the other persons making the filing, unless such person knows or has
+reason  to  believe  that  such  information  is  inaccurate.
+
+In  accordance  with  Rule  13d-1(k)(1)  promulgated  under  the  Securities and
+Exchange  Act  of  1934,  as  amended, the undersigned hereby agree to the joint
+filing with each other on behalf of each of them of such a statement on Schedule
+13G and any amendments thereto with respect to the equity securities (as defined
+in Rule 13d-1(i)) of the issuer, beneficially owned by each of them.  This Joint
+Filing  Agreement  shall  be included as an exhibit to such Schedule 13G and any
+amendments  thereto.
+
+
+Date:  September 9, 2024
+
+                                    First Trust Portfolios L.P.,
+                                    First Trust Advisors L.P. and
+                                    The Charger Corporation
+
+                                    By: /s/ James M. Dykas
+                                        ---------------------------
+                                    Name:  James M. Dykas
+                                    Title: Chief Financial Officer of
+                                           First Trust Portfolios L.P. and
+                                           First Trust Advisors L.P., and
+                                           Chief Financial Officer and
+                                           Treasurer of The Charger
+                                           Corporation
+
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

@@ -1,0 +1,483 @@
+<SEC-DOCUMENT>0000895421-24-000082.txt : 20240208
+<SEC-HEADER>0000895421-24-000082.hdr.sgml : 20240208
+<ACCEPTANCE-DATETIME>20240208153339
+ACCESSION NUMBER:		0000895421-24-000082
+CONFORMED SUBMISSION TYPE:	SC 13G/A
+PUBLIC DOCUMENT COUNT:		1
+FILED AS OF DATE:		20240208
+DATE AS OF CHANGE:		20240208
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			STARRETT L S CO
+		CENTRAL INDEX KEY:			0000093676
+		STANDARD INDUSTRIAL CLASSIFICATION:	CUTLERY, HANDTOOLS & GENERAL HARDWARE [3420]
+		ORGANIZATION NAME:           	04 Manufacturing
+		IRS NUMBER:				041866480
+		STATE OF INCORPORATION:			MA
+		FISCAL YEAR END:			0630
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-35513
+		FILM NUMBER:		24608720
+
+	BUSINESS ADDRESS:	
+		STREET 1:		121 CRESCENT ST
+		CITY:			ATHOL
+		STATE:			MA
+		ZIP:			01331
+		BUSINESS PHONE:		978-249-3551
+
+	MAIL ADDRESS:	
+		STREET 1:		121 CRESCENT STREET
+		CITY:			ATHOL
+		STATE:			MA
+		ZIP:			01331
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			MORGAN STANLEY
+		CENTRAL INDEX KEY:			0000895421
+		STANDARD INDUSTRIAL CLASSIFICATION:	SECURITY BROKERS, DEALERS & FLOTATION COMPANIES [6211]
+		ORGANIZATION NAME:           	02 Finance
+		IRS NUMBER:				363145972
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+
+	BUSINESS ADDRESS:	
+		STREET 1:		1585 BROADWAY
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10036
+		BUSINESS PHONE:		212-761-4000
+
+	MAIL ADDRESS:	
+		STREET 1:		1585 BROADWAY
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10036
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	MORGAN STANLEY DEAN WITTER & CO
+		DATE OF NAME CHANGE:	19980326
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	DEAN WITTER DISCOVER & CO
+		DATE OF NAME CHANGE:	19960315
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13G/A
+<SEQUENCE>1
+<FILENAME>StarrettSCX.txt
+<DESCRIPTION>MS AMENDMENT
+<TEXT>
+
+
+
+
+
+                                UNITED STATES
+                      SECURITIES AND EXCHANGE COMMISSION
+                            Washington, D.C. 20549
+
+
+                                 SCHEDULE 13G
+
+                   Under the Securities Exchange Act of 1934
+
+                                (Amendment No.5)*
+
+                                 STARRETT L S CO
+             -----------------------------------------------------
+                                (Name of Issuer)
+
+                                  Common Stock
+             -----------------------------------------------------
+                         (Title of Class of Securities)
+
+                                   855668109
+             -----------------------------------------------------
+                                 (CUSIP Number)
+
+                               December 31, 2023
+             -----------------------------------------------------
+            (Date Of Event which Requires Filing of this Statement)
+
+
+
+Check the appropriate box to designate the rule pursuant to which this Schedule
+is filed:
+
+     [x] Rule 13d-1(b)
+
+     [ ] Rule 13d-1(c)
+
+     [ ] Rule 13d-1(d)
+
+
+*  The remainder of this cover page shall be filled out for a reporting person's
+initial filing on this form with respect to the subject class of securities, and
+for any subsequent amendment containing information which would alter the
+disclosures provided in a prior cover page.
+
+The information required in the remainder of this cover page shall not be deemed
+to be "filed" for the purpose of Section 18 of the Securities Exchange Act of
+1934 ("Act") or otherwise subject to the liabilities of that section of the Act
+but shall be subject to all other provisions of the Act (however, see the
+Notes).
+
+Persons who respond to the collection of information contained in this form are
+not required to respond unless the form displays a currently valid OMB control
+number.
+
+SEC 1745 (3-06)
+
+<PAGE>
+
+CUSIP No.855668109                     13G                     Page 2 of 8 Pages
+--------------------------------------------------------------------------------
+   1.  NAME OF REPORTING PERSON:
+       I.R.S. IDENTIFICATION NO. OF ABOVE PERSON:
+
+       Morgan Stanley
+       I.R.S. # 36-3145972
+--------------------------------------------------------------------------------
+   2.  CHECK THE APPROPRIATE BOX IF A MEMBER OF A GROUP:
+
+       (a) [ ]
+
+       (b) [ ]
+--------------------------------------------------------------------------------
+   3.  SEC USE ONLY:
+
+--------------------------------------------------------------------------------
+   4.  CITIZENSHIP OR PLACE OF ORGANIZATION:
+
+       Delaware.
+--------------------------------------------------------------------------------
+   NUMBER OF      5.   SOLE VOTING POWER:
+     SHARES            0
+  BENEFICIALLY    --------------------------------------------------------------
+    OWNED BY      6.   SHARED VOTING POWER:
+      EACH             0
+   REPORTING      --------------------------------------------------------------
+     PERSON       7.   SOLE DISPOSITIVE POWER:
+      WITH:            0
+                  --------------------------------------------------------------
+                  8.   SHARED DISPOSITIVE POWER:
+                       394,385
+--------------------------------------------------------------------------------
+   9.  AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON:
+       394,385
+--------------------------------------------------------------------------------
+  10.  CHECK BOX IF THE AGGREGATE AMOUNT IN ROW (9) EXCLUDES CERTAIN SHARES:
+       [ ]
+--------------------------------------------------------------------------------
+  11.  PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (9):
+       5.7%
+--------------------------------------------------------------------------------
+  12.  TYPE OF REPORTING PERSON:
+       HC, CO
+--------------------------------------------------------------------------------
+
+<PAGE>
+
+CUSIP No.855668109                     13G                     Page 3 of 8 Pages
+--------------------------------------------------------------------------------
+   1.  NAME OF REPORTING PERSON:
+       I.R.S. IDENTIFICATION NO. OF ABOVE PERSON:
+
+       Morgan Stanley Smith Barney LLC
+       I.R.S. # 26-4310844
+--------------------------------------------------------------------------------
+   2.  CHECK THE APPROPRIATE BOX IF A MEMBER OF A GROUP:
+
+       (a) [ ]
+
+       (b) [ ]
+--------------------------------------------------------------------------------
+   3.  SEC USE ONLY:
+
+--------------------------------------------------------------------------------
+   4.  CITIZENSHIP OR PLACE OF ORGANIZATION:
+
+       Delaware.
+--------------------------------------------------------------------------------
+   NUMBER OF      5.   SOLE VOTING POWER:
+     SHARES            0
+  BENEFICIALLY    --------------------------------------------------------------
+    OWNED BY      6.   SHARED VOTING POWER:
+      EACH             0
+   REPORTING      --------------------------------------------------------------
+     PERSON       7.   SOLE DISPOSITIVE POWER:
+      WITH:            0
+                  --------------------------------------------------------------
+                  8.   SHARED DISPOSITIVE POWER:
+                       394,385
+--------------------------------------------------------------------------------
+   9.  AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON:
+       394,385
+--------------------------------------------------------------------------------
+  10.  CHECK BOX IF THE AGGREGATE AMOUNT IN ROW (9) EXCLUDES CERTAIN SHARES:
+       [ ]
+--------------------------------------------------------------------------------
+  11.  PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (9):
+       5.7%
+--------------------------------------------------------------------------------
+  12.  TYPE OF REPORTING PERSON:
+       BD, IA
+--------------------------------------------------------------------------------
+
+<PAGE>
+
+CUSIP No.855668109                     13G                     Page 4 of 8 Pages
+--------------------------------------------------------------------------------
+
+Item 1.     (a)   Name of Issuer:
+
+                  STARRETT L S CO
+                  --------------------------------------------------------------
+            (b)   Address of Issuer's Principal Executive Offices:
+
+                  121 CRESCENT ST
+                  ATHOL MA 01331
+                  UNITED STATES OF AMERICA
+                  --------------------------------------------------------------
+Item 2.     (a)   Name of Person Filing:
+
+                  (1) Morgan Stanley
+                  (2) Morgan Stanley Smith Barney LLC
+                  --------------------------------------------------------------
+            (b)   Address of Principal Business Office, or if None, Residence:
+
+                  (1) 1585 Broadway New York, NY 10036
+                  (2) 1585 Broadway, New York, NY 10036
+                  --------------------------------------------------------------
+            (c)   Citizenship:
+
+                  (1) Delaware.
+                  (2) Delaware.
+                  --------------------------------------------------------------
+            (d)   Title of Class of Securities:
+
+                  Common Stock
+                  --------------------------------------------------------------
+            (e)   CUSIP Number:
+
+                  855668109
+                  --------------------------------------------------------------
+
+Item 3.     If this statement is filed pursuant to Sections 240.13d-1(b) or
+            240.13d-2(b) or (c), check whether the person filing is a:
+
+            (a) [x]  Broker or dealer registered under Section 15 of the Act
+                     (15 U.S.C. 78o).
+
+            (b) [ ]  Bank as defined in Section 3(a)(6) of the Act
+                     (15 U.S.C. 78c).
+
+            (c) [ ]  Insurance company as defined in Section 3(a)(19) of the Act
+                     (15 U.S.C. 78c).
+
+            (d) [ ]  Investment company registered under Section 8 of the
+                     Investment Company Act of 1940 (15 U.S.C. 80a-8).
+
+            (e) [x]  An investment adviser in accordance with Sections
+                     240.13d-1(b)(1)(ii)(E);
+
+            (f) [ ]  An employee benefit plan or endowment fund in accordance
+                     with Section 240.13d-1(b)(1)(ii)(F);
+
+            (g) [x]  A parent holding company or control person in accordance
+                     with Section 240.13d-1(b)(1)(ii)(G);
+
+            (h) [ ]  A savings association as defined in Section 3(b) of the
+                     Federal Deposit Insurance Act (12 U.S.C. 1813);
+
+            (i) [ ]  A church plan that is excluded from the definition of an
+                     investment company under Section 3(c)(14) of the
+                     Investment Company Act of 1940 (15 U.S.C. 80a-3);
+
+            (j) [ ]  A non-U.S. institution in accordance with section
+                     240.13d-1(b)(1)(ii)(J);
+
+            (k) [ ]  Group, in accordance with sections 240.13d-1(b)(1)(ii)(K).
+                     If filing as a non-U.S. institution in accordance with
+                     sections 240.13d-1(b)(1)(ii)(J), please specify the type
+                     of institution:  Not Applicable
+
+<PAGE>
+
+CUSIP No.855668109                     13G                     Page 5 of 8 Pages
+--------------------------------------------------------------------------------
+
+Item 4.    Ownership as of  December 31, 2023.*
+
+           (a) Amount beneficially owned:
+           See the response(s) to Item 9 on the attached cover page(s).
+
+           (b) Percent of Class:
+           See the response(s) to Item 11 on the attached cover page(s).
+
+           (c) Number of shares as to which such person has:
+
+              (i)   Sole power to vote or to direct the vote:
+                    See the response(s) to Item 5 on the attached cover page(s).
+
+              (ii)  Shared power to vote or to direct the vote:
+                    See the response(s) to Item 6 on the attached cover page(s).
+
+              (iii) Sole power to dispose or to direct the disposition of:
+                    See the response(s) to Item 7 on the attached cover page(s).
+
+              (iv)  Shared power to dispose or to direct the disposition of:
+                    See the response(s) to Item 8 on the attached cover page(s).
+
+Item 5.    Ownership of Five Percent or Less of a Class.
+
+           Not Applicable
+
+Item 6.    Ownership of More Than Five Percent on Behalf of Another Person.
+
+           Not Applicable
+
+Item 7.    Identification and Classification of the Subsidiary which Acquired
+           the Security Being Reported on By the Parent Holding Company.
+
+           See Exhibit 99.2
+
+Item 8.    Identification and Classification of Members of the Group.
+
+           Not Applicable
+
+Item 9.    Notice of Dissolution of Group.
+
+           Not Applicable
+
+Item 10.   Certification.
+
+           (1) By signing below I certify that, to the best of my knowledge and
+           belief, the securities referred to above were acquired and are held
+           in the ordinary course of business and were not acquired and are not
+           held for the purpose of or with the effect of changing or influencing
+           the control of the issuer of the securities and were not acquired and
+           are not held in connection with or as a participant in any
+           transaction having that purpose or effect.
+
+*  In Accordance with the Securities and Exchange Commission Release
+No. 34-39538 (January 12, 1998) (the "Release"), this filing reflects the
+securities beneficially owned, or that may be deemed to be beneficially owned,
+by certain operating units (collectively, the "MS Reporting Units") of Morgan
+Stanley and its subsidiaries and affiliates (collectively, "MS").  This filing
+does not reflect securities, if any, beneficially owned by any operating units
+of MS whose ownership of securities is disaggregated from that of the MS
+Reporting Units in accordance with the Release.
+
+<PAGE>
+
+CUSIP No.855668109                     13G                     Page 6 of 8 Pages
+--------------------------------------------------------------------------------
+
+                                  Signature
+
+
+After reasonable inquiry and to the best of my knowledge and belief, I certify
+that the information set forth in this statement is true, complete and correct.
+
+
+Date:       February 08, 2024
+
+Signature:  /s/ Christopher O'Hara
+            --------------------------------------------------------------------
+
+Name/Title: Christopher O'Hara/Authorized Signatory, Morgan Stanley
+            --------------------------------------------------------------------
+            MORGAN STANLEY
+
+
+Date:       February 08, 2024
+
+Signature:  /s/ David Galasso
+            --------------------------------------------------------------------
+
+Name/Title: David Galasso/Authorized Signatory,
+            Morgan Stanley Smith Barney LLC
+            --------------------------------------------------------------------
+            Morgan Stanley Smith Barney LLC
+
+
+EXHIBIT NO.                        EXHIBITS                                 PAGE
+-----------                        ----------                               ----
+
+   99.1                       Joint Filing Agreement                          7
+
+   99.2                       Item 7 Information                              8
+
+*  Attention. Intentional misstatements or omissions of fact constitute federal
+criminal violations (see 18 U.S.C. 1001).
+
+<PAGE>
+
+CUSIP No.855668109                     13G                     Page 7 of 8 Pages
+--------------------------------------------------------------------------------
+
+                       EXHIBIT NO. 99.1 TO SCHEDULE 13G
+                            JOINT FILING AGREEMENT
+              ---------------------------------------------------
+
+
+                              February 08, 2024
+              ---------------------------------------------------
+
+              MORGAN STANLEY and Morgan Stanley Smith Barney LLC hereby agree
+
+              that, unless differentiated, this Schedule 13G is filed on behalf
+
+              of each of the parties.
+
+
+           MORGAN STANLEY
+
+           BY: /s/ Christopher O'Hara
+           ---------------------------------------------------------------------
+           Christopher O'Hara/Authorized Signatory, Morgan Stanley
+
+           Morgan Stanley Smith Barney LLC
+
+           BY: /s/ David Galasso
+           ---------------------------------------------------------------------
+           David Galasso/Authorized Signatory,
+           Morgan Stanley Smith Barney LLC
+
+
+*  Attention. Intentional misstatements or omissions of fact constitute federal
+criminal violations (see 18 U.S.C. 1001).
+
+<PAGE>
+
+CUSIP No.855668109                     13G                     Page 8 of 8 Pages
+--------------------------------------------------------------------------------
+
+                                 EXHIBIT NO. 99.2
+                                ------------------
+
+                                ITEM 7 INFORMATION
+
+
+             The securities being reported on by Morgan Stanley as a parent
+
+     holding company are owned, or may be deemed to be beneficially owned, by
+
+     Morgan Stanley Smith Barney LLC, a wholly-owned subsidiary of Morgan
+
+     Stanley.
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

@@ -1,0 +1,214 @@
+<SEC-DOCUMENT>0001104659-24-021596.txt : 20240213
+<SEC-HEADER>0001104659-24-021596.hdr.sgml : 20240213
+<ACCEPTANCE-DATETIME>20240213170950
+ACCESSION NUMBER:		0001104659-24-021596
+CONFORMED SUBMISSION TYPE:	SC 13G/A
+PUBLIC DOCUMENT COUNT:		1
+FILED AS OF DATE:		20240213
+DATE AS OF CHANGE:		20240213
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			NVIDIA CORP
+		CENTRAL INDEX KEY:			0001045810
+		STANDARD INDUSTRIAL CLASSIFICATION:	SEMICONDUCTORS & RELATED DEVICES [3674]
+		ORGANIZATION NAME:           	04 Manufacturing
+		IRS NUMBER:				943177549
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			0128
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-56649
+		FILM NUMBER:		24629124
+
+	BUSINESS ADDRESS:	
+		STREET 1:		2788 SAN TOMAS EXPRESSWAY
+		CITY:			SANTA CLARA
+		STATE:			CA
+		ZIP:			95051
+		BUSINESS PHONE:		408-486-2000
+
+	MAIL ADDRESS:	
+		STREET 1:		2788 SAN TOMAS EXPRESSWAY
+		CITY:			SANTA CLARA
+		STATE:			CA
+		ZIP:			95051
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	NVIDIA CORP/DE
+		DATE OF NAME CHANGE:	20020612
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	NVIDIA CORP/CA
+		DATE OF NAME CHANGE:	19980303
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			VANGUARD GROUP INC
+		CENTRAL INDEX KEY:			0000102909
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				231945930
+		STATE OF INCORPORATION:			PA
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+
+	BUSINESS ADDRESS:	
+		STREET 1:		PO BOX 2600
+		STREET 2:		V26
+		CITY:			VALLEY FORGE
+		STATE:			PA
+		ZIP:			19482-2600
+		BUSINESS PHONE:		6106691000
+
+	MAIL ADDRESS:	
+		STREET 1:		PO BOX 2600
+		STREET 2:		V26
+		CITY:			VALLEY FORGE
+		STATE:			PA
+		ZIP:			19482-2600
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13G/A
+<SEQUENCE>1
+<FILENAME>tv01585-nvidiacorp.htm
+<DESCRIPTION>SCHEDULE 13G/A
+<TEXT>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+  <head>
+    <title>nvidiacorp</title>
+  </head>
+  <body>
+    <div style="font-size:9.5pt;">
+      <p style="text-align:center;">SECURITIES AND EXCHANGE COMMISSION<br >Washington, D.C. 20549</p>
+      <p style="text-align:center;margin-top:12pt;">Schedule 13G</p>
+      <p style="text-align:center;">Under the Securities Exchange Act of 1934<br >(Amendment No.: 12)*</p>
+      <p style="margin-top:36pt;">Name of issuer:&#160; NVIDIA Corp</p>
+      <p style="margin-top:24pt;">Title of Class of Securities:&#160;&#160;Common Stock</p>
+      <p style="margin-top:24pt;">CUSIP Number:&#160;&#160;67066G104</p>
+      <p style="margin-top:24pt;">Date of Event Which Requires Filing of this Statement: <b>December 29, 2023</b></p>
+      <p style="margin-top:12pt;">Check the appropriate box to designate the rule pursuant to which this Schedule is filed:</p>
+      <p style="text-indent:12pt;">&#9746;&#8195;Rule 13d-1(b) </p>
+      <p style="text-indent:12pt;">&#9744;&#8195;Rule 13d-1(c)</p>
+      <p style="text-indent:12pt;">&#9744;&#8195;Rule 13d-1(d)</p>
+      <p style="margin-top:12pt;text-indent:12pt;">*The remainder of this cover page shall be filled out for a reporting person's initial filing on this form with respect to the subject class of securities, and for any subsequent amendment containing information which would alter the disclosures provided in a prior cover page.</p>
+      <p style="margin-top:12pt;text-indent:12pt;">The information required in the remainder of this cover page shall not be deemed to be "filed" for the purpose of Section 18 of the Securities Exchange Act of 1934 ("Act") or otherwise subject to the liabilities of that section of the Act but shall be subject to all other provisions of the Act (however, see the Notes).</p>
+      <p style="margin-top:24pt;margin-bottom:12pt;">(Continued on the following page(s))</p>
+    </div>
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid">
+      <P STYLE="margin: 0pt">&#160;</P>
+    </DIV>
+    <DIV STYLE="page-break-before: always; margin-top: 6pt; margin-bottom: 12pt">
+      <P STYLE="margin: 0pt">&#160;</P>
+    </DIV>
+    <div style="font-size:9.5pt;">
+      <p style="text-align:center;">13G</p>
+      <p>CUSIP No.:&#160;&#160;67066G104</p>
+      <p style="margin-top:24pt;margin-left:12pt;text-indent:-12pt;">1.&#160;&#160;NAME OF REPORTING PERSON <br >I.R.S. IDENTIFICATION NO. OF ABOVE PERSON</p>
+      <p style="margin-top:12pt;text-indent:12pt;">The Vanguard Group - 23-1945930</p>
+      <p style="margin-top:12pt;">2.&#160;&#160;CHECK THE APPROPRIATE [LINE] IF A MEMBER OF A GROUP</p>
+      <div style="text-align:left;margin-top:12pt;">
+        <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:90%;font-size:9.5pt;">
+          <tr>
+            <td valign="top" width="47%" style="padding:0in 5.4pt 0in 5.4pt;">
+              <p>A.&#160; </p>
+            </td>
+            <td valign="top" width="53%" style="padding:0in 5.4pt 0in 5.4pt;">
+              <p>B.&#160; <font style="text-decoration:underline;">X</font></p>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <p style="margin-top:12pt;">3.&#160;&#160;SEC USE ONLY</p>
+      <p style="margin-top:36pt;">4.&#160;&#160;CITIZENSHIP OF PLACE OF ORGANIZATION</p>
+      <p style="margin-top:12pt;text-indent:12pt;">Pennsylvania</p>
+      <p style="margin-top:12pt;">(For questions 5-8, report the number of shares beneficially owned by each reporting person with:)</p>
+      <p style="margin-top:12pt;">5.&#160; SOLE VOTING POWER</p>
+      <p style="margin-top:12pt;text-indent:12pt;">0</p>
+      <p style="margin-top:12pt;">6.&#160; SHARED VOTING POWER</p>
+      <p style="margin-top:12pt;text-indent:12pt;">3,257,646</p>
+      <p style="margin-top:12pt;">7.&#160;&#160;SOLE DISPOSITIVE POWER</p>
+      <p style="margin-top:12pt;text-indent:12pt;">193,993,095</p>
+      <p style="margin-top:12pt;">8.&#160;&#160;SHARED DISPOSITIVE POWER</p>
+      <p style="margin-top:12pt;text-indent:12pt;">10,511,843</p>
+      <p style="margin-top:12pt;">9.&#160;&#160;AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON</p>
+      <p style="margin-top:12pt;text-indent:12pt;">204,504,938</p>
+      <p style="margin-top:12pt;">10.&#160;&#160;CHECK BOX IF THE AGGREGATE AMOUNT IN ROW (9) EXCLUDES CERTAIN SHARES </p>
+      <p style="margin-top:12pt;text-indent:12pt;">N/A</p>
+      <p style="margin-top:12pt;">11.&#160;&#160;PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW 9</p>
+      <p style="margin-top:12pt;text-indent:12pt;">8.28%</p>
+      <p style="margin-top:12pt;">12.&#160;&#160;TYPE OF REPORTING PERSON</p>
+      <p style="margin-top:12pt;text-indent:12pt;">IA</p>
+    </div>
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid">
+      <P STYLE="margin: 0pt">&#160;</P>
+    </DIV>
+    <DIV STYLE="page-break-before: always; margin-top: 6pt; margin-bottom: 12pt">
+      <P STYLE="margin: 0pt">&#160;</P>
+    </DIV>
+    <div style="font-size:9.5pt;">
+      <p style="text-align:center;">SECURITIES AND EXCHANGE COMMISSION<br >Washington, D.C. 20549</p>
+      <p style="text-align:center;margin-top:12pt;">Schedule 13G<br >Under the Securities Act of 1934</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 1(a) - Name of Issuer:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">NVIDIA Corp</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 1(b) - Address of Issuer's Principal Executive Offices:</p>
+      <p style="margin-top:12pt;margin-left:12pt;">2788 San Tomas Expressway<br >Santa Clara, CA 95051<br ></p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 2(a) - Name of Person Filing:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">The Vanguard Group - 23-1945930</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 2(b) &#8211; Address of Principal Business Office or, if none, residence:</p>
+      <p style="margin-top:12pt;margin-left:12pt;">100 Vanguard Blvd.<br >Malvern, PA&#160;19355</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 2(c) &#8211; Citizenship:</p>
+      <p style="margin-top:12pt;margin-left:12pt;">Pennsylvania</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 2(d) - Title of Class of Securities:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">Common Stock</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 2(e) - CUSIP Number</p>
+      <p style="margin-top:12pt;text-indent:12pt;">67066G104</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 3 - Type of Filing:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">This statement is being filed pursuant to Rule 13d-1.&#160;&#160;An investment adviser in accordance with &#167;240.13d-1(b)(1)(ii)(E). </p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 4 - Ownership:</p>
+      <p style="margin-top:12pt;">&#160; (a) Amount Beneficially Owned:</p>
+      <p style="margin-top:12pt;">&#160; (b) Percent of Class:</p>
+    </div>
+    <DIV STYLE="margin-top: 12pt; margin-bottom: 6pt; border-bottom: Black 1pt solid">
+      <P STYLE="margin: 0pt">&#160;</P>
+    </DIV>
+    <DIV STYLE="page-break-before: always; margin-top: 6pt; margin-bottom: 12pt">
+      <P STYLE="margin: 0pt">&#160;</P>
+    </DIV>
+    <div style="font-size:9.5pt;">
+      <p style="text-indent:12pt;">(c)&#160;&#160;Number of shares as to which such person has:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">(i)&#160;&#160;sole power to vote or direct to vote:&#160;&#160;</p>
+      <p style="margin-top:12pt;text-indent:12pt;">(ii)&#160;&#160;shared power to vote or direct to vote:&#160;&#160;</p>
+      <p style="margin-top:12pt;text-indent:12pt;">(iii)&#160;&#160;sole power to dispose of or to direct the disposition of:&#160;&#160;</p>
+      <p style="margin-top:12pt;text-indent:12pt;">(iv)&#160;&#160;shared power to dispose or to direct the disposition of:&#160;&#160;</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Comments:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">The responses to questions 5 through 9 and 11 on the cover page(s) are incorporated by reference into this Item 4. &#8195;</p>
+      <p style="margin-top:12pt;text-decoration:underline;margin-bottom:12pt;">Item 5 - Ownership of Five Percent or Less of a Class:</p>
+      <p style="margin:0pt;text-indent:12pt;">If this statement is being filed to report the fact that as of the date hereof the reporting person has ceased to be the beneficial owner of more than 5 percent of the class of securities, check the following &#9744;</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 6 - Ownership of More Than Five Percent on Behalf of Another Person:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">The Vanguard Group, Inc.'s clients, including investment companies registered under the Investment Company Act of 1940 and other managed accounts, have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, the securities reported herein.</p>
+      <p style="margin-top:12pt;text-indent:12pt;">No one other person's interest in the securities reported herein is more than 5%.</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 7 - Identification and Classification of the Subsidiary Which Acquired The Security Being Reported on by the Parent Holding Company:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">Not applicable</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 8 - Identification and Classification of Members of Group:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">Not applicable</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 9 - Notice of Dissolution of Group:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">Not applicable</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Item 10 - Certification:</p>
+      <p style="margin-top:12pt;text-indent:12pt;">By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &#167;240.14a-11.</p>
+      <p style="margin-top:12pt;text-decoration:underline;">Signature</p>
+      <p style="margin-top:12pt;text-indent:12pt;">After reasonable inquiry and to the best of my knowledge and belief, I certify that the information set forth in this statement is true, complete and correct.</p>
+      <p style="margin-top:12pt;margin-bottom:0pt;">Date:&#160;&#160;February 13, 2024</p>
+      <p style="margin-top:12pt;margin-left:3.0in;font-size:10.0pt;">By<font style="text-decoration:underline;"> /s/ Ashley Grim</font><br >Name: Ashley Grim<br >Title:&#160; Head of Global Fund Administration</p>
+    </div>
+  </body>
+</html>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

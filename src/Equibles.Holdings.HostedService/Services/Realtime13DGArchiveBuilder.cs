@@ -77,7 +77,7 @@ public class Realtime13DGArchiveBuilder
             AppendRow(
                 infoTable,
                 Clean(filing.AccessionNumber),
-                Clean(filing.IssuerCusip),
+                Clean(filing.PositionCusip ?? filing.IssuerCusip),
                 "SH",
                 string.Empty,
                 0,
