@@ -74,6 +74,12 @@ public sealed class StockHolderRow
     public string RollupCik { get; set; }
 
     /// <summary>
+    /// The evidence that chose the holder's own parent on the way to <see cref="RollupCik"/>:
+    /// Self when the holder is its own ultimate parent, null without a CIK.
+    /// </summary>
+    public HolderRollupBasis? RollupBasis { get; set; }
+
+    /// <summary>
     /// The CIK of the 13F filer of this listing whose report includes this holder's shares: the
     /// holder itself, or the parent it nests under by confirmed reporting evidence; null otherwise.
     /// </summary>

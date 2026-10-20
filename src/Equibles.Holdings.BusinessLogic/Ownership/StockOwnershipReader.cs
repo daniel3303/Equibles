@@ -227,7 +227,7 @@ public class StockOwnershipReader
             cancellationToken
         );
         foreach (var row in rows)
-            row.RollupCik = UltimateAggregation.UltimateOf(row, rollups);
+            UltimateAggregation.Assign(row, rollups);
         var filedOwn = await FiledOwn13F(rows, rollups, cancellationToken);
         var tops = StockOwnershipPrecedence.Arrange(
             rows,
