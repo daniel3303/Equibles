@@ -22,6 +22,11 @@
       CopyToOutputDirectory="PreserveNewest"
     />
     <Content
+      Include="../Equibles.UnitTests/TestAssets/Yahoo/RecycledSymbols/*.json"
+      Link="TestAssets/Yahoo/RecycledSymbols/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
       Include="../Equibles.UnitTests/TestAssets/Holdings13DG/sc13ga-morgan-stanley-x0202.xml;../Equibles.UnitTests/TestAssets/Holdings13DG/sc13d-multiple-type-codes.xml"
       Link="TestAssets/Holdings13DG/%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"

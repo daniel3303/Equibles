@@ -139,6 +139,92 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
     }
 
     [Fact]
+    public async Task HistoricalQueue_SelectsAndPurgesBarsStoredFromAnotherIssuersSymbol()
+    {
+        var retiredIssuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "PARENT",
+            SecondaryTickers: ["WHEN"]
+        );
+        var retired = retiredIssuer
+            .Securities.SelectMany(security => security.Listings)
+            .Single(listing => listing.Ticker == "WHEN");
+        retired.Active = false;
+        retired.IsDirectoryListed = false;
+        retired.DelistedOn = new(2024, 4, 1);
+        retired.PriceHistoryBackfilled = true;
+        var holder = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "WHEN");
+        var evidence = new EquityListingRetirementEvidence
+        {
+            Issuer = retiredIssuer,
+            ListedTicker = "WHEN",
+            DelistedOn = retired.DelistedOn.Value,
+            HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow,
+        };
+        DbContext.AddRange(retiredIssuer, holder, evidence);
+        var ownDate = new DateOnly(2024, 3, 1);
+        var heldDates = new[] { new DateOnly(2024, 3, 25), new DateOnly(2024, 4, 1) };
+        DbContext.AddRange(
+            heldDates
+                .Select(date => Bar(holder.Presentation.Listing, date))
+                .Concat(heldDates.Prepend(ownDate).Select(date => Bar(retired, date)))
+        );
+        await DbContext.SaveChangesAsync();
+
+        var service = Service();
+        var queued = await InvokeTargets(
+            service,
+            "BuildHistoricalPriceTargets",
+            CancellationToken.None
+        );
+        var target = queued.Should().ContainSingle().Which;
+        target.EquityListingId.Should().Be(retired.Id);
+
+        await (Task)
+            typeof(YahooPriceImportService)
+                .GetMethod(
+                    "PurgePricesAfterHistoricalCutoff",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                )!
+                .Invoke(service, [target, CancellationToken.None])!;
+
+        await using var read = Fixture.CreateDbContext();
+        (
+            await read.Set<EquityDailyStockPrice>()
+                .Where(price => price.EquityListingId == retired.Id)
+                .Select(price => price.Date)
+                .ToListAsync()
+        )
+            .Should()
+            .Equal(ownDate);
+        (
+            await read.Set<EquityDailyStockPrice>()
+                .CountAsync(price => price.EquityListingId == holder.Presentation.EquityListingId)
+        )
+            .Should()
+            .Be(heldDates.Length);
+        (await read.Set<EquityListing>().SingleAsync(listing => listing.Id == retired.Id))
+            .PriceHistoryBackfilled.Should()
+            .BeFalse();
+        (await InvokeTargets(service, "BuildHistoricalPriceTargets", CancellationToken.None))
+            .Should()
+            .BeEmpty();
+    }
+
+    private static EquityDailyStockPrice Bar(EquityListing listing, DateOnly date) =>
+        new()
+        {
+            Listing = listing,
+            SourceTicker = listing.Ticker,
+            Date = date,
+            Open = 1,
+            High = 1,
+            Low = 1,
+            Close = 1,
+            AdjustedClose = 1,
+            Volume = 10,
+        };
+
+    [Fact]
     public async Task CrawlFreshness_UsesNativeIdDespiteRenamedSourceTicker()
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
