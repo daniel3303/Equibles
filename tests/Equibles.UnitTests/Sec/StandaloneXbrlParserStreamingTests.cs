@@ -69,9 +69,13 @@ public class StandaloneXbrlParserStreamingTests
             "<xbrli:period><xbrli:startDate>2023-01-01</xbrli:startDate><xbrli:endDate>2023-12-31</xbrli:endDate></xbrli:period>"
         );
         builder.Append("</xbrli:context>");
-        builder.Append("<xbrli:unit id=\"u\"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>");
+        builder.Append(
+            "<xbrli:unit id=\"u\"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>"
+        );
         for (var i = 0; i < count; i++)
-            builder.Append($"<us-gaap:Line{i} contextRef=\"C1\" unitRef=\"u\">{i}</us-gaap:Line{i}>");
+            builder.Append(
+                $"<us-gaap:Line{i} contextRef=\"C1\" unitRef=\"u\">{i}</us-gaap:Line{i}>"
+            );
         builder.Append("</xbrli:xbrl>");
 
         var facts = new StandaloneXbrlParser().Parse(builder.ToString());
