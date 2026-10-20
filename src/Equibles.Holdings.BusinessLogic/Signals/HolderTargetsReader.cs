@@ -3,8 +3,8 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.BusinessLogic.Intelligence;
-using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
+using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -106,7 +106,11 @@ public class HolderTargetsReader
         CancellationToken cancellationToken
     )
     {
-        if ((await Funds([stock.Id], cancellationToken)).IsFund(new HolderSecurityKey(stock.Id, listedTicker)))
+        if (
+            (await Funds([stock.Id], cancellationToken)).IsFund(
+                new HolderSecurityKey(stock.Id, listedTicker)
+            )
+        )
             return new StockHolderTargets
             {
                 Sort = sort,

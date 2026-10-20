@@ -51,7 +51,10 @@ public sealed class HolderOverlapCalculator
             .GroupBy(position => position.Security.IssuerId)
             .Where(group => group.All(position => position.Value != null))
             .Select(group =>
-                (Issuer: group.Key, Value: group.Sum(position => position.Value.GetValueOrDefault()))
+                (
+                    Issuer: group.Key,
+                    Value: group.Sum(position => position.Value.GetValueOrDefault())
+                )
             )
             .Where(position => position.Value > 0)
             .OrderByDescending(position => position.Value)

@@ -50,7 +50,8 @@ public sealed class FundSecurities
         CancellationToken cancellationToken
     )
     {
-        var scoped = issuerIds == null ? issuers : issuers.Where(issuer => issuerIds.Contains(issuer.Id));
+        var scoped =
+            issuerIds == null ? issuers : issuers.Where(issuer => issuerIds.Contains(issuer.Id));
         var listings = await scoped
             .SelectMany(issuer =>
                 issuer.Securities.SelectMany(security =>

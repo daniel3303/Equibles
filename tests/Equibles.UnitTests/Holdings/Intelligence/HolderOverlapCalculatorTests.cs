@@ -72,15 +72,13 @@ public class HolderOverlapCalculatorTests
         var funds = new FundSecurities([note], [etf.IssuerId, closedEnd.IssuerId]);
         var calculator = new HolderOverlapCalculator(funds);
         for (var holder = 0; holder < 3; holder++)
-            calculator.Add(
-                [
-                    Position(stock),
-                    Position(peer),
-                    Position(etf, 10_000),
-                    Position(closedEnd, 10_000),
-                    Position(note, 10_000),
-                ]
-            );
+            calculator.Add([
+                Position(stock),
+                Position(peer),
+                Position(etf, 10_000),
+                Position(closedEnd, 10_000),
+                Position(note, 10_000),
+            ]);
         calculator.Add([Position(stock), Position(bank)]);
         calculator.Add([Position(stock), Position(bank)]);
         calculator.Add([Position(stock), Position(bank)]);
@@ -94,7 +92,10 @@ public class HolderOverlapCalculatorTests
         rows.Where(row => row.EquityIssuerId == stock.IssuerId)
             .Select(row => (row.PeerEquityIssuerId, row.SharedHolders))
             .Should()
-            .BeEquivalentTo([(peer.IssuerId, 3), (bank.IssuerId, 3)], "the bank's note is not the bank");
+            .BeEquivalentTo(
+                [(peer.IssuerId, 3), (bank.IssuerId, 3)],
+                "the bank's note is not the bank"
+            );
     }
 
     [Fact]
@@ -108,13 +109,11 @@ public class HolderOverlapCalculatorTests
             .Select(_ => Key())
             .ToList();
         for (var holder = 0; holder < 3; holder++)
-            calculator.Add(
-                [
-                    Position(fund, 1_000_000),
-                    .. others.Select(other => Position(other, 1_000)),
-                    Position(stock, 1),
-                ]
-            );
+            calculator.Add([
+                Position(fund, 1_000_000),
+                .. others.Select(other => Position(other, 1_000)),
+                Position(stock, 1),
+            ]);
 
         calculator
             .Build(Quarter)

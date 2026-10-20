@@ -77,9 +77,17 @@ public class HolderPeerCompaniesTests : IAsyncLifetime
             Series(null, "0001100663", "S000000002")
         );
 
-        var bothClasses = new InstitutionalHolder { Cik = "1000001", Name = "Both Classes Capital" };
+        var bothClasses = new InstitutionalHolder
+        {
+            Cik = "1000001",
+            Name = "Both Classes Capital",
+        };
         var noteOnly = new InstitutionalHolder { Cik = "1000002", Name = "Note Only Capital" };
-        var alreadyHolds = new InstitutionalHolder { Cik = "1000003", Name = "Already Holds Capital" };
+        var alreadyHolds = new InstitutionalHolder
+        {
+            Cik = "1000003",
+            Name = "Already Holds Capital",
+        };
         seed.AddRange(bothClasses, noteOnly, alreadyHolds);
         seed.AddRange(
             Holding(_alphabet, null, bothClasses, 100_000_000),
@@ -129,10 +137,19 @@ public class HolderPeerCompaniesTests : IAsyncLifetime
             CancellationToken.None
         );
 
-        funds.IsFundIssuer(_spy.Id).Should().BeTrue("its presentation listing is an exchange-traded product");
+        funds
+            .IsFundIssuer(_spy.Id)
+            .Should()
+            .BeTrue("its presentation listing is an exchange-traded product");
         funds.IsFundIssuer(_closedEnd.Id).Should().BeTrue("it files Form N-PORT");
-        funds.IsFundIssuer(_trust.Id).Should().BeTrue("its CIK registers an N-PORT series, however padded");
-        funds.IsFundIssuer(_bank.Id).Should().BeFalse("a note it issues does not make the bank a fund");
+        funds
+            .IsFundIssuer(_trust.Id)
+            .Should()
+            .BeTrue("its CIK registers an N-PORT series, however padded");
+        funds
+            .IsFundIssuer(_bank.Id)
+            .Should()
+            .BeFalse("a note it issues does not make the bank a fund");
         funds.IsFund(new HolderSecurityKey(_bank.Id, "AMJ")).Should().BeTrue();
         funds.IsFund(new HolderSecurityKey(_bank.Id, null)).Should().BeFalse();
         funds.IsFundIssuer(_namedLikeAFund.Id).Should().BeFalse("a name is never evidence");
@@ -214,7 +231,8 @@ public class HolderPeerCompaniesTests : IAsyncLifetime
     private static FundSeries Series(Guid? issuerId, string registrantCik, string seriesId) =>
         new()
         {
-            IdentityKey = issuerId != null ? $"cs:{issuerId}:{seriesId}" : $"rc:{registrantCik}:{seriesId}",
+            IdentityKey =
+                issuerId != null ? $"cs:{issuerId}:{seriesId}" : $"rc:{registrantCik}:{seriesId}",
             Slug = $"fund-{seriesId.ToLowerInvariant()}",
             EquityIssuerId = issuerId,
             RegistrantCik = registrantCik,

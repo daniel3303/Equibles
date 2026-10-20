@@ -94,11 +94,7 @@ public class StockHolderSignalsCalculatorTests
             calculator.Add(
                 Holder(
                     3_000,
-                    [
-                        new(shell, 1_600_000, 100),
-                        new(issued, 160, 100),
-                        new(counted, 160, 100),
-                    ],
+                    [new(shell, 1_600_000, 100), new(issued, 160, 100), new(counted, 160, 100)],
                     turnover: HolderTurnoverBand.High
                 )
             );
@@ -143,7 +139,11 @@ public class StockHolderSignalsCalculatorTests
         var calculator = new StockHolderSignalsCalculator();
         for (var filer = 0; filer < StockHolderSignalsCalculator.MinimumRankedFilers; filer++)
             calculator.Add(
-                Holder(3_000, [new(stale, 10, 100), new(current, 10, 100)], turnover: HolderTurnoverBand.High)
+                Holder(
+                    3_000,
+                    [new(stale, 10, 100), new(current, 10, 100)],
+                    turnover: HolderTurnoverBand.High
+                )
             );
         var oldest = Quarter.AddDays(-StockHolderSignalsCalculator.MaximumCountAgeDays);
 
@@ -293,7 +293,12 @@ public class StockHolderSignalsCalculatorTests
     }
 
     private static StockHolderSignalsQuarterInputs Counts(
-        params (HolderSecurityKey Security, long Count, DateOnly AsOf, SharesOutstandingBasis Basis)[] counts
+        params (
+            HolderSecurityKey Security,
+            long Count,
+            DateOnly AsOf,
+            SharesOutstandingBasis Basis
+        )[] counts
     ) =>
         new()
         {
