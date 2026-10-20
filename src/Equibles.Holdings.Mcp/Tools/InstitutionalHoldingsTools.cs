@@ -843,7 +843,7 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine();
         result.AppendLine(
-            $"_Shares are 13F common shares restated to today's split basis; options and principal amounts are left out. The change compares only filers with an observed 13F in both quarters and keeps each filer in its bucket of the later quarter on both sides; a filer that continues under a new CIK is compared through its successor. Holder type, client base and private funds are each filer's current regulatory profile, never its name; style, turnover, horizon and book size are measured from each filer's 13F book in the newest measured quarter on or before the column, and Not measured means none was. Other dimensions: {HolderBucketTokens.MixDimensionTokenList}._"
+            $"_Shares are 13F common shares restated to today's split basis; options and principal amounts are left out. The change compares only filers with an observed 13F in both quarters and keeps each filer in its bucket of the later quarter on both sides; a filer that continues under a new CIK is compared through its successor. Holder type is each filer's current regulatory profile, never its name; client base and private funds come from the Form ADV roster current at the column's quarter end (rosters from December 2019, so an earlier column reads Unknown); style, turnover, horizon and book size are measured from each filer's 13F book in the newest measured quarter on or before the column, and Not measured means none was. Other dimensions: {HolderBucketTokens.MixDimensionTokenList}._"
         );
         return result.ToString();
     }
