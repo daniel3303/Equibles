@@ -96,6 +96,21 @@ public class DataCountService
     // reltuples is -1 for a table that has never been analyzed - in that case we
     // fall back to the exact count rather than report a wrong zero. That path is
     // rare in practice, so it does not reintroduce the slow behaviour.
+    //
+    // STALENESS - read this before "fixing" the number by adding a timeout:
+    // autovacuum's analyze trigger is 50 + autovacuum_analyze_scale_factor (0.1)
+    // of the table, so on a 44M-row table it fires only after ~4.4M changes and
+    // this page can show the same figure for days. That is a staleness problem,
+    // not an accuracy one: on a 20.5M-row table the estimate was within 47 rows of
+    // an exact COUNT(*). Refresh it by lowering the threshold for the big tables
+    //    ALTER TABLE "InstitutionalHolding"
+    //      SET (autovacuum_analyze_scale_factor = 0.01);
+    // and NOT by scheduling ANALYZE: a single 315k-row table took 33.8 s on the
+    // host this was measured on, and a whole-database ANALYZE; there caused a
+    // backend crash and a cluster-wide restart. ANALYZE is cheap per table and
+    // expensive as a sweep. pg_stat_user_tables.n_live_tup is more responsive but
+    // resets toward zero on a statistics reset or a crash (observed: 172 for a
+    // 20.5M-row table), so it is not a drop-in replacement.
     private async Task<int> CountAll<T>(BaseRepository<T> repository)
         where T : class
     {
