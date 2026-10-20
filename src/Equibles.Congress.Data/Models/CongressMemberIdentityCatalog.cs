@@ -17,9 +17,27 @@ public static class CongressMemberIdentityCatalog
             "Alexandria F Ocasio-Cortez",
             "Alexandria F. Ocasio-Cortez"
         ),
+        Identity("C001105", "Barbara Comstock", "Barbara J Comstock", "Barbara J. Comstock"),
+        Identity(
+            "C001075",
+            "Bill Cassidy",
+            "William Cassidy",
+            "William M Cassidy",
+            "William M. Cassidy"
+        ),
+        Identity("C001111", "Charlie Crist", "Charlie Joseph Crist"),
+        Identity("H001077", "Clay Higgins", "Captain Clay Higgins", "Clay Captain Higgins"),
+        Identity("R000603", "David Rouzer", "David Cheston Rouzer"),
         Identity("R000305", "Deborah Ross", "Deborah K Ross", "Deborah K. Ross"),
+        Identity("B001298", "Don Bacon", "Donald J Bacon", "Donald J. Bacon", "Donald John Bacon"),
+        Identity("S001208", "Elissa Slotkin", "Elissa Blair Slotkin"),
+        Identity("P000595", "Gary Peters", "Gary C Peters", "Gary C. Peters"),
+        Identity("I000058", "Glenn Ivey", "Glenn Frederick Ivey"),
+        Identity("S001214", "Greg Steube", "W Greg Steube", "W. Greg Steube"),
         Identity("D000628", "Neal Dunn", "Neal P Dunn", "Neal P. Dunn", "Neal Patrick Dunn"),
+        Identity("R000608", "Jacky Rosen", "Jacklyn S Rosen", "Jacklyn S. Rosen"),
         Identity("B001299", "James Banks", "James E Banks", "James E. Banks", "Jim Banks"),
+        Identity("A000375", "Jodey Arrington", "Jodey Cook Arrington"),
         Identity("C001114", "John Curtis", "John R Curtis", "John R. Curtis"),
         Identity(
             "M001239",
@@ -39,6 +57,14 @@ public static class CongressMemberIdentityCatalog
             "Matt M. Rosendale",
             "Matthew Rosendale"
         ),
+        Identity("R000605", "Mike Rounds", "M Michael Rounds", "M. Michael Rounds"),
+        Identity(
+            "W000788",
+            "Nikema Williams",
+            "Nikema N Williams",
+            "Nikema N. Williams",
+            "Nikema Natassha Williams"
+        ),
         Identity("G000595", "Robert Good", "Robert G Good", "Robert G. Good"),
         Identity("M001198", "Roger Marshall", "Roger W Marshall", "Roger W. Marshall"),
         Identity(
@@ -53,8 +79,17 @@ public static class CongressMemberIdentityCatalog
         Identity("F000472", "Scott Franklin", "C Scott Franklin", "C. Scott Franklin"),
         Identity("B001313", "Shontel Brown", "M Shontel Brown", "Shontel M. Brown"),
         Identity("G000587", "Sylvia Garcia", "Sylvia R Garcia", "Sylvia R. Garcia"),
+        Identity("D000622", "Tammy Duckworth", "Ladda Tammy Duckworth"),
         Identity("B001305", "Ted Budd", "Theodore Budd", "Theodore P Budd", "Theodore P. Budd"),
         Identity("S001201", "Thomas Suozzi", "Thomas R Suozzi", "Thomas R. Suozzi"),
+        Identity("C001097", "Tony Cárdenas", "Tony Cardenas"),
+        Identity(
+            "T000479",
+            "Van Taylor",
+            "Nicholas V Taylor",
+            "Nicholas V. Taylor",
+            "Nicholas Van Taylor"
+        ),
     ];
 
     private static readonly IReadOnlyDictionary<string, CongressMemberIdentity> ByAlias =

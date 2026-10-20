@@ -13,6 +13,10 @@ public class CongressMemberIdentityCatalogTests
     [InlineData("Adam B Schiff", "S001150", "Adam Schiff")]
     [InlineData("Adam B. Schiff", "S001150", "Adam Schiff")]
     [InlineData("C. Scott Franklin", "F000472", "Scott Franklin")]
+    [InlineData("Jacklyn S Rosen", "R000608", "Jacky Rosen")]
+    [InlineData("Clay Captain Higgins", "H001077", "Clay Higgins")]
+    [InlineData("Tony Cardenas", "C001097", "Tony Cárdenas")]
+    [InlineData("Nicholas Van Taylor", "T000479", "Van Taylor")]
     public void Resolve_ReviewedExactAlias_ReturnsStableIdentity(
         string alias,
         string bioguideId,
