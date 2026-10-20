@@ -6,8 +6,10 @@ namespace Equibles.UnitTests.Holdings.Intelligence;
 // holder-intelligence load of either table must name Form 13F or a single stake joins a 13F book.
 public class HolderIntelligenceLoadConventionTests
 {
-    [Fact]
-    public void IntelligenceHoldingLoads_Are13FFiltered()
+    [Theory]
+    [InlineData("", "HolderIntelligenceRefreshService.cs")]
+    [InlineData("Benchmarks", "AggregateHolderBenchmarkProvider.cs")]
+    public void IntelligenceHoldingLoads_Are13FFiltered(string folder, string file)
     {
         var source = File.ReadAllText(
             Path.Combine(
@@ -15,7 +17,8 @@ public class HolderIntelligenceLoadConventionTests
                 "src",
                 "Equibles.Holdings.HostedService",
                 "Services",
-                "HolderIntelligenceRefreshService.cs"
+                folder,
+                file
             )
         );
         var loads = Regex.Matches(source, @"Set<Institutional(Holding|Filing)>\(\)");

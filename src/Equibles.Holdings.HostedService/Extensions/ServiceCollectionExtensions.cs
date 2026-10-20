@@ -1,7 +1,10 @@
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.HostedService.Services.Benchmarks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Equibles.Holdings.HostedService.Extensions;
 
@@ -16,6 +19,8 @@ public static class ServiceCollectionExtensions
         // register it here so the worker's composition root is self-contained.
         services.AutoWireServicesFrom<FundScoringManager>();
 
+        services.AddHolderBenchmarks();
+
         services.AddHostedService<HoldingsScraperWorker>();
         services.AddHostedService<Holdings13FRealtimeWorker>();
         services.AddHostedService<Holdings13DGRealtimeWorker>();
@@ -26,6 +31,25 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<AumSnapshotRebuildWorker>();
         services.AddHostedService<FundScoringWorker>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the benchmarks the intelligence drain measures active share against: the combined
+    /// 13F book and index-tracking funds' N-PORT holdings (<see cref="HolderBenchmarkOptions"/>).
+    /// A host adds other <see cref="IHolderBenchmarkProvider"/> sources with <c>TryAddEnumerable</c>.
+    /// </summary>
+    public static IServiceCollection AddHolderBenchmarks(this IServiceCollection services)
+    {
+        services
+            .AddOptions<HolderBenchmarkOptions>()
+            .BindConfiguration(HolderBenchmarkOptions.SectionName);
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IHolderBenchmarkProvider, AggregateHolderBenchmarkProvider>()
+        );
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IHolderBenchmarkProvider, NportSeriesHolderBenchmarkProvider>()
+        );
         return services;
     }
 

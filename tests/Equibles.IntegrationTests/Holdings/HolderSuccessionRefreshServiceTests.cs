@@ -90,6 +90,54 @@ public class HolderSuccessionRefreshServiceTests : ParadeDbMcpTestBase
         (await Successions()).Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Run_StampsTheIntelligenceQuarterWhoseSuccessionsChanged()
+    {
+        var quarter = new DateOnly(2026, 3, 31);
+        DbContext.AddRange(
+            new HolderIntelligenceQuarterState
+            {
+                ReportDate = quarter,
+                ComputedAt = DateTime.UtcNow,
+            },
+            new HolderIntelligenceQuarterState
+            {
+                ReportDate = new DateOnly(2025, 12, 31),
+                ComputedAt = DateTime.UtcNow,
+            }
+        );
+        var stopped = Holder("41", crd: "888");
+        Rollup(stopped, "s4-2025q4", "2025-12-31");
+        var started = Holder("42", crd: "888");
+        Rollup(started, "n4-2026q1", "2026-03-31");
+        await DbContext.SaveChangesAsync();
+
+        (await Sut().Run(Today, CancellationToken.None)).Should().Be(1);
+        (await DirtyQuarters()).Should().Equal(quarter);
+
+        await DbContext
+            .Set<HolderIntelligenceQuarterState>()
+            .ExecuteUpdateAsync(setters =>
+                setters.SetProperty(state => state.DirtyAt, (DateTime?)null)
+            );
+        (await Sut().Run(Today, CancellationToken.None)).Should().Be(1);
+        (await DirtyQuarters()).Should().BeEmpty("an unchanged succession set stamps nothing");
+
+        Rollup(stopped, "s4-2026q1", "2026-03-31");
+        await DbContext.SaveChangesAsync();
+        (await Sut().Run(Today, CancellationToken.None)).Should().Be(0);
+        (await DirtyQuarters()).Should().Equal(quarter);
+    }
+
+    private async Task<List<DateOnly>> DirtyQuarters()
+    {
+        await using var read = Fixture.CreateDbContext();
+        return await read.Set<HolderIntelligenceQuarterState>()
+            .Where(state => state.DirtyAt != null)
+            .Select(state => state.ReportDate)
+            .ToListAsync();
+    }
+
     private Guid Holder(string cik, string fileNumber = null, string crd = null)
     {
         var holder = new InstitutionalHolder

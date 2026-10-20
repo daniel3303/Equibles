@@ -5,19 +5,25 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.BusinessLogic.Intelligence;
+using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
+using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
+using Equibles.Holdings.HostedService.Services.Benchmarks;
 using Equibles.Holdings.Repositories;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
-/// Rebuilds one closed quarter's <see cref="HolderQuarterlyMetrics"/> and
-/// <see cref="HolderQuarterlySectorFlow"/> rows from Form 13F rows, a few hundred filers at a time,
-/// and keeps each filer's <see cref="HolderStockPresence"/> bit for the quarter current. A changed presence bit re-dirties every later quarter, whose tenure reads it.
+/// Rebuilds one closed quarter's <see cref="HolderQuarterlyMetrics"/>,
+/// <see cref="HolderQuarterlySectorFlow"/> and <see cref="HolderQuarterlyBenchmarkActiveShare"/>
+/// rows from Form 13F rows, a few hundred filers at a time, and keeps each filer's
+/// <see cref="HolderStockPresence"/> bit for the quarter current. A changed presence bit re-dirties
+/// every later quarter, whose tenure reads it.
 /// </summary>
 [Service]
 public class HolderIntelligenceRefreshService
@@ -29,29 +35,43 @@ public class HolderIntelligenceRefreshService
     /// 5: a trade whose shares, at its price, grossly exceed a position's reported value is unpriced
     /// (<see cref="HolderTurnoverCalculator"/>), which heals buy, sell, turnover, style bands and
     /// sector flows built on swapped share and value columns or a sibling class's CUSIP.
+    /// 6: active share is also measured against every published index benchmark
+    /// (<see cref="IHolderBenchmarkProvider"/>) and the closest one feeds the index-like band, sector
+    /// active share is stored, and a filer that alone continues one predecessor's 13F reports trades
+    /// against that predecessor's book (<see cref="HolderQuarterlyMetrics.ComparedHolderId"/>), which
+    /// heals small- and mid-cap trackers read as active and successors' first quarters with no trades.
     /// </summary>
-    public const int CalculationVersion = 5;
+    public const int CalculationVersion = 6;
 
     /// <summary>A stamp this old is past the drain's cooldown and is picked up on its next tick.</summary>
     public static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
 
     internal const int HolderBatchSize = 250;
 
+    // Rows saved per round trip on publish, so the change tracker never holds a whole quarter.
+    internal const int PublishBatchSize = 2_000;
+
     // A quarter-wide aggregate over millions of holdings outlasts the default 30-second timeout.
     internal static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(30);
 
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly HoldingsCorpusCoverage _corpusCoverage;
+    private readonly IEnumerable<IHolderBenchmarkProvider> _benchmarkProviders;
+    private readonly decimal _minimumBenchmarkCoverage;
     private readonly ILogger<HolderIntelligenceRefreshService> _logger;
 
     public HolderIntelligenceRefreshService(
         EquiblesFinancialDbContext dbContext,
         HoldingsCorpusCoverage corpusCoverage,
+        IEnumerable<IHolderBenchmarkProvider> benchmarkProviders,
+        IOptions<HolderBenchmarkOptions> benchmarkOptions,
         ILogger<HolderIntelligenceRefreshService> logger
     )
     {
         _dbContext = dbContext;
         _corpusCoverage = corpusCoverage;
+        _benchmarkProviders = benchmarkProviders;
+        _minimumBenchmarkCoverage = Math.Clamp(benchmarkOptions.Value.MinimumCoverage, 0, 1);
         _logger = logger;
     }
 
@@ -90,7 +110,7 @@ public class HolderIntelligenceRefreshService
             .Select(back => reportDate.AddDays(1).AddMonths(-3 * back).AddDays(-1))
             .ToList();
 
-        var benchmark = await LoadAggregateBenchmark(reportDate, cancellationToken);
+        var benchmarks = await LoadBenchmarks(reportDate, cancellationToken);
         var filers = await LoadFilers(reportDate, cancellationToken);
         // A quarter before the corpus is incidental, so the first covered quarter has no trades.
         var previousFilers =
@@ -112,13 +132,28 @@ public class HolderIntelligenceRefreshService
         var advisedSeries = HolderIdentifierRules.SummarizeAdvisedSeries(
             await AdvisedSeriesLoader.Load(_dbContext, reportDate, cancellationToken)
         );
-        var (issuerSectors, exchangeTraded) =
-            previousFilers.Count > 0 ? await LoadSectors(cancellationToken) : ([], []);
+        var (issuerSectors, exchangeTraded) = await LoadSectors(cancellationToken);
+        var aggregateSectorWeights = benchmarks.FirstOrDefault(benchmark =>
+            benchmark.Key == HolderBenchmarkCatalog.Aggregate
+        )
+            is { } aggregate
+            ? HolderSectorWeights.Of(aggregate.Weights, issuerSectors)
+            : [];
+        var predecessors =
+            previousFilers.Count > 0
+                ? await LoadComparedPredecessors(
+                    reportDate,
+                    previous,
+                    previousFilers,
+                    cancellationToken
+                )
+                : [];
 
         var presenceChanged = await ClearNonFilers(reportDate, bit, cancellationToken);
 
         var metrics = new List<HolderQuarterlyMetrics>(filers.Count);
         var sectorFlows = new List<HolderQuarterlySectorFlow>();
+        var benchmarkRows = new List<HolderQuarterlyBenchmarkActiveShare>();
         foreach (var batch in filers.Chunk(HolderBatchSize))
         {
             var (results, presenceIds) = await BuildBatch(
@@ -126,8 +161,10 @@ public class HolderIntelligenceRefreshService
                 reportDate,
                 previous,
                 previousFilers,
+                predecessors,
                 priorDates,
-                benchmark,
+                benchmarks,
+                aggregateSectorWeights,
                 averagePrices,
                 advisedSeries,
                 issuerSectors,
@@ -136,6 +173,9 @@ public class HolderIntelligenceRefreshService
             );
             metrics.AddRange(results.Select(result => result.Result.Metrics));
             sectorFlows.AddRange(results.SelectMany(result => result.Result.SectorFlows));
+            benchmarkRows.AddRange(
+                results.SelectMany(result => result.Result.BenchmarkActiveShares)
+            );
             presenceChanged |= await WritePresence(
                 results,
                 presenceIds,
@@ -146,15 +186,20 @@ public class HolderIntelligenceRefreshService
         }
 
         await BeforePublish(reportDate);
-        await Publish(reportDate, metrics, sectorFlows, cancellationToken);
+        await Publish(reportDate, metrics, sectorFlows, benchmarkRows, cancellationToken);
 
         _logger.LogInformation(
-            "Holder intelligence for {ReportDate}: {Count} filers, {SectorFlows} sector flow rows, {Priced} securities at their quarter average price, {Advised} filers with N-CEN series, presence changed: {Changed}",
+            "Holder intelligence for {ReportDate}: {Count} filers, {SectorFlows} sector flow rows, {Benchmarks} benchmarks ({BenchmarkKeys}), {Priced} securities at their quarter average price, {Advised} filers with N-CEN series, {Compared} compared with a predecessor, presence changed: {Changed}",
             reportDate,
             metrics.Count,
             sectorFlows.Count,
+            benchmarks.Count,
+            string.Join(", ", benchmarks.Select(benchmark => benchmark.Key)),
             averagePrices.Count,
             metrics.Count(row => row.AdvisedSeriesAsOf != null),
+            metrics.Count(row =>
+                row.ComparedHolderId != null && row.ComparedHolderId != row.InstitutionalHolderId
+            ),
             presenceChanged
         );
         return true;
@@ -168,8 +213,10 @@ public class HolderIntelligenceRefreshService
         DateOnly reportDate,
         DateOnly previous,
         HashSet<Guid> previousFilers,
+        Dictionary<Guid, Guid> predecessors,
         List<DateOnly> priorDates,
-        Dictionary<Guid, decimal> benchmark,
+        List<HolderBenchmark> benchmarks,
+        Dictionary<Guid, decimal> aggregateSectorWeights,
         Dictionary<HolderSecurityKey, decimal> averagePrices,
         Dictionary<int, AdvisedSeriesSummary> advisedSeries,
         Dictionary<Guid, Guid> issuerSectors,
@@ -179,14 +226,30 @@ public class HolderIntelligenceRefreshService
     {
         // Nothing before the corpus is a baseline, so its rows are never read.
         var readPrevious = previousFilers.Count > 0;
+        // A filer that alone continues a predecessor compares with that predecessor's last book.
+        var comparedIds = holderIds.ToDictionary(
+            holderId => holderId,
+            holderId =>
+                previousFilers.Contains(holderId) ? holderId
+                : predecessors.TryGetValue(holderId, out var predecessor) ? predecessor
+                : (Guid?)null
+        );
+        var predecessorIds = comparedIds
+            .Where(pair => pair.Value is { } compared && compared != pair.Key)
+            .Select(pair => pair.Value.Value)
+            .ToList();
         var rows = await _dbContext
             .Set<InstitutionalHolding>()
             .AsNoTracking()
             .Where(holding =>
-                holderIds.Contains(holding.InstitutionalHolderId)
-                && (
-                    holding.ReportDate == reportDate
-                    || readPrevious && holding.ReportDate == previous
+                (
+                    holderIds.Contains(holding.InstitutionalHolderId)
+                        && (
+                            holding.ReportDate == reportDate
+                            || readPrevious && holding.ReportDate == previous
+                        )
+                    || predecessorIds.Contains(holding.InstitutionalHolderId)
+                        && holding.ReportDate == previous
                 )
                 && holding.FilingType == FilingType.Form13F
             )
@@ -248,14 +311,16 @@ public class HolderIntelligenceRefreshService
                 var series = adviserCrds.TryGetValue(holderId, out var crd)
                     ? advisedSeries.GetValueOrDefault(crd)
                     : null;
+                var comparedId = comparedIds[holderId];
                 var input = new HolderQuarterInput
                 {
                     InstitutionalHolderId = holderId,
                     ReportDate = reportDate,
                     Current = holderRows.Where(row => row.ReportDate == reportDate).ToList(),
-                    Previous = previousFilers.Contains(holderId)
-                        ? holderRows.Where(row => row.ReportDate == previous).ToList()
+                    Previous = comparedId is { } compared
+                        ? rowsByHolder[compared].Where(row => row.ReportDate == previous).ToList()
                         : null,
+                    ComparedHolderId = comparedId,
                     PreviousShareFactors = factors,
                     Presence = presenceByHolder[holderId]
                         .ToDictionary(row => row.Key.Security, row => row.HeldMask),
@@ -268,7 +333,9 @@ public class HolderIntelligenceRefreshService
                                     : mask
                         ),
                     FirstCoveredQuarter = HolderTenureCalculator.QuarterIndex(firstQuarter).Value,
-                    AggregateBenchmark = benchmark,
+                    Benchmarks = benchmarks,
+                    MinimumBenchmarkCoverage = _minimumBenchmarkCoverage,
+                    AggregateSectorWeights = aggregateSectorWeights,
                     AveragePrices = averagePrices,
                     PriorTurnovers = priorDates
                         .Select(date =>
@@ -527,13 +594,14 @@ public class HolderIntelligenceRefreshService
         return cleared > 0;
     }
 
-    // Replaces the quarter's metrics and sector flows in one transaction. A changed filer set
-    // re-dirties every later quarter (tenure bridges unfiled quarters); a changed turnover the three
-    // whose trailing sum reads it.
+    // Replaces the quarter's metrics, sector flows and benchmark active shares in one transaction,
+    // saved a batch at a time. A changed filer set re-dirties every later quarter (tenure bridges
+    // unfiled quarters); a changed turnover the three whose trailing sum reads it.
     private async Task Publish(
         DateOnly reportDate,
         List<HolderQuarterlyMetrics> metrics,
         List<HolderQuarterlySectorFlow> sectorFlows,
+        List<HolderQuarterlyBenchmarkActiveShare> benchmarkRows,
         CancellationToken cancellationToken
     )
     {
@@ -556,9 +624,13 @@ public class HolderIntelligenceRefreshService
                 .Set<HolderQuarterlySectorFlow>()
                 .Where(row => row.ReportDate == reportDate)
                 .ExecuteDeleteAsync(cancellationToken);
-            _dbContext.Set<HolderQuarterlyMetrics>().AddRange(metrics);
-            _dbContext.Set<HolderQuarterlySectorFlow>().AddRange(sectorFlows);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext
+                .Set<HolderQuarterlyBenchmarkActiveShare>()
+                .Where(row => row.ReportDate == reportDate)
+                .ExecuteDeleteAsync(cancellationToken);
+            await AddInBatches(metrics, cancellationToken);
+            await AddInBatches(sectorFlows, cancellationToken);
+            await AddInBatches(benchmarkRows, cancellationToken);
 
             var filersChanged =
                 stored.Count != metrics.Count
@@ -579,6 +651,17 @@ public class HolderIntelligenceRefreshService
         _dbContext.ChangeTracker.Clear();
     }
 
+    private async Task AddInBatches<T>(List<T> rows, CancellationToken cancellationToken)
+        where T : class
+    {
+        foreach (var batch in rows.Chunk(PublishBatchSize))
+        {
+            _dbContext.Set<T>().AddRange(batch);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            _dbContext.ChangeTracker.Clear();
+        }
+    }
+
     // Postgres rounds the turnover half away from zero to the column's six decimals.
     internal static bool TurnoverChanged(decimal? stored, decimal? current) =>
         stored
@@ -590,25 +673,78 @@ public class HolderIntelligenceRefreshService
     // Test seam for a failure after the presence bits are written and before the metrics publish.
     protected virtual Task BeforePublish(DateOnly reportDate) => Task.CompletedTask;
 
-    // Every 13F filer's common-share value per issuer, the benchmark aggregate active share uses.
-    private Task<Dictionary<Guid, decimal>> LoadAggregateBenchmark(
+    // Every provider's benchmarks for the quarter, one per catalog key; a provider that throws
+    // fails the rebuild, so a quarter never publishes against a partial benchmark set.
+    private async Task<List<HolderBenchmark>> LoadBenchmarks(
         DateOnly reportDate,
         CancellationToken cancellationToken
-    ) =>
-        _dbContext
-            .Set<InstitutionalHolding>()
-            .Where(holding =>
-                holding.ReportDate == reportDate
-                && holding.FilingType == FilingType.Form13F
-                && holding.ShareType == ShareType.Shares
-                && holding.OptionType == null
-                && !holding.ValuePending
-                && !holding.ValueUnavailable
-                && holding.Value > 0
+    )
+    {
+        var candidates = new List<HolderBenchmark>();
+        foreach (var provider in _benchmarkProviders)
+            candidates.AddRange(await provider.Load(reportDate, cancellationToken));
+        foreach (var unknown in candidates.Where(c => !HolderBenchmarkCatalog.Contains(c.Key)))
+            _logger.LogWarning(
+                "Holder benchmark {Key} from {Source} is not in the catalog and is ignored",
+                unknown.Key,
+                unknown.Source
+            );
+        var chosen = HolderBenchmarkSelection.Choose(candidates, reportDate);
+        foreach (var thin in chosen.Where(c => c.Coverage < _minimumBenchmarkCoverage))
+            _logger.LogWarning(
+                "Holder benchmark {Key} from {Source} resolves {Coverage:P1} of its weight to issuers, under the {Minimum:P0} floor; it is stored but never the closest benchmark for {ReportDate}",
+                thin.Key,
+                thin.Source,
+                thin.Coverage,
+                _minimumBenchmarkCoverage,
+                reportDate
+            );
+        return chosen;
+    }
+
+    // Successor to predecessor for each comparable succession that pairs one filer with one, whose
+    // successor first files this quarter and whose predecessor filed the quarter before. A group
+    // of several filers cannot divide its prior book, so its successors keep no baseline.
+    private async Task<Dictionary<Guid, Guid>> LoadComparedPredecessors(
+        DateOnly reportDate,
+        DateOnly previous,
+        HashSet<Guid> previousFilers,
+        CancellationToken cancellationToken
+    )
+    {
+        var pairs = await _dbContext
+            .Set<HolderSuccession>()
+            .AsNoTracking()
+            .Where(succession =>
+                succession.SuccessorFirstReportDate == reportDate
+                && succession.PredecessorLastReportDate == previous
             )
-            .GroupBy(holding => holding.EquityIssuerId)
-            .Select(group => new { IssuerId = group.Key, Value = group.Sum(h => h.Value) })
-            .ToDictionaryAsync(row => row.IssuerId, row => (decimal)row.Value, cancellationToken);
+            .Select(succession => new HoldingsSuccessionPair
+            {
+                PredecessorHolderId = succession.PredecessorHolderId,
+                SuccessorHolderId = succession.SuccessorHolderId,
+                SuccessorFirstReportDate = succession.SuccessorFirstReportDate,
+                PredecessorGroupValue = succession.PredecessorGroupValue,
+                SuccessorGroupValue = succession.SuccessorGroupValue,
+            })
+            .ToListAsync(cancellationToken);
+        return HoldingsSuccessionGroups
+            .Build(pairs)
+            .Where(group =>
+                group.Comparable && group.Predecessors.Count == 1 && group.Successors.Count == 1
+            )
+            .Select(group =>
+                (
+                    Successor: group.Successors.Keys.Single(),
+                    Predecessor: group.Predecessors.Keys.Single()
+                )
+            )
+            .Where(pair =>
+                !previousFilers.Contains(pair.Successor)
+                && previousFilers.Contains(pair.Predecessor)
+            )
+            .ToDictionary(pair => pair.Successor, pair => pair.Predecessor);
+    }
 
     // Each issuer's industry sector as of now, and the US listings flagged as exchange-traded
     // products by the reference directory: a presentation listing's rows carry no listed ticker.
