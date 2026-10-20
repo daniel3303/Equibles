@@ -9,6 +9,6 @@ public enum EquitySecurityKind
     DepositaryReceipt = 3,
     Other = 4,
 
-    // A listed unit of an operating trust (a REIT or income trust); it is neither a share nor a receipt.
+    // A listed unit of an operating trust or limited partnership (a REIT, income trust or LP unit), not a share.
     TrustUnit = 5,
 }

@@ -136,11 +136,23 @@ internal sealed class EquityDirectoryInstrumentIdentity(
             return true;
         if (proven != null && proven.Id != security.Id)
             return true;
+        // A proven share recorded without an ISIN takes a stated one only when that ISIN embeds its own CUSIP.
+        if (proven != null && security.Isin == null && input.Isin != null && !EmbedsCusip(security))
+            return true;
         return security.Isin != null
             && input.Isin != null
             && security.Isin != input.Isin
             && !Reissued(security);
     }
+
+    // ISO 6166 embeds the national CUSIP only in US and CA ISINs.
+    private bool EmbedsCusip(EquitySecurity security) =>
+        security.Cusip != null
+        && (
+            input.Isin.StartsWith("US", StringComparison.Ordinal)
+            || input.Isin.StartsWith("CA", StringComparison.Ordinal)
+        )
+        && input.Isin.Substring(2, 9) == security.Cusip;
 
     // Only a security bound to this venue code may take the code's reissued ISIN.
     private bool Reissued(EquitySecurity security) =>
