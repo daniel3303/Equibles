@@ -164,12 +164,12 @@ public static class OwnershipSummaryCalculator
         do
         {
             added = false;
-            foreach (var names in schedules.Select(schedule => Names(schedule).ToList()))
-            {
-                if (names.Any(covered.Contains))
-                    foreach (var cik in names)
-                        added |= covered.Add(cik);
-            }
+            var touching = schedules
+                .Select(schedule => Names(schedule).ToList())
+                .Where(names => names.Any(covered.Contains))
+                .ToList();
+            foreach (var cik in touching.SelectMany(names => names))
+                added |= covered.Add(cik);
         } while (added);
         return covered;
     }
