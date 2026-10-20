@@ -44,9 +44,10 @@ public class InsiderTransaction
     /// in holding-section supersession; v10 restores source-row identity through rejected dates;
     /// v11 re-reads spelled-out ADS ratios above twenty ("sixty", "thirty-five") so per-ADS
     /// prices on ordinary-share rows are restated to per-ordinary; v12 records the reporting
-    /// owner's relationship boxes on each row.
+    /// owner's relationship boxes on each row; v13 records each row's filed nature of ownership
+    /// and its footnote ids, so an insider's indirect vehicles keep separate balances.
     /// </summary>
-    public const int CurrentParserVersion = 12;
+    public const int CurrentParserVersion = 13;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -91,6 +92,20 @@ public class InsiderTransaction
     public AcquiredDisposed AcquiredDisposed { get; set; }
     public long SharesOwnedAfter { get; set; }
     public OwnershipNature OwnershipNature { get; set; }
+
+    /// <summary>
+    /// The row's filed <c>natureOfOwnership</c> text (e.g. "By Trust"), whitespace collapsed; null
+    /// when the filing states none or the row predates parser version 13.
+    /// </summary>
+    [MaxLength(256)]
+    public string NatureOfOwnership { get; set; }
+
+    /// <summary>
+    /// The footnote ids the filing attaches to the row's ownership nature, in document order. With
+    /// <see cref="NatureOfOwnership"/> they name the vehicle an indirect balance sits in; ids are
+    /// only comparable within one accession.
+    /// </summary>
+    public List<string> OwnershipNatureFootnoteIds { get; set; } = [];
 
     [MaxLength(128)]
     public string SecurityTitle { get; set; }

@@ -4383,6 +4383,10 @@ namespace Equibles.Migrations.Migrations
                     b.Property<bool?>("IsRule10b5One")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("NatureOfOwnership")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.PrimitiveCollection<List<string>>("Notes")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -4397,6 +4401,12 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("OwnershipNature")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("OwnershipNatureFootnoteIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<int>("ParserVersion")
                         .HasColumnType("integer");

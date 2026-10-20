@@ -372,6 +372,8 @@ public static class InsiderFilingParser
                 adCode == "D" ? AcquiredDisposed.Disposed : AcquiredDisposed.Acquired,
             SharesOwnedAfter = ParseLong(sharesAfterStr),
             OwnershipNature = ParseOwnershipNature(txElement),
+            NatureOfOwnership = ParseNatureOfOwnership(txElement),
+            OwnershipNatureFootnoteIds = ParseOwnershipNatureFootnoteIds(txElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
@@ -414,6 +416,8 @@ public static class InsiderFilingParser
             AcquiredDisposed = AcquiredDisposed.Acquired,
             SharesOwnedAfter = ParseLong(sharesStr),
             OwnershipNature = ParseOwnershipNature(holdingElement),
+            NatureOfOwnership = ParseNatureOfOwnership(holdingElement),
+            OwnershipNatureFootnoteIds = ParseOwnershipNatureFootnoteIds(holdingElement),
             SecurityTitle = securityTitle,
             AccessionNumber = filing.AccessionNumber,
             IsAmendment = isAmendment,
@@ -479,6 +483,35 @@ public static class InsiderFilingParser
             ?.Trim();
         return value == "I" ? OwnershipNature.Indirect : OwnershipNature.Direct;
     }
+
+    internal const int NatureOfOwnershipMaxLength = 256;
+
+    // The filed natureOfOwnership text with whitespace runs collapsed; null when absent or blank.
+    internal static string ParseNatureOfOwnership(XElement element)
+    {
+        var value = GetWrappedValue(element, "ownershipNature", "natureOfOwnership");
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var collapsed = string.Join(
+            ' ',
+            value.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
+        );
+        return collapsed.Length <= NatureOfOwnershipMaxLength
+            ? collapsed
+            : collapsed[..NatureOfOwnershipMaxLength];
+    }
+
+    // Footnote ids anywhere in the row's ownershipNature block: filers attach the footnote that
+    // names a vehicle to natureOfOwnership or to directOrIndirectOwnership.
+    internal static List<string> ParseOwnershipNatureFootnoteIds(XElement element) =>
+        element
+            .Element("ownershipNature")
+            ?.Descendants("footnoteId")
+            .Select(reference => reference.Attribute("id")?.Value?.Trim())
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct()
+            .ToList()
+        ?? [];
 
     // SEC ownership XML wraps each field in <field><value>...</value></field>,
     // sometimes nested under a grouping element (transactionAmounts, etc.).

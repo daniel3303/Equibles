@@ -508,6 +508,9 @@ public class InsiderFilingReprocessManager
                 }
                 // Re-derive footnotes (added in parser v2); cheap to always copy.
                 row.Notes = reparsed.Notes;
+                // The holding vehicle (parser v13) keys each indirect balance in ownership reads.
+                row.NatureOfOwnership = reparsed.NatureOfOwnership;
+                row.OwnershipNatureFootnoteIds = reparsed.OwnershipNatureFootnoteIds;
                 // Transient one-for-one evidence for the derivative price check below; not stored.
                 row.UnderlyingShares = reparsed.UnderlyingShares;
                 row.ExercisePrice = reparsed.ExercisePrice;
