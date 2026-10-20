@@ -207,9 +207,7 @@ public class StockOwnershipReader
             }
         );
 
-        var multiClass = scope.ExactListing
-            ? false
-            : await IsMultiClass(scope.Stock, cancellationToken);
+        var multiClass = !scope.ExactListing && await IsMultiClass(scope.Stock, cancellationToken);
         var summary = OwnershipSummaryCalculator.Build(
             rows,
             new OwnershipSummaryCalculator.Context
@@ -387,9 +385,13 @@ public class StockOwnershipReader
             var filers = await _holdingRepository
                 .GetFiledHolderIdsAmong(quarter.Key, ids)
                 .ToListAsync(cancellationToken);
-            foreach (var candidate in quarter)
-                if (idByCik.TryGetValue(candidate.Cik, out var id) && filers.Contains(id))
-                    filed.Add((candidate.Cik, quarter.Key));
+            filed.UnionWith(
+                quarter
+                    .Where(candidate =>
+                        idByCik.TryGetValue(candidate.Cik, out var id) && filers.Contains(id)
+                    )
+                    .Select(candidate => (candidate.Cik, quarter.Key))
+            );
         }
         return filed;
     }

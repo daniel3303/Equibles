@@ -164,9 +164,8 @@ public static class OwnershipSummaryCalculator
         do
         {
             added = false;
-            foreach (var schedule in schedules)
+            foreach (var names in schedules.Select(schedule => Names(schedule).ToList()))
             {
-                var names = Names(schedule).ToList();
                 if (names.Any(covered.Contains))
                     foreach (var cik in names)
                         added |= covered.Add(cik);

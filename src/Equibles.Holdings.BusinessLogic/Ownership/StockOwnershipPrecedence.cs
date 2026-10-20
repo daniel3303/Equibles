@@ -145,15 +145,13 @@ public static class StockOwnershipPrecedence
                 : null;
         if (top.Cik == null || !context.Rollups.TryGetValue(top.Cik, out var rollup))
             return null;
-        foreach (var candidate in ReportingParentCandidates(rollup))
-        {
-            if (candidate == top.Cik || !groupsBy13FCik.TryGetValue(candidate, out var parent))
-                continue;
-            if (context.FiledOwn13F(top.Cik, parent.Form13F.AsOf))
-                return null;
-            return parent;
-        }
-        return null;
+        var parent = ReportingParentCandidates(rollup)
+            .Where(candidate => candidate != top.Cik)
+            .Select(candidate => groupsBy13FCik.GetValueOrDefault(candidate))
+            .FirstOrDefault(candidateGroup => candidateGroup != null);
+        if (parent == null || context.FiledOwn13F(top.Cik, parent.Form13F.AsOf))
+            return null;
+        return parent;
     }
 
     /// <summary>
