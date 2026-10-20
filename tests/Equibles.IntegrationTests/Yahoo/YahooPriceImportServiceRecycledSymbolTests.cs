@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.EquityMarkets.Data;
@@ -80,10 +81,11 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
             retiredIssuer,
             "MMMW",
             MmmwDelisted,
-            backfilledAt: DateTime.UtcNow
+            backfilledAt: DateTime.UtcNow.AddDays(-60)
         );
         await SeedBars(holder.Presentation.Listing, chart.Prices);
-        // What production stored: the holder's bars, copied onto the retired listing.
+        // What production stored: the holder's bars, copied onto the retired listing long after
+        // it delisted.
         await SeedBars(retired, chart.Prices);
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
@@ -91,14 +93,155 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
         BarDates(retired).Should().BeEmpty();
         BarDates(holder.Presentation.Listing).Should().Equal(chart.Prices.Select(bar => bar.Date));
         ReloadListing(retired).PriceHistoryBackfilled.Should().BeFalse();
-        Evidence(retiredIssuer).HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
+        Evidence(retiredIssuer)
+            .HistoricalPriceBackfillAttemptedAt.Should()
+            .BeAfter(DateTime.UtcNow.AddDays(-1));
         await _yahooClient.DidNotReceive().GetChart("MMMW", Arg.Any<DateOnly>(), MmmwDelisted);
 
-        // Healed: nothing is left inside the holder's window, so the next pass leaves it alone.
-        var stamped = Evidence(retiredIssuer).HistoricalPriceBackfillAttemptedAt;
+        // Healed: no copy is left, so even past the retry window the next pass leaves it alone.
+        var stamped = ExpireAttempt(retiredIssuer);
         await _service.Import(includeEnrichment: false, CancellationToken.None);
         Evidence(retiredIssuer).HistoricalPriceBackfillAttemptedAt.Should().Be(stamped);
         BarDates(retired).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Import_RetiredListingStoringTheHoldersSeriesOnAnotherSplitBasis_PurgesThem()
+    {
+        var first = new DateOnly(2021, 9, 27);
+        var delistedOn = new DateOnly(2021, 10, 1);
+        _workerOptions.MinSyncDate = first.ToDateTime(TimeOnly.MinValue);
+        var chart = await RecordedChart(
+            "ipw-2021-09-27-to-2021-10-01.json",
+            "IPW",
+            first,
+            delistedOn
+        );
+        var holder = CreateStock("IPW", "Current holder of the symbol");
+        var retiredIssuer = CreateStock("IP", "Retired when-issued filer");
+        await SeedStocks(holder, retiredIssuer);
+        var retired = await SeedRetiredListing(
+            retiredIssuer,
+            "IPW",
+            delistedOn,
+            backfilledAt: DateTime.UtcNow.AddDays(-60)
+        );
+        // Production stored the copy on one side of the holder's 1-for-9 reverse split and the
+        // holder's own series on the other.
+        await SeedBars(holder.Presentation.Listing, chart.Prices, priceFactor: 9m);
+        await SeedBars(retired, chart.Prices);
+        await SeedSplit(holder, new DateOnly(2026, 8, 7), numerator: 1m, denominator: 9m);
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        BarDates(retired).Should().BeEmpty();
+        BarDates(holder.Presentation.Listing).Should().Equal(chart.Prices.Select(bar => bar.Date));
+        ReloadListing(retired).PriceHistoryBackfilled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Import_SymbolTakenByARenamedIssuer_KeepsTheRetiredListingsOwnHistory()
+    {
+        // The earlier holder traded the symbol until it delisted; the later holder renamed into it
+        // and its new listing was filled with its own older history under the same symbol.
+        var delistedOn = new DateOnly(2023, 3, 31);
+        var liveDates = new[] { new DateOnly(2023, 3, 29), new DateOnly(2023, 3, 30), delistedOn };
+        var backfilledDate = new DateOnly(2023, 3, 28);
+        _workerOptions.MinSyncDate = new DateOnly(2023, 3, 1).ToDateTime(TimeOnly.MinValue);
+        var renamed = CreateStock("RENM", "Holder that renamed into the symbol");
+        var retiredIssuer = CreateStock("ORIG", "Earlier holder of the symbol");
+        await SeedStocks(renamed, retiredIssuer);
+        var retired = await SeedRetiredListing(
+            retiredIssuer,
+            "RENM",
+            delistedOn,
+            backfilledAt: DateTime.UtcNow.AddDays(-60)
+        );
+        await SeedBars(
+            renamed.Presentation.Listing,
+            Bars(50m, liveDates.Prepend(backfilledDate).ToArray())
+        );
+        foreach (var date in liveDates)
+            await SeedBars(retired, Bars(10m, date), createdOn: date.AddDays(1));
+        await SeedBars(retired, Bars(11m, backfilledDate));
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        BarDates(retired).Should().Equal(liveDates.Prepend(backfilledDate));
+        ReloadListing(retired).PriceHistoryBackfilled.Should().BeTrue();
+        await _yahooClient.DidNotReceive().GetChart("RENM", Arg.Any<DateOnly>(), delistedOn);
+    }
+
+    [Fact]
+    public async Task Import_RetiredListingWithACopiedGap_PurgesOnlyTheCopies()
+    {
+        var delistedOn = new DateOnly(2024, 4, 1);
+        var liveDate = new DateOnly(2024, 3, 28);
+        var copiedDates = new[] { new DateOnly(2024, 3, 25), new DateOnly(2024, 3, 26) };
+        _workerOptions.MinSyncDate = new DateOnly(2024, 3, 1).ToDateTime(TimeOnly.MinValue);
+        var holder = CreateStock("GAPS", "Holder of the symbol");
+        var retiredIssuer = CreateStock("PARENT", "Retired when-issued filer");
+        await SeedStocks(holder, retiredIssuer);
+        var retired = await SeedRetiredListing(
+            retiredIssuer,
+            "GAPS",
+            delistedOn,
+            backfilledAt: DateTime.UtcNow.AddDays(-60)
+        );
+        await SeedBars(
+            holder.Presentation.Listing,
+            Bars(5m, copiedDates.Append(liveDate).ToArray())
+        );
+        await SeedBars(retired, Bars(20m, liveDate), createdOn: liveDate.AddDays(1));
+        await SeedBars(retired, Bars(5m, copiedDates));
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        BarDates(retired).Should().Equal(liveDate);
+        BarDates(holder.Presentation.Listing).Should().HaveCount(3);
+        ReloadListing(retired).PriceHistoryBackfilled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CaptureForHistoricalListing_SymbolHeldByAnotherIssuer_WritesNoSplit()
+    {
+        var delistedOn = new DateOnly(2021, 10, 1);
+        var retiredIssuer = CreateStock("IP", "Retired when-issued filer");
+        await SeedStocks(retiredIssuer);
+        var retired = await SeedRetiredListing(retiredIssuer, "IPW", delistedOn);
+        var manager = new StockSplitCaptureManager(_splitRepo, _stockRepo);
+        CapturedSplit[] splits =
+        [
+            new()
+            {
+                EffectiveDate = new DateOnly(2021, 6, 1),
+                Numerator = 2m,
+                Denominator = 1m,
+                Source = StockSplitSource.Yahoo,
+            },
+        ];
+
+        var unclaimed = await manager.CaptureForHistoricalListing(
+            retiredIssuer.Id,
+            retired.Id,
+            "IPW",
+            delistedOn,
+            splits
+        );
+        _splitRepo.Delete(_splitRepo.GetAll().ToList());
+        await _splitRepo.SaveChanges();
+        await SeedStocks(CreateStock("IPW", "Current holder of the symbol"));
+        var claimed = await manager.CaptureForHistoricalListing(
+            retiredIssuer.Id,
+            retired.Id,
+            "IPW",
+            delistedOn,
+            splits
+        );
+
+        unclaimed.Should().Be(1, "the capture writes the split while no one else holds the symbol");
+        claimed.Should().Be(0);
+        _splitRepo.GetAll().Should().BeEmpty();
     }
 
     [Fact]
@@ -277,7 +420,14 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
         return listing;
     }
 
-    private async Task SeedBars(EquityListing listing, IEnumerable<HistoricalPrice> bars)
+    // Bars default to being written now, long after any test listing delisted, which is when the
+    // historical backfill stored the copies; a live-written bar passes the day it was written.
+    private async Task SeedBars(
+        EquityListing listing,
+        IEnumerable<HistoricalPrice> bars,
+        DateOnly? createdOn = null,
+        decimal priceFactor = 1m
+    )
     {
         _priceRepo.AddRange(
             bars.Select(bar => new EquityDailyStockPrice
@@ -287,15 +437,47 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
                 EquityListingId = listing.Id,
                 SourceTicker = listing.Ticker,
                 Date = bar.Date,
-                Open = bar.Open,
-                High = bar.High,
-                Low = bar.Low,
-                Close = bar.Close,
-                AdjustedClose = bar.AdjustedClose,
+                Open = bar.Open * priceFactor,
+                High = bar.High * priceFactor,
+                Low = bar.Low * priceFactor,
+                Close = bar.Close * priceFactor,
+                AdjustedClose = bar.AdjustedClose * priceFactor,
                 Volume = bar.Volume,
+                CreationTime =
+                    createdOn?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) ?? DateTime.UtcNow,
             })
         );
         await _priceRepo.SaveChanges();
+    }
+
+    private async Task SeedSplit(
+        EquityIssuer issuer,
+        DateOnly effectiveDate,
+        decimal numerator,
+        decimal denominator
+    )
+    {
+        _splitRepo.Add(
+            new StockSplit
+            {
+                EquityIssuerId = issuer.Id,
+                EquityListingId = issuer.Presentation.EquityListingId,
+                PriceSeriesTicker = issuer.Presentation.Listing.Ticker,
+                EffectiveDate = effectiveDate,
+                Numerator = numerator,
+                Denominator = denominator,
+            }
+        );
+        await _splitRepo.SaveChanges();
+    }
+
+    // Moves the attempt stamp back past the retry window so the queue considers the listing again.
+    private DateTime? ExpireAttempt(EquityIssuer issuer)
+    {
+        var evidence = Evidence(issuer);
+        evidence.HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow.AddDays(-60);
+        _dbContext.SaveChanges();
+        return evidence.HistoricalPriceBackfillAttemptedAt;
     }
 
     private static IEnumerable<HistoricalPrice> Bars(decimal close, params DateOnly[] dates) =>

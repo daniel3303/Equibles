@@ -158,15 +158,23 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             Issuer = retiredIssuer,
             ListedTicker = "WHEN",
             DelistedOn = retired.DelistedOn.Value,
-            HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow,
+            HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow.AddDays(-60),
         };
         DbContext.AddRange(retiredIssuer, holder, evidence);
+        // The retired listing's own bars were written while it traded, one of them on a session the
+        // holder also has; the later backfill copied the holder's session on its last date and
+        // stored one more after it delisted.
         var ownDate = new DateOnly(2024, 3, 1);
-        var heldDates = new[] { new DateOnly(2024, 3, 25), new DateOnly(2024, 4, 1) };
+        var sharedLiveDate = new DateOnly(2024, 3, 25);
+        var copiedDate = new DateOnly(2024, 4, 1);
+        var afterDelisting = new DateOnly(2024, 4, 2);
+        var heldDates = new[] { sharedLiveDate, copiedDate, afterDelisting };
+        DbContext.AddRange(heldDates.Select(date => Bar(holder.Presentation.Listing, date)));
         DbContext.AddRange(
-            heldDates
-                .Select(date => Bar(holder.Presentation.Listing, date))
-                .Concat(heldDates.Prepend(ownDate).Select(date => Bar(retired, date)))
+            Bar(retired, ownDate, createdOn: ownDate.AddDays(1)),
+            Bar(retired, sharedLiveDate, createdOn: sharedLiveDate.AddDays(1)),
+            Bar(retired, copiedDate),
+            Bar(retired, afterDelisting)
         );
         await DbContext.SaveChangesAsync();
 
@@ -191,11 +199,12 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         (
             await read.Set<EquityDailyStockPrice>()
                 .Where(price => price.EquityListingId == retired.Id)
+                .OrderBy(price => price.Date)
                 .Select(price => price.Date)
                 .ToListAsync()
         )
             .Should()
-            .Equal(ownDate);
+            .Equal(ownDate, sharedLiveDate);
         (
             await read.Set<EquityDailyStockPrice>()
                 .CountAsync(price => price.EquityListingId == holder.Presentation.EquityListingId)
@@ -210,7 +219,11 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .BeEmpty();
     }
 
-    private static EquityDailyStockPrice Bar(EquityListing listing, DateOnly date) =>
+    private static EquityDailyStockPrice Bar(
+        EquityListing listing,
+        DateOnly date,
+        DateOnly? createdOn = null
+    ) =>
         new()
         {
             Listing = listing,
@@ -222,6 +235,8 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             Close = 1,
             AdjustedClose = 1,
             Volume = 10,
+            CreationTime =
+                createdOn?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) ?? DateTime.UtcNow,
         };
 
     [Fact]

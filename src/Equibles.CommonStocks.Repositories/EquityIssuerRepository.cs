@@ -79,6 +79,26 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
     public IQueryable<EquitySecurity> GetSecurities() =>
         GetAll().SelectMany(issuer => issuer.Securities);
 
+    /// <summary>
+    /// Another issuer's U.S. listings that hold a retired listing's symbol: active, retired without
+    /// a known date, or retired on or after the retired listing's own delisting date. Yahoo serves
+    /// a bare U.S. symbol as its current holder's series, so while such a claim exists no fetch of
+    /// that symbol is the retired listing's own history.
+    /// </summary>
+    public IQueryable<EquityListing> GetForeignSymbolClaims(
+        Guid retiredIssuerId,
+        string ticker,
+        DateOnly retiredOn
+    ) =>
+        GetSecurities()
+            .SelectMany(security => security.Listings)
+            .Where(claim =>
+                claim.MarketCountryCode == "US"
+                && claim.Ticker == ticker
+                && claim.Security.EquityIssuerId != retiredIssuerId
+                && (claim.Active || claim.DelistedOn == null || claim.DelistedOn >= retiredOn)
+            );
+
     public override IQueryable<EquityIssuer> GetAll() =>
         base.GetAll()
             .Include(issuer => issuer.Presentation)
