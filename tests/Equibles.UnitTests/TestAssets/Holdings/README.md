@@ -40,3 +40,9 @@
 - SHA-256: `16b93695ae364d84862df17594d5d141ae3e2e4857fe96acd76fb3ab9a4c7729`.
 - The restatement corrects a filing submitted under the wrong manager; the complete submission verifies one row with explicit zero shares, value, and votes.
 - Its empty book must replace the original without falling back to the prior quarter or treating missing quantities as zero.
+
+# Information tables with swapped share-count and value columns
+
+- `SwappedColumns/<accession>.json` holds one 13F information table's share rows (`sshPrnAmt` and `value` as filed) and each security's quarter-end close on the filing's share basis.
+- Rebuilt on 2026-10-20 from the stored rows of https://www.sec.gov/Archives/edgar/data/1737088/000173708822000002/ (thousands era) and https://www.sec.gov/Archives/edgar/data/1977602/000197760223000001/ (whole dollars), both swapped, and https://www.sec.gov/Archives/edgar/data/1737088/000173708822000005/, the same filer's correct next quarter.
+- A CUSIP without a recorded close was unpriced at import and stays unpriced in the replay.
