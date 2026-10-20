@@ -63,7 +63,7 @@ public class HoldingsActivityController : BaseController
             previousDate,
             viewModel.IsCombinedSelected
         );
-        var movers = activityRows.Where(a => a.CurrentShares != a.PreviousShares);
+        var movers = activityRows.Where(a => a.DeltaShares != 0);
 
         var topBuysAgg = movers.TopBuyers().Take(HoldingsActivityViewModel.RowCap).ToList();
         var topSellsAgg = movers.TopSellers().Take(HoldingsActivityViewModel.RowCap).ToList();
