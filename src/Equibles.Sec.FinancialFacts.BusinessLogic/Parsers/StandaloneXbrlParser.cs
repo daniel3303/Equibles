@@ -59,31 +59,16 @@ public class StandaloneXbrlParser
         if (string.IsNullOrWhiteSpace(xml))
             return [];
 
-        XDocument document;
         try
         {
-            document = XDocument.Parse(xml);
+            if (!TryReadContextsAndUnits(xml, out var contexts, out var units))
+                return [];
+            return ReadFacts(xml, contexts, units);
         }
-        catch (System.Xml.XmlException)
+        catch (XmlException)
         {
             return [];
         }
-
-        var root = document.Root;
-        if (root == null || root.Name != XbrlRoot)
-            return [];
-
-        var contexts = BuildContextMap(root);
-        var units = BuildUnitMap(root);
-
-        var facts = new List<ParsedXbrlFact>();
-        foreach (var element in root.Elements())
-        {
-            if (TryParseFact(element, contexts, units, out var fact))
-                facts.Add(fact);
-        }
-
-        return facts;
     }
 
     public List<ParsedFiscalYearEnd> ParseFiscalYearEnds(string xml)
@@ -97,93 +82,173 @@ public class StandaloneXbrlParser
             && xml.EndsWith("</XBRL>", StringComparison.Ordinal)
         )
             xml = xml[6..^7].Trim();
-        XDocument document;
+
+        var observations = new List<ParsedFiscalYearEnd>();
         try
         {
-            using var reader = XmlReader.Create(
-                new StringReader(xml),
-                new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }
-            );
-            document = XDocument.Load(reader);
+            if (!TryReadContextsAndUnits(xml, out var contexts, out _))
+                return observations;
+
+            using var reader = CreateReader(xml);
+            if (!TryMoveToXbrlRoot(reader))
+                return observations;
+
+            // Explicit advance for the same reason as ReadFacts: the content read
+            // leaves the reader past the element it consumed.
+            while (!reader.EOF)
+            {
+                if (reader.NodeType != XmlNodeType.Element || reader.Depth != 1)
+                {
+                    reader.Read();
+                    continue;
+                }
+
+                if (!TryMatchFiscalYearEnd(reader, contexts, out var context))
+                {
+                    reader.Skip();
+                    continue;
+                }
+
+                var rawValue = reader.ReadElementContentAsString();
+                if (!FiscalYearEndValueParser.TryParse(rawValue, out var date))
+                    continue;
+                observations.Add(
+                    new ParsedFiscalYearEnd(
+                        context.ConsolidatedCik,
+                        context.Start,
+                        context.End,
+                        date.Month,
+                        date.Day
+                    )
+                );
+            }
         }
-        catch (System.Xml.XmlException)
+        catch (XmlException)
         {
-            return [];
-        }
-        if (document.Root?.Name != XbrlRoot)
-            return [];
-        var contexts = BuildContextMap(document.Root);
-        var observations = new List<ParsedFiscalYearEnd>();
-        foreach (var element in document.Root.Elements())
-        {
-            if (
-                element.Name.LocalName != "CurrentFiscalYearEndDate"
-                || !Uri.TryCreate(element.Name.NamespaceName, UriKind.Absolute, out var ns)
-                || ns.Host != "xbrl.sec.gov"
-                || !ns.AbsolutePath.StartsWith("/dei/", StringComparison.Ordinal)
-                || (string)element.Attribute(XsiNil) is "true" or "1"
-                || !contexts.TryGetValue(
-                    (string)element.Attribute("contextRef") ?? "",
-                    out var context
-                )
-                || string.IsNullOrWhiteSpace(context.ConsolidatedCik)
-                || !FiscalYearEndValueParser.TryParse(element.Value, out var date)
-            )
-                continue;
-            observations.Add(
-                new ParsedFiscalYearEnd(
-                    context.ConsolidatedCik,
-                    context.Start,
-                    context.End,
-                    date.Month,
-                    date.Day
-                )
-            );
+            return observations;
         }
         return observations;
     }
 
-    private static Dictionary<string, ParsedContext> BuildContextMap(XElement root)
-    {
-        var contexts = new Dictionary<string, ParsedContext>(StringComparer.Ordinal);
+    // ---- streaming plumbing -------------------------------------------------
+    // This parser used to materialise the whole instance as an XDocument. A
+    // standalone instance is the largest XML artifact in the pipeline, and a DOM
+    // expands multi-MB XML by roughly an order of magnitude, so peak memory
+    // scaled with filing size: one oversized instance is enough to OOM the
+    // worker (see the XbrlFactsExtraction.Extract row in Errors).
+    //
+    // Every pass below walks the document with XmlReader instead. Contexts and
+    // units are few and small, so each one is still lifted into a throwaway
+    // XElement - that keeps the existing LINQ-to-XML logic byte-identical
+    // instead of re-deriving it, and the element is released on the next
+    // iteration. Facts are the many, repeated part and are never materialised.
 
-        foreach (var contextElement in root.Elements(ContextElement))
-        {
-            var id = (string)contextElement.Attribute("id");
-            if (string.IsNullOrEmpty(id))
-                continue;
-
-            var period = contextElement.Element(PeriodElement);
-            if (period == null)
-                continue;
-
-            if (!TryParsePeriod(period, out var isInstant, out var start, out var end))
-                continue;
-
-            var dimensions = ExtractDimensions(contextElement);
-            var identifier = contextElement
-                .Element(XName.Get("entity", XbrliNamespace))
-                ?.Element(XName.Get("identifier", XbrliNamespace));
-            var unqualified =
-                !contextElement.Descendants(XName.Get("segment", XbrliNamespace)).Any()
-                && !contextElement.Descendants(XName.Get("scenario", XbrliNamespace)).Any();
-            var scheme = (string)identifier?.Attribute("scheme");
-            var cik =
-                unqualified && scheme == "http://www.sec.gov/CIK" ? identifier?.Value.Trim() : null;
-            // A European report states the same unqualified identity under the ISO 17442 scheme.
-            var lei =
-                unqualified && scheme == "http://standards.iso.org/iso/17442"
-                    ? identifier?.Value.Trim()
-                    : null;
-            if (contexts.ContainsKey(id))
+    private static XmlReader CreateReader(string xml) =>
+        XmlReader.Create(
+            new StringReader(xml),
+            new XmlReaderSettings
             {
-                cik = null;
-                lei = null;
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                IgnoreComments = true,
+                IgnoreProcessingInstructions = true,
             }
-            contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik, lei);
+        );
+
+    /// <summary>
+    /// Positions <paramref name="reader"/> on the document element and reports
+    /// whether it is <c>xbrli:xbrl</c> — the previous <c>document.Root.Name !=
+    /// XbrlRoot</c> guard.
+    /// </summary>
+    private static bool TryMoveToXbrlRoot(XmlReader reader)
+    {
+        while (reader.Read())
+        {
+            if (reader.NodeType != XmlNodeType.Element)
+                continue;
+            return reader.LocalName == XbrlRoot.LocalName
+                && reader.NamespaceURI == XbrlRoot.NamespaceName;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// First pass: the document's contexts and units. Returns false when the
+    /// document is not an <c>xbrli:xbrl</c> instance, matching the old
+    /// root-name guard.
+    /// </summary>
+    private static bool TryReadContextsAndUnits(
+        string xml,
+        out Dictionary<string, ParsedContext> contexts,
+        out Dictionary<string, string> units
+    )
+    {
+        contexts = new Dictionary<string, ParsedContext>(StringComparer.Ordinal);
+        units = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        using var reader = CreateReader(xml);
+        if (!TryMoveToXbrlRoot(reader))
+            return false;
+
+        while (reader.Read())
+        {
+            if (reader.NodeType != XmlNodeType.Element || reader.Depth != 1)
+                continue;
+            if (reader.NamespaceURI != XbrliNamespace)
+                continue;
+
+            if (reader.LocalName == ContextElement.LocalName)
+            {
+                using var subtree = reader.ReadSubtree();
+                AddContext(contexts, XElement.Load(subtree));
+            }
+            else if (reader.LocalName == UnitElement.LocalName)
+            {
+                using var subtree = reader.ReadSubtree();
+                AddUnit(units, XElement.Load(subtree));
+            }
         }
 
-        return contexts;
+        return true;
+    }
+
+    private static void AddContext(
+        Dictionary<string, ParsedContext> contexts,
+        XElement contextElement
+    )
+    {
+        var id = (string)contextElement.Attribute("id");
+        if (string.IsNullOrEmpty(id))
+            return;
+
+        var period = contextElement.Element(PeriodElement);
+        if (period == null)
+            return;
+
+        if (!TryParsePeriod(period, out var isInstant, out var start, out var end))
+            return;
+
+        var dimensions = ExtractDimensions(contextElement);
+        var identifier = contextElement
+            .Element(XName.Get("entity", XbrliNamespace))
+            ?.Element(XName.Get("identifier", XbrliNamespace));
+        var unqualified =
+            !contextElement.Descendants(XName.Get("segment", XbrliNamespace)).Any()
+            && !contextElement.Descendants(XName.Get("scenario", XbrliNamespace)).Any();
+        var scheme = (string)identifier?.Attribute("scheme");
+        var cik =
+            unqualified && scheme == "http://www.sec.gov/CIK" ? identifier?.Value.Trim() : null;
+        // A European report states the same unqualified identity under the ISO 17442 scheme.
+        var lei =
+            unqualified && scheme == "http://standards.iso.org/iso/17442"
+                ? identifier?.Value.Trim()
+                : null;
+        if (contexts.ContainsKey(id))
+        {
+            cik = null;
+            lei = null;
+        }
+        contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik, lei);
     }
 
     private static bool TryParsePeriod(
@@ -246,24 +311,17 @@ public class StandaloneXbrlParser
         return dimensions;
     }
 
-    private static Dictionary<string, string> BuildUnitMap(XElement root)
+    private static void AddUnit(Dictionary<string, string> units, XElement unitElement)
     {
-        var units = new Dictionary<string, string>(StringComparer.Ordinal);
+        var id = (string)unitElement.Attribute("id");
+        if (string.IsNullOrEmpty(id))
+            return;
 
-        foreach (var unitElement in root.Elements(UnitElement))
-        {
-            var id = (string)unitElement.Attribute("id");
-            if (string.IsNullOrEmpty(id))
-                continue;
+        var resolved = ResolveUnit(unitElement);
+        if (resolved == null)
+            return;
 
-            var resolved = ResolveUnit(unitElement);
-            if (resolved == null)
-                continue;
-
-            units[id] = resolved;
-        }
-
-        return units;
+        units[id] = resolved;
     }
 
     private static string ResolveUnit(XElement unitElement)
@@ -291,8 +349,90 @@ public class StandaloneXbrlParser
         return XbrlValueParser.StripPrefix(measureValue);
     }
 
-    private static bool TryParseFact(
-        XElement element,
+    /// <summary>
+    /// Second pass: one <see cref="ParsedXbrlFact"/> per numeric fact element
+    /// under the root. Same accept/reject rules as the old XElement walk — the
+    /// only mechanical difference is that the element's value is read from the
+    /// reader instead of from a materialised tree, which advances the reader
+    /// past the element, so every attribute-derived decision is made first.
+    /// </summary>
+    /// <summary>
+    /// True when the depth-1 element at the reader is the SEC dei
+    /// <c>CurrentFiscalYearEndDate</c> and its context carries a consolidated CIK.
+    /// Returns false without advancing the reader.
+    /// </summary>
+    private static bool TryMatchFiscalYearEnd(
+        XmlReader reader,
+        Dictionary<string, ParsedContext> contexts,
+        out ParsedContext context
+    )
+    {
+        context = default;
+        if (reader.LocalName != "CurrentFiscalYearEndDate")
+            return false;
+        if (!Uri.TryCreate(reader.NamespaceURI, UriKind.Absolute, out var ns))
+            return false;
+        if (
+            ns.Host != "xbrl.sec.gov"
+            || !ns.AbsolutePath.StartsWith("/dei/", StringComparison.Ordinal)
+        )
+            return false;
+        var nil = reader.GetAttribute(XsiNil.LocalName, XsiNil.NamespaceName);
+        if (nil is "true" or "1")
+            return false;
+        var contextRef = reader.GetAttribute("contextRef") ?? "";
+        if (!contexts.TryGetValue(contextRef, out context))
+            return false;
+        if (string.IsNullOrWhiteSpace(context.ConsolidatedCik))
+            return false;
+        return true;
+    }
+
+    private static List<ParsedXbrlFact> ReadFacts(
+        string xml,
+        Dictionary<string, ParsedContext> contexts,
+        Dictionary<string, string> units
+    )
+    {
+        var facts = new List<ParsedXbrlFact>();
+
+        using var reader = CreateReader(xml);
+        if (!TryMoveToXbrlRoot(reader))
+            return facts;
+
+        // NOT `while (reader.Read())`. TryReadFact consumes a fact element with
+        // ReadElementContentAsString, which leaves the reader on the node AFTER
+        // that element - so a Read() at the top of every iteration skips whatever
+        // follows, which on a fact-dense document is the next fact. Measured on a
+        // 2000-fact fixture: 1000 facts came back, every other one dropped.
+        // Advance explicitly instead: fact elements advance themselves, and
+        // anything rejected is stepped over with Skip().
+        while (!reader.EOF)
+        {
+            if (reader.NodeType != XmlNodeType.Element || reader.Depth != 1)
+            {
+                reader.Read();
+                continue;
+            }
+
+            if (!TryReadFact(reader, contexts, units, out var fact))
+            {
+                reader.Skip();
+                continue;
+            }
+            facts.Add(fact);
+        }
+
+        return facts;
+    }
+
+    /// <summary>
+    /// Consumes one depth-1 element if it is a numeric fact. Returns false WITHOUT
+    /// advancing the reader (the caller decides how to step over it), and true
+    /// having read the element's content — which leaves the reader past it.
+    /// </summary>
+    private static bool TryReadFact(
+        XmlReader reader,
         Dictionary<string, ParsedContext> contexts,
         Dictionary<string, string> units,
         out ParsedXbrlFact fact
@@ -301,15 +441,15 @@ public class StandaloneXbrlParser
         fact = null;
 
         // xbrli: namespace elements (context, unit, …) are XBRL machinery, not facts.
-        if (element.Name.NamespaceName == XbrliNamespace)
+        if (reader.NamespaceURI == XbrliNamespace)
             return false;
 
-        var contextRef = (string)element.Attribute("contextRef");
-        var unitRef = (string)element.Attribute("unitRef");
+        var contextRef = reader.GetAttribute("contextRef");
+        var unitRef = reader.GetAttribute("unitRef");
         if (string.IsNullOrEmpty(contextRef) || string.IsNullOrEmpty(unitRef))
             return false;
 
-        var nilAttribute = (string)element.Attribute(XsiNil);
+        var nilAttribute = reader.GetAttribute(XsiNil.LocalName, XsiNil.NamespaceName);
         if (string.Equals(nilAttribute, "true", StringComparison.OrdinalIgnoreCase))
             return false;
 
@@ -318,9 +458,24 @@ public class StandaloneXbrlParser
         if (!units.TryGetValue(unitRef, out var unit))
             return false;
 
+        // The element's own prefix is the taxonomy alias. XDocument's
+        // GetPrefixOfNamespace walked up to the declaration; XmlReader's Prefix is
+        // the prefix actually used on this element, the same alias for any document
+        // that declares it in scope. An unprefixed (default-namespace) element is
+        // rejected in both.
+        var taxonomy = reader.Prefix;
+        if (string.IsNullOrEmpty(taxonomy))
+            return false;
+
+        // Everything derivable from attributes must be captured before the content
+        // read, which advances the reader past the element.
+        var decimals = XbrlValueParser.ParseDecimals(reader.GetAttribute("decimals"));
+        var tag = reader.LocalName;
+        var elementNamespace = reader.NamespaceURI;
+        var rawValue = reader.ReadElementContentAsString();
         if (
             !decimal.TryParse(
-                element.Value,
+                rawValue,
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out var value
@@ -328,15 +483,11 @@ public class StandaloneXbrlParser
         )
             return false;
 
-        var taxonomy = element.GetPrefixOfNamespace(element.Name.Namespace);
-        if (string.IsNullOrEmpty(taxonomy))
-            return false;
-
         fact = new ParsedXbrlFact
         {
             Taxonomy = taxonomy,
-            Tag = element.Name.LocalName,
-            Namespace = element.Name.NamespaceName,
+            Tag = tag,
+            Namespace = elementNamespace,
             Unit = unit,
             Value = value,
             IsInstant = context.IsInstant,
@@ -345,7 +496,7 @@ public class StandaloneXbrlParser
             Dimensions = context.Dimensions,
             ConsolidatedCik = context.ConsolidatedCik,
             ConsolidatedLei = context.ConsolidatedLei,
-            Decimals = XbrlValueParser.ParseDecimals((string)element.Attribute("decimals")),
+            Decimals = decimals,
         };
         return true;
     }
