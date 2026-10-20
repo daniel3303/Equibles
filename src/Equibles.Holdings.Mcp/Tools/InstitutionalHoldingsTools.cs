@@ -2341,45 +2341,10 @@ public class InstitutionalHoldingsTools
     {
         if (filing.FundCount == 0)
             return "no private funds listed.";
-        (FormAdvPrivateFundType Type, int Count, long Assets)[] types =
-        [
-            (FormAdvPrivateFundType.Hedge, filing.HedgeFundCount, filing.HedgeFundGrossAssets),
-            (
-                FormAdvPrivateFundType.PrivateEquity,
-                filing.PrivateEquityFundCount,
-                filing.PrivateEquityFundGrossAssets
-            ),
-            (
-                FormAdvPrivateFundType.VentureCapital,
-                filing.VentureCapitalFundCount,
-                filing.VentureCapitalFundGrossAssets
-            ),
-            (
-                FormAdvPrivateFundType.RealEstate,
-                filing.RealEstateFundCount,
-                filing.RealEstateFundGrossAssets
-            ),
-            (
-                FormAdvPrivateFundType.Liquidity,
-                filing.LiquidityFundCount,
-                filing.LiquidityFundGrossAssets
-            ),
-            (
-                FormAdvPrivateFundType.Securitized,
-                filing.SecuritizedAssetFundCount,
-                filing.SecuritizedAssetFundGrossAssets
-            ),
-            (
-                FormAdvPrivateFundType.Other,
-                filing.OtherPrivateFundCount,
-                filing.OtherPrivateFundGrossAssets
-            ),
-        ];
-        var byType = types
-            .Where(type => type.Count > 0)
-            .OrderByDescending(type => type.Assets)
+        var byType = ScheduleDFundType
+            .Of(filing)
             .Select(type =>
-                $"{type.Type.NameForHumans()} ${McpFormat.WholeNumber(type.Assets)} ({McpFormat.WholeNumber(type.Count)})"
+                $"{type.Type.NameForHumans()} ${McpFormat.WholeNumber(type.GrossAssets)} ({McpFormat.WholeNumber(type.Count)})"
             );
         return $"{McpFormat.WholeNumber(filing.FundCount)} funds, ${McpFormat.WholeNumber(filing.GrossAssets)} gross assets; {string.Join(", ", byType)}.";
     }
