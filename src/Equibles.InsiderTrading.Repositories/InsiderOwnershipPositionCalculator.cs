@@ -32,7 +32,9 @@ public class InsiderOwnershipPositionCalculator
         var rows = await _transactionRepository
             .GetCurrentPositionRows(stock.Id)
             .ToListAsync(cancellationToken);
-        return rows.GroupBy(t => t.InsiderOwnerId).Select(group => Build([.. group], splits)).ToList();
+        return rows.GroupBy(t => t.InsiderOwnerId)
+            .Select(group => Build([.. group], splits))
+            .ToList();
     }
 
     /// <summary>
@@ -66,9 +68,7 @@ public class InsiderOwnershipPositionCalculator
                     .OrderByDescending(filing => filing.TransactionDate)
                     .ThenByDescending(filing => filing.FilingDate)
                     .ThenByDescending(filing => filing.AccessionNumber, StringComparer.Ordinal)
-                    .SkipWhile(filing =>
-                        filing.AccessionNumber != currentAccessions[group.Key]
-                    )
+                    .SkipWhile(filing => filing.AccessionNumber != currentAccessions[group.Key])
                     .Skip(1)
                     .FirstOrDefault()
             )
@@ -76,9 +76,14 @@ public class InsiderOwnershipPositionCalculator
             .ToList();
         if (previous.Count == 0)
             return [];
-        var wanted = previous.Select(filing => (filing.InsiderOwnerId, filing.AccessionNumber)).ToHashSet();
+        var wanted = previous
+            .Select(filing => (filing.InsiderOwnerId, filing.AccessionNumber))
+            .ToHashSet();
         var rows = await _transactionRepository
-            .GetFilingRows(stock.Id, previous.Select(filing => filing.AccessionNumber).Distinct().ToList())
+            .GetFilingRows(
+                stock.Id,
+                previous.Select(filing => filing.AccessionNumber).Distinct().ToList()
+            )
             .ToListAsync(cancellationToken);
         return rows.Where(row => wanted.Contains((row.InsiderOwnerId, row.AccessionNumber)))
             .GroupBy(row => row.InsiderOwnerId)
@@ -91,7 +96,10 @@ public class InsiderOwnershipPositionCalculator
     /// filing order is its closing balance; those are restated onto today's split basis and summed
     /// per nature. The anchor is the filing's overall last row.
     /// </summary>
-    public static InsiderOwnershipPosition Build(List<InsiderTransaction> rows, List<StockSplit> splits)
+    public static InsiderOwnershipPosition Build(
+        List<InsiderTransaction> rows,
+        List<StockSplit> splits
+    )
     {
         var ordered = rows.OrderByDescending(t => t.TransactionDate)
             .ThenByDescending(t => t.FilingDate)

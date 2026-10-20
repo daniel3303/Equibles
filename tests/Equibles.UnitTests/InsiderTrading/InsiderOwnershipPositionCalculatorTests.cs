@@ -158,7 +158,14 @@ public class InsiderOwnershipPositionCalculatorTests
                 "acc-f-deriv",
                 kind: InsiderSecurityKind.Derivative
             ),
-            Row(stock, early, new DateOnly(2023, 2, 1), 600, "acc-e-1", code: TransactionCode.Purchase),
+            Row(
+                stock,
+                early,
+                new DateOnly(2023, 2, 1),
+                600,
+                "acc-e-1",
+                code: TransactionCode.Purchase
+            ),
             Row(stock, noAccession, new DateOnly(2024, 1, 5), 3_000, null),
             Row(stock, former, new DateOnly(2022, 5, 5), 0, "acc-x-1")
         );
@@ -190,6 +197,28 @@ public class InsiderOwnershipPositionCalculatorTests
             + await tools.GetInsiderOwnership("NVDA", maxResults: 2, offset: 1);
 
         output.Should().Be(GoldenOutput);
+    }
+
+    [Fact]
+    public async Task GetPreviousPositions_ReadsEachInsidersFilingBeforeTheCurrentOne()
+    {
+        await using var db = NewDb();
+        var stock = await Seed(db);
+        var splits = await db.Set<StockSplit>().ToListAsync();
+        var calculator = new InsiderOwnershipPositionCalculator(
+            new InsiderTransactionRepository(db)
+        );
+
+        var current = await calculator.GetCurrentPositions(stock, splits);
+        var previous = await calculator.GetPreviousPositions(stock, current, splits);
+
+        // Only the founder filed before the current filing; a single filing, a paper filing
+        // without an accession and the derivative-only filing have no previous position.
+        var founder = current.Single(p => p.Anchor.InsiderOwner.Name == "Founder Holder");
+        founder.Anchor.AccessionNumber.Should().Be("acc-f-new");
+        previous.Keys.Should().BeEquivalentTo([founder.Anchor.InsiderOwnerId]);
+        previous[founder.Anchor.InsiderOwnerId].Anchor.AccessionNumber.Should().Be("acc-f-old");
+        previous[founder.Anchor.InsiderOwnerId].TotalShares.Should().Be(900);
     }
 
     private const string GoldenOutput = """

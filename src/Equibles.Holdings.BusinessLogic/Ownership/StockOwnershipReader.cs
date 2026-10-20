@@ -39,6 +39,7 @@ public class StockOwnershipReader
     private readonly IHolderRollupReader _rollupReader;
     private readonly ISharesOutstandingProvider _sharesOutstandingProvider;
     private readonly IMemoryCache _memoryCache;
+    private readonly TimeProvider _timeProvider;
 
     public StockOwnershipReader(
         IEnumerable<IHolderSourceContributor> contributors,
@@ -48,9 +49,11 @@ public class StockOwnershipReader
         StockCombinedQuarterService combinedQuarterService,
         IHolderRollupReader rollupReader,
         IMemoryCache memoryCache,
-        ISharesOutstandingProvider sharesOutstandingProvider = null
+        ISharesOutstandingProvider sharesOutstandingProvider = null,
+        TimeProvider timeProvider = null
     )
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _contributors = contributors;
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
@@ -72,7 +75,7 @@ public class StockOwnershipReader
         CancellationToken cancellationToken = default
     )
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
         var listedTicker =
             SecondaryTickerPolicy.ResolveListedTicker(stock, requestedTicker)
             ?? stock.Presentation.Listing.Ticker;
