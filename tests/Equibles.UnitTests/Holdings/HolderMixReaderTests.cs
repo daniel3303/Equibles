@@ -294,7 +294,7 @@ public class HolderMixReaderTests
         refused
             .Should()
             .Be(
-                "Unknown dimension 'sector'. Use one of: type, style, turnover, horizon, aum, client, pf, country."
+                "Unknown dimension 'sector'. Use one of: type, style, turnover, horizon, aum, client, pf, country, fundtype."
             );
     }
 
