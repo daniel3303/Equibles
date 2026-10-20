@@ -28,17 +28,11 @@ internal static class Swapped13FColumnRepairer
         Func<InstitutionalHolding, decimal?> filingBasisPrice
     )
     {
-        var comparable = 0;
-        var swapped = 0;
-        foreach (var row in rows)
-        {
-            var fit = Classify(row, filingBasisPrice);
-            if (fit == Fit.Unpriced)
-                continue;
-            comparable++;
-            if (fit == Fit.Swapped)
-                swapped++;
-        }
+        var priced = rows.Select(row => Classify(row, filingBasisPrice))
+            .Where(fit => fit != Fit.Unpriced)
+            .ToList();
+        var comparable = priced.Count;
+        var swapped = priced.Count(fit => fit == Fit.Swapped);
 
         return comparable >= Corrupt13FShareCountRepairer.MinimumComparableRows
             && swapped >= comparable * Corrupt13FShareCountRepairer.SuspectRowFraction;
@@ -55,12 +49,12 @@ internal static class Swapped13FColumnRepairer
         Action<BufferedHoldingRow> revalue
     )
     {
-        var repaired = 0;
-        foreach (var row in rows)
+        var swappedRows = rows.Where(row =>
+                HasBothColumns(row) && Classify(row, filingBasisPrice) != Fit.AsFiled
+            )
+            .ToList();
+        foreach (var row in swappedRows)
         {
-            if (!HasBothColumns(row) || Classify(row, filingBasisPrice) == Fit.AsFiled)
-                continue;
-
             // The share column holds whole dollars whatever the filing's era: the detection read
             // dollars over shares as the price.
             var dollars = row.Holding.Shares;
@@ -68,9 +62,8 @@ internal static class Swapped13FColumnRepairer
             row.Holding.FiledValue = dollars;
             row.ManagerEntry.Shares = row.ReportedValue;
             revalue(row);
-            repaired++;
         }
-        return repaired;
+        return swappedRows.Count;
     }
 
     private enum Fit
