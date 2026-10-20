@@ -71,7 +71,8 @@ public class InsiderFilingParserOwnershipVehicleTests
             );
         var direct = rows.Single(row => row.OwnershipNature == OwnershipNature.Direct);
         direct.NatureOfOwnership.Should().BeNull();
-        direct.OwnershipNatureFootnoteIds.Should().BeEmpty();
+        // The direct balance's own footnote (shares vested from RSUs) is kept as filed.
+        direct.OwnershipNatureFootnoteIds.Should().Equal("F2");
     }
 
     [Fact]
@@ -94,6 +95,31 @@ public class InsiderFilingParserOwnershipVehicleTests
                 ("See footnote", "F7"),
                 ("See footnote", "F9"),
                 ("See footnote", "F27")
+            );
+    }
+
+    [Fact]
+    public void ParseTransactions_FootnoteOnTheReportedBalance_BelongsToTheVehicle()
+    {
+        // Nelnet, accession 0001008886-26-000109, names each trust and GRAT in a footnote on the
+        // shares owned rather than on the nature of ownership.
+        var rows = Parse(
+            "form4-nelnet-balance-footnoted-holdings.xml",
+            new DateOnly(2026, 4, 30),
+            new DateOnly(2026, 4, 30)
+        );
+
+        Vehicles(rows)
+            .Should()
+            .Equal(
+                ("By Trust", "F1"),
+                ("By GRAT", "F3"),
+                ("By GRAT", "F4"),
+                ("By Trust", "F5"),
+                ("By Trust", "F6"),
+                ("By revocable trust", "F7"),
+                ("By revocable trust", "F8"),
+                ("By spouse", "")
             );
     }
 

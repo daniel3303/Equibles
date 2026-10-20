@@ -126,7 +126,7 @@ public class InsiderFilingReprocessManagerOwnershipVehicleTests : ParadeDbMcpTes
         rows.Select(t => (t.NatureOfOwnership, string.Join(",", t.OwnershipNatureFootnoteIds)))
             .Should()
             .Equal(
-                (null, ""),
+                (null, "F2"),
                 ("By Trust", "F4"),
                 ("By Irrevocable Trust", "F5"),
                 ("By Irrevocable Remainder Trust", "F6"),

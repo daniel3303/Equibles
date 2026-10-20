@@ -8,10 +8,8 @@ namespace Equibles.InsiderTrading.Repositories;
 /// Splits one filing's rows into the balances it reports. Direct holdings of a security are one
 /// balance. Indirect rows are grouped by their filed nature of ownership, and within a group a row
 /// continues the balance its trade started from (shares owned after, less the shares acquired or
-/// plus those disposed). A holding row is a separate balance; it repeats an earlier one only when it
-/// carries the same balance and the same footnotes, so equal unfootnoted lines such as two
-/// "By GRAT" holdings both count. Footnote ids otherwise only break ties: filers attach one-off
-/// footnotes to single trades of one vehicle.
+/// plus those disposed); a holding row is a separate balance unless it repeats one. Footnote ids
+/// only break ties: filers attach one-off footnotes to single trades of one vehicle.
 /// </summary>
 public static class InsiderPositionBalances
 {
@@ -51,7 +49,12 @@ public static class InsiderPositionBalances
                 }
 
                 closings.AddRange(chains.Select(chain => chain[^1]));
-                ambiguous |= guessed;
+                ambiguous |=
+                    guessed
+                    || chains
+                        .Select(chain => FootnoteKey(chain[0]))
+                        .GroupBy(key => key)
+                        .Any(group => group.Count() > 1);
             }
         }
 
@@ -72,13 +75,10 @@ public static class InsiderPositionBalances
             List<InsiderTransaction> target;
             if (row.TransactionCode == TransactionCode.Holding)
             {
-                target =
-                    key.Length == 0
-                        ? null
-                        : chains.LastOrDefault(chain =>
-                            Continues(chain, row.SharesOwnedAfter)
-                            && chain.Any(member => FootnoteKey(member) == key)
-                        );
+                target = chains.LastOrDefault(chain =>
+                    Continues(chain, row.SharesOwnedAfter)
+                    && chain.Any(member => FootnoteKey(member) == key)
+                );
             }
             else
             {
