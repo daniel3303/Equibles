@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.Core.AutoWiring;
+using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.Repositories;
@@ -14,15 +15,15 @@ namespace Equibles.Holdings.HostedService.Services;
 /// beneficial-ownership filings from EDGAR's daily index, parses their XML
 /// <c>primary_doc.xml</c>, and feeds them through the existing bulk-dataset
 /// import pipeline. Unlike 13F there is no quarterly authoritative data set, so
-/// this is the sole source — coverage begins 2024-12-18 when the forms became
-/// machine-readable XML.
+/// this is the sole source; coverage begins 2023-12-18, when filers could first
+/// submit the forms as machine-readable XML.
 /// </summary>
 [Service]
 public class Realtime13DGIngestionService
 {
     // Daily-index form types: "SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G",
     // "SCHEDULE 13G/A" — all matched by these StartsWith prefixes.
-    private static readonly string[] ScheduleFormPrefixes = ["SCHEDULE 13D", "SCHEDULE 13G"];
+    internal static readonly string[] ScheduleFormPrefixes = ["SCHEDULE 13D", "SCHEDULE 13G"];
 
     private readonly ISecEdgarClient _edgarClient;
     private readonly Filing13DGXmlParser _parser;
@@ -101,82 +102,21 @@ public class Realtime13DGIngestionService
             if (filing == null)
                 continue;
 
-            await _detailWriter.TryWrite(filing, cancellationToken);
+            var outcome = await ImportParsedFiling(filing, minReportDate, cancellationToken);
+            if (outcome == Schedule13DGImportOutcome.Imported)
+                totalImported++;
 
-            _logger.LogInformation(
-                "Importing {Form} {Accession} (CIK {Cik}, event {Event})",
-                filing.SubmissionType,
-                entry.AccessionNumber,
-                entry.Cik,
-                filing.DateOfEvent
-            );
-
-            ImportResult importResult;
-            try
-            {
-                using var archive = _archiveBuilder.Build([filing]);
-                importResult = await _importService.ImportDataSet(
-                    archive,
-                    minReportDate,
-                    cancellationToken
-                );
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // A poisoned filing must cost only its own rows, never the sweep:
-                // skip it and leave it unrecorded so a later cycle retries it
-                // (e.g. once a fix for its defect deploys). Mirrors the per-entry
-                // isolation TryParseAndValidateEntry gives parse failures. Holding
-                // the watermark back keeps the filing re-discoverable even after
-                // it ages out of the trailing window (EquiblesCommercial#2850).
-                _logger.LogError(
-                    ex,
-                    "Failed to import {Form} {Accession} (CIK {Cik}); skipping filing",
-                    filing.SubmissionType,
-                    entry.AccessionNumber,
-                    entry.Cik
-                );
-                if (earliestRetryDate == null || entry.DateFiled < earliestRetryDate)
-                    earliestRetryDate = entry.DateFiled;
-                continue;
-            }
-
-            // IsComplete=false is the import service's "retry later" contract (e.g.
-            // NoTrackedStocks until CUSIPs seed) — recording it here would consume
-            // the filing forever (EquiblesCommercial#2850). It deliberately does
-            // NOT hold the watermark back: an issuer that never seeds a CUSIP
-            // would wedge the sweep, so its retry is bounded by the trailing
-            // window instead.
-            if (!importResult.IsComplete)
-                continue;
-
-            // A filing that imported "complete" yet inserted zero holdings is
-            // suspect: recording it would consume the accession forever even
-            // though we hold none of its position (e.g. a blank filer CIK made
-            // the holder upsert skip it). Unlike 13F there is no quarterly bulk
-            // data set to reconcile the loss, so retry instead — and every
-            // 13D/G archive row carries the issuer position (an amendment
-            // re-reports it, a final exit reports zero shares), so zero inserts
-            // is never legitimate here, amendments included.
-            if (importResult.InsertedHoldings == 0)
-            {
-                _logger.LogWarning(
-                    "{Form} {Accession} (CIK {Cik}) imported as complete but inserted no holdings; not recording so a later cycle retries",
-                    filing.SubmissionType,
-                    entry.AccessionNumber,
-                    entry.Cik
-                );
-                if (earliestRetryDate == null || entry.DateFiled < earliestRetryDate)
-                    earliestRetryDate = entry.DateFiled;
-                continue;
-            }
-
-            await RecordProcessed([entry.AccessionNumber], cancellationToken);
-            totalImported++;
+            // A thrown import or a complete import that stored nothing holds the watermark back so
+            // the filing stays re-discoverable after it ages out of the trailing window
+            // (EquiblesCommercial#2850). An incomplete import does not: an issuer that never seeds a
+            // CUSIP would wedge the sweep, and its details stay on file for the coverage worker.
+            if (
+                outcome
+                    is Schedule13DGImportOutcome.Failed
+                        or Schedule13DGImportOutcome.NothingInserted
+                && (earliestRetryDate == null || entry.DateFiled < earliestRetryDate)
+            )
+                earliestRetryDate = entry.DateFiled;
         }
 
         _logger.LogInformation(
@@ -185,6 +125,130 @@ public class Realtime13DGIngestionService
         );
 
         return new RealtimeIngestionResult(totalImported, earliestRetryDate);
+    }
+
+    /// <summary>
+    /// Stores one parsed filing's details and imports its position, unless a later stored filing
+    /// already reports the same filer's stake in the same security on the same event date.
+    /// Only an <see cref="Schedule13DGImportOutcome.Imported"/> or
+    /// <see cref="Schedule13DGImportOutcome.Superseded"/> filing is recorded as processed.
+    /// </summary>
+    public async Task<Schedule13DGImportOutcome> ImportParsedFiling(
+        Parsed13DGFiling filing,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        await _detailWriter.TryWrite(filing, cancellationToken);
+
+        if (await IsSupersededByStoredFiling(filing, cancellationToken))
+        {
+            // The import would overwrite the later filing's row (an original upserts it, an
+            // amendment deletes it first), so a late-discovered earlier filing keeps only details.
+            _logger.LogInformation(
+                "Skipping {Form} {Accession}: a later stored filing reports the same stake",
+                filing.SubmissionType,
+                filing.AccessionNumber
+            );
+            await RecordProcessed([filing.AccessionNumber], cancellationToken);
+            return Schedule13DGImportOutcome.Superseded;
+        }
+
+        _logger.LogInformation(
+            "Importing {Form} {Accession} (CIK {Cik}, event {Event})",
+            filing.SubmissionType,
+            filing.AccessionNumber,
+            filing.FilerCik,
+            filing.DateOfEvent
+        );
+
+        ImportResult importResult;
+        try
+        {
+            using var archive = _archiveBuilder.Build([filing]);
+            importResult = await _importService.ImportDataSet(
+                archive,
+                minReportDate,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // A poisoned filing must cost only its own rows, never the sweep: leave it unrecorded
+            // so a later cycle retries it (e.g. once a fix for its defect deploys).
+            _logger.LogError(
+                ex,
+                "Failed to import {Form} {Accession} (CIK {Cik}); skipping filing",
+                filing.SubmissionType,
+                filing.AccessionNumber,
+                filing.FilerCik
+            );
+            return Schedule13DGImportOutcome.Failed;
+        }
+
+        // IsComplete=false is the import service's "retry later" contract (e.g. NoTrackedStocks
+        // until CUSIPs seed); recording it would consume the filing forever
+        // (EquiblesCommercial#2850).
+        if (!importResult.IsComplete)
+            return Schedule13DGImportOutcome.Incomplete;
+
+        // Every 13D/G archive row carries the issuer position (an amendment re-reports it, a final
+        // exit reports zero shares), so a complete import that inserted nothing is suspect, e.g. a
+        // blank filer CIK made the holder upsert skip it. There is no bulk data set to reconcile
+        // the loss, so retry instead of recording.
+        if (importResult.InsertedHoldings == 0)
+        {
+            _logger.LogWarning(
+                "{Form} {Accession} (CIK {Cik}) imported as complete but inserted no holdings; not recording so a later cycle retries",
+                filing.SubmissionType,
+                filing.AccessionNumber,
+                filing.FilerCik
+            );
+            return Schedule13DGImportOutcome.NothingInserted;
+        }
+
+        await RecordProcessed([filing.AccessionNumber], cancellationToken);
+        return Schedule13DGImportOutcome.Imported;
+    }
+
+    /// <summary>Why a parsed filing holds no importable position, or null when it does.</summary>
+    internal static string RejectionReason(Parsed13DGFiling filing) =>
+        filing.DateOfEvent == DateOnly.MinValue ? "unparseable event date"
+        : filing.ReportingPersons.Count == 0 ? "no reporting persons"
+        : null;
+
+    // A later filing by the same filer for the same CUSIP, form and event date whose position is
+    // stored. Same-day ties go to the amendment, then to the higher accession number.
+    private async Task<bool> IsSupersededByStoredFiling(
+        Parsed13DGFiling filing,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            string.IsNullOrWhiteSpace(filing.FilerCik)
+            || string.IsNullOrWhiteSpace(filing.IssuerCusip)
+            || filing.DateOfEvent == DateOnly.MinValue
+        )
+            return false;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        return await Schedule13DGSupersession
+            .LaterStoredFilings(
+                dbContext,
+                filing.FilerCik,
+                filing.IssuerCusip,
+                filing.FilingType,
+                filing.DateOfEvent,
+                filing.FilingDate,
+                filing.IsAmendment,
+                filing.AccessionNumber
+            )
+            .AnyAsync(cancellationToken);
     }
 
     private async Task<Parsed13DGFiling> TryParseAndValidateEntry(
@@ -199,28 +263,18 @@ public class Realtime13DGIngestionService
             if (filing == null)
                 return null;
 
-            if (filing.DateOfEvent == DateOnly.MinValue)
+            var rejection = RejectionReason(filing);
+            if (rejection != null)
             {
                 _logger.LogWarning(
-                    "Skipping filing {Accession}: unparseable event date",
-                    entry.AccessionNumber
+                    "Skipping filing {Accession}: {Reason}",
+                    entry.AccessionNumber,
+                    rejection
                 );
                 return null;
             }
 
-            if (filing.DateOfEvent < minReportDate)
-                return null;
-
-            if (filing.ReportingPersons.Count == 0)
-            {
-                _logger.LogWarning(
-                    "Skipping filing {Accession}: no reporting persons",
-                    entry.AccessionNumber
-                );
-                return null;
-            }
-
-            return filing;
+            return filing.DateOfEvent < minReportDate ? null : filing;
         }
         catch (OperationCanceledException)
         {

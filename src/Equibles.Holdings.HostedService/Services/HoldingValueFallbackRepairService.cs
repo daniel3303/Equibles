@@ -354,6 +354,11 @@ public class HoldingValueFallbackRepairService
             cs => cs.Id,
             cs => cs.SecondaryTickers ?? []
         );
+        var seriesByIssuer = await RegisteredSeriesTickers.Load(
+            dbContext,
+            splitsByStock.Values.SelectMany(splits => splits),
+            cancellationToken
+        );
 
         var deferred = 0;
         var priced = new List<(InstitutionalHolding Holding, bool InBand)>();
@@ -382,6 +387,7 @@ public class HoldingValueFallbackRepairService
             splitsByStock.TryGetValue(holding.EquityIssuerId, out var splits);
             primaryTickers.TryGetValue(holding.EquityIssuerId, out var primaryTicker);
             secondaryTickers.TryGetValue(holding.EquityIssuerId, out var listedSecondaries);
+            seriesByIssuer.TryGetValue(holding.EquityIssuerId, out var seriesByTicker);
             if (
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     holding.ReportDate,
@@ -389,7 +395,8 @@ public class HoldingValueFallbackRepairService
                     holding.ListedTicker,
                     primaryTicker,
                     listedSecondaries,
-                    out var shareCountFactor
+                    out var shareCountFactor,
+                    seriesByTicker
                 ) || HoldingValueSanityGuard.IsImplausibleClose(shareCountFactor * closePrice)
             )
             {
