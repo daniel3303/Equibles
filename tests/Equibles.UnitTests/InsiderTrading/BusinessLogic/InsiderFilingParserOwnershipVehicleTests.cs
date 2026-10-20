@@ -75,35 +75,25 @@ public class InsiderFilingParserOwnershipVehicleTests
     }
 
     [Fact]
-    public void ParseTransactions_SameNatureText_IsToldApartByItsFootnotes()
+    public void ParseTransactions_SameNatureText_KeepsEachLinesFootnotes()
     {
-        // Dell, accession 0001193125-26-421726: eighteen sales out of one partnership share one
-        // vehicle, and four holding lines all read "See footnote", each pointing to its own entity.
+        // Dell, accession 0001193125-26-421726: eighteen sales out of one partnership, then four
+        // holding lines that all read "See footnote", each pointing to its own entity.
         var rows = Parse(
             "form4-dell-see-footnote-vehicles.xml",
             new DateOnly(2026, 10, 14),
             new DateOnly(2026, 10, 9)
         );
 
-        var buckets = rows.Where(row =>
-                row.OwnershipNature == OwnershipNature.Indirect
-                && row.SecurityKind == InsiderSecurityKind.NonDerivative
-            )
-            .GroupBy(InsiderPositionBucket.Of)
-            .ToDictionary(group => group.Key.Vehicle, group => group.Count());
-
-        buckets
+        Vehicles(rows)
+            .Skip(18)
             .Should()
-            .BeEquivalentTo(
-                new Dictionary<string, int>
-                {
-                    ["Held through Silver Lake Technology Investors IV, L.P.\u001fF3,F4"] = 18,
-                    ["Held through Silver Lake Group, L.L.C.\u001fF4,F5"] = 1,
-                    ["See footnote\u001fF6"] = 1,
-                    ["See footnote\u001fF7"] = 1,
-                    ["See footnote\u001fF9"] = 1,
-                    ["See footnote\u001fF27"] = 1,
-                }
+            .Equal(
+                ("Held through Silver Lake Group, L.L.C.", "F4,F5"),
+                ("See footnote", "F6"),
+                ("See footnote", "F7"),
+                ("See footnote", "F9"),
+                ("See footnote", "F27")
             );
     }
 

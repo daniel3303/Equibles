@@ -15,9 +15,9 @@ public sealed record InsiderOwnershipPosition(
     public long TotalShares => DirectShares + IndirectShares;
 
     /// <summary>
-    /// True when an indirect bucket states several different balances. A filing keeps no vehicle
-    /// identity, so they may be separate trusts, and the closing balance cannot be compared
-    /// with another filing's.
+    /// True when the filing's indirect rows do not show which balances belong to one vehicle
+    /// (<see cref="InsiderPositionClosings.IndirectAmbiguous"/>), so its indirect total cannot be
+    /// compared with another filing's. One vehicle traded several times is not ambiguous.
     /// </summary>
     public bool IndirectBalancesAmbiguous { get; init; }
 }

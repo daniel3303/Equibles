@@ -255,7 +255,7 @@ public class InsiderOwnershipPositionCalculatorTests
     private const string GoldenOutput = """
 Insider ownership summary for NVIDIA Corp. (NVDA):
 Showing 4 insiders with most recent data
-_Each row is as-of that insider's most recent filing: the filing's closing balance per security and ownership bucket (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A filing reports one balance per indirect vehicle and keeps no vehicle identity, so Indirect can understate an insider holding through several vehicles. Former insiders may linger with stale dates or zero shares._
+_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Former insiders may linger with stale dates or zero shares._
 
 | Insider | Role | Direct Shares | Indirect Shares | Total | Last Transaction | Last Date |
 |---------|------|--------------|-----------------|-------|-----------------|-----------|
@@ -267,7 +267,7 @@ _Each row is as-of that insider's most recent filing: the filing's closing balan
 ====
 Insider ownership summary for NVIDIA Corp. (NVDA):
 Showing 2 insiders with most recent data
-_Each row is as-of that insider's most recent filing: the filing's closing balance per security and ownership bucket (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A filing reports one balance per indirect vehicle and keeps no vehicle identity, so Indirect can understate an insider holding through several vehicles. Former insiders may linger with stale dates or zero shares._
+_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Former insiders may linger with stale dates or zero shares._
 
 | Insider | Role | Direct Shares | Indirect Shares | Total | Last Transaction | Last Date |
 |---------|------|--------------|-----------------|-------|-----------------|-----------|

@@ -110,9 +110,12 @@ public class InsiderFilingReprocessManagerOwnershipVehicleTests : ParadeDbMcpTes
             NullLogger<InsiderFilingReprocessManager>()
         );
 
-        var result = await manager.Run();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var result = await manager.Run(batchPause: TimeSpan.FromMilliseconds(300));
 
         result.Processed.Should().Be(1);
+        // The worker paces the drain so a parser bump does not rewrite every filing back to back.
+        watch.Elapsed.Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(300));
         await using var verify = Fixture.CreateDbContext();
         var rows = await verify
             .Set<InsiderTransaction>()

@@ -101,9 +101,9 @@ public class InsiderTransaction
     public string NatureOfOwnership { get; set; }
 
     /// <summary>
-    /// The footnote ids the filing attaches to the row's ownership nature, in document order. With
-    /// <see cref="NatureOfOwnership"/> they name the vehicle an indirect balance sits in; ids are
-    /// only comparable within one accession.
+    /// The footnote ids the filing attaches to the row's ownership nature, in document order. Filers
+    /// also footnote single trades here, so they only tell apart balances whose stated nature
+    /// reads the same; ids are only comparable within one accession.
     /// </summary>
     public List<string> OwnershipNatureFootnoteIds { get; set; } = [];
 

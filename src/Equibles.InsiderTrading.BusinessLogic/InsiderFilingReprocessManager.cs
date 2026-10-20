@@ -80,9 +80,14 @@ public class InsiderFilingReprocessManager
         _logger = logger;
     }
 
+    /// <param name="batchPause">
+    /// Waited after each committed batch, so a drain of every stored filing leaves the database room
+    /// for other writers; the backoffice run passes none.
+    /// </param>
     public async Task<InsiderFilingReprocessResult> Run(
         Func<InsiderFilingReprocessResult, Task> onProgress = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        TimeSpan batchPause = default
     )
     {
         await ClearProvenCrossFamilyClaims(cancellationToken);
@@ -224,6 +229,9 @@ public class InsiderFilingReprocessManager
 
                 if (onProgress != null)
                     await onProgress(result);
+
+                if (batchPause > TimeSpan.Zero)
+                    await Task.Delay(batchPause, cancellationToken);
             }
         }
         finally
