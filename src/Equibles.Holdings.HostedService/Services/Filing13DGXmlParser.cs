@@ -82,6 +82,8 @@ public class Filing13DGXmlParser
             filing.ReportingPersons.Add(ParseReportingPerson(person));
 
         filing.RuleDesignations = Values(root, "designateRulePursuantThisScheduleFiled");
+        // Item 3's checked categories. Its otherTypeOfPersonFiling is the free-text "type of
+        // institution" line, never a code, even when a filer writes one there.
         filing.FilingPersonTypeCodes = Codes(Descendants(root, "typeOfPersonFiling"));
 
         return filing;
