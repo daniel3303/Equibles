@@ -299,11 +299,62 @@ public class HolderSuccessionRefreshService
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(
                 cancellationToken
             );
+            var stored = await _dbContext
+                .Set<HolderSuccession>()
+                .AsNoTracking()
+                .Select(succession => new SuccessionKey(
+                    succession.PredecessorHolderId,
+                    succession.SuccessorHolderId,
+                    succession.SuccessorFirstReportDate,
+                    succession.PredecessorGroupValue,
+                    succession.SuccessorGroupValue
+                ))
+                .ToListAsync(cancellationToken);
             await _dbContext.Set<HolderSuccession>().ExecuteDeleteAsync(cancellationToken);
             _dbContext.AddRange(successions);
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await DirtyChangedQuarters(stored, successions, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         });
         _dbContext.ChangeTracker.Clear();
     }
+
+    // A successor's first quarter compares its trades with its predecessor's book, so a quarter
+    // whose successions changed is stamped for the intelligence drain with the change.
+    private async Task DirtyChangedQuarters(
+        List<SuccessionKey> stored,
+        List<HolderSuccession> successions,
+        CancellationToken cancellationToken
+    )
+    {
+        var current = successions.Select(succession => new SuccessionKey(
+            succession.PredecessorHolderId,
+            succession.SuccessorHolderId,
+            succession.SuccessorFirstReportDate,
+            succession.PredecessorGroupValue,
+            succession.SuccessorGroupValue
+        ));
+        var difference = stored.ToHashSet();
+        difference.SymmetricExceptWith(current);
+        var changed = difference.Select(key => key.SuccessorFirstReportDate).Distinct().ToList();
+        if (changed.Count == 0)
+            return;
+        var stamp =
+            DateTime.UtcNow - HolderIntelligenceRefreshService.Cooldown - TimeSpan.FromSeconds(1);
+        await _dbContext
+            .Set<HolderIntelligenceQuarterState>()
+            .Where(state => changed.Contains(state.ReportDate))
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(state => state.DirtyAt, stamp),
+                cancellationToken
+            );
+    }
+
+    private readonly record struct SuccessionKey(
+        Guid PredecessorHolderId,
+        Guid SuccessorHolderId,
+        DateOnly SuccessorFirstReportDate,
+        long PredecessorGroupValue,
+        long SuccessorGroupValue
+    );
 }

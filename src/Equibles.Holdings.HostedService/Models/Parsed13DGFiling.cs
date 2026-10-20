@@ -4,8 +4,8 @@ namespace Equibles.Holdings.HostedService.Models;
 
 /// <summary>
 /// A single Schedule 13D/13G (or 13D/A / 13G/A) submission parsed from its raw
-/// EDGAR <c>primary_doc.xml</c>. Schedule 13D and 13G became machine-readable
-/// XML on 2024-12-18, so only filings from that date forward can be parsed; the
+/// EDGAR <c>primary_doc.xml</c>. Schedule 13D and 13G could be filed as XML from
+/// 2023-12-18 (mandatory from 2024-12-18), so only those filings can be parsed; the
 /// two forms share a namespace family but use different element names, which the
 /// parser reconciles. This is the beneficial-ownership equivalent of one 13F
 /// filing and is projected into the same import pipeline by the realtime path.

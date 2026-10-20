@@ -43,6 +43,10 @@ internal static class HoldingValueBasis
     /// classes split together. Per-class split capture is the deferred follow-up that drains
     /// those pendings.
     /// </para>
+    /// <para>
+    /// <paramref name="registeredSeriesByTicker"/> (from <see cref="RegisteredSeriesTickers"/>)
+    /// exempts splits of a different SEC fund series: one trust's funds never split together.
+    /// </para>
     /// </summary>
     internal static bool TryResolveShareCountFactor(
         DateOnly reportDate,
@@ -50,7 +54,8 @@ internal static class HoldingValueBasis
         string listedTicker,
         string primaryTicker,
         IReadOnlyCollection<string> secondaryTickers,
-        out decimal shareCountFactor
+        out decimal shareCountFactor,
+        IReadOnlyDictionary<string, string> registeredSeriesByTicker = null
     )
     {
         // The walk itself lives in SplitBasisResolver (Equibles.CorporateActions.Data) so the
@@ -62,7 +67,8 @@ internal static class HoldingValueBasis
             listedTicker,
             primaryTicker,
             secondaryTickers,
-            out shareCountFactor
+            out shareCountFactor,
+            registeredSeriesByTicker
         );
     }
 }

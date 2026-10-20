@@ -1,3 +1,4 @@
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Integrations.Sec.Models;
 using static Equibles.Holdings.HostedService.Services.Realtime13FIngestionService;
@@ -168,6 +169,65 @@ public class RecoveryTailWalkTests
             .BeEmpty(
                 "a marked writer would be skipped while the amendment behind it stays unapplied"
             );
+    }
+
+    [Fact]
+    public async Task APendingFilingClosedWithoutRows_ReportsItsSourceProof()
+    {
+        var walk = new Walk(
+            (
+                "withheld",
+                new EntryImport(
+                    EntryImportOutcome.Imported,
+                    true,
+                    HoldingsImportFailureReason.ConfidentialTreatment
+                )
+            ),
+            ("written", Imported),
+            (
+                "placeholder",
+                new EntryImport(
+                    EntryImportOutcome.Imported,
+                    true,
+                    HoldingsImportFailureReason.NoTrackedPositions
+                )
+            )
+        );
+
+        var result = await walk.Run(pending: ["withheld", "written", "placeholder"], processed: []);
+
+        result.Resolvable.Should().Equal(["withheld", "written", "placeholder"]);
+        result
+            .ClosedWithoutRows.Should()
+            .BeEquivalentTo(
+                new Dictionary<string, HoldingsImportFailureReason>
+                {
+                    ["withheld"] = HoldingsImportFailureReason.ConfidentialTreatment,
+                    ["placeholder"] = HoldingsImportFailureReason.NoTrackedPositions,
+                },
+                "a filing that wrote its rows keeps no closure, so its row keeps its failure reason"
+            );
+    }
+
+    [Fact]
+    public async Task AClosureBehindALaterFailure_IsNotReported()
+    {
+        var walk = new Walk(
+            (
+                "placeholder",
+                new EntryImport(
+                    EntryImportOutcome.Imported,
+                    true,
+                    HoldingsImportFailureReason.NoTrackedPositions
+                )
+            ),
+            ("broken", new EntryImport(EntryImportOutcome.Failed, false))
+        );
+
+        var result = await walk.Run(pending: ["placeholder", "broken"], processed: []);
+
+        result.Resolvable.Should().BeEmpty();
+        result.ClosedWithoutRows.Should().BeEmpty("nothing closes while its later tail failed");
     }
 
     private sealed class Walk(params (string Accession, EntryImport Result)[] steps)

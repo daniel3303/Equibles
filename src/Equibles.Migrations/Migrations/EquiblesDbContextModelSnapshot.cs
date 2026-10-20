@@ -3006,6 +3006,48 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("HolderLinkEvidence");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyBenchmarkActiveShare", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ActiveShare")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)");
+
+                    b.Property<DateOnly>("BenchmarkAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<string>("BenchmarkKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal>("Coverage")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)");
+
+                    b.Property<Guid>("InstitutionalHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Overlap")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportDate", "BenchmarkKey");
+
+                    b.HasIndex("InstitutionalHolderId", "ReportDate", "BenchmarkKey")
+                        .IsUnique();
+
+                    b.ToTable("HolderQuarterlyBenchmarkActiveShare");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyMetrics", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3038,6 +3080,24 @@ namespace Equibles.Migrations.Migrations
                     b.Property<decimal?>("CensoredValueShare")
                         .HasPrecision(12, 6)
                         .HasColumnType("numeric(12,6)");
+
+                    b.Property<decimal?>("ClosestActiveShare")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)");
+
+                    b.Property<string>("ClosestBenchmark")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateOnly?>("ClosestBenchmarkAsOf")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ClosestBenchmarkName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("ComparedHolderId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("ComputedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3089,6 +3149,10 @@ namespace Equibles.Migrations.Migrations
                     b.Property<DateOnly>("ReportDate")
                         .HasColumnType("date");
 
+                    b.Property<decimal?>("SectorActiveShare")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)");
+
                     b.Property<decimal?>("SellValue")
                         .HasPrecision(20, 2)
                         .HasColumnType("numeric(20,2)");
@@ -3122,6 +3186,8 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("numeric(10,4)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ComparedHolderId");
 
                     b.HasIndex("InstitutionalHolderId", "ReportDate")
                         .IsUnique();
@@ -4383,6 +4449,10 @@ namespace Equibles.Migrations.Migrations
                     b.Property<bool?>("IsRule10b5One")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("NatureOfOwnership")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.PrimitiveCollection<List<string>>("Notes")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -4397,6 +4467,12 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("OwnershipNature")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("OwnershipNatureFootnoteIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<int>("ParserVersion")
                         .HasColumnType("integer");
@@ -7019,8 +7095,24 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("InstitutionalHolder");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyBenchmarkActiveShare", b =>
+                {
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
+                        .WithMany()
+                        .HasForeignKey("InstitutionalHolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InstitutionalHolder");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyMetrics", b =>
                 {
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", null)
+                        .WithMany()
+                        .HasForeignKey("ComparedHolderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
                         .WithMany()
                         .HasForeignKey("InstitutionalHolderId")

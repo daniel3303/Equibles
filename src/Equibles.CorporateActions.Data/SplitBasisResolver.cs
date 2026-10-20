@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CorporateActions.Data.Models;
 
 namespace Equibles.CorporateActions.Data;
@@ -35,6 +36,12 @@ public static class SplitBasisResolver
     /// listing), the class's own split history is unknowable from stored data, so the caller
     /// honestly defers rather than assuming the classes split together.
     /// </para>
+    /// <para>
+    /// <paramref name="registeredSeriesByTicker"/> maps a listed ticker to its SEC fund series id.
+    /// A split attributed to a listing of a DIFFERENT series moves nothing: separate funds of one
+    /// trust are separate products with separate split histories, unlike share classes of one
+    /// series or company. Null or unmapped tickers keep the conservative rules above.
+    /// </para>
     /// </summary>
     public static bool TryResolveFactor(
         DateOnly asOfDate,
@@ -42,7 +49,8 @@ public static class SplitBasisResolver
         string listedTicker,
         string primaryTicker,
         IReadOnlyCollection<string> secondaryTickers,
-        out decimal factor
+        out decimal factor,
+        IReadOnlyDictionary<string, string> registeredSeriesByTicker = null
     )
     {
         factor = 1m;
@@ -83,6 +91,19 @@ public static class SplitBasisResolver
                 positionSeries,
                 StringComparison.OrdinalIgnoreCase
             );
+            if (
+                !belongsToSeries
+                && split.EquityListingId != null
+                && IsDifferentRegisteredSeries(
+                    registeredSeriesByTicker,
+                    positionSeries,
+                    split.Listing.Ticker
+                )
+            )
+            {
+                continue;
+            }
+
             if (!belongsToSeries)
             {
                 // Another listing of the same issuer split after the as-of date: for a
@@ -133,5 +154,27 @@ public static class SplitBasisResolver
 
         factor = resolved;
         return true;
+    }
+
+    private static bool IsDifferentRegisteredSeries(
+        IReadOnlyDictionary<string, string> registeredSeriesByTicker,
+        string positionTicker,
+        string splitTicker
+    )
+    {
+        if (registeredSeriesByTicker == null || positionTicker == null || splitTicker == null)
+            return false;
+
+        return registeredSeriesByTicker.TryGetValue(
+                TickerNormalizer.NormalizeDashListed(positionTicker) ?? positionTicker,
+                out var positionSeriesId
+            )
+            && registeredSeriesByTicker.TryGetValue(
+                TickerNormalizer.NormalizeDashListed(splitTicker) ?? splitTicker,
+                out var splitSeriesId
+            )
+            && !string.IsNullOrWhiteSpace(positionSeriesId)
+            && !string.IsNullOrWhiteSpace(splitSeriesId)
+            && !string.Equals(positionSeriesId, splitSeriesId, StringComparison.OrdinalIgnoreCase);
     }
 }

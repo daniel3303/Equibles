@@ -16,6 +16,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.BusinessLogic.Contracts;
 using Equibles.Holdings.BusinessLogic.Intelligence;
+using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
@@ -1593,7 +1594,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Δ Value is the change in published position value: values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. It includes price movement on held shares, so use Δ Shares to read the position change itself. The output publishes the first complete 13F report quarter and refuses comparisons that cross that corpus boundary. Use this to answer 'what's the consensus 13F move this quarter?'"
+        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Entries and exits count only filers with a 13F in both quarters. Δ Value is the change in published position value: values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. It includes price movement on held shares, so use Δ Shares to read the position change itself. The output publishes the first complete 13F report quarter and refuses comparisons that cross that corpus boundary. Use this to answer 'what's the consensus 13F move this quarter?'"
     )]
     public Task<string> GetMarketWide13FActivity(
         [Description("Bucket: top-buys, top-sells, new-positions, or sold-out-positions")]
@@ -2005,6 +2006,12 @@ public class InstitutionalHoldingsTools
                 return $"| {rank} | {ticker} | {name} | {countCell} |";
             }
         );
+        result.AppendLine();
+        result.AppendLine(
+            normalizedBucket == "new-positions"
+                ? "_Counts only filers that reported a 13F for the prior quarter too: a first-time filer's book, or a return after a gap, is not a new position._"
+                : "_Counts only filers that reported a 13F for this quarter too: a filer that has not filed, or withheld its positions under confidential treatment, has not sold._"
+        );
         return result.ToString();
     }
 
@@ -2318,6 +2325,8 @@ public class InstitutionalHoldingsTools
         result.AppendLine($"| Style | {HolderStyleDescriptions.Style(style)} |");
         result.AppendLine($"| Turnover | {HolderStyleDescriptions.Turnover(style)} |");
         result.AppendLine($"| Horizon | {HolderStyleDescriptions.Horizon(style)} |");
+        if (HolderStyleDescriptions.BenchmarkSummary(style) is { } benchmark)
+            result.AppendLine($"| Benchmark | {benchmark} |");
         result.AppendLine();
         result.AppendLine(
             "_GetInstitutionStyleHistory shows these measurements for every quarter, with the thresholds._"
@@ -2331,7 +2340,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get an institutional 13F filer's portfolio style quarter by quarter, measured from its filed common-share book: style band (index-like, systematic-like, concentrated, diversified active), turnover band, holding-horizon band, and the measurements behind them (equity value, stock count, active share against every 13F filer's combined book, top 10 weight, effective positions, trailing annual turnover, value-weighted holding period). Bands are measurements with stated thresholds, never the firm's own description. Closed quarters only; the newest quarter is measured once its filing window closes."
+        "Get an institutional 13F filer's portfolio style quarter by quarter, measured from its filed common-share book: style band (index-like, systematic-like, concentrated, diversified active), turnover band, holding-horizon band, and the measurements behind them (equity value, stock count, active share against every 13F filer's combined book and against the closest benchmark among the S&P 500, S&P MidCap 400, S&P SmallCap 600, Russell 1000, Russell 2000, Nasdaq-100 and Dow Jones Industrial Average with its as-of date, sector active share, top 10 weight, effective positions, trailing annual turnover, value-weighted holding period), plus the newest quarter's active share against every benchmark. Bands are measurements with stated thresholds, never the firm's own description. Closed quarters only; the newest quarter is measured once its filing window closes."
     )]
     public Task<string> GetInstitutionStyleHistory(
         [Description(
@@ -2362,7 +2371,22 @@ public class InstitutionalHoldingsTools
                     .AsNoTracking()
                     .ToListAsync();
                 var links = await LoadHolderLinks(holder);
-                return RenderStyleHistory(holder, reportDates[0], rows, notes, links);
+                var latestBenchmarks =
+                    rows.Count == 0
+                        ? []
+                        : await _holderRepository
+                            .GetQuarterlyBenchmarkActiveShares(holder)
+                            .Where(row => row.ReportDate == rows[0].ReportDate)
+                            .AsNoTracking()
+                            .ToListAsync();
+                return RenderStyleHistory(
+                    holder,
+                    reportDates[0],
+                    rows,
+                    latestBenchmarks,
+                    notes,
+                    links
+                );
             },
             "GetInstitutionStyleHistory",
             $"institution: {institutionName}, maxPeriods: {maxPeriods}"
@@ -2375,6 +2399,7 @@ public class InstitutionalHoldingsTools
         InstitutionalHolder holder,
         DateOnly latestReportDate,
         IReadOnlyList<HolderQuarterlyMetrics> rows,
+        IReadOnlyList<HolderQuarterlyBenchmarkActiveShare> latestBenchmarks,
         string notes,
         IReadOnlyList<HolderLinkRow> links
     )
@@ -2403,16 +2428,17 @@ public class InstitutionalHoldingsTools
             );
         result.AppendLine();
         result.AppendLine(
-            "| Quarter | Style | Turnover | Horizon | Equity value ($M) | Stocks | Active share | Top 10 weight | Effective positions | Annual turnover | Holding period (qtrs) |"
+            "| Quarter | Style | Turnover | Horizon | Equity value ($M) | Stocks | Active share (13F book) | Closest benchmark | Sector active share | Top 10 weight | Effective positions | Annual turnover | Holding period (qtrs) |"
         );
         result.AppendLine(
-            "|---------|-------|----------|---------|-------------------|--------|--------------|---------------|---------------------|-----------------|-----------------------|"
+            "|---------|-------|----------|---------|-------------------|--------|-------------------------|-------------------|---------------------|---------------|---------------------|-----------------|-----------------------|"
         );
         foreach (var row in rows)
             result.AppendLine(
                 $"| {FormatDate(row.ReportDate)} | {StyleCell(row)} | {row.TurnoverBand.NameForHumans()} | {row.HorizonBand.NameForHumans()} | "
                     + $"{FormatMillions(row.EquityAum)} | {McpFormat.WholeNumber(row.StockCount)} | "
-                    + $"{FractionCell(row.AggregateActiveShare)} | {FractionCell(row.TopTenWeight)} | "
+                    + $"{FractionCell(row.AggregateActiveShare)} | {ClosestBenchmarkCell(row)} | "
+                    + $"{FractionCell(row.SectorActiveShare)} | {FractionCell(row.TopTenWeight)} | "
                     + $"{DecimalCell(row.EffectivePositions)} | {FractionCell(row.TrailingAnnualTurnover)} | "
                     + $"{DecimalCell(row.ValueWeightedTenureQuarters)} |"
             );
@@ -2422,10 +2448,57 @@ public class InstitutionalHoldingsTools
         result.AppendLine($"- {HolderStyleDescriptions.Style(latest)}");
         result.AppendLine($"- {HolderStyleDescriptions.Turnover(latest)}");
         result.AppendLine($"- {HolderStyleDescriptions.Horizon(latest)}");
+        if (HolderStyleDescriptions.BenchmarkSummary(latest) is { } closest)
+            result.AppendLine($"- {closest}");
+        AppendBenchmarkTable(result, latest.ReportDate, latestBenchmarks);
         result.AppendLine();
         result.AppendLine($"_{HolderStyleDescriptions.Methodology}_");
         AppendStyleLinkNotes(result, links);
         return result.ToString();
+    }
+
+    // The newest quarter's active share against every benchmark, closest first.
+    private static void AppendBenchmarkTable(
+        StringBuilder result,
+        DateOnly reportDate,
+        IReadOnlyList<HolderQuarterlyBenchmarkActiveShare> benchmarks
+    )
+    {
+        if (benchmarks.Count == 0)
+            return;
+        result.AppendLine();
+        result.AppendLine(
+            $"**Active share by benchmark, {FormatDate(reportDate)}** (measured over the benchmark names matched to tracked stocks; overlap is the benchmark's weight in names the filer holds; coverage is the share of the benchmark's weight matched, and one under {(int)(HolderBenchmark.DefaultMinimumCoverage * 100)}% is never the closest):"
+        );
+        result.AppendLine();
+        result.AppendLine("| Benchmark | As of | Active share | Overlap | Coverage |");
+        result.AppendLine("|-----------|-------|--------------|---------|----------|");
+        foreach (
+            var row in benchmarks
+                .OrderBy(row => row.ActiveShare)
+                .ThenBy(row => HolderBenchmarkCatalog.Order(row.BenchmarkKey))
+        )
+            result.AppendLine(
+                $"| {BenchmarkLabel(row.BenchmarkKey)} | {FormatDate(row.BenchmarkAsOf)} | {FractionCell(row.ActiveShare)} | {FractionCell(row.Overlap)} | {FractionCell(row.Coverage)} |"
+            );
+    }
+
+    private static string BenchmarkLabel(string key) =>
+        key == HolderBenchmarkCatalog.Aggregate
+            ? "13F combined book"
+            : HolderBenchmarkCatalog.Name(key) ?? key;
+
+    // The closest benchmark with the book's active share against it and, for a published index,
+    // the date its weights are as of.
+    private static string ClosestBenchmarkCell(HolderQuarterlyMetrics row)
+    {
+        if (row is not { ClosestBenchmark: { } key, ClosestActiveShare: { } activeShare })
+            return "—";
+        if (key == HolderBenchmarkCatalog.Aggregate)
+            return $"{BenchmarkLabel(key)} {FractionCell(activeShare)}";
+        var name = MarkdownTable.EscapeCell(row.ClosestBenchmarkName ?? BenchmarkLabel(key), "—");
+        var asOf = row.ClosestBenchmarkAsOf is { } date ? $" ({FormatDate(date)})" : "";
+        return $"{name} {FractionCell(activeShare)}{asOf}";
     }
 
     // An index-like band names the measurement that placed it, since two different tests can.

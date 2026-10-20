@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
@@ -60,6 +61,34 @@ public class HolderQuarterlyMetrics
     /// <summary>Active share against every 13F filer's combined common-share book that quarter.</summary>
     [Precision(12, 6)]
     public decimal? AggregateActiveShare { get; set; }
+
+    /// <summary>
+    /// The benchmark the book is closest to by active share, among the published indexes and the
+    /// combined 13F book measured that quarter (<see cref="HolderQuarterlyBenchmarkActiveShare"/>).
+    /// </summary>
+    [MaxLength(64)]
+    public string ClosestBenchmark { get; set; }
+
+    [MaxLength(128)]
+    public string ClosestBenchmarkName { get; set; }
+
+    public DateOnly? ClosestBenchmarkAsOf { get; set; }
+
+    [Precision(12, 6)]
+    public decimal? ClosestActiveShare { get; set; }
+
+    /// <summary>
+    /// Half the summed absolute differences between the book's sector weights and the combined
+    /// 13F book's; an issuer without a sector weighs in as Unclassified on both sides.
+    /// </summary>
+    [Precision(12, 6)]
+    public decimal? SectorActiveShare { get; set; }
+
+    /// <summary>
+    /// The filer whose previous-quarter book the trades compare with: the filer itself, or the one
+    /// predecessor whose 13F reports it alone continues from this quarter; null without a baseline.
+    /// </summary>
+    public Guid? ComparedHolderId { get; set; }
 
     /// <summary>
     /// Net assets of the index series and of every registered fund series the filer's adviser

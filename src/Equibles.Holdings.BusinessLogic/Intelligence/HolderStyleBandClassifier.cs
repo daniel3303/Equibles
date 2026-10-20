@@ -10,7 +10,12 @@ namespace Equibles.Holdings.BusinessLogic.Intelligence;
 /// </summary>
 public static class HolderStyleBandClassifier
 {
-    public const int BandVersion = 1;
+    /// <summary>
+    /// 2: index-like reads the closest benchmark's active share, a published index or the combined
+    /// 13F book, so a small- or mid-cap tracker no longer reads active against the large-cap
+    /// aggregate.
+    /// </summary>
+    public const int BandVersion = 2;
 
     public const long MinimumEquityAum = 10_000_000;
     public const int MinimumStockCount = 5;

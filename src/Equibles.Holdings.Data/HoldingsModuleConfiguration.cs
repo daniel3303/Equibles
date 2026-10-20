@@ -325,6 +325,14 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // presence bitmask tenure reads, unique per exact listing with a null primary.
         builder.Entity<HolderIntelligenceQuarterState>();
         builder.Entity<HolderQuarterlyMetrics>();
+        // The compared predecessor is provenance; removing that filer must never delete metrics.
+        builder
+            .Entity<HolderQuarterlyMetrics>()
+            .HasOne<InstitutionalHolder>()
+            .WithMany()
+            .HasForeignKey(metrics => metrics.ComparedHolderId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.Entity<HolderQuarterlyBenchmarkActiveShare>();
         // A sector change in the taxonomy must never silently delete published flows.
         builder
             .Entity<HolderQuarterlySectorFlow>()

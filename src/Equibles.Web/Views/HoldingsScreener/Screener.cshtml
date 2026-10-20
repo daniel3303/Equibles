@@ -62,10 +62,12 @@
                     <fieldset class="fieldset">
                         <legend class="fieldset-legend">New positions (min)</legend>
                         <input type="number" name="MinNewPositions" value="@filters.MinNewPositions" placeholder="min" class="input input-bordered w-full" />
+                        <p class="label">Filers that also reported the prior quarter</p>
                     </fieldset>
                     <fieldset class="fieldset">
                         <legend class="fieldset-legend">Sold-out positions (min)</legend>
                         <input type="number" name="MinSoldOutPositions" value="@filters.MinSoldOutPositions" placeholder="min" class="input input-bordered w-full" />
+                        <p class="label">Filers that also reported this quarter</p>
                     </fieldset>
 
                     @if (Model.IndustryOptions.Count > 0) {

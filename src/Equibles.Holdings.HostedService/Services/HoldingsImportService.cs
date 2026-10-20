@@ -809,6 +809,11 @@ public class HoldingsImportService
         context.StockSplits = splits
             .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
+        context.RegisteredSeriesByTicker = await RegisteredSeriesTickers.Load(
+            dbContext,
+            splits,
+            cancellationToken
+        );
 
         _logger.LogInformation(
             "Loaded {Splits} split(s) across {Stocks} stock(s) for share-basis restatement",
@@ -2343,13 +2348,15 @@ public class HoldingsImportService
         context.StockSplits.TryGetValue(commonStockId, out var splits);
         context.PrimaryTickers.TryGetValue(commonStockId, out var primaryTicker);
         context.SecondaryTickers.TryGetValue(commonStockId, out var secondaryTickers);
+        context.RegisteredSeriesByTicker.TryGetValue(commonStockId, out var seriesByTicker);
         basisKnown = HoldingValueBasis.TryResolveShareCountFactor(
             reportDate,
             splits,
             listedTicker,
             primaryTicker,
             secondaryTickers,
-            out shareCountFactor
+            out shareCountFactor,
+            seriesByTicker
         );
         // An implausible close (a corrupt bar in the price series) is no price at all: deriving
         // from it once stated a $13.7T position for a $1.09M filing. The row stays pending and the
