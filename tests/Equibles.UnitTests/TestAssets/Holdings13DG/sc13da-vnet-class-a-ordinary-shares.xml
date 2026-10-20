@@ -1,0 +1,516 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <headerData>
+    <submissionType>SCHEDULE 13D/A</submissionType>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <cik>0001758419</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <amendmentNo>3</amendmentNo>
+      <securitiesClassTitle>Class A Ordinary Shares, par value US$0.00001 per share</securitiesClassTitle>
+      <dateOfEvent>03/17/2025</dateOfEvent>
+      <previouslyFiledFlag>false</previouslyFiledFlag>
+      <issuerInfo>
+        <issuerCIK>0001508475</issuerCIK>
+        <issuerCUSIP>G91458102</issuerCUSIP>
+        <issuerName>VNET GROUP, INC.</issuerName>
+        <address>
+          <street1 xmlns="http://www.sec.gov/edgar/common">Guanjie Building, Southeast 1st Floor</street1>
+          <street2 xmlns="http://www.sec.gov/edgar/common">10# Jiuxianqiao East Road</street2>
+          <city xmlns="http://www.sec.gov/edgar/common">Chaoyang District, Beijing</city>
+          <stateOrCountry xmlns="http://www.sec.gov/edgar/common">F4</stateOrCountry>
+          <zipCode xmlns="http://www.sec.gov/edgar/common">100016</zipCode>
+        </address>
+      </issuerInfo>
+      <authorizedPersons>
+        <notificationInfo>
+          <personName>John G. Finley</personName>
+          <personPhoneNum>(212) 583-5000</personPhoneNum>
+          <personAddress>
+            <street1 xmlns="http://www.sec.gov/edgar/common">Blackstone Inc., 345 Park Avenue</street1>
+            <city xmlns="http://www.sec.gov/edgar/common">New York</city>
+            <stateOrCountry xmlns="http://www.sec.gov/edgar/common">NY</stateOrCountry>
+            <zipCode xmlns="http://www.sec.gov/edgar/common">10154</zipCode>
+          </personAddress>
+        </notificationInfo>
+      </authorizedPersons>
+    </coverPageHeader>
+    <reportingPersons>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Vector Holdco Pte. Ltd.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>U0</citizenshipOrOrganization>
+        <soleVotingPower>201070641</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>201070641</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>201070641</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.1</percentOfClass>
+        <typeOfReportingPerson>CO</typeOfReportingPerson>
+        <commentContent>The aggregate amount represents (i) 60,578,154 Class A Ordinary Shares held in the form of American Depositary Shares ("ADSs"), and (ii) 140,492,487 Class A Ordinary Shares issuable upon conversion of Notes (as defined below), each held directly by the Reporting Person. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by BTO Vector Fund ESC (CYM) L.P. ("Vector Fund ESC") and BTO Vector Fund FD (CYM) L.P. ("Vector Fund FD" and, together with Vector Fund ESC, the "Noteholders").</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>BTO Vector Fund ESC (CYM) L.P.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>E9</citizenshipOrOrganization>
+        <soleVotingPower>268800</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>268800</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>268800</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>0.02</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents (i) 268,800 Class A Ordinary Shares held in the form of ADSs directly held by the Reporting Person. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>BTO Vector Fund FD (CYM) L.P.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>E9</citizenshipOrOrganization>
+        <soleVotingPower>5618794</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>5618794</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>5618794</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>0.3</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents (i) 1,565,826 Class A Ordinary Shares held in the form of ADSs and (ii) 4,052,968 Class A Ordinary Shares of the Issuer, issuable upon conversion of the Notes, in each case held by the Reporting Person. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>BTO Super Holding (NQ) Co. III Pte. Ltd.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>U0</citizenshipOrOrganization>
+        <soleVotingPower>201070641</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>201070641</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>201070641</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.1</percentOfClass>
+        <typeOfReportingPerson>CO</typeOfReportingPerson>
+        <commentContent>The aggregate number represents (i) 60,578,154 Class A Ordinary Shares held in the form of ADSs, and (ii) 140,492,487 Class A Ordinary Shares issuable upon conversion of Notes, in each case held by the Reporting Person. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Tactical Opportunities SG II (Cayman) - NQ L.P.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>E9</citizenshipOrOrganization>
+        <soleVotingPower>201070641</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>201070641</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>201070641</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.1</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents (i) 60,578,154 Class A Ordinary Shares held in the form of ADSs, and (ii) 140,492,487 Class A Ordinary Shares issuable upon conversion of Notes, held by Vector Holdco Pte. Ltd. ("Vector Holdco"). The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>BTO Holdings (Cayman) - NQ Manager L.L.C.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>5887594</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>5887594</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>5887594</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>0.3</percentOfClass>
+        <typeOfReportingPerson>OO</typeOfReportingPerson>
+        <commentContent>The aggregate number represents (i) 1,834,626 Class A Ordinary Shares held in the form of ADSs, and (ii) 4,052,968 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001758419</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Tactical Opportunities Management Associates (Cayman) - NQ L.P.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>E9</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 62,412,780 Class A Ordinary Shares held in the form of ADSs held by Vector Holdco, Vector ESC and Vector Fund FD (the "Holders") and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the  Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>BTO GP-NQ L.L.C.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>OO</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Tactical Opportunities LR Associates (Cayman) - NQ Ltd.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>E9</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>0</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>OO</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Holdings IV L.P.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>A8</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Holdings IV GP L.P.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>A8</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Holdings IV GP Management (Delaware) L.P.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Holdings IV GP Management L.L.C.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>OO</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Inc.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>CO</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Blackstone Group Management L.L.C.</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>OO</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonNoCIK>Y</reportingPersonNoCIK>
+        <reportingPersonName>Stephen A. Schwarzman</reportingPersonName>
+        <memberOfGroup>b</memberOfGroup>
+        <fundType>OO</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+        <soleVotingPower>206958235</soleVotingPower>
+        <sharedVotingPower>0</sharedVotingPower>
+        <soleDispositivePower>206958235</soleDispositivePower>
+        <sharedDispositivePower>0</sharedDispositivePower>
+        <aggregateAmountOwned>206958235</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>12.5</percentOfClass>
+        <typeOfReportingPerson>IN</typeOfReportingPerson>
+        <commentContent>The aggregate number represents 206,958,235 Class A Ordinary Shares in the form of ADSs held by the Holders or issuable upon conversion of Notes held by the Noteholders. The percent of class is calculated based upon the sum of (i) 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023, and (ii) 144,545,455 Class A Ordinary Shares issuable upon conversion of Notes held by the Noteholders.</commentContent>
+      </reportingPersonInfo>
+    </reportingPersons>
+    <items1To7>
+      <item1>
+        <securityTitle>Class A Ordinary Shares, par value US$0.00001 per share</securityTitle>
+        <issuerName>VNET GROUP, INC.</issuerName>
+        <issuerPrincipalAddress>
+          <street1 xmlns="http://www.sec.gov/edgar/common">Guanjie Building, Southeast 1st Floor</street1>
+          <street2 xmlns="http://www.sec.gov/edgar/common">10# Jiuxianqiao East Road</street2>
+          <city xmlns="http://www.sec.gov/edgar/common">Chaoyang District, Beijing</city>
+          <stateOrCountry xmlns="http://www.sec.gov/edgar/common">F4</stateOrCountry>
+          <zipCode xmlns="http://www.sec.gov/edgar/common">100016</zipCode>
+        </issuerPrincipalAddress>
+        <commentText>This Amendment No. 3 to Schedule 13D (this "Amendment No. 3") amends and supplements the Schedule 13D originally filed by the Reporting Persons on July 2, 2020, as amended by Amendment No. 1 filed on April 8, 2021 ("Amendment No. 1") and Amendment No. 2 filed on February 1, 2022 ("Amendment No. 2", and as amended and supplemented by this Amendment No. 3, the "Schedule 13D"), relating to the Class A Ordinary Shares, par value US$0.00001 per share ("Class A Ordinary Shares") of VNET Group, Inc. (the "Issuer").
+
+Capitalized terms used but not defined in this Amendment No. 3 shall have the same meanings ascribed to them in the Schedule 13D. Except as specifically amended by this Amendment No. 3, items in the Schedule 13D are unchanged. The CUSIP number set forth on the cover of this Schedule 13D/A applies to the ADSs of the Issuer.</commentText>
+      </item1>
+      <item2>
+        <principalBusinessAddress>Item 2(b) of the Schedule 13D is hereby amended and restated as follows:
+The principal business address of each of the Reporting Persons is c/o Blackstone Inc., 345 Park Avenue, New York, New York 10154.
+
+The information set forth in the amended and restated Schedule I attached hereto as Exhibit 99.2 is incorporated herein by reference in this amended Item 2.</principalBusinessAddress>
+      </item2>
+      <item4>
+        <transactionPurpose>Item 4 of the Schedule 13D  is hereby amended by adding the following paragraphs immediately prior to the penultimate paragraph of such item:
+
+On March 17, 2025, each of Vector Holdco, Vector Fund ESC, and Vector Fund FD (each a "Counterparty") entered into a Master Confirmation (each, a "Master Confirmation") for Prepaid Variable Share Forward Transactions with Morgan Stanley Bank, N.A. (the "Dealer") and a transaction pursuant to a Supplemental Confirmation thereunder (each, a "Forward Contract"). Each Forward Contract obligates (i) Dealer to make an upfront payment to the applicable Counterparty, in an amount in cash based on the upfront market price of the ADSs subject to the applicable Forward Contract and (ii) the applicable Counterparty to deliver to Dealer, on specified dates in the first quarter of 2027 (each, a "Settlement Date"), consideration (in ADSs or, at the election of Counterparty subject to certain conditions, cash) with a value based on the volume weighted average price per ADS on the date that is one settlement cycle prior to the applicable Settlement Date, subject to a floor price and a cap price, each determined as a percentage of the price used to determine Dealer's upfront payment.
+
+To secure its obligations under, and as required pursuant to, the applicable Forward Contract, Vector Holdco, Vector Fund ESC and Vector Fund FD are pledging 10,096,355, 44,833 and 260,942 ADSs, respectively (with respect to the applicable Counterparty, the "Pledged Shares"), to Dealer. Each Counterparty will retain ownership, and voting and ordinary dividend rights in its Pledged Shares during the term of the Forward Contract (subject to any foreclosure by Dealer in the case of a default by such Counterparty), and thereafter if the Counterparty settles the Forward Contract in cash, subject to certain payments the Counterparty will be required to make to Dealer with respect to dividends under the terms of its Forward Contract.
+
+The foregoing summary of the Forward Contracts does not purport to be complete and is qualified in its entirety by reference to the full text of the Master Confirmations, a form of which is attached as Exhibit 99.5 hereto and is incorporated by reference in its entirety into this Item 4.</transactionPurpose>
+      </item4>
+      <item5>
+        <percentageOfClassSecurities>Item 5(a) The information contained in rows 11 and 13 of each of the cover pages hereto is hereby incorporated by reference into this Item 5(a).  The reported securities are directly held as follows:
+
+* Vector HoldCo beneficially owns 201,070,641 Class A Ordinary Shares, which amount includes ADSs representing 60,578,154 Class A Ordinary Shares and 140,492,487 Class A Ordinary Shares issuable upon conversion of the Issuer's 2.00% convertible notes due 2027 (the "Notes") in principal amount of US$$257,569,559 (inclusive of PIK interest) at an initial conversion price of US$1.8333 per Class A Ordinary Share, which ADSs and Notes are directly held by Vector HoldCo.
+
+* Vector Fund ESC beneficially owns 268,800 Class A Ordinary Shares held in the form of ADSs directly held by Vector Fund ESC; and
+
+* Vector Fund FD beneficially owns 5,618,794 Class A Ordinary Shares, which amount includes ADSs representing 1,565,826 Class A Ordinary Shares and 4,052,968 Class A Ordinary Shares issuable upon conversion of Notes in principal amount of US$$7,430,441 (inclusive of PIK interest) at an initial conversion price at US$1.8333 per Class A Ordinary Share, which ADSs and Notes are directly held by Vector Fund FD.
+
+The securities held by Vector HoldCo, Vector ESC and Vector Fund FD (together, the "Direct Holders") represent an aggregate of 206,958,235 Class A Ordinary Shares, which constitutes 12.5% of outstanding Class A Ordinary Shares.  Calculations of the percentage of Class A Ordinary Shares beneficially owned assumes that there were 1,513,609,283 Class A Ordinary Shares outstanding of the Issuer as of December 31, 2023 (excluding (a) treasury shares and (b) Class A Ordinary Shares in the form of ADSs that are reserved for future issuances upon the exercise or vesting of share incentive awards), as reported in the Issuer's annual report on Form 20-F filed with the SEC on April 26, 2024, and takes into account the Class A Ordinary Shares issuable upon conversion of the Notes beneficially owned by assuming the full conversion of the Notes held by the Noteholders.
+
+BTO Super Holding is the 100% equity owner of Vector Holdco. BTO SG is the 100% equity owner of BTO Super Holding. BTO Holdings is the general partner of Vector Fund ESC and Vector Fund FD. BTOMA is the managing member of BTO Holdings and the general partner of BTO SG. BTO GP and BTOLRA are the general partners of BTOMA with BTO GP controlling BTOMA with respect to all matters other than voting of securities of underlying portfolio companies, which power is held by the Class B shareholders of BTOLRA, who are certain senior personnel of Blackstone. Blackstone IV is the sole member of BTO GP and the sole Class A shareholder of BTOLRA. Blackstone IV GP is the general partner of Blackstone IV. Blackstone IV GP Management (Delaware) is the general partner of Blackstone IV GP. Blackstone IV GP Management is the general partner of Blackstone IV GP Management (Delaware). Blackstone Inc. is the sole member of Blackstone IV GP Management. Blackstone Group Management L.L.C. is the sole holder of the Series II preferred stock of Blackstone Inc. Blackstone Group Management L.L.C. is wholly-owned by Blackstone's Managing Directors and controlled by its founder, Stephen A. Schwarzman.
+
+As a result of such relationships, each of the foregoing may be deemed to beneficially own the   Class A Ordinary Shares  that are directly or indirectly controlled by such Reporting Person, but neither the filing of this Amendment No. 3 nor any of its contents shall be deemed to constitute an admission that any Reporting Person is the beneficial owner of the Class A Ordinary Shares referred to herein for purposes of Section 13(d) of the Securities Exchange Act of 1934, as amended, or for any other purpose and each of the Reporting Persons expressly disclaims beneficial ownership of such Class A Ordinary Shares. The filing of this statement should not be construed to be an admission that any member of the Reporting Persons are members of a "group" for the purposes of Section 13(d) and 13(g) of the Act.</percentageOfClassSecurities>
+        <numberOfShares>The information contained in rows 7 through 10 of each of the cover pages hereto and in Item 5(a) hereof are hereby incorporated by reference into this Item 5(b).</numberOfShares>
+        <transactionDesc>Except as set forth in this Amendment No. 3, none of the Reporting Persons or, to the best knowledge of the Reporting Persons, any other person named in Schedule I, has effected any transaction in Class A Ordinary Shares in the past 60 days.</transactionDesc>
+      </item5>
+      <item6>
+        <contractDescription>Item 6 of the Schedule 13D is hereby amended to incorporate the following at the end thereof:
+
+The information set forth in or incorporated by reference in Item 4 of this Amendment No. 3 is incorporated by reference into this Item 6.</contractDescription>
+      </item6>
+      <item7>
+        <filedExhibits>Item 7 of Schedule 13D is hereby amended and supplemented as follows:
+
+99.1	       Joint Filing Agreement, dated February 1, 2022 (incorporated by reference to Exhibit 99.1 to the Statement on Schedule 13D filed by the Reporting Persons with the Securities and Exchange Commission on February 1, 2022)
+99.2		Schedule I - Executive Officers and Directors of Blackstone Inc.
+99.5		Form of Master Confirmation for Prepaid Variable Share Forward Transaction
+99.6		Signature Page dated March 19, 2025</filedExhibits>
+      </item7>
+    </items1To7>
+    <signatureInfo>
+      <signaturePerson>
+        <signatureReportingPerson>Vector Holdco Pte. Ltd.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Melanie Mei Lan Ng</signature>
+          <title>Melanie Mei Lan Ng / Director</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>BTO Vector Fund ESC (CYM) L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Christopher J. James</signature>
+          <title>Christopher J. James / Authorized Person of BTO GP - NQ L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>BTO Vector Fund FD (CYM) L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Christopher J. James</signature>
+          <title>Christopher J. James / Authorized Person of BTO GP - NQ L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>BTO Super Holding (NQ) Co. III Pte. Ltd.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Melanie Mei Lan Ng</signature>
+          <title>Melanie Mei Lan Ng / Director</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Tactical Opportunities SG II (Cayman) - NQ L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Christopher J. James</signature>
+          <title>Christopher J. James / Authorized Person of BTO GP - NQ L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>BTO Holdings (Cayman) - NQ Manager L.L.C.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Christopher J. James</signature>
+          <title>Christopher J. James / Authorized Person of BTO GP - NQ L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Tactical Opportunities Management Associates (Cayman) - NQ L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Christopher J. James</signature>
+          <title>Christopher J. James / Authorized Person of BTO GP - NQ L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>BTO GP-NQ L.L.C.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Christopher J. James</signature>
+          <title>Christopher J. James / Authorized Person</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Tactical Opportunities LR Associates (Cayman) - NQ Ltd.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Christopher J. James</signature>
+          <title>Christopher J. James / Authorized Person of Blackstone Capital Holdings Director L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Holdings IV L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Victoria Portnoy</signature>
+          <title>Victoria Portnoy /  Managing Director - Assistant Secretary of Blackstone Holdings IV GP Management L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Holdings IV GP L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Victoria Portnoy</signature>
+          <title>Victoria Portnoy /  Managing Director - Assistant Secretary of Blackstone Holdings IV GP Management L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Holdings IV GP Management (Delaware) L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Victoria Portnoy</signature>
+          <title>Victoria Portnoy /  Managing Director - Assistant Secretary of Blackstone Holdings IV GP Management L.L.C., See Exhibit 99.6</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Holdings IV GP Management L.L.C.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Victoria Portnoy</signature>
+          <title>Victoria Portnoy / Managing Director - Assistant Secretary</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Inc.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Victoria Portnoy</signature>
+          <title>Victoria Portnoy / Managing Director - Assistant Secretary</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Blackstone Group Management L.L.C.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Victoria Portnoy</signature>
+          <title>Victoria Portnoy / Managing Director - Assistant Secretary</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>Stephen A. Schwarzman</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Stephen A. Schwarzman</signature>
+          <title>Stephen A. Schwarzman</title>
+          <date>03/19/2025</date>
+        </signatureDetails>
+      </signaturePerson>
+    </signatureInfo>
+  </formData>
+
+</edgarSubmission>

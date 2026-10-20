@@ -1,0 +1,308 @@
+<SEC-DOCUMENT>0000315066-24-001331.txt : 20240209
+<SEC-HEADER>0000315066-24-001331.hdr.sgml : 20240209
+<ACCEPTANCE-DATETIME>20240209092831
+ACCESSION NUMBER:		0000315066-24-001331
+CONFORMED SUBMISSION TYPE:	SC 13G/A
+PUBLIC DOCUMENT COUNT:		1
+FILED AS OF DATE:		20240209
+DATE AS OF CHANGE:		20240209
+
+SUBJECT COMPANY:	
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			NVIDIA CORP
+		CENTRAL INDEX KEY:			0001045810
+		STANDARD INDUSTRIAL CLASSIFICATION:	SEMICONDUCTORS & RELATED DEVICES [3674]
+		ORGANIZATION NAME:           	04 Manufacturing
+		IRS NUMBER:				943177549
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			0128
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	005-56649
+		FILM NUMBER:		24611864
+
+	BUSINESS ADDRESS:	
+		STREET 1:		2788 SAN TOMAS EXPRESSWAY
+		CITY:			SANTA CLARA
+		STATE:			CA
+		ZIP:			95051
+		BUSINESS PHONE:		408-486-2000
+
+	MAIL ADDRESS:	
+		STREET 1:		2788 SAN TOMAS EXPRESSWAY
+		CITY:			SANTA CLARA
+		STATE:			CA
+		ZIP:			95051
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	NVIDIA CORP/DE
+		DATE OF NAME CHANGE:	20020612
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	NVIDIA CORP/CA
+		DATE OF NAME CHANGE:	19980303
+
+FILED BY:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			FMR LLC
+		CENTRAL INDEX KEY:			0000315066
+		STANDARD INDUSTRIAL CLASSIFICATION:	UNKNOWN SIC - 0000 [0000]
+		ORGANIZATION NAME:           	
+		IRS NUMBER:				043532603
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		SC 13G/A
+
+	BUSINESS ADDRESS:	
+		STREET 1:		245 SUMMER STREET
+		CITY:			BOSTON
+		STATE:			MA
+		ZIP:			02210
+		BUSINESS PHONE:		6175706339
+
+	MAIL ADDRESS:	
+		STREET 1:		245 SUMMER STREET
+		CITY:			BOSTON
+		STATE:			MA
+		ZIP:			02210
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	FMR CORP
+		DATE OF NAME CHANGE:	19920717
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SC 13G/A
+<SEQUENCE>1
+<FILENAME>filing.txt
+<TEXT>
+SCHEDULE 13G
+
+Amendment No.15
+NVIDIA CORP
+COMMON STOCK
+Cusip #67066G104
+Check the appropriate box to designate the rule pursuant to which this
+Schedule is filed:
+[x] Rule 13d-1(b)
+[ ] Rule 13d-1(c)
+[ ] Rule 13d-1(d)
+
+Cusip #67066G104
+Item 1: Reporting Person - FMR LLC
+Item 2: (a)  [ ]
+        (b)  [ ]
+Item 4: Delaware
+Item 5: 121,060,256
+Item 6: 0
+Item 7: 127,855,229
+Item 8: 0
+Item 9: 127,855,229
+Item 11: 5.176%
+Item 12: HC
+
+Cusip #67066G104
+Item 1: Reporting Person - Abigail P. Johnson
+Item 2: (a)  [ ]
+        (b)  [ ]
+Item 4: United States of America
+Item 5: 0
+Item 6: 0
+Item 7: 127,855,229
+Item 8: 0
+Item 9: 127,855,229
+Item 11: 5.176%
+Item 12: IN
+
+
+
+Item 1(a). Name of Issuer:
+
+NVIDIA CORP
+
+Item 1(b). Address of Issuer's Principal Executive Offices:
+
+2788 San Tomas Expressway
+Santa Clara, CA 95051
+US
+
+Item 2(a). Name of Person Filing:
+
+FMR LLC
+
+Item 2(b). Address or Principal Business Office or, if None, Residence:
+
+245 Summer Street, Boston, Massachusetts 02210
+
+Item 2(c). Citizenship:
+
+Not applicable
+
+Item 2(d). Title of Class of Securities:
+
+COMMON STOCK
+
+Item 2(e). CUSIP Number:
+
+67066G104
+
+Item 3. This statement is filed pursuant to Rule 13d-1(b) or 13d-2(b) or (c)
+and the person filing, FMR LLC, is a parent holding company in accordance with
+Section 240.13d-1(b)(1)(ii)(G). (Note: See Exhibit A).
+
+Item 4. Ownership
+
+(a) Amount Beneficially Owned: 127,855,229
+
+(b) Percent of Class: 5.176%
+
+(c) Number of shares as to which such person has:
+
+(i) sole power to vote or to direct the vote: Please see the responses to
+Items 5 and 6 on the cover page
+
+(ii) shared power to vote or to direct the vote: 0
+
+(iii) sole power to dispose or to direct the disposition of: 127,855,229
+
+(iv) shared power to dispose or to direct the disposition of: 0
+
+
+Item 5. Ownership of Five Percent or Less of a Class.
+
+Not applicable.
+
+Item 6. Ownership of More than Five Percent on Behalf of Another Person.
+
+One or more other persons are known to have the right to receive or the power
+to direct the receipt of dividends from, or the proceeds from the sale of, the
+COMMON STOCK of NVIDIA CORP. No one other person's interest in the COMMON
+STOCK of NVIDIA CORP is more than five percent of the total outstanding COMMON
+STOCK.
+
+
+Item 7. Identification and Classification of the Subsidiary Which Acquired the
+Security Being Reported on By the Parent Holding Company.
+
+See attached Exhibit A.
+
+Item 8. Identification and Classification of Members of the Group.
+
+Not applicable.
+
+Item 9. Notice of Dissolution of Group.
+
+Not applicable.
+
+Item 10. Certifications.
+
+By signing below I certify that, to the best of my knowledge and belief,
+the securities referred to above were acquired and are held in the ordinary
+course of business and were not acquired and are not held for the purpose of
+or with the effect of changing or influencing the control of the issuer of the
+securities and were not acquired and are not held in connection with or as a
+participant in any transaction having that purpose or effect.
+
+Signature
+
+After reasonable inquiry and to the best of my knowledge and belief, I certify
+that the information set forth in this statement is true, complete and
+correct.
+
+February 8, 2024
+Date
+
+/s/ Stephanie J. Brown
+Signature
+
+Stephanie J. Brown
+Duly authorized under Power of Attorney effective as of January 3, 2023, by
+and on behalf of FMR LLC and its direct and indirect subsidiaries*
+
+* This power of attorney is incorporated herein by reference to Exhibit 24 to
+the Schedule 13G filed by FMR LLC on January 10, 2023, accession number:
+0000315066-23-000003.
+
+
+Exhibit A
+
+
+Pursuant to the instructions in Item 7 of Schedule 13G, the following table
+lists the identity and Item 3 classification, if applicable, of each relevant
+entity that beneficially owns shares of the security class being reported on
+this Schedule 13G.
+
+Entity   ITEM 3 Classification
+
+Crosby Advisors LLC  N/A
+FIAM LLC  IA
+Fidelity Diversifying Solutions LLC  IA
+Fidelity Institutional Asset Management Trust Company  BK
+Fidelity Management & Research (Hong Kong) Limited  IA
+Fidelity Management & Research Company LLC  IA
+Fidelity Management Trust Company  BK
+FMR Investment Management (UK) Limited  FI
+Strategic Advisers LLC  IA
+
+
+
+Abigail P. Johnson is a Director, the Chairman and the Chief Executive Officer
+of FMR LLC.
+
+Members of the Johnson family, including Abigail P. Johnson, are the
+predominant owners, directly or through trusts, of Series B voting common
+shares of FMR LLC, representing 49% of the voting power of FMR LLC. The
+Johnson family group and all other Series B shareholders have entered into a
+shareholders' voting agreement under which all Series B voting common shares
+will be voted in accordance with the majority vote of Series B voting common
+shares. Accordingly, through their ownership of voting common shares and the
+execution of the shareholders' voting agreement, members of the Johnson family
+may be deemed, under the Investment Company Act of 1940, to form a controlling
+group with respect to FMR LLC.
+
+This filing reflects the securities beneficially owned, or that may be deemed
+to be beneficially owned, by FMR LLC, certain of its subsidiaries and
+affiliates, and other companies (collectively, the "FMR Reporters"). This
+filing does not reflect securities, if any, beneficially owned by certain
+other companies whose beneficial ownership of securities is disaggregated from
+that of the FMR Reporters in accordance with Securities and Exchange
+Commission Release No. 34-39538 (January 12, 1998).
+
+
+RULE 13d-1(k)(1) AGREEMENT
+
+The undersigned persons, on February 8, 2024, agree and consent to the joint
+filing on their behalf of this Schedule 13G in connection with their
+beneficial ownership of the COMMON STOCK of NVIDIA CORP at December 29, 2023.
+
+FMR LLC
+
+By /s/ Stephanie J. Brown
+Stephanie J. Brown
+Duly authorized under Power of Attorney effective as of January 3, 2023, by
+and on behalf of FMR LLC and its direct and indirect subsidiaries*
+
+Abigail P. Johnson
+
+By /s/ Stephanie J. Brown
+Stephanie J. Brown
+Duly authorized under Power of Attorney effective as of January 26, 2023, by
+and on behalf of Abigail P. Johnson**
+
+
+* This power of attorney is incorporated herein by reference to Exhibit 24 to
+the Schedule 13G filed by FMR LLC on January 10, 2023, accession number:
+0000315066-23-000003.
+
+** This power of attorney is incorporated herein by reference to Exhibit 24 to
+the Schedule 13G filed by FMR LLC on January 31, 2023, accession number:
+0000315066-23-000038.
+
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

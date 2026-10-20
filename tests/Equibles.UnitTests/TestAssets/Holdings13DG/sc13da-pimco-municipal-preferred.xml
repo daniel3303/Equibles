@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:com="http://www.sec.gov/edgar/common">
+<headerData>
+<submissionType>SCHEDULE 13D/A</submissionType>
+<previousAccessionNumber>0001140361-24-021789</previousAccessionNumber>
+<filerInfo>
+<filer>
+<filerCredentials>
+<cik>0000070858</cik>
+<ccc>XXXXXXXX</ccc>
+</filerCredentials>
+</filer>
+<liveTestFlag>LIVE</liveTestFlag>
+
+
+
+</filerInfo>
+</headerData>
+<formData>
+<coverPageHeader>
+<amendmentNo>1</amendmentNo>
+<securitiesClassTitle>REMARKETABLE VARIABLE RATE MUNIFUND TERM PREFERRED SHARES</securitiesClassTitle>
+<dateOfEvent>10/11/2024</dateOfEvent>
+<previouslyFiledFlag>false</previouslyFiledFlag>
+<issuerInfo>
+<issuerCIK>0001170299</issuerCIK>
+<issuerCUSIP>72200W882</issuerCUSIP>
+<issuerName>PIMCO MUNICIPAL INCOME FUND II</issuerName>
+<address>
+<com:street1>1633 BROADWAY</com:street1>
+<com:city>NEW YORK</com:city>
+<com:stateOrCountry>NY</com:stateOrCountry>
+<com:zipCode>10019</com:zipCode>
+</address>
+</issuerInfo>
+<authorizedPersons>
+<notificationInfo>
+<personName>Bank of America Corporation</personName>
+<personPhoneNum>212-739-4000</personPhoneNum>
+<personAddress>
+<com:street1>Bank of America Corporate Center 100 N.</com:street1>
+<com:street2>Tryon Street</com:street2>
+<com:city>Charlotte</com:city>
+<com:stateOrCountry>NC</com:stateOrCountry>
+<com:zipCode>28255</com:zipCode>
+</personAddress>
+</notificationInfo>
+</authorizedPersons>
+</coverPageHeader>
+<reportingPersons>
+<reportingPersonInfo>
+<reportingPersonCIK>0000070858</reportingPersonCIK>
+<reportingPersonName>BANK OF AMERICA CORP /DE/</reportingPersonName>
+<memberOfGroup>b</memberOfGroup>
+<fundType>WC</fundType>
+<citizenshipOrOrganization>DE</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>2530</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>2530</sharedDispositivePower>
+<aggregateAmountOwned>2530</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>62.8</percentOfClass>
+<typeOfReportingPerson>HC</typeOfReportingPerson>
+<commentContent>The calculation of the percentage of outstanding shares is based on 4,029 shares of RVMTP and ARPS shares outstanding as of October 17, 2024, as described in Schedule 14A, filed by PIMCO Municipal Income Fund with the SEC on November 04, 2024.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonNoCIK>Y</reportingPersonNoCIK>
+<reportingPersonName>Banc of America Preferred Funding Corporation</reportingPersonName>
+<memberOfGroup>b</memberOfGroup>
+<fundType>WC</fundType>
+<citizenshipOrOrganization>DE</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>2530</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>2530</sharedDispositivePower>
+<aggregateAmountOwned>2530</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>62.8</percentOfClass>
+<typeOfReportingPerson>CO</typeOfReportingPerson>
+<commentContent>The calculation of the percentage of outstanding shares is based on 4,029 shares of RVMTP and ARPS shares outstanding as of October 17, 2024, as described in Schedule 14A, filed by PIMCO Municipal Income Fund with the SEC on November 04, 2024.</commentContent>
+</reportingPersonInfo>
+<reportingPersonInfo>
+<reportingPersonNoCIK>Y</reportingPersonNoCIK>
+<reportingPersonName>Merrill Lynch, Pierce, Fenner &amp; Smith Incorporated</reportingPersonName>
+<memberOfGroup>b</memberOfGroup>
+<fundType>OO</fundType>
+<citizenshipOrOrganization>DE</citizenshipOrOrganization>
+<soleVotingPower>0</soleVotingPower>
+<sharedVotingPower>0</sharedVotingPower>
+<soleDispositivePower>0</soleDispositivePower>
+<sharedDispositivePower>0</sharedDispositivePower>
+<aggregateAmountOwned>0</aggregateAmountOwned>
+<isAggregateExcludeShares>N</isAggregateExcludeShares>
+<percentOfClass>0</percentOfClass>
+<typeOfReportingPerson>BD</typeOfReportingPerson>
+<commentContent>The calculation of the percentage of outstanding shares is based on 4,029 shares of RVMTP and ARPS shares outstanding as of October 17, 2024, as described in Schedule 14A, filed by PIMCO Municipal Income Fund with the SEC on November 04, 2024.</commentContent>
+</reportingPersonInfo>
+</reportingPersons>
+<items1To7>
+<item1>
+<securityTitle>REMARKETABLE VARIABLE RATE MUNIFUND TERM PREFERRED SHARES</securityTitle>
+<issuerName>PIMCO MUNICIPAL INCOME FUND II</issuerName>
+<issuerPrincipalAddress>
+<com:street1>1633 BROADWAY</com:street1>
+<com:city>NEW YORK</com:city>
+<com:stateOrCountry>NY</com:stateOrCountry>
+<com:zipCode>10019</com:zipCode>
+</issuerPrincipalAddress>
+<commentText>This Amendment No. 1 (this "Amendment") amends, as set forth below, the statement on Schedule 13D, dated April 17, 2024 and filed with the SEC on April 24, 2024 (as amended to the date hereof, the "Original Schedule 13D") of Bank of America Corporation ("BAC") and Bank of America Preferred Funding Corporation ("BAPFC") (collectively, the "Reporting Persons") with respect to the remarketable variable rate munifund term preferred shares, series 2054 ("RVMTP") of PIMCO Municipal Income Fund II (the "Issuer").
+
+This amendment is being filed to disclose previously unreported trades.</commentText>
+</item1>
+<item2>
+<filingPersonName>Item 2 of the Original Schedule 13D is hereby amended by deleting Schedule I and Schedule II referenced therein and replacing them with Schedule I and Schedule II included with this Amendment</filingPersonName>
+</item2>
+<item5>
+<transactionDesc>The Reporting Person have effected the transactions in securities of the Issuer identified in Schedule III</transactionDesc>
+</item5>
+<item7>
+<filedExhibits>Item 7 of the Original Schedule 13D is hereby amended by deleting Exhibit 99.1 and Exhibit 99.2 thereto and the insertion of the following exhibits:
+
+Exhibit	Description of Exhibit
+
+Exhibit 99.1 - Joint Filing Agreement
+
+Exhibit 99.2 - Power of Attorney
+
+Exhibit 99.3 - Schedule I
+
+Exhibit 99.4 - Schedule II
+
+Exhibit 99.5 - Schedule III</filedExhibits>
+</item7>
+</items1To7>
+<signatureInfo>
+<signaturePerson>
+<signatureReportingPerson>BANK OF AMERICA CORP /DE/</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/Andres Ortiz</signature>
+<title>Andres Ortiz / Authorized Signatory</title>
+<date>12/20/2024</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Banc of America Preferred Funding Corporation</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Andres Ortiz</signature>
+<title>Andres Ortiz / Authorized Signatory</title>
+<date>12/20/2024</date>
+</signatureDetails>
+</signaturePerson>
+<signaturePerson>
+<signatureReportingPerson>Merrill Lynch, Pierce, Fenner &amp; Smith Incorporated</signatureReportingPerson>
+<signatureDetails>
+<signature>/s/ Andres Ortiz</signature>
+<title>Andres Ortiz / Authorized Signatory</title>
+<date>12/20/2024</date>
+</signatureDetails>
+</signaturePerson>
+</signatureInfo>
+</formData>
+
+</edgarSubmission>

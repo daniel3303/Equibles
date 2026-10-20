@@ -17,4 +17,10 @@ public enum Schedule13DGReadStatus
 
     /// <summary>EDGAR is unavailable; the pass stops and retries later.</summary>
     Outage,
+
+    /// <summary>
+    /// A pre-XML document was read but not reliably; it is parked under the text reader's version
+    /// until a later version reads it again.
+    /// </summary>
+    Refused,
 }

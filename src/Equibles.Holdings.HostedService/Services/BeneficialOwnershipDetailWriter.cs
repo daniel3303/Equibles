@@ -53,6 +53,31 @@ public partial class BeneficialOwnershipDetailWriter
         );
 
     /// <summary>
+    /// Parks a pre-XML filing the text reader refused: the header facts it could read, the reason
+    /// and the reader version, with no reporting persons, so nothing imports it until a later
+    /// reader version reads it again.
+    /// </summary>
+    public Task WriteRefused(Schedule13DGTextParse parse, CancellationToken cancellationToken)
+    {
+        var filing = parse.Filing;
+        return Replace(
+            new BeneficialOwnershipFiling
+            {
+                AccessionNumber = filing.AccessionNumber,
+                FilingType = filing.FilingType,
+                IsAmendment = filing.IsAmendment,
+                FilingDate = filing.FilingDate,
+                FilerCik = Truncate(filing.FilerCik?.TrimStart('0'), 16),
+                IssuerCik = Truncate(filing.IssuerCik?.TrimStart('0'), 16),
+                IsUnreadable = true,
+                ParserVersion = filing.TextParserVersion,
+                RefusalReason = Truncate(parse.RefusalReason, 128),
+            },
+            cancellationToken
+        );
+    }
+
+    /// <summary>
     /// The realtime path's write: a failure is logged and left to the detail sync, so it never
     /// costs the filing's holdings import.
     /// </summary>
@@ -94,6 +119,7 @@ public partial class BeneficialOwnershipDetailWriter
                 out var unrecognizedFilingCodes
             ),
             UnrecognizedFilingPersonTypeCodes = Truncate(unrecognizedFilingCodes, CodeListLength),
+            ParserVersion = filing.TextParserVersion,
         };
 
         for (var ordinal = 0; ordinal < filing.ReportingPersons.Count; ordinal++)

@@ -2499,8 +2499,15 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<int?>("ParserVersion")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("ReadAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefusalReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<int>("Rules")
                         .HasColumnType("integer");
