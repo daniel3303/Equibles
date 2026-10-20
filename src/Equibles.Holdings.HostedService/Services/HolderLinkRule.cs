@@ -199,9 +199,11 @@ internal static class HolderLinkRule
     private static bool IsGleif(HolderLinkKind kind) =>
         kind is HolderLinkKind.GleifDirectParent or HolderLinkKind.GleifUltimateParent;
 
-    // A child's holdings are inside a parent's report for a quarter only when the child says so:
-    // its notice names that manager alone, or the parent includes it and the child's own cover or
-    // notice names the parent that quarter. Every 13F row of such a pair is confirmed.
+    // A child's holdings are inside a parent's report for a quarter only when the child's 13F
+    // notice says so: it names that manager alone, or the parent includes it and the notice names
+    // the parent that quarter. A combination cover never confirms: its filer reports some holdings
+    // itself, and the managers it lists are often sub-advised clients or its own subsidiaries.
+    // Every 13F row of such a pair is confirmed.
     private static void Confirm(
         IReadOnlyCollection<HolderLinkEvidence> evidence,
         IReadOnlySet<string> soleNotices
@@ -218,11 +220,7 @@ internal static class HolderLinkRule
             );
             var confirmedInclusion =
                 pair.Any(row => row.Kind == HolderLinkKind.IncludedInParentReport)
-                && pair.Any(row =>
-                    row.Kind
-                        is HolderLinkKind.ChildCoverReportsBy
-                            or HolderLinkKind.NoticeReportedBy
-                );
+                && pair.Any(row => row.Kind == HolderLinkKind.NoticeReportedBy);
             if (!soleNotice && !confirmedInclusion)
                 continue;
             foreach (var row in pair)

@@ -12,7 +12,10 @@ public enum HolderLinkKind
     [Display(Name = "Included in the parent's 13F")]
     IncludedInParentReport = 0,
 
-    /// <summary>The child's own 13F cover lists the parent as reporting part of its holdings.</summary>
+    /// <summary>
+    /// The child's own 13F cover lists the parent as reporting part of its holdings. It confirms no
+    /// reporting parent: the child reports the rest itself.
+    /// </summary>
     [Display(Name = "Child's 13F cover names the parent as reporting for it")]
     ChildCoverReportsBy = 1,
 
