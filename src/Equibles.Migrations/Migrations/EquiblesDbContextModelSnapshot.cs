@@ -2852,6 +2852,35 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FundScoreAttempt");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.FundSeriesHolderLink", b =>
+                {
+                    b.Property<string>("SeriesId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("AdviserCrd")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Basis")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("InstitutionalHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("NCenReportEndingPeriod")
+                        .HasColumnType("date");
+
+                    b.Property<string>("RegistrantCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("SeriesId");
+
+                    b.HasIndex("InstitutionalHolderId");
+
+                    b.ToTable("FundSeriesHolderLink");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderClassificationEvidence", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2920,6 +2949,58 @@ namespace Equibles.Migrations.Migrations
                         .IsUnique();
 
                     b.ToTable("HolderIntelligenceQuarterState");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderLinkEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AsOf")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ChildCik")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("ChildHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChildLei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ParentCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("ParentHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParentLei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateOnly?>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentCik", "ReportDate");
+
+                    b.HasIndex("ChildCik", "Kind", "ReportDate");
+
+                    b.ToTable("HolderLinkEvidence");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyMetrics", b =>
@@ -3115,6 +3196,45 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("ReportDate");
 
                     b.ToTable("HolderQuarterlySnapshot");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderRollup", b =>
+                {
+                    b.Property<string>("Cik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("Basis")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DerivationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("HasConflictingEvidence")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ReportingParentCik")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("UltimateCik")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("UltimateHolderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Cik");
+
+                    b.HasIndex("ReportingParentCik");
+
+                    b.HasIndex("UltimateCik");
+
+                    b.ToTable("HolderRollup");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockPresence", b =>
