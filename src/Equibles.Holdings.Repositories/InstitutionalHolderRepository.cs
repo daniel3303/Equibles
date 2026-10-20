@@ -779,12 +779,6 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .Select(h => h.StateOrCountry)
             .Distinct();
     }
-
-    public IQueryable<InstitutionalHolder> GetUnclassified()
-    {
-        return GetAll()
-            .Where(h => h.Classification == FundClassification.Unknown && h.Name != null);
-    }
 }
 
 internal static class InstitutionalHolderSearchAliases

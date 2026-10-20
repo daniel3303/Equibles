@@ -126,6 +126,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - The Lisbon directory worker and the `EquityMarkets:LisbonEnabled` lane switch are removed: every catalog market with a directory adapter is captured without a per-market switch, and `EquityMarketRegistration` records each market's pass state.
 - `ListFilings` replaces the retired `ListCompanyDocuments` public MCP tool; clients with cached tool catalogs must refresh their MCP connection.
 
+### Removed
+
+- The name matcher behind `InstitutionalHolder.Classification`: `FundClassifierService`, the `BackfillHolderClassifications` pass at the start of every holdings cycle and `InstitutionalHolderRepository.GetUnclassified()`. It guessed a filer's type from words in its name ("SECURITIES" read as a broker-dealer, "ETF" as a mutual fund); holder types come only from `InstitutionalHolderProfile`. New holders keep `Classification` at `Unknown` and nothing reads it. The column and the `FundClassification` enum stay mapped for one release so hosts still running the previous build keep working, and `HolderNameClassificationRetirementTests` fails on any new reader, writer or name classifier.
+
 ### Fixed
 
 - Company Facts retries retain a durable cooldown after interrupted persistence and avoid rewriting unchanged facts; successful checkpoints remain all-or-nothing (#4579).

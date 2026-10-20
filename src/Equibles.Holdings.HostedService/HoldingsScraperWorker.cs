@@ -126,8 +126,6 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Before the walk, so a replay finds each stored position under its current label.
         await ConvergeHoldingLabels(stoppingToken);
 
-        await BackfillHolderClassifications(stoppingToken);
-
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
         var minReportDate = DateOnly.FromDateTime(startDate);
         var fileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
@@ -846,37 +844,6 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "Holder succession refresh failed; retrying next cycle");
-        }
-    }
-
-    private async Task BackfillHolderClassifications(CancellationToken cancellationToken)
-    {
-        await using var scope = ScopeFactory.CreateAsyncScope();
-        var repo = scope.ServiceProvider.GetRequiredService<InstitutionalHolderRepository>();
-
-        var unclassified = await repo.GetUnclassified().ToListAsync(cancellationToken);
-        if (unclassified.Count == 0)
-            return;
-
-        var classified = 0;
-        foreach (var holder in unclassified)
-        {
-            var result = FundClassifierService.Classify(holder.Name);
-            if (result != FundClassification.Unknown)
-            {
-                holder.Classification = result;
-                classified++;
-            }
-        }
-
-        if (classified > 0)
-        {
-            await repo.SaveChanges();
-            Logger.LogInformation(
-                "Backfilled fund classification for {Classified}/{Total} unclassified holders",
-                classified,
-                unclassified.Count
-            );
         }
     }
 }
