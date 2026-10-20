@@ -126,8 +126,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Before the walk, so a replay finds each stored position under its current label.
         await ConvergeHoldingLabels(stoppingToken);
 
-        // A link rule change must not wait for the walk, which a parser replay stretches to
-        // days; the stored evidence is enough to rebuild a rollup set derived by an older rule.
+        // A profile or link rule change must not wait for the walk, which a parser replay
+        // stretches to days; the stored records are enough to rebuild a set derived by an older
+        // rule. Profiles first, since the links read them.
+        await RefreshStaleHolderProfiles(stoppingToken);
         await RefreshStaleHolderLinks(stoppingToken);
 
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
@@ -833,6 +835,21 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "Holder link refresh failed; retrying next cycle");
+        }
+    }
+
+    private async Task RefreshStaleHolderProfiles(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<HolderProfileRefreshService>()
+                .RunIfStale(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogError(exception, "Stale holder profile refresh failed; retrying next cycle");
         }
     }
 

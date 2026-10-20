@@ -233,6 +233,37 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task RunIfStale_RederivesOnlyAProfileSetDerivedByAnOlderRule()
+    {
+        var holder = Holder("19617");
+        DbContext.Add(
+            new SecFilerProfile
+            {
+                Cik = "19617",
+                Found = true,
+                Sic = "6021",
+            }
+        );
+        // A deriver bump during a parser replay: the stored profile still reads the older rule.
+        DbContext.Add(
+            new InstitutionalHolderProfile
+            {
+                InstitutionalHolderId = holder,
+                EntityType = HolderEntityType.Unknown,
+                DerivationVersion = HolderEntityTypeDeriver.Version - 1,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await Sut().RunIfStale(Today, CancellationToken.None)).Should().BeTrue();
+        var profile = (await Profiles())[holder];
+        profile.EntityType.Should().Be(HolderEntityType.Bank);
+        profile.DerivationVersion.Should().Be(HolderEntityTypeDeriver.Version);
+
+        (await Sut().RunIfStale(Today, CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Run_CountsOnlyCurrentSeriesTheAdviserManagesAsPrimaryAdviser()
     {
         var holder = Holder("102909", crd: "105958");
