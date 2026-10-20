@@ -9,7 +9,7 @@ namespace Equibles.InsiderTrading.Repositories.Models;
 /// <param name="Rows">Each balance's closing row, as filed.</param>
 /// <param name="IndirectAmbiguous">
 /// True when the filing's indirect rows do not show which balances belong to one vehicle: a trade
-/// that continues no balance joined one only by its stated vehicle, two balances carry the same
-/// stated vehicle, or rows naming no vehicle hold balances no trade connects.
+/// that continues no balance joined one only by its stated vehicle, or rows naming no vehicle hold
+/// balances no trade connects. Separate holding lines under one stated vehicle are not ambiguous.
 /// </param>
 public sealed record InsiderPositionClosings(List<InsiderTransaction> Rows, bool IndirectAmbiguous);

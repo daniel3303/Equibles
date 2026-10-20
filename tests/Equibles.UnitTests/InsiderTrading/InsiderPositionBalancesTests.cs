@@ -103,6 +103,34 @@ public class InsiderPositionBalancesTests
     }
 
     [Fact]
+    public void Resolve_NelnetUnfootnotedHoldingLines_CountEachLine()
+    {
+        // Accession 0001008886-26-000109: a trust's gift leaves 5,000 shares, then holding lines
+        // without footnotes list another "By Trust" at 5,000 and two "By GRAT" at 6,800 each.
+        // Equal balances under one name are separate lines, not repeats.
+        var rows = Parse("form4-nelnet-unfootnoted-holdings.xml");
+
+        var closings = InsiderPositionBalances.Resolve(rows);
+
+        Indirect(rows).Should().Equal(5_000, 5_000, 6_800, 6_800, 8_200, 10_000, 45_000, 45_192);
+        closings.IndirectAmbiguous.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Resolve_HoldingLineRepeatingAFootnotedBalance_CountsOnce()
+    {
+        // A holding line carrying the same footnotes and balance as the vehicle's last trade is
+        // that vehicle listed again.
+        var date = new DateOnly(2026, 9, 18);
+        var trade = Named(0, TransactionCode.Sale, 1_000, 9_000, date);
+        var repeat = Named(1, TransactionCode.Holding, 0, 9_000, date);
+
+        var closings = InsiderPositionBalances.Resolve([trade, repeat]);
+
+        closings.Rows.Select(row => row.SharesOwnedAfter).Should().Equal(9_000);
+    }
+
+    [Fact]
     public void Resolve_LillyCeo_CountsEachTrustAndThe401k()
     {
         // Accession 0001538604-26-000004 attaches its trust footnote to the direct-or-indirect code.
@@ -129,6 +157,20 @@ public class InsiderPositionBalancesTests
         closings.Rows.Single().SharesOwnedAfter.Should().Be(15_017_750);
         closings.IndirectAmbiguous.Should().BeTrue();
         InsiderPositionBalances.Resolve(rows.Take(2)).IndirectAmbiguous.Should().BeFalse();
+    }
+
+    private static InsiderTransaction Named(
+        int order,
+        TransactionCode code,
+        long shares,
+        long ownedAfter,
+        DateOnly date
+    )
+    {
+        var row = Unnamed(order, code, shares, ownedAfter, date);
+        row.NatureOfOwnership = "By Trust";
+        row.OwnershipNatureFootnoteIds = ["F1"];
+        return row;
     }
 
     private static InsiderTransaction Unnamed(
