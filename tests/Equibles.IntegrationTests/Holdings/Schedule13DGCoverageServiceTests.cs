@@ -230,6 +230,104 @@ public class Schedule13DGCoverageServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task BackfillDays_DocumentEdgarAnswers404_IsRecordedUnreadable()
+    {
+        List(new DateOnly(2026, 1, 30), VanguardNvidia, "102909");
+        _edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                VanguardNvidia,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(new HttpRequestException("gone", null, HttpStatusCode.NotFound));
+
+        var day = new DateOnly(2026, 1, 30);
+        var result = await Coverage()
+            .BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+
+        result.Should().Be(new Schedule13DGBackfillResult(day, 1, 0, false));
+        await using var verify = FreshContext();
+        (await verify.Set<BeneficialOwnershipFiling>().SingleAsync())
+            .IsUnreadable.Should()
+            .BeTrue();
+    }
+
+    // A parser fix ships with a CoverageVersion bump, so a document the parser cannot read today
+    // must leave nothing on file for that walk to skip.
+    [Fact]
+    public async Task BackfillDays_UnparseableDocument_StaysRetryableForTheNextWalk()
+    {
+        await SeedIssuer("NVDA", "0001045810", NvidiaCusip);
+        List(new DateOnly(2026, 1, 30), VanguardNvidia, "102909");
+        _edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                VanguardNvidia,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Encoding.UTF8.GetBytes("<edgarSubmission><coverPageHeader>"));
+        var day = new DateOnly(2026, 1, 30);
+
+        var first = await Coverage()
+            .BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+
+        first.Should().Be(new Schedule13DGBackfillResult(day, 1, 0, false));
+        await using (var verify = FreshContext())
+            (await verify.Set<BeneficialOwnershipFiling>().AnyAsync()).Should().BeFalse();
+
+        Serve(VanguardNvidia, "sc13ga-vanguard-nvidia.xml");
+        var next = await Coverage()
+            .BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+
+        next.Should().Be(new Schedule13DGBackfillResult(day, 1, 1, false));
+        (await Positions(NvidiaCusip))
+            .Should()
+            .Equal((VanguardNvidia, new DateOnly(2025, 12, 31), 2_266_625_855L, "102909"));
+    }
+
+    [Fact]
+    public async Task RetryResolvable_DocumentNoLongerReadable_KeepsItsStoredDetails()
+    {
+        List(new DateOnly(2026, 1, 30), VanguardNvidia, "102909");
+        Serve(VanguardNvidia, "sc13ga-vanguard-nvidia.xml");
+        var day = new DateOnly(2026, 1, 30);
+        await Coverage().BackfillDays(day, day, MinReportDate, 100, CancellationToken.None);
+        await SeedIssuer("NVDA", "0001045810", NvidiaCusip);
+        await AgeDetails(TimeSpan.FromDays(2));
+        _edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                VanguardNvidia,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(new HttpRequestException("gone", null, HttpStatusCode.NotFound));
+
+        (await Coverage().RetryResolvable(10, TimeSpan.FromDays(1), MinReportDate, default))
+            .Should()
+            .Be(0);
+        (await Coverage().RetryResolvable(10, TimeSpan.FromDays(1), MinReportDate, default))
+            .Should()
+            .Be(0);
+
+        await using var verify = FreshContext();
+        var detail = await verify.Set<BeneficialOwnershipFiling>().SingleAsync();
+        detail.IsUnreadable.Should().BeFalse();
+        detail.IssuerCusip.Should().Be(NvidiaCusip);
+        // The failed read restarted the backoff, so the second retry did not fetch it again.
+        await _edgar
+            .Received(2)
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                VanguardNvidia,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
     public async Task RetryResolvable_FilingReadBeforeItsIssuerWasTracked_ImportsOnceItIs()
     {
         List(new DateOnly(2026, 1, 30), VanguardNvidia, "102909");

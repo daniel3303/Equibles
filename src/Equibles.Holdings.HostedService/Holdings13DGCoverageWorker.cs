@@ -18,9 +18,11 @@ namespace Equibles.Holdings.HostedService;
 public class Holdings13DGCoverageWorker : BaseScraperWorker
 {
     /// <summary>
-    /// Bump to walk the daily indexes again from the start; each version keeps its own cursor row,
-    /// and accessions already on file are still skipped. v1 recovers the filings the first realtime
-    /// backfill lost to defects fixed while it ran, and the voluntary XML filings before 2024-12-18.
+    /// Bump to walk the daily indexes again from the start, as with a parser or import fix; each
+    /// version keeps its own cursor row. Accessions on file are still skipped, and a document that
+    /// could not be parsed leaves nothing on file, so the new walk reads it again. v1 recovers the
+    /// filings the first realtime backfill lost to defects fixed while it ran, and the voluntary
+    /// XML filings before 2024-12-18.
     /// </summary>
     internal const int CoverageVersion = 1;
 

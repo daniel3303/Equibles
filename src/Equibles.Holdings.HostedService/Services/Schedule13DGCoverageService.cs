@@ -114,7 +114,7 @@ public class Schedule13DGCoverageService
                 candidate.FilingDate,
                 cancellationToken
             );
-            if (read.Outage)
+            if (read.Status == Schedule13DGReadStatus.Outage)
             {
                 _logger.LogWarning(
                     "13D/13G coverage retry stopped: EDGAR is unavailable after {Imported} imports",
@@ -123,15 +123,10 @@ public class Schedule13DGCoverageService
                 break;
             }
 
-            if (read.Filing == null)
+            if (read.Status != Schedule13DGReadStatus.Parsed)
             {
-                await _detailWriter.WriteUnreadable(
-                    candidate.AccessionNumber,
-                    candidate.FilingType,
-                    candidate.FilingDate,
-                    candidate.FilerCik,
-                    cancellationToken
-                );
+                // The stored details came from an earlier read and stay; the backoff restarts.
+                await TouchReadAt(candidate.AccessionNumber, cancellationToken);
                 continue;
             }
 
@@ -210,7 +205,7 @@ public class Schedule13DGCoverageService
                 entry.DateFiled,
                 cancellationToken
             );
-            if (read.Outage)
+            if (read.Status == Schedule13DGReadStatus.Outage)
             {
                 _logger.LogWarning(
                     "13D/13G coverage stopped on {Day:yyyy-MM-dd}: EDGAR is unavailable",
@@ -220,9 +215,11 @@ public class Schedule13DGCoverageService
             }
 
             documents++;
-            if (read.Filing == null)
+            if (read.Status == Schedule13DGReadStatus.Failed)
+                continue;
+            if (read.Status == Schedule13DGReadStatus.NotServed)
             {
-                // A missing or unparseable document never changes; recording it stops a re-read.
+                // A document EDGAR does not serve never changes; recording it stops a re-read.
                 await _detailWriter.WriteUnreadable(
                     entry.AccessionNumber,
                     entry.FormType.ToHoldingsFilingType() ?? FilingType.Schedule13D,
@@ -271,7 +268,7 @@ public class Schedule13DGCoverageService
     )
     {
         if (string.IsNullOrWhiteSpace(cik))
-            return new Schedule13DGDocumentRead(null, false);
+            return new Schedule13DGDocumentRead(null, Schedule13DGReadStatus.Failed);
 
         byte[] bytes;
         try
@@ -285,13 +282,18 @@ public class Schedule13DGCoverageService
         }
         catch (HttpRequestException exception) when (!IsOutage(exception))
         {
-            // Any refusal other than an outage is final for the document, like a 404.
+            // Only a document EDGAR says it does not have is final; any other refusal may pass.
             _logger.LogInformation(
                 "EDGAR refused 13D/13G {Accession} ({Status})",
                 accessionNumber,
                 exception.StatusCode
             );
-            return new Schedule13DGDocumentRead(null, false);
+            return new Schedule13DGDocumentRead(
+                null,
+                exception.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone
+                    ? Schedule13DGReadStatus.NotServed
+                    : Schedule13DGReadStatus.Failed
+            );
         }
         catch (Exception exception)
             when (exception is HttpRequestException
@@ -299,11 +301,11 @@ public class Schedule13DGCoverageService
             )
         {
             _logger.LogWarning(exception, "13D/13G {Accession} could not be read", accessionNumber);
-            return new Schedule13DGDocumentRead(null, true);
+            return new Schedule13DGDocumentRead(null, Schedule13DGReadStatus.Outage);
         }
 
-        if (bytes.Length == 0)
-            return new Schedule13DGDocumentRead(null, false);
+        if (bytes == null || bytes.Length == 0)
+            return new Schedule13DGDocumentRead(null, Schedule13DGReadStatus.NotServed);
 
         try
         {
@@ -314,14 +316,30 @@ public class Schedule13DGCoverageService
                     cik,
                     filingDate
                 ),
-                false
+                Schedule13DGReadStatus.Parsed
             );
         }
         catch (Exception exception) when (exception is XmlException or FormatException)
         {
+            // Left retryable: a parser fix ships with a CoverageVersion bump, whose walk reads
+            // every accession with nothing on file again.
             _logger.LogWarning(exception, "13D/13G {Accession} cannot be parsed", accessionNumber);
-            return new Schedule13DGDocumentRead(null, false);
+            return new Schedule13DGDocumentRead(null, Schedule13DGReadStatus.Failed);
         }
+    }
+
+    private async Task TouchReadAt(string accessionNumber, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var now = DateTime.UtcNow;
+        await dbContext
+            .Set<BeneficialOwnershipFiling>()
+            .Where(filing => filing.AccessionNumber == accessionNumber)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(filing => filing.ReadAt, now),
+                cancellationToken
+            );
     }
 
     // Accessions already imported, already read, or recorded as processed by the realtime sweep.
