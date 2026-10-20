@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020075732_AddBeneficialOwnershipTextRefusals")]
+    [Migration("20261020083647_AddBeneficialOwnershipTextRefusals")]
     partial class AddBeneficialOwnershipTextRefusals
     {
         /// <inheritdoc />
@@ -4434,6 +4434,12 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("AcquiredDisposed")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("BalanceFootnoteIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
