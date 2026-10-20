@@ -110,10 +110,16 @@ public class InsiderOwnershipPositionCalculator
 
         long direct = 0;
         long indirect = 0;
+        var ambiguous = false;
         foreach (
             var bucket in ordered.GroupBy(t => (Title: t.SecurityTitle ?? "", t.OwnershipNature))
         )
         {
+            if (
+                bucket.Key.OwnershipNature != OwnershipNature.Direct
+                && bucket.Select(t => t.SharesOwnedAfter).Distinct().Skip(1).Any()
+            )
+                ambiguous = true;
             var closing = bucket.First();
             var adjusted = SplitAdjustment.AdjustShareCount(
                 closing.SharesOwnedAfter,
@@ -126,6 +132,9 @@ public class InsiderOwnershipPositionCalculator
                 indirect += adjusted;
         }
 
-        return new InsiderOwnershipPosition(ordered[0], direct, indirect);
+        return new InsiderOwnershipPosition(ordered[0], direct, indirect)
+        {
+            IndirectBalancesAmbiguous = ambiguous,
+        };
     }
 }

@@ -436,7 +436,7 @@ public class StockOwnershipTools
         var result = new StringBuilder();
         result.AppendLine($"## Schedule 13D and 13G filers of {label}");
         result.AppendLine(
-            $"{McpFormat.WholeNumber(total)} filers, each on its latest 13D or 13G; shares restated onto today's split basis"
+            $"{McpFormat.WholeNumber(total)} {(total == 1 ? "filer" : "filers")}, each on its latest 13D or 13G; shares restated onto today's split basis"
         );
         var rank = offset;
         foreach (var block in page)
@@ -538,7 +538,7 @@ public class StockOwnershipTools
     private static void AppendRowNotes(StringBuilder result, StockOwnershipRead read)
     {
         result.AppendLine(
-            "_Shares are restated onto today's split basis. Change compares each row with the same holder's previous filing in the same source (13F quarter, 13D or 13G, Form 4, N-PORT report); a dash means no comparable previous filing. Rows nest by CIK and SEC reporting links, never by name; funds and nested 13D/G rows are not summed, since a 13F report already holds them._"
+            "_Shares are restated onto today's split basis. Change compares each row with the same holder's previous filing in the same source (13F quarter, 13D or 13G, Form 4, N-PORT report); a dash means no comparable previous filing, as when an insider's indirect line states several balances. Rows nest by CIK and SEC reporting links, never by name; funds and nested 13D/G rows are not summed, since a 13F report already holds them._"
         );
         if (
             read.Summary.SharesOutstanding is { } outstanding

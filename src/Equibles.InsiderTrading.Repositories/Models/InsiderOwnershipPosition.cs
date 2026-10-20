@@ -13,4 +13,11 @@ public sealed record InsiderOwnershipPosition(
 )
 {
     public long TotalShares => DirectShares + IndirectShares;
+
+    /// <summary>
+    /// True when an indirect bucket states several different balances. A filing keeps no vehicle
+    /// identity, so they may be separate trusts, and the closing balance cannot be compared
+    /// with another filing's.
+    /// </summary>
+    public bool IndirectBalancesAmbiguous { get; init; }
 }

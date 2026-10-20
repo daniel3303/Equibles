@@ -221,6 +221,37 @@ public class InsiderOwnershipPositionCalculatorTests
         previous[founder.Anchor.InsiderOwnerId].TotalShares.Should().Be(900);
     }
 
+    [Fact]
+    public void Build_SeveralBalancesOnOneIndirectLine_AreAmbiguous()
+    {
+        // A filing keeps one balance per indirect vehicle without naming it, so two balances
+        // on one indirect line may be two trusts and the closing balance compares with nothing.
+        var stock = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "NVDA");
+        var owner = new InsiderOwner { OwnerCik = "0001197649", Name = "Founder" };
+        var date = new DateOnly(2026, 9, 16);
+        var trusts = new List<InsiderTransaction>
+        {
+            Row(stock, owner, date, 70_000, "acc-1", order: 0),
+            Row(stock, owner, date, 31_000, "acc-1", order: 1, nature: OwnershipNature.Indirect),
+            Row(stock, owner, date, 30_000, "acc-1", order: 2, nature: OwnershipNature.Indirect),
+        };
+        var sequentialDirect = new List<InsiderTransaction>
+        {
+            Row(stock, owner, date, 70_000, "acc-2", order: 0),
+            Row(stock, owner, date, 69_000, "acc-2", order: 1),
+            Row(stock, owner, date, 5_000, "acc-2", order: 2, nature: OwnershipNature.Indirect),
+        };
+
+        InsiderOwnershipPositionCalculator
+            .Build(trusts, [])
+            .IndirectBalancesAmbiguous.Should()
+            .BeTrue();
+        InsiderOwnershipPositionCalculator
+            .Build(sequentialDirect, [])
+            .IndirectBalancesAmbiguous.Should()
+            .BeFalse();
+    }
+
     private const string GoldenOutput = """
 Insider ownership summary for NVIDIA Corp. (NVDA):
 Showing 4 insiders with most recent data

@@ -42,7 +42,14 @@ public class InsiderContributor : IHolderSourceContributor
             {
                 var owner = position.Anchor.InsiderOwner;
                 var cik = CikNormalizer.Canonicalize(owner.OwnerCik);
+                // Several balances on one indirect line may be separate vehicles, so neither
+                // filing's closing balance compares with the other's.
                 var prior = previous.GetValueOrDefault(position.Anchor.InsiderOwnerId);
+                if (
+                    prior != null
+                    && (position.IndirectBalancesAmbiguous || prior.IndirectBalancesAmbiguous)
+                )
+                    prior = null;
                 return new StockHolderRow
                 {
                     HolderKey = new StockHolderKey(
