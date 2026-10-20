@@ -134,9 +134,11 @@ public class FundOwnershipReader
     }
 
     /// <summary>
-    /// Every issuer's registered-fund shares in the newest computed quarter, all listings summed and
+    /// Every issuer's registered-fund shares of its primary listing in the newest computed quarter,
     /// restated onto today's split basis: the index funds' and index ETFs' shares and every fund's.
-    /// An issuer whose split basis after the quarter cannot be attributed is listed as unresolved.
+    /// Sibling classes are left out, so the figures divide by the primary security's shares
+    /// outstanding. An issuer whose split basis after the quarter cannot be attributed is listed as
+    /// unresolved.
     /// </summary>
     public Task<FundIndexOwnershipSnapshot> ReadLatestByIssuer(
         CancellationToken cancellationToken = default
@@ -167,7 +169,10 @@ public class FundOwnershipReader
                 new HashSet<Guid>()
             );
 
-        var quarterRows = _repository.GetByQuarter(reportDate).AsNoTracking();
+        var quarterRows = _repository
+            .GetByQuarter(reportDate)
+            .AsNoTracking()
+            .Where(row => row.ListedTicker == null);
         if (issuerIds != null)
             quarterRows = quarterRows.Where(row => issuerIds.Contains(row.EquityIssuerId));
         var rows = await quarterRows
