@@ -929,31 +929,37 @@ public class InstitutionalHoldingsTools
 
                 // One grouped round trip for the three header scalars — this is the same table
                 // whose non-index-only scans once drained a connection pool, so the extra
-                // per-call queries matter. The unvalued count shares the header's distinct-stock
+                // per-call queries matter. The unvalued count shares the header's distinct-security
                 // basis (a filer's option and share rows must not double-count), and its
                 // predicate must catch every cohort of $0 rows: still pending, marked
                 // unknowable, AND rows the old retry ladder abandoned with neither flag set —
                 // those carry only the filer's own FiledValue as the tell. Counting just the
                 // flagged rows once reported "1 unvalued position" for a filer with 94 of its 96
-                // positions at $0 — the same dishonesty this disclosure exists to remove.
+                // positions at $0 — the same dishonesty this disclosure exists to remove. A
+                // position is one security: issuer plus listed ticker, since a multi-series
+                // trust files every fund under one issuer.
                 var summary = await allHoldings
-                    .GroupBy(h => 1)
+                    .GroupBy(h => new { h.EquityIssuerId, h.ListedTicker })
                     .Select(g => new
                     {
-                        // Rows and Positions differ: a stock held as shares AND as puts/calls
-                        // is one distinct position spread over several holding rows, and the
-                        // table below renders ROWS — quoting the distinct-stock count as its
-                        // denominator once produced "top 39 of 35".
                         Rows = g.Count(),
-                        Positions = g.Select(h => h.EquityIssuerId).Distinct().Count(),
                         Value = g.Sum(h => h.Value),
-                        Unvalued = g.Where(h =>
-                                h.Value == 0L
-                                && (h.ValuePending || h.ValueUnavailable || h.FiledValue > 0)
-                            )
-                            .Select(h => h.EquityIssuerId)
-                            .Distinct()
-                            .Count(),
+                        UnvaluedRows = g.Count(h =>
+                            h.Value == 0L
+                            && (h.ValuePending || h.ValueUnavailable || h.FiledValue > 0)
+                        ),
+                    })
+                    .GroupBy(position => 1)
+                    .Select(g => new
+                    {
+                        // Rows and Positions differ: a security held as shares AND as
+                        // puts/calls is one distinct position spread over several holding
+                        // rows, and the table below renders ROWS — quoting the distinct
+                        // count as its denominator once produced "top 39 of 35".
+                        Rows = g.Sum(position => position.Rows),
+                        Positions = g.Count(),
+                        Value = g.Sum(position => position.Value),
+                        Unvalued = g.Count(position => position.UnvaluedRows > 0),
                     })
                     .FirstOrDefaultAsync();
                 var totalRows = summary?.Rows ?? 0;

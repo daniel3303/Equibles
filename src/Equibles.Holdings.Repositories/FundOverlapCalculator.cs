@@ -1,3 +1,5 @@
+using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories.Models;
 
@@ -36,16 +38,16 @@ public static class FundOverlapCalculator
             );
         }
 
-        // Union of stock ids; build one row per stock, with one slice per fund.
-        var allStockIds = fundAggregates.SelectMany(f => f.PerStock.Keys).Distinct().ToList();
+        // Union of securities; build one row per security, with one slice per fund.
+        var allSecurities = fundAggregates.SelectMany(f => f.PerStock.Keys).Distinct().ToList();
 
         long dollarWeightedNumerator = 0;
         long dollarWeightedDenominator = 0;
         var intersectionCount = 0;
 
-        foreach (var stockId in allStockIds)
+        foreach (var security in allSecurities)
         {
-            var (row, minValue, maxValue, allHaveIt) = BuildStockRow(stockId, fundAggregates);
+            var (row, minValue, maxValue, allHaveIt) = BuildStockRow(security, fundAggregates);
             if (allHaveIt)
             {
                 intersectionCount++;
@@ -55,9 +57,9 @@ public static class FundOverlapCalculator
             result.Rows.Add(row);
         }
 
-        result.UnionPositionCount = allStockIds.Count;
+        result.UnionPositionCount = allSecurities.Count;
         result.IntersectionPositionCount = intersectionCount;
-        result.JaccardSimilarityPercent = Percentage.Of(intersectionCount, allStockIds.Count);
+        result.JaccardSimilarityPercent = Percentage.Of(intersectionCount, allSecurities.Count);
         result.DollarWeightedOverlapPercent = Percentage.Of(
             dollarWeightedNumerator,
             dollarWeightedDenominator
@@ -100,7 +102,7 @@ public static class FundOverlapCalculator
     }
 
     private static (FundOverlapRow Row, long MinValue, long MaxValue, bool AllHaveIt) BuildStockRow(
-        Guid stockId,
+        (Guid CommonStockId, string ListedTicker) security,
         List<FundAggregate> fundAggregates
     )
     {
@@ -113,7 +115,7 @@ public static class FundOverlapCalculator
         var allHaveIt = true;
         foreach (var fund in fundAggregates)
         {
-            fund.PerStock.TryGetValue(stockId, out var perStock);
+            fund.PerStock.TryGetValue(security, out var perStock);
             ticker ??= perStock?.Ticker;
             name ??= perStock?.Name;
             var slice = new FundOverlapRowSlice
@@ -141,7 +143,8 @@ public static class FundOverlapCalculator
 
         var row = new FundOverlapRow
         {
-            CommonStockId = stockId,
+            CommonStockId = security.CommonStockId,
+            ListedTicker = security.ListedTicker,
             Ticker = ticker,
             Name = name,
             Slices = slices,
@@ -151,22 +154,22 @@ public static class FundOverlapCalculator
         return (row, minValue, maxValue, allHaveIt);
     }
 
-    // Aggregate each fund's positions per stock. The aggregation collapses multiple
-    // discretion rows for the same stock so the per-fund slice is one entry per
-    // CommonStockId.
+    // Aggregate each fund's positions per security. The aggregation collapses multiple
+    // discretion rows for the same security so the per-fund slice is one entry per issuer
+    // and listed ticker: a multi-series trust files every fund under one issuer.
     private static FundAggregate BuildFundAggregate(
         (InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings) fund
     )
     {
         var perStock = fund
-            .Holdings.GroupBy(h => h.EquityIssuerId)
+            .Holdings.GroupBy(h => (CommonStockId: h.EquityIssuerId, h.ListedTicker))
             .ToDictionary(
                 g => g.Key,
                 g => new FundStockAggregate
                 {
-                    CommonStockId = g.Key,
-                    Ticker = g.First().Issuer?.Presentation?.Listing?.Ticker,
-                    Name = g.First().Issuer?.Name,
+                    CommonStockId = g.Key.CommonStockId,
+                    Ticker = g.Key.ListedTicker ?? g.First().Issuer?.Presentation?.Listing?.Ticker,
+                    Name = ProductName(g.First().Issuer, g.Key.ListedTicker),
                     Shares = g.Sum(h => h.Shares),
                     Value = g.Sum(h => h.Value),
                 }
@@ -179,10 +182,23 @@ public static class FundOverlapCalculator
         };
     }
 
+    // A share class carries its issuer's name, but a trust's listed fund is its own product and
+    // the trust's name can belong to a sibling fund, so such a row is left unnamed rather than
+    // labelled with another product's name.
+    private static string ProductName(EquityIssuer issuer, string listedTicker) =>
+        listedTicker != null && SecondaryTickerPolicy.IsExchangeTradedListing(issuer, listedTicker)
+            ? null
+            : issuer?.Name;
+
     private class FundAggregate
     {
         public InstitutionalHolder Holder { get; set; }
-        public Dictionary<Guid, FundStockAggregate> PerStock { get; set; }
+
+        // Keyed by issuer and listed ticker; a null listed ticker is the primary listing.
+        public Dictionary<
+            (Guid CommonStockId, string ListedTicker),
+            FundStockAggregate
+        > PerStock { get; set; }
         public long TotalValue { get; set; }
     }
 

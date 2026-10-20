@@ -63,7 +63,7 @@ public class FundOverlapCalculatorBuildStockRowMinValueTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var result = buildStockRow.Invoke(null, [stockId, fundAggregates]);
+        var result = buildStockRow.Invoke(null, [(stockId, (string)null), fundAggregates]);
         var minValue = (long)result.GetType().GetField("Item2").GetValue(result);
         var maxValue = (long)result.GetType().GetField("Item3").GetValue(result);
 

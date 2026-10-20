@@ -61,9 +61,9 @@ public class FundOverlapCalculatorBuildFundAggregateMultiDiscretionSumTests
         var result = method.Invoke(null, [fund]);
 
         var perStock = result.GetType().GetProperty("PerStock").GetValue(result);
-        // PerStock is Dictionary<Guid, FundStockAggregate>; index in via reflection.
+        // PerStock is keyed by (issuer, listed ticker); null is the primary listing.
         var indexer = perStock.GetType().GetProperty("Item");
-        var aggregate = indexer.GetValue(perStock, [stockId]);
+        var aggregate = indexer.GetValue(perStock, [(stockId, (string)null)]);
         var shares = (long)aggregate.GetType().GetProperty("Shares").GetValue(aggregate);
         var value = (long)aggregate.GetType().GetProperty("Value").GetValue(aggregate);
 

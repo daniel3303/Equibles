@@ -14,19 +14,21 @@ public static class InstitutionPortfolioSummaryCalculator
     )
     {
         var current = currentQuarterHoldings
-            .GroupBy(h => h.EquityIssuerId)
+            .GroupBy(h => new { h.EquityIssuerId, h.ListedTicker })
             .Select(g => new InstitutionPortfolioPosition
             {
-                CommonStockId = g.Key,
+                CommonStockId = g.Key.EquityIssuerId,
+                ListedTicker = g.Key.ListedTicker,
                 Shares = g.Sum(h => h.Shares),
                 Value = g.Sum(h => h.Value),
             })
             .ToList();
         var previous = previousQuarterHoldings
-            .GroupBy(h => h.EquityIssuerId)
+            .GroupBy(h => new { h.EquityIssuerId, h.ListedTicker })
             .Select(g => new InstitutionPortfolioPosition
             {
-                CommonStockId = g.Key,
+                CommonStockId = g.Key.EquityIssuerId,
+                ListedTicker = g.Key.ListedTicker,
                 Shares = g.Sum(h => h.Shares),
                 Value = g.Sum(h => h.Value),
             })
@@ -91,21 +93,25 @@ public static class InstitutionPortfolioSummaryCalculator
         long reportedAum
     )
     {
-        // Current-quarter price proxy = Value / Shares per stock. For each stock that
+        // Current-quarter price proxy = Value / Shares per security. For each security that
         // appears in either quarter, |Δ shares × current price proxy| is the absolute
-        // dollar movement; the canonical turnover formula then divides by 2 × AUM.
-        var currentByStock = currentQuarterPositions.ToDictionary(p => p.CommonStockId);
-        var previousByStock = previousQuarterPositions.ToDictionary(
-            p => p.CommonStockId,
+        // dollar movement; the canonical turnover formula then divides by 2 × AUM. Keyed by
+        // issuer and listed ticker: a trust's funds share one issuer, and netting one fund's
+        // sale against another's purchase would hide both trades.
+        var currentBySecurity = currentQuarterPositions.ToDictionary(p =>
+            (p.CommonStockId, p.ListedTicker)
+        );
+        var previousBySecurity = previousQuarterPositions.ToDictionary(
+            p => (p.CommonStockId, p.ListedTicker),
             p => p.Shares
         );
 
-        var allStockIds = currentByStock.Keys.Union(previousByStock.Keys);
+        var allSecurities = currentBySecurity.Keys.Union(previousBySecurity.Keys);
         decimal turnoverDollars = 0m;
-        foreach (var stockId in allStockIds)
+        foreach (var security in allSecurities)
         {
-            currentByStock.TryGetValue(stockId, out var current);
-            previousByStock.TryGetValue(stockId, out var priorShares);
+            currentBySecurity.TryGetValue(security, out var current);
+            previousBySecurity.TryGetValue(security, out var priorShares);
             var currentShares = current?.Shares ?? 0;
             var deltaShares = Math.Abs(currentShares - priorShares);
             if (deltaShares == 0)
