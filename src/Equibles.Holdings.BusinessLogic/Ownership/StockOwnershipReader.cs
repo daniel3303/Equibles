@@ -228,13 +228,15 @@ public class StockOwnershipReader
         );
         foreach (var row in rows)
             UltimateAggregation.Assign(row, rollups);
-        var filedOwn = await FiledOwn13F(rows, rollups, cancellationToken);
+        var successors = await Successors(rows, cancellationToken);
+        var filedOwn = await FiledOwn13F(rows, rollups, successors, cancellationToken);
         var tops = StockOwnershipPrecedence.Arrange(
             rows,
             new StockOwnershipPrecedence.Context
             {
                 Rollups = rollups,
                 FiledOwn13F = (cik, quarter) => filedOwn.Contains((cik, quarter)),
+                Successors = successors,
                 Today = scope.Today,
             }
         );
@@ -384,12 +386,62 @@ public class StockOwnershipReader
                 is > 0;
     }
 
-    // The (CIK, quarter) pairs where a holder a rollup would nest under a 13F filer of the listing
-    // filed its own 13F for that filer's quarter: an edge also counts the quarter after its own, so
-    // a child that has since filed a full report is its own holder.
+    // The CIKs each holder without a 13F row of the listing continues its 13F reports under,
+    // following the successors' own successions too.
+    private async Task<Dictionary<string, IReadOnlyList<string>>> Successors(
+        IReadOnlyList<StockHolderRow> rows,
+        CancellationToken cancellationToken
+    )
+    {
+        var filers = rows.Where(row => row.Source == StockHolderSource.Form13F && row.Cik != null)
+            .Select(row => row.Cik)
+            .ToHashSet(StringComparer.Ordinal);
+        var pending = rows.Where(row => row.Cik != null && !filers.Contains(row.Cik))
+            .Select(row => row.InstitutionalHolderId)
+            .OfType<Guid>()
+            .ToHashSet();
+        var seen = new HashSet<Guid>(pending);
+        var successors = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        while (pending.Count > 0)
+        {
+            var pairs = await _holderRepository
+                .GetSuccessionsOf(pending)
+                .AsNoTracking()
+                .Select(succession => new
+                {
+                    PredecessorCik = succession.PredecessorHolder.Cik,
+                    succession.SuccessorHolderId,
+                    SuccessorCik = succession.SuccessorHolder.Cik,
+                })
+                .ToListAsync(cancellationToken);
+            pending = [];
+            foreach (var pair in pairs)
+            {
+                var predecessor = CikNormalizer.Canonicalize(pair.PredecessorCik);
+                var successor = CikNormalizer.Canonicalize(pair.SuccessorCik);
+                if (predecessor == null || successor == null)
+                    continue;
+                if (!successors.TryGetValue(predecessor, out var list))
+                    successors[predecessor] = list = [];
+                list.Add(successor);
+                if (seen.Add(pair.SuccessorHolderId))
+                    pending.Add(pair.SuccessorHolderId);
+            }
+        }
+        return successors.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlyList<string>)entry.Value,
+            StringComparer.Ordinal
+        );
+    }
+
+    // The (CIK, quarter) pairs where a holder a rollup or a succession would nest under a 13F
+    // filer of the listing filed its own 13F for that filer's quarter: an edge also counts the
+    // quarter after its own, so a child that has since filed a full report is its own holder.
     private async Task<HashSet<(string, DateOnly)>> FiledOwn13F(
         IReadOnlyList<StockHolderRow> rows,
         IReadOnlyDictionary<string, HolderRollup> rollups,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> successors,
         CancellationToken cancellationToken
     )
     {
@@ -402,16 +454,22 @@ public class StockOwnershipReader
                 row.Cik != null
                 && row.Source != StockHolderSource.Form13F
                 && !quarterOf13FCik.ContainsKey(row.Cik)
-                && rollups.ContainsKey(row.Cik)
             )
-            .Select(row =>
+            .SelectMany(row =>
             {
-                var parent = StockOwnershipPrecedence
-                    .ReportingParentCandidates(rollups[row.Cik])
-                    .FirstOrDefault(cik => cik != row.Cik && quarterOf13FCik.ContainsKey(cik));
-                return parent == null ? default : (Cik: row.Cik, Quarter: quarterOf13FCik[parent]);
+                var parent = rollups.TryGetValue(row.Cik, out var rollup)
+                    ? StockOwnershipPrecedence
+                        .ReportingParentCandidates(rollup)
+                        .FirstOrDefault(cik => cik != row.Cik && quarterOf13FCik.ContainsKey(cik))
+                    : null;
+                IEnumerable<string> parents =
+                    parent != null
+                        ? [parent]
+                        : StockOwnershipPrecedence
+                            .SuccessorCiks(row.Cik, successors)
+                            .Where(quarterOf13FCik.ContainsKey);
+                return parents.Select(cik => (Cik: row.Cik, Quarter: quarterOf13FCik[cik]));
             })
-            .Where(candidate => candidate.Cik != null)
             .Distinct()
             .ToList();
         var filed = new HashSet<(string, DateOnly)>();
