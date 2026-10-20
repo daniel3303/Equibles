@@ -78,17 +78,26 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         EquityIssuer stock = await SeedStock(seed, ticker: "NVDA");
+        EquityIssuer other = await SeedStock(seed, ticker: "KO");
         var continuingHolder = await SeedHolder(seed, cik: "cont");
         var initiatingHolder = await SeedHolder(seed, cik: "init");
         var exitingHolder = await SeedHolder(seed, cik: "exit");
+        var lapsedHolder = await SeedHolder(seed, cik: "lapsed");
+        var firstFiler = await SeedHolder(seed, cik: "first");
 
         // Continuing holder: holds in both quarters.
         seed.Add(MakeHolding(stock, continuingHolder, Prior, shares: 100, value: 100_000));
         seed.Add(MakeHolding(stock, continuingHolder, Current, shares: 100, value: 100_000));
-        // Initiating holder: first appears in Current.
+        // Initiating holder: buys the stock in Current after filing without it in Prior.
+        seed.Add(MakeHolding(other, initiatingHolder, Prior, shares: 1, value: 1_000));
         seed.Add(MakeHolding(stock, initiatingHolder, Current, shares: 200, value: 200_000));
-        // Exiting holder: appears in Prior only.
+        // First-time filer: no 13F for Prior, which proves no entry.
+        seed.Add(MakeHolding(stock, firstFiler, Current, shares: 90, value: 90_000));
+        // Exiting holder: drops the stock but still files for Current.
         seed.Add(MakeHolding(stock, exitingHolder, Prior, shares: 50, value: 50_000));
+        seed.Add(MakeHolding(other, exitingHolder, Current, shares: 1, value: 1_000));
+        // Lapsed holder: files no 13F for Current, which proves no exit.
+        seed.Add(MakeHolding(stock, lapsedHolder, Prior, shares: 70, value: 70_000));
         await seed.SaveChangesAsync();
 
         await using var read = FreshContext();
@@ -99,8 +108,8 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
 
         row.NewFilerCount.Should().Be(1);
         row.SoldOutFilerCount.Should().Be(1);
-        row.CurrentFilerCount.Should().Be(2);
-        row.PreviousFilerCount.Should().Be(2);
+        row.CurrentFilerCount.Should().Be(3);
+        row.PreviousFilerCount.Should().Be(3);
     }
 
     [Fact]
@@ -164,7 +173,10 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         var h1 = await SeedHolder(seed, cik: "p1");
         var h2 = await SeedHolder(seed, cik: "p2");
         var h3 = await SeedHolder(seed, cik: "p3");
-        // TREND: 2 initiators in Current
+        EquityIssuer prior = await SeedStock(seed, ticker: "PRIOR");
+        // TREND: 2 initiators in Current, both of which filed Prior without it
+        seed.Add(MakeHolding(prior, h1, Prior, shares: 1, value: 1));
+        seed.Add(MakeHolding(prior, h2, Prior, shares: 1, value: 1));
         seed.Add(MakeHolding(trending, h1, Current, shares: 10, value: 10));
         seed.Add(MakeHolding(trending, h2, Current, shares: 10, value: 10));
         // QUIET: 1 continuing holder, 0 initiators

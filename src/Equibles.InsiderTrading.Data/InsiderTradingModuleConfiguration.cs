@@ -42,6 +42,11 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
             .Property(t => t.Notes)
             .IsRequired()
             .HasDefaultValueSql("'{}'");
+        builder
+            .Entity<InsiderTransaction>()
+            .Property(t => t.OwnershipNatureFootnoteIds)
+            .IsRequired()
+            .HasDefaultValueSql("'{}'");
 
         // The reprocess drain selects DISTINCT accessions from one exact stale parser
         // version at a time. This key order lets Postgres seek that version and stream

@@ -1593,7 +1593,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Δ Value is the change in published position value: values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. It includes price movement on held shares, so use Δ Shares to read the position change itself. The output publishes the first complete 13F report quarter and refuses comparisons that cross that corpus boundary. Use this to answer 'what's the consensus 13F move this quarter?'"
+        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Entries and exits count only filers with a 13F in both quarters. Δ Value is the change in published position value: values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. It includes price movement on held shares, so use Δ Shares to read the position change itself. The output publishes the first complete 13F report quarter and refuses comparisons that cross that corpus boundary. Use this to answer 'what's the consensus 13F move this quarter?'"
     )]
     public Task<string> GetMarketWide13FActivity(
         [Description("Bucket: top-buys, top-sells, new-positions, or sold-out-positions")]
@@ -2004,6 +2004,12 @@ public class InstitutionalHoldingsTools
                 var countCell = McpFormat.WholeNumber(count);
                 return $"| {rank} | {ticker} | {name} | {countCell} |";
             }
+        );
+        result.AppendLine();
+        result.AppendLine(
+            normalizedBucket == "new-positions"
+                ? "_Counts only filers that reported a 13F for the prior quarter too: a first-time filer's book, or a return after a gap, is not a new position._"
+                : "_Counts only filers that reported a 13F for this quarter too: a filer that has not filed, or withheld its positions under confidential treatment, has not sold._"
         );
         return result.ToString();
     }

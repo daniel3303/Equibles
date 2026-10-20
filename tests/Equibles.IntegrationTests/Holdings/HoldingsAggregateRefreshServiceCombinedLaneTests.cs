@@ -86,12 +86,13 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         EquityIssuer msft = await SeedStock(seed, "MSFT", industry);
         var holderA = await SeedHolder(seed, "H001"); // filed both quarters
         var holderB = await SeedHolder(seed, "H002"); // has NOT filed the open quarter → carried forward
-        var holderC = await SeedHolder(seed, "H003"); // new filer this quarter
+        var holderC = await SeedHolder(seed, "H003"); // filed last quarter without AAPL, buys it now
         var holderD = await SeedHolder(seed, "H004"); // filed the open quarter but dropped AAPL
         seed.AddRange(
             MakeHolding(aapl, holderA, OpenPrev, 100_000, "acc-a-prev"),
             MakeHolding(aapl, holderB, OpenPrev, 50_000, "acc-b-prev"),
             MakeHolding(aapl, holderD, OpenPrev, 10_000, "acc-d-prev"),
+            MakeHolding(msft, holderC, OpenPrev, 20_000, "acc-c-prev"),
             MakeHolding(aapl, holderA, OpenCur, 120_000, "acc-a-cur"),
             MakeHolding(aapl, holderC, OpenCur, 30_000, "acc-c-cur"),
             // D's open-quarter filing holds only MSFT — proof D filed, so no AAPL

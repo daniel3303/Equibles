@@ -31,6 +31,12 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         // Added by 20261007201000_AddInsiderTransactionOwnerRelationship.
         builder.Entity<InsiderTransaction>().Ignore(transaction => transaction.OwnerRelationship);
 
+        // Added by 20261020060313_AddInsiderOwnershipVehicle.
+        builder.Entity<InsiderTransaction>().Ignore(transaction => transaction.NatureOfOwnership);
+        builder
+            .Entity<InsiderTransaction>()
+            .Ignore(transaction => transaction.OwnershipNatureFootnoteIds);
+
         // Added by 20261014150246_SplitShareCountEvidence.
         builder.Entity<StockSplit>().Ignore(split => split.ShareCountEvidence);
         builder.Entity<StockSplit>().Ignore(split => split.ShareCountEvidenceAsOf);

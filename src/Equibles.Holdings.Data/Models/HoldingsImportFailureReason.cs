@@ -30,4 +30,14 @@ public enum HoldingsImportFailureReason
 
     [Display(Name = "Filing withdrawn from EDGAR")]
     SourceWithdrawn,
+
+    // Terminal reasons below close a row with nothing to store; the published source proves it.
+    [Display(Name = "Source holds no tracked position")]
+    NoTrackedPositions,
+
+    [Display(Name = "Positions withheld under confidential treatment")]
+    ConfidentialTreatment,
+
+    [Display(Name = "Report period precedes the imported history")]
+    OutsideHistoryWindow,
 }

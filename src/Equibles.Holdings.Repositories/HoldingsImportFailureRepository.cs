@@ -31,7 +31,18 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
             cancellationToken
         );
 
-    // Discovery is not an import attempt and must not postpone an existing retry.
+    // Reasons that close a row without a holdings write; any other reason on a resolved row means
+    // the filing's holdings were written.
+    private static readonly int[] ClosedWithoutWrite =
+    [
+        (int)HoldingsImportFailureReason.SourceWithdrawn,
+        (int)HoldingsImportFailureReason.NoTrackedPositions,
+        (int)HoldingsImportFailureReason.ConfidentialTreatment,
+        (int)HoldingsImportFailureReason.OutsideHistoryWindow,
+    ];
+
+    // Discovery is not an import attempt and must not postpone an existing retry. A reopened row
+    // drops the reason it closed under, which a later write would otherwise contradict.
     public Task EnqueueRecovery(
         string accession,
         string cik,
@@ -49,7 +60,10 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
                     clock_timestamp(), clock_timestamp(), clock_timestamp(), NULL)
             ON CONFLICT ("AccessionNumber") DO UPDATE SET
               "ResolvedAt" = NULL, "LastAttemptAt" = clock_timestamp(),
-              "NextAttemptAt" = clock_timestamp()
+              "NextAttemptAt" = clock_timestamp(),
+              "Reason" = CASE WHEN "HoldingsImportFailure"."ResolvedAt" IS NOT NULL
+                THEN {(int)HoldingsImportFailureReason.PendingRecovery}
+                ELSE "HoldingsImportFailure"."Reason" END
             WHERE "HoldingsImportFailure"."ResolvedAt" IS NOT NULL OR {supersedesActiveAttempt}
             """,
             cancellationToken
@@ -75,6 +89,26 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
                         .SetProperty(row => row.Reason, row => reason ?? row.Reason),
                 cancellationToken
             );
+
+    /// <summary>
+    /// Restates a resolved row after another import of its filing (a realtime replay or a
+    /// recovery tail): under the source proof when that import stored nothing, otherwise no longer
+    /// under a reason that says nothing was stored.
+    /// </summary>
+    public Task RestateResolved(
+        string accession,
+        HoldingsImportFailureReason? closedWithoutRows,
+        CancellationToken cancellationToken
+    ) =>
+        DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE "HoldingsImportFailure"
+            SET "Reason" = {(int)(closedWithoutRows ?? HoldingsImportFailureReason.PendingRecovery)}
+            WHERE "AccessionNumber" = {accession} AND "ResolvedAt" IS NOT NULL
+              AND ({closedWithoutRows.HasValue} OR "Reason" = ANY({ClosedWithoutWrite}))
+            """,
+            cancellationToken
+        );
 
     public Task Defer(string cik, DateTime attemptedAt, CancellationToken cancellationToken) =>
         GetAll()

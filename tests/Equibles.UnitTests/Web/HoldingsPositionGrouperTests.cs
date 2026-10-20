@@ -38,6 +38,31 @@ public class HoldingsPositionGrouperTests
         result[PositionChangeType.New][0].DeltaValue.Should().Be(1000);
     }
 
+    // A first 13F, or a return after a gap, proves no entry: only a holder that filed the prior
+    // quarter without this stock lands in New.
+    [Fact]
+    public void Group_CurrentOnlyWithoutAPriorQuarterFiling_IsNotNew()
+    {
+        var buyer = Guid.NewGuid();
+        var firstFiler = Guid.NewGuid();
+
+        var result = HoldingsPositionGrouper.Group(
+            [Holding(buyer, shares: 100, value: 1000), Holding(firstFiler, shares: 70, value: 700)],
+            [],
+            filersWithCurrentQuarterFilings: null,
+            effectiveSplits: [],
+            primaryTicker: null,
+            filersWithPreviousQuarterFilings: new HashSet<Guid> { buyer }
+        );
+
+        result[PositionChangeType.New].Select(c => c.InstitutionalHolderId).Should().Equal(buyer);
+        result[PositionChangeType.NoPriorFiling]
+            .Select(c => c.InstitutionalHolderId)
+            .Should()
+            .Equal(firstFiler);
+        HoldingsTopMoversSelector.CountBuyers(result).Should().Be(1);
+    }
+
     [Fact]
     public void Group_PreviousOnly_ClassifiesAsSoldOut()
     {

@@ -150,8 +150,17 @@ public class HoldingsImportRecoveryService(
         var resolved = replay.Complete
             ? pending.Select(row => row.AccessionNumber).ToList()
             : replay.Resolvable;
+        // A row closed without storing anything names the source's proof, so a resolved row that
+        // kept its failure reason always means the filing's holdings were written.
         foreach (var accession in resolved)
-            await failures.Resolve(accession, cancellationToken, startedAt);
+            await failures.Resolve(
+                accession,
+                cancellationToken,
+                startedAt,
+                outOfScope.Contains(accession) ? HoldingsImportFailureReason.OutsideHistoryWindow
+                    : replay.ClosedWithoutRows.TryGetValue(accession, out var closure) ? closure
+                    : null
+            );
         if (resolved.Count == 0)
         {
             logger.LogDebug(
