@@ -158,6 +158,35 @@ public class HolderLinkRefreshServiceTests : ParadeDbMcpTestBase
             .BeEquivalentTo(["p-q2", "c-q2-a"]);
     }
 
+    [Fact]
+    public async Task RunIfStale_RebuildsOnlyARollupSetDerivedByAnOlderRule()
+    {
+        var parent = Holder("100", null);
+        Holder("200", null);
+        Rollup(parent, "p-q2", Q2);
+        Included("p-q2", 1, cik: "200");
+        Notice("c-q2", "200", Q2, crd: null, reporters: ["100"]);
+        // Shaped on UBS under Calamos: an older rule left this filer under a wrong parent.
+        DbContext.Add(
+            new HolderRollup
+            {
+                Cik = "200",
+                ReportingParentCik = "999",
+                UltimateCik = "999",
+                Basis = HolderRollupBasis.ReportingParent,
+                DerivationVersion = HolderLinkRule.Version - 1,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await Sut().RunIfStale(Today, CancellationToken.None)).Should().BeTrue();
+        var rebuilt = await RollupOf("200");
+        rebuilt.UltimateCik.Should().Be("100");
+        rebuilt.DerivationVersion.Should().Be(HolderLinkRule.Version);
+
+        (await Sut().RunIfStale(Today, CancellationToken.None)).Should().BeFalse();
+    }
+
     private async Task<HolderRollup> RollupOf(string cik)
     {
         await using var verify = Fixture.CreateDbContext();
