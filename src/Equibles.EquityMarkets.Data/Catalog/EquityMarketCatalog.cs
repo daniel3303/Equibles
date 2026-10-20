@@ -322,6 +322,26 @@ public static class EquityMarketCatalog
             YahooNumericSymbolWidth: 4,
             NumericTickerWidth: 5
         ),
+        // Japan has no FIRDS register either; the JPX list of TSE-listed issues states every listing. Yahoo's regular
+        // period runs 09:00 to 15:30 Tokyo time, continuous trading prints until 15:24 and the closing auction
+        // uncrosses at 15:30. Ahead of London, so a Tokyo line holds the presentation over a London line of its share.
+        new(
+            "tokyo",
+            "Tokyo Stock Exchange",
+            "JP",
+            ["XTKS"],
+            "JPY",
+            ".T",
+            "JPX",
+            "Asia/Tokyo",
+            new(9, 0),
+            new(15, 25),
+            new(15, 30),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null
+        ),
         // Canada has no FIRDS register, so a host-owned venue directory states every listing. Continuous trading
         // prints from 09:30 to 15:59 on each venue; only TSX runs a closing call, which prints at 16:00.
         Canadian("tsx", "Toronto Stock Exchange", "XTSE", ".TO", "TOR"),

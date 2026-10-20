@@ -9,6 +9,7 @@ public class EquityQuotationUnitsTests
     [InlineData("NOK", "NOK", 1)]
     [InlineData("GBP", "GBP", 1)]
     [InlineData("CAD", "CAD", 1)]
+    [InlineData("JPY", "JPY", 1)]
     [InlineData("GBp", "GBP", 0.01)]
     [InlineData("GBX", "GBP", 0.01)]
     public void KnownTokens_ResolveToIsoCurrencyAndMajorUnitMultiplier(
@@ -26,7 +27,7 @@ public class EquityQuotationUnitsTests
     [Theory]
     [InlineData("gbp")]
     [InlineData("ZAc")]
-    [InlineData("JPY")]
+    [InlineData("KRW")]
     [InlineData("")]
     [InlineData(null)]
     public void UnknownTokens_NeverGuessAScale(string token)
