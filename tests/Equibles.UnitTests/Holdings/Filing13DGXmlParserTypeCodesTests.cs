@@ -56,6 +56,28 @@ public class Filing13DGXmlParserTypeCodesTests
     }
 
     [Fact]
+    public void ParseFiling_Item3FreeTextTypeOfInstitution_IsNotACode()
+    {
+        // BlackRock's 13G/A filings (such as 0002012383-26-003315) write HC only in Item 3's
+        // free-text "type of institution" line, which the schema types as text, not a code.
+        var xml = Load("sc13g-blackrock-hc.xml")
+            .Replace(
+                "<typeOfPersonFiling>HC</typeOfPersonFiling>",
+                "<otherTypeOfPersonFiling>HC</otherTypeOfPersonFiling>"
+            );
+
+        var result = _sut.ParseFiling(
+            xml,
+            "0002012383-26-003340",
+            "0002012383",
+            new DateOnly(2026, 10, 5)
+        );
+
+        result.FilingPersonTypeCodes.Should().BeEmpty();
+        result.ReportingPersons.Should().ContainSingle().Which.TypeCodes.Should().Equal("HC");
+    }
+
+    [Fact]
     public void ParseFiling_CodesListedInOneElement_AreSplit()
     {
         var xml = Load("sc13d-multiple-type-codes.xml")

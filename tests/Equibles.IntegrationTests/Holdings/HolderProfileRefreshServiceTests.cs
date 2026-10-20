@@ -103,6 +103,30 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Run_JointThirteenGUnderRule13d1bWithOneItem3Code_TypesItsFiler()
+    {
+        var parent = Holder("315066");
+        var passive = Holder("1100");
+        var qualified = Joint13G("0000315066-26-002332", "315066");
+        qualified.Rules = Schedule13GRules.QualifiedInstitution;
+        qualified.FilingPersonTypes = ReportingPersonTypes.ParentHoldingCompany;
+        // Rule 13d-1(c) filers state no Item 3 category that describes them.
+        var underPassiveRule = Joint13G("0000001100-26-000001", "1100");
+        underPassiveRule.Rules = Schedule13GRules.PassiveInvestor;
+        underPassiveRule.FilingPersonTypes = ReportingPersonTypes.InvestmentAdviser;
+        DbContext.AddRange(qualified, underPassiveRule);
+        await DbContext.SaveChangesAsync();
+
+        await Sut().Run(Today, CancellationToken.None);
+
+        var profiles = await Profiles();
+        profiles[parent].EntityType.Should().Be(HolderEntityType.HoldingCompany);
+        profiles[parent].EntityTypeSource.Should().Be(HolderEvidenceSource.Schedule13G);
+        profiles[parent].EntityTypeSourceKey.Should().Be("0000315066-26-002332");
+        profiles[passive].EntityType.Should().Be(HolderEntityType.Unknown);
+    }
+
+    [Fact]
     public async Task Run_Again_ReplacesTheStoredGeneration()
     {
         var holder = Holder("19617");
@@ -228,6 +252,20 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
             RegulatoryAum = aum,
             ReportDate = Roster,
         };
+
+    // A 13G naming a parent and the person who controls it; 13G persons carry no CIK.
+    private static BeneficialOwnershipFiling Joint13G(string accession, string filerCik)
+    {
+        var filing = BeneficialOwnership(
+            accession,
+            FilingType.Schedule13G,
+            Today.AddMonths(-1),
+            (null, ReportingPersonTypes.ParentHoldingCompany),
+            (null, ReportingPersonTypes.Individual)
+        );
+        filing.FilerCik = filerCik;
+        return filing;
+    }
 
     private static BeneficialOwnershipFiling BeneficialOwnership(
         string accession,
