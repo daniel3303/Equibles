@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **65 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **68 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -344,13 +344,16 @@ Build first: a plain `dotnet run` restores and prints build output on stdout, wh
 
 ## Tools
 
-This self-hosted build exposes 65 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 68 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
 - GetInstitutionCloneBacktest — backtest cloning a filer's 13F portfolio vs a benchmark
 - GetTopHolders — top institutional holders of a stock (13F-HR), with each holder's type and measured style, filterable by both
 - GetInstitutionalOwnershipHistory — institutional ownership trend across quarters
+- GetAllHolders — every disclosed holder of a stock in one list (13F, 13D/13G, insiders, funds), one row per holder with its other filings and contained disclosures nested, or grouped by ultimate parent
+- GetOwnershipSummary — who owns a stock: institutions, insiders, 13D/G-only blocks and the remaining float as % of shares outstanding, with funds shown but never summed
+- GetBeneficialOwnership — a stock's Schedule 13D and 13G filers, each latest filing with every reporting person
 - GetHolderMix — who holds a stock by holder type, measured style, turnover, horizon, book size, client base, private funds or location, with each bucket's like-for-like change
 - GetHolderTypeFlows — market-wide money in and out of US equities by kind of 13F filer for a closed quarter, optionally split by sector, with net flow as a share of each bucket's prior book
 - GetInstitutionPortfolio — an institution's 13F portfolio
