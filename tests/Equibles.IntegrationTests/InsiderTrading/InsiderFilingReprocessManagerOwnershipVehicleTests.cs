@@ -72,6 +72,7 @@ public class InsiderFilingReprocessManagerOwnershipVehicleTests : ParadeDbMcpTes
             row.ReportedPricePerShare = row.PricePerShare;
             row.NatureOfOwnership = null;
             row.OwnershipNatureFootnoteIds = [];
+            row.BalanceFootnoteIds = [];
             row.ParserVersion = 12;
         }
 
@@ -137,5 +138,8 @@ public class InsiderFilingReprocessManagerOwnershipVehicleTests : ParadeDbMcpTes
                 ("By Limited Liability Company 5", "F11"),
                 ("By Limited Liability Company 6", "F12")
             );
+        rows.Select(t => string.Join(",", t.BalanceFootnoteIds))
+            .Should()
+            .Equal("F2", "", "", "", "", "", "", "", "", "");
     }
 }

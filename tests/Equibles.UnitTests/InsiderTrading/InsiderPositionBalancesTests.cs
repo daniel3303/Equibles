@@ -103,6 +103,48 @@ public class InsiderPositionBalancesTests
     }
 
     [Fact]
+    public void Resolve_NelnetHoldingLinesNamedByBalanceFootnotes_CountEachLine()
+    {
+        // Accession 0001008886-26-000109: a trust's gift leaves 5,000 shares, then holding lines
+        // list another "By Trust" at 5,000 and two "By GRAT" at 6,800 each. Each line's balance
+        // carries the footnote naming its trust, so equal balances are separate vehicles.
+        var rows = Parse("form4-nelnet-balance-footnoted-holdings.xml");
+
+        Indirect(rows).Should().Equal(5_000, 5_000, 6_800, 6_800, 8_200, 10_000, 45_000, 45_192);
+    }
+
+    [Fact]
+    public void Resolve_SchneiderTrustGiftRepeatedAsAHolding_CountsOnce()
+    {
+        // Accession 0000892712-26-000043: a gift out of "By Trusts" leaves 1,279,870, and a holding
+        // line repeats that balance with no footnote naming another vehicle.
+        var rows = Parse("form4-schneider-trust-gift-repeated.xml");
+
+        Indirect(rows).Should().Equal(1_279_870);
+        InsiderPositionBalances.Resolve(rows).IndirectAmbiguous.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Resolve_StrykerTradeWhoseBalanceFootnoteExplainsATransfer_StaysInItsTrust()
+    {
+        // Accession 0001242914-26-000008: the last "By Revocable Trust" sale starts from a balance
+        // no earlier row left, and its balance footnote explains shares transferred in.
+        var rows = Parse("form4-stryker-transfer-footnoted-sale.xml");
+
+        Indirect(rows).Should().Equal(37_600, 2_600_815, 12_177_521);
+    }
+
+    [Fact]
+    public void Resolve_OriginEsppFootnotedBalances_StayOneSpouseBalance()
+    {
+        // Accession 0001857896-26-000004: "By Spouse" trades whose balance footnotes count ESPP
+        // purchases between them remain the spouse's one balance.
+        var rows = Parse("form4-origin-espp-footnoted-balances.xml");
+
+        Indirect(rows).Should().Equal(2_798);
+    }
+
+    [Fact]
     public void Resolve_LillyCeo_CountsEachTrustAndThe401k()
     {
         // Accession 0001538604-26-000004 attaches its trust footnote to the direct-or-indirect code.

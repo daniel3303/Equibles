@@ -1,4 +1,5 @@
 using System.Globalization;
+using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.Data.Models;
 using static Equibles.Holdings.BusinessLogic.Intelligence.HolderStyleBandClassifier;
 
@@ -14,6 +15,72 @@ public static class HolderStyleDescriptions
     /// <summary>The benchmark behind <see cref="HolderQuarterlyMetrics.AggregateActiveShare"/>.</summary>
     public const string AggregateBenchmark = "every 13F filer's combined book";
 
+    /// <summary>What <see cref="BenchmarkSummary"/> reads for a row with no closest benchmark yet.</summary>
+    public const string NotYetComputed = "Closest benchmark: not yet computed";
+
+    /// <summary>
+    /// What <see cref="BenchmarkSummary"/> reads for a book with no valued common shares, which no
+    /// recompute ever measures against a benchmark.
+    /// </summary>
+    public const string NoCommonPositions =
+        "Closest benchmark: no common-share positions to compare";
+
+    /// <summary>
+    /// The benchmark a stored row names, with its as-of date when it is a published index: "the
+    /// S&amp;P 500 as of 2026-06-30", or <see cref="AggregateBenchmark"/>.
+    /// </summary>
+    public static string Benchmark(string key, string name, DateOnly? asOf)
+    {
+        if (key == HolderBenchmarkCatalog.Aggregate)
+            return AggregateBenchmark;
+        var label = name ?? HolderBenchmarkCatalog.Name(key) ?? key;
+        return asOf is { } date
+            ? $"the {label} as of {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+            : $"the {label}";
+    }
+
+    /// <summary>
+    /// The benchmark the stored style band was read against, with the book's active share: the
+    /// closest benchmark, or the combined 13F book for a band read before index benchmarks.
+    /// </summary>
+    private static (decimal? ActiveShare, string Benchmark) BandMeasurement(
+        HolderQuarterlyMetrics metrics
+    ) =>
+        metrics.ClosestBenchmark == null
+            ? (metrics.AggregateActiveShare, AggregateBenchmark)
+            : (
+                metrics.ClosestActiveShare,
+                Benchmark(
+                    metrics.ClosestBenchmark,
+                    metrics.ClosestBenchmarkName,
+                    metrics.ClosestBenchmarkAsOf
+                )
+            );
+
+    /// <summary>
+    /// One line naming the closest benchmark and the sector active share, for a row under the
+    /// bands. A row not yet recomputed against the index benchmarks says so instead of passing
+    /// its combined-book active share off as the closest benchmark.
+    /// </summary>
+    public static string BenchmarkSummary(HolderQuarterlyMetrics metrics)
+    {
+        if (metrics.ClosestBenchmark == null || metrics.ClosestActiveShare is not { } activeShare)
+            return metrics.EquityAum <= 0 ? NoCommonPositions : NotYetComputed;
+        var benchmark = Benchmark(
+            metrics.ClosestBenchmark,
+            metrics.ClosestBenchmarkName,
+            metrics.ClosestBenchmarkAsOf
+        );
+        var sector = metrics.SectorActiveShare is { } sectorShare
+            ? Invariant(
+                $"; sector active share {Percent(sectorShare)} against the combined 13F book's sector weights"
+            )
+            : "";
+        return Invariant(
+            $"Closest benchmark: {benchmark}, active share {Percent(activeShare)}{sector}"
+        );
+    }
+
     public static string Style(HolderQuarterlyMetrics metrics) =>
         metrics.StyleBand switch
         {
@@ -21,7 +88,7 @@ public static class HolderStyleDescriptions
                 when metrics.IndexLikeEvidence == HolderIndexLikeEvidence.IndexFundAssets =>
                 IndexFundAssets(metrics),
             HolderStyleBand.IndexLike => Invariant(
-                $"Index-like: active share {Percent(metrics.AggregateActiveShare)} against {AggregateBenchmark}, across {metrics.StockCount:N0} stocks (index-like at {Threshold(IndexLikeMaximumActiveShare)} or less with {IndexLikeMinimumStockCount}+ stocks)"
+                $"Index-like: active share {Percent(BandMeasurement(metrics).ActiveShare)} against {BandMeasurement(metrics).Benchmark}, across {metrics.StockCount:N0} stocks (index-like at {Threshold(IndexLikeMaximumActiveShare)} or less with {IndexLikeMinimumStockCount}+ stocks)"
             ),
             HolderStyleBand.SystematicLike => Invariant(
                 $"Systematic-like: {metrics.StockCount:N0} stocks ({SystematicMinimumStockCount}+), trailing annual turnover {Percent(metrics.TrailingAnnualTurnover)} ({Threshold(SystematicMinimumAnnualTurnover)}+), top 10 weight {Percent(metrics.TopTenWeight)} ({Threshold(SystematicMaximumTopTenWeight)} or less)"
@@ -34,7 +101,7 @@ public static class HolderStyleDescriptions
                 $"Concentrated: {Number(metrics.EffectivePositions)} effective positions ({ConcentratedMaximumEffectivePositions:0} or fewer)"
             ),
             HolderStyleBand.DiversifiedActive => Invariant(
-                $"Diversified active: top 10 weight {Percent(metrics.TopTenWeight)}, {Number(metrics.EffectivePositions)} effective positions{(metrics.AggregateActiveShare is { } activeShare ? $", active share {Percent(activeShare)}" : "")}; it meets none of the index-like, systematic-like or concentrated tests"
+                $"Diversified active: top 10 weight {Percent(metrics.TopTenWeight)}, {Number(metrics.EffectivePositions)} effective positions{(BandMeasurement(metrics) is ({ } activeShare, var against) ? $", active share {Percent(activeShare)} against {against}" : "")}; it meets none of the index-like, systematic-like or concentrated tests"
             ),
             _ => Unbanded(metrics),
         };
@@ -75,8 +142,21 @@ public static class HolderStyleDescriptions
     /// <summary>Every band's rule with its thresholds, for a footnote under the bands.</summary>
     public static string Methodology =>
         Invariant(
-            $"Style bands measure the filed 13F common-share book each closed quarter, tested in this order. Unknown: under ${MinimumEquityAum:N0} of valued equity or {MinimumStockCount} stocks. Index-like ({IndexLikeMinimumStockCount}+ stocks): active share against {AggregateBenchmark} at {Threshold(IndexLikeMaximumActiveShare)} or less, or index series holding {Threshold(IndexLikeMinimumIndexFundShare)}+ of the registered fund assets it advises (N-CEN) and equal to {Threshold(IndexLikeMinimumIndexAssetsToBook)}+ of its book. Systematic-like: {SystematicMinimumStockCount}+ stocks, {Threshold(SystematicMinimumAnnualTurnover)}+ annual turnover and a top 10 weight of {Threshold(SystematicMaximumTopTenWeight)} or less. Concentrated: a top 10 weight of {Threshold(ConcentratedMinimumTopTenWeight)}+ or {ConcentratedMaximumEffectivePositions:0} or fewer effective positions. Diversified active: none of these. Turnover is the smaller of buys and sells over average equity value, summed over four quarters: low under {Threshold(LowTurnoverBelow)}, high {Threshold(HighTurnoverFrom)}+. Horizon is the value-weighted number of quarters each position has been held: short under {ShortHorizonBelowQuarters:0}, long {LongHorizonFromQuarters:0}+."
+            $"Style bands measure the filed 13F common-share book each closed quarter, tested in this order. Unknown: under ${MinimumEquityAum:N0} of valued equity or {MinimumStockCount} stocks. Index-like ({IndexLikeMinimumStockCount}+ stocks): active share of {Threshold(IndexLikeMaximumActiveShare)} or less against the closest benchmark, which is {IndexBenchmarks} (weighted by an index-tracking fund's reported holdings or the index's constituents nearest the quarter end, over the names resolved to companies, and only when those are {Threshold(HolderBenchmark.DefaultMinimumCoverage)}+ of its weight) or {AggregateBenchmark}, or index series holding {Threshold(IndexLikeMinimumIndexFundShare)}+ of the registered fund assets it advises (N-CEN) and equal to {Threshold(IndexLikeMinimumIndexAssetsToBook)}+ of its book. Systematic-like: {SystematicMinimumStockCount}+ stocks, {Threshold(SystematicMinimumAnnualTurnover)}+ annual turnover and a top 10 weight of {Threshold(SystematicMaximumTopTenWeight)} or less. Concentrated: a top 10 weight of {Threshold(ConcentratedMinimumTopTenWeight)}+ or {ConcentratedMaximumEffectivePositions:0} or fewer effective positions. Diversified active: none of these. Turnover is the smaller of buys and sells over average equity value, summed over four quarters: low under {Threshold(LowTurnoverBelow)}, high {Threshold(HighTurnoverFrom)}+. Horizon is the value-weighted number of quarters each position has been held: short under {ShortHorizonBelowQuarters:0}, long {LongHorizonFromQuarters:0}+."
         );
+
+    // Every published index in the catalog, listed for the methodology.
+    private static string IndexBenchmarks
+    {
+        get
+        {
+            var names = HolderBenchmarkCatalog
+                .All.Where(entry => entry.Key != HolderBenchmarkCatalog.Aggregate)
+                .Select(entry => entry.Name)
+                .ToList();
+            return $"the {string.Join(", ", names.SkipLast(1))} or {names[^1]}";
+        }
+    }
 
     private static string IndexFundAssets(HolderQuarterlyMetrics metrics)
     {

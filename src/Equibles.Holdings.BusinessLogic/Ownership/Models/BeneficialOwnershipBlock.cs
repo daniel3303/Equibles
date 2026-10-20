@@ -32,4 +32,10 @@ public sealed class BeneficialOwnershipBlock
     public bool HasCoverPage { get; init; }
 
     public IReadOnlyList<BeneficialOwnershipPerson> Persons { get; init; } = [];
+
+    /// <summary>
+    /// The purpose a 13D states in Item 4, as <see cref="IBeneficialOwnershipPurposeSource"/>
+    /// reads it; null for a 13G or without a reading.
+    /// </summary>
+    public StatedPurpose Purpose { get; set; }
 }

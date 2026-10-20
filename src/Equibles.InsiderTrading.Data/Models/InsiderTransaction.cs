@@ -45,9 +45,10 @@ public class InsiderTransaction
     /// v11 re-reads spelled-out ADS ratios above twenty ("sixty", "thirty-five") so per-ADS
     /// prices on ordinary-share rows are restated to per-ordinary; v12 records the reporting
     /// owner's relationship boxes on each row; v13 records each row's filed nature of ownership
-    /// and its footnote ids, so an insider's indirect vehicles keep separate balances.
+    /// and its footnote ids, so an insider's indirect vehicles keep separate balances; v14 adds the
+    /// footnote ids on the row's reported balance, where some filers name the vehicle.
     /// </summary>
-    public const int CurrentParserVersion = 13;
+    public const int CurrentParserVersion = 14;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -106,6 +107,13 @@ public class InsiderTransaction
     /// reads the same; ids are only comparable within one accession.
     /// </summary>
     public List<string> OwnershipNatureFootnoteIds { get; set; } = [];
+
+    /// <summary>
+    /// The footnote ids on the balance the row reports (sharesOwnedFollowingTransaction). Some
+    /// filers name a holding line's vehicle there; others explain a jump in the balance, so a
+    /// trade never splits from its vehicle on these.
+    /// </summary>
+    public List<string> BalanceFootnoteIds { get; set; } = [];
 
     [MaxLength(128)]
     public string SecurityTitle { get; set; }

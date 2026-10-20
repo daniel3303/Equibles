@@ -1,3 +1,5 @@
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
+
 namespace Equibles.Holdings.BusinessLogic.Intelligence;
 
 /// <summary>
@@ -12,6 +14,15 @@ public static class ActiveShareCalculator
     /// are summed over the portfolio's holdings only.
     /// </summary>
     public static decimal? ActiveShare<TKey>(
+        IReadOnlyDictionary<TKey, decimal> portfolio,
+        IReadOnlyDictionary<TKey, decimal> benchmark
+    ) => Measure(portfolio, benchmark)?.ActiveShare;
+
+    /// <summary>
+    /// <see cref="ActiveShare"/> with the benchmark weight in the portfolio's holdings. The work is
+    /// one pass over the portfolio, never the union, so a large benchmark costs a lookup per holding.
+    /// </summary>
+    public static ActiveShareMeasurement? Measure<TKey>(
         IReadOnlyDictionary<TKey, decimal> portfolio,
         IReadOnlyDictionary<TKey, decimal> benchmark
     )
@@ -32,6 +43,9 @@ public static class ActiveShareCalculator
             difference += Math.Abs(value / portfolioTotal - benchmarkWeight);
             sharedBenchmarkWeight += benchmarkWeight;
         }
-        return Math.Clamp((difference + 1 - sharedBenchmarkWeight) / 2, 0, 1);
+        return new ActiveShareMeasurement(
+            Math.Clamp((difference + 1 - sharedBenchmarkWeight) / 2, 0, 1),
+            Math.Clamp(sharedBenchmarkWeight, 0, 1)
+        );
     }
 }

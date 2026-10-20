@@ -6,6 +6,9 @@ public class DoubleDownPosition
     public string FilerName { get; set; }
     public string FilerCik { get; set; }
     public Guid CommonStockId { get; set; }
+
+    // Null is the issuer's primary listing; a trust's funds are separate positions.
+    public string ListedTicker { get; set; }
     public string Ticker { get; set; }
     public string StockName { get; set; }
     public long CurrentShares { get; set; }

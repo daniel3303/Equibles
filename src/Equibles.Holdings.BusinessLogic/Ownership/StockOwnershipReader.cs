@@ -32,6 +32,7 @@ public class StockOwnershipReader
     internal static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
     private readonly IEnumerable<IHolderSourceContributor> _contributors;
+    private readonly IBeneficialOwnershipPurposeSource _purposeSource;
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly StockSplitRepository _stockSplitRepository;
@@ -50,10 +51,12 @@ public class StockOwnershipReader
         IHolderRollupReader rollupReader,
         IMemoryCache memoryCache,
         ISharesOutstandingProvider sharesOutstandingProvider = null,
-        TimeProvider timeProvider = null
+        TimeProvider timeProvider = null,
+        IBeneficialOwnershipPurposeSource purposeSource = null
     )
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _purposeSource = purposeSource;
         _contributors = contributors;
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
@@ -147,6 +150,13 @@ public class StockOwnershipReader
         var rows = new List<StockHolderRow>();
         foreach (var contributor in _contributors)
             rows.AddRange(await contributor.Read(scope, cancellationToken));
+        await ReadPurposes(
+            rows.Where(row => row.Source == StockHolderSource.Schedule13D).ToList(),
+            row => row.Accession,
+            (row, purpose) => row.Purpose = purpose,
+            _purposeSource,
+            cancellationToken
+        );
 
         var (sharesOutstanding, percentUnavailable) = await SharesOutstanding(
             scope,
@@ -285,6 +295,30 @@ public class StockOwnershipReader
                 PreviousReportDate = dates.Count > 1 ? dates[1] : null,
                 FilingWindowOpen = false,
             };
+    }
+
+    /// <summary>Sets each 13D's Item 4 purpose from the deployment's source, when it has one.</summary>
+    internal static async Task ReadPurposes<T>(
+        IReadOnlyList<T> schedules13D,
+        Func<T, string> accessionOf,
+        Action<T, StatedPurpose> setPurpose,
+        IBeneficialOwnershipPurposeSource purposeSource,
+        CancellationToken cancellationToken
+    )
+    {
+        var accessions = schedules13D
+            .Select(accessionOf)
+            .Where(accession => accession != null)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (purposeSource == null || accessions.Count == 0)
+            return;
+        var purposes = await purposeSource.Read(accessions, cancellationToken);
+        var described = schedules13D.Where(schedule =>
+            accessionOf(schedule) is { } accession && purposes.ContainsKey(accession)
+        );
+        foreach (var schedule in described)
+            setPurpose(schedule, purposes[accessionOf(schedule)]);
     }
 
     private async Task<(long? Shares, string Unavailable)> SharesOutstanding(

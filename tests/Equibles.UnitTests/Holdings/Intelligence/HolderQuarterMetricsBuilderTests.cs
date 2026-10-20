@@ -1,4 +1,5 @@
 using Equibles.Holdings.BusinessLogic.Intelligence;
+using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
 
@@ -12,6 +13,7 @@ public class HolderQuarterMetricsBuilderTests
     private static readonly Guid Kept = Guid.NewGuid();
     private static readonly Guid Split = Guid.NewGuid();
     private static readonly Guid Dropped = Guid.NewGuid();
+    private const decimal Tolerance = 0.0000001m;
 
     [Fact]
     public void Build_KeepsLegsOutOfTheEquityBookAndRestatesTheQuarterBefore()
@@ -35,7 +37,7 @@ public class HolderQuarterMetricsBuilderTests
             {
                 [new(Split, null)] = 2m,
             },
-            AggregateBenchmark = new Dictionary<Guid, decimal> { [Kept] = 1, [Split] = 2 },
+            Benchmarks = [Aggregate(new Dictionary<Guid, decimal> { [Kept] = 1, [Split] = 2 })],
         };
 
         var metrics = HolderQuarterMetricsBuilder.Build(input, 7).Metrics;
@@ -168,7 +170,7 @@ public class HolderQuarterMetricsBuilderTests
                 .Range(0, 120)
                 .Select(_ => Row(Guid.NewGuid(), Quarter, 1_000, 100_000))
                 .ToList(),
-            AggregateBenchmark = new Dictionary<Guid, decimal> { [Guid.NewGuid()] = 1 },
+            Benchmarks = [Aggregate(new Dictionary<Guid, decimal> { [Guid.NewGuid()] = 1 })],
         };
         var asOf = new DateOnly(2024, 6, 30);
 
@@ -233,6 +235,205 @@ public class HolderQuarterMetricsBuilderTests
 
         build.Should().Throw<ArgumentException>();
     }
+
+    [Fact]
+    public void Build_MeasuresEveryBenchmarkAndBandsOnTheClosest()
+    {
+        // 120 equal positions that are the index, far from a combined book of other names.
+        var issuers = Enumerable.Range(0, 120).Select(_ => Guid.NewGuid()).ToList();
+        var weights = issuers.ToDictionary(issuer => issuer, _ => 1m);
+        var asOf = new DateOnly(2024, 11, 30);
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current = issuers.Select(issuer => Row(issuer, Quarter, 1_000, 100_000)).ToList(),
+            Benchmarks =
+            [
+                Benchmark(HolderBenchmarkCatalog.Sp500, asOf, weights, coverage: 0.97m),
+                Aggregate(new Dictionary<Guid, decimal> { [Guid.NewGuid()] = 1 }),
+            ],
+        };
+
+        var result = HolderQuarterMetricsBuilder.Build(input, 6);
+
+        var metrics = result.Metrics;
+        metrics.AggregateActiveShare.Should().BeApproximately(1m, Tolerance);
+        metrics.ClosestBenchmark.Should().Be(HolderBenchmarkCatalog.Sp500);
+        metrics.ClosestBenchmarkName.Should().Be("S&P 500");
+        metrics.ClosestBenchmarkAsOf.Should().Be(asOf);
+        metrics.ClosestActiveShare.Should().BeApproximately(0m, Tolerance);
+        metrics.StyleBand.Should().Be(HolderStyleBand.IndexLike);
+        metrics.IndexLikeEvidence.Should().Be(HolderIndexLikeEvidence.ActiveShare);
+
+        result
+            .BenchmarkActiveShares.Select(row => (row.BenchmarkKey, row.BenchmarkAsOf))
+            .Should()
+            .Equal(
+                (HolderBenchmarkCatalog.Sp500, asOf),
+                (HolderBenchmarkCatalog.Aggregate, Quarter)
+            );
+        var index = result.BenchmarkActiveShares[0];
+        index.ActiveShare.Should().BeApproximately(0m, Tolerance);
+        index.Overlap.Should().BeApproximately(1m, Tolerance);
+        index.Coverage.Should().Be(0.97m);
+        var aggregate = result.BenchmarkActiveShares[1];
+        aggregate.ActiveShare.Should().Be(metrics.AggregateActiveShare.Value);
+        aggregate.Overlap.Should().Be(0m);
+        result
+            .BenchmarkActiveShares.Should()
+            .OnlyContain(row => row.InstitutionalHolderId == Holder && row.ReportDate == Quarter);
+    }
+
+    [Theory]
+    [InlineData(0.90, 0.90, HolderBenchmarkCatalog.Russell2000)]
+    [InlineData(0.8999, 0.90, HolderBenchmarkCatalog.Aggregate)]
+    [InlineData(0.80, 0.80, HolderBenchmarkCatalog.Russell2000)]
+    public void Build_ABenchmarkUnderTheCoverageFloorIsStoredButNeverTheClosest(
+        double coverage,
+        double floor,
+        string closest
+    )
+    {
+        // 120 equal positions that are the index, far from a combined book of other names.
+        var issuers = Enumerable.Range(0, 120).Select(_ => Guid.NewGuid()).ToList();
+        var weights = issuers.ToDictionary(issuer => issuer, _ => 1m);
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current = issuers.Select(issuer => Row(issuer, Quarter, 1_000, 100_000)).ToList(),
+            Benchmarks =
+            [
+                Benchmark(HolderBenchmarkCatalog.Russell2000, Quarter, weights, (decimal)coverage),
+                Aggregate(new Dictionary<Guid, decimal> { [Guid.NewGuid()] = 1 }),
+            ],
+            MinimumBenchmarkCoverage = (decimal)floor,
+        };
+
+        var result = HolderQuarterMetricsBuilder.Build(input, 6);
+
+        result.Metrics.ClosestBenchmark.Should().Be(closest);
+        result
+            .Metrics.StyleBand.Should()
+            .Be(
+                closest == HolderBenchmarkCatalog.Aggregate
+                    ? HolderStyleBand.DiversifiedActive
+                    : HolderStyleBand.IndexLike
+            );
+        var index = result.BenchmarkActiveShares.Single(row =>
+            row.BenchmarkKey == HolderBenchmarkCatalog.Russell2000
+        );
+        index.ActiveShare.Should().BeApproximately(0m, Tolerance);
+        index.Coverage.Should().Be((decimal)coverage);
+    }
+
+    [Fact]
+    public void Build_ATieKeepsThePublishedIndex()
+    {
+        var book = new Dictionary<Guid, decimal> { [Kept] = 1, [Split] = 1 };
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current = [Row(Kept, Quarter, 10, 1_000), Row(Split, Quarter, 10, 1_000)],
+            Benchmarks =
+            [
+                Benchmark(HolderBenchmarkCatalog.Russell2000, Quarter, book),
+                Aggregate(book),
+            ],
+        };
+
+        HolderQuarterMetricsBuilder
+            .Build(input, 6)
+            .Metrics.ClosestBenchmark.Should()
+            .Be(HolderBenchmarkCatalog.Russell2000);
+    }
+
+    [Fact]
+    public void Build_WithoutBenchmarks_LeavesActiveShareUnmeasured()
+    {
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current = [Row(Kept, Quarter, 10, 1_000)],
+        };
+
+        var result = HolderQuarterMetricsBuilder.Build(input, 6);
+
+        result.Metrics.AggregateActiveShare.Should().BeNull();
+        result.Metrics.ClosestBenchmark.Should().BeNull();
+        result.Metrics.ClosestActiveShare.Should().BeNull();
+        result.Metrics.SectorActiveShare.Should().BeNull();
+        result.BenchmarkActiveShares.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_SectorActiveShareComparesSectorWeightsWithTheCombinedBook()
+    {
+        var technology = Guid.NewGuid();
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            // Three quarters in technology, a quarter in an issuer without a sector.
+            Current = [Row(Kept, Quarter, 10, 3_000), Row(Split, Quarter, 10, 1_000)],
+            IssuerSectors = new Dictionary<Guid, Guid> { [Kept] = technology },
+            AggregateSectorWeights = new Dictionary<Guid, decimal>
+            {
+                [technology] = 1,
+                [HolderSectorWeights.Unclassified] = 1,
+            },
+        };
+
+        HolderQuarterMetricsBuilder
+            .Build(input, 6)
+            .Metrics.SectorActiveShare.Should()
+            .Be(0.25m, "half of |0.75 - 0.5| + |0.25 - 0.5|");
+    }
+
+    [Fact]
+    public void Build_RecordsWhoseBookTheTradesCompareWith()
+    {
+        var predecessor = Guid.NewGuid();
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current = [Row(Kept, Quarter, 150, 1_500)],
+        };
+        var previous = new List<HolderIntelligenceRow> { Row(Kept, Previous, 100, 1_000) };
+
+        HolderQuarterMetricsBuilder.Build(input, 6).Metrics.ComparedHolderId.Should().BeNull();
+        HolderQuarterMetricsBuilder
+            .Build(input with { Previous = previous }, 6)
+            .Metrics.ComparedHolderId.Should()
+            .Be(Holder);
+        var continued = HolderQuarterMetricsBuilder
+            .Build(input with { Previous = previous, ComparedHolderId = predecessor }, 6)
+            .Metrics;
+        continued.ComparedHolderId.Should().Be(predecessor);
+        continued.IncreasedCount.Should().Be(1, "the predecessor's book is the baseline");
+        continued.PreviousEquityAum.Should().Be(1_000);
+    }
+
+    private static HolderBenchmark Aggregate(Dictionary<Guid, decimal> weights) =>
+        Benchmark(HolderBenchmarkCatalog.Aggregate, Quarter, weights);
+
+    private static HolderBenchmark Benchmark(
+        string key,
+        DateOnly asOf,
+        Dictionary<Guid, decimal> weights,
+        decimal coverage = 1m
+    ) =>
+        new()
+        {
+            Key = key,
+            AsOf = asOf,
+            Weights = weights,
+            Coverage = coverage,
+        };
 
     private static HolderIntelligenceRow Row(
         Guid issuer,

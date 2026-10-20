@@ -30,16 +30,6 @@ public class StockOwnershipTools
 
     private const int DefaultMaxResults = 25;
 
-    private static readonly string[] Sources =
-    [
-        "all",
-        "13f",
-        "13dg",
-        "13d",
-        "13g",
-        "insider",
-        "fund",
-    ];
     private static readonly string[] Views = ["default", "all", "ultimate"];
     private static readonly string[] SummaryViews = ["default", "ultimate"];
 
@@ -72,7 +62,7 @@ public class StockOwnershipTools
     public Task<string> GetAllHolders(
         [Description("Listed security ticker (e.g., NVDA, VOO)")] string ticker,
         [Description(
-            "Source to list: all (default), 13f, 13dg (13D and 13G), 13d, 13g, insider or fund. A single source lists its rows flat, stale ones flagged."
+            "Source to list: all (default), 13f, 13dg (13D and 13G), 13d, 13g, insider, fund or nonus (non-US disclosures a deployment adds). A single source lists its rows flat, stale ones flagged."
         )]
             string source = "all",
         [Description(
@@ -91,9 +81,14 @@ public class StockOwnershipTools
         return _runner.Execute(
             async () =>
             {
-                source = (source ?? "all").Trim().ToLowerInvariant();
-                if (!Sources.Contains(source))
-                    return McpOutput.InvalidArgument("source", source, string.Join(", ", Sources));
+                var sourceToken = StockHolderSourceFilter.Normalize(source);
+                if (sourceToken == null)
+                    return McpOutput.InvalidArgument(
+                        "source",
+                        source,
+                        string.Join(", ", StockHolderSourceFilter.Tokens)
+                    );
+                source = sourceToken;
                 view = (view ?? "default").Trim().ToLowerInvariant();
                 if (!Views.Contains(view))
                     return McpOutput.InvalidArgument("view", view, string.Join(", ", Views));
@@ -267,7 +262,7 @@ public class StockOwnershipTools
     )
     {
         var rows = read
-            .Rows.Where(row => MatchesSource(row.Source, source))
+            .Rows.Where(row => StockHolderSourceFilter.Matches(row.Source, source))
             .Where(row =>
                 typeFilter == null
                 || typeFilter.Contains(row.EntityType ?? HolderEntityType.Unknown)
@@ -277,12 +272,12 @@ public class StockOwnershipTools
         if (page.Count == 0)
             return offset > 0
                 ? McpOutput.PagedTruncationNote(0, rows.Count, offset)
-                : $"No {SourceLabel(source)} rows for {label}.";
+                : $"No {StockHolderSourceFilter.Label(source)} rows for {label}.";
 
         var result = Start(
             read,
             label,
-            $"{McpFormat.WholeNumber(rows.Count)} {SourceLabel(source)} rows, stale ones included"
+            $"{McpFormat.WholeNumber(rows.Count)} {StockHolderSourceFilter.Label(source)} rows, stale ones included"
         );
         for (var index = 0; index < page.Count; index++)
             result.AppendLine(
@@ -456,6 +451,12 @@ public class StockOwnershipTools
                     + $"{(block.PercentOfClass is { } percent ? $", {McpFormat.Invariant(percent, "0.##")}% of class" : "")}{change}"
                     + $"{(block.SplitUnresolved ? " (as filed: a split since cannot be attributed)" : "")}"
             );
+            if (block.Purpose != null)
+            {
+                result.AppendLine($"Purpose (Item 4): {block.Purpose.Summary}");
+                foreach (var category in block.Purpose.Categories.Where(c => c.Quote != null))
+                    result.AppendLine($"- {category.Name}: \"{category.Quote}\"");
+            }
             if (block.Persons.Count == 0)
             {
                 result.AppendLine();
@@ -518,6 +519,8 @@ public class StockOwnershipTools
         var notes = new List<string>();
         if (!string.IsNullOrEmpty(row.Detail))
             notes.Add(row.Detail);
+        if (row.Purpose != null)
+            notes.Add($"purpose: {row.Purpose.Summary}");
         if (row.Carried)
             notes.Add("carried, not yet filed for the newest quarter");
         if (row.Has(StockHolderRowFlags.Stale))
@@ -550,31 +553,6 @@ public class StockOwnershipTools
         else if (read.Summary.PercentUnavailableReason != null)
             result.AppendLine($"_% Out is unavailable: {read.Summary.PercentUnavailableReason}._");
     }
-
-    private static bool MatchesSource(StockHolderSource rowSource, string source) =>
-        source switch
-        {
-            "all" => true,
-            "13f" => rowSource == StockHolderSource.Form13F,
-            "13dg" => rowSource is StockHolderSource.Schedule13D or StockHolderSource.Schedule13G,
-            "13d" => rowSource == StockHolderSource.Schedule13D,
-            "13g" => rowSource == StockHolderSource.Schedule13G,
-            "insider" => rowSource == StockHolderSource.Insider,
-            "fund" => rowSource == StockHolderSource.Fund,
-            _ => false,
-        };
-
-    private static string SourceLabel(string source) =>
-        source switch
-        {
-            "13f" => "13F",
-            "13dg" => "13D and 13G",
-            "13d" => "13D",
-            "13g" => "13G",
-            "insider" => "insider",
-            "fund" => "fund",
-            _ => "holder",
-        };
 
     private static string SourceText(StockHolderSource source) =>
         source switch
