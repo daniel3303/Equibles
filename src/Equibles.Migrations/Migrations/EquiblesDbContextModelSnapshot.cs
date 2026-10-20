@@ -4425,6 +4425,12 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("AcquiredDisposed")
                         .HasColumnType("integer");
 
+                    b.PrimitiveCollection<List<string>>("BalanceFootnoteIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
+
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
 
