@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020042128_AddInsiderOwnershipVehicle")]
+    [Migration("20261020060313_AddInsiderOwnershipVehicle")]
     partial class AddInsiderOwnershipVehicle
     {
         /// <inheritdoc />
