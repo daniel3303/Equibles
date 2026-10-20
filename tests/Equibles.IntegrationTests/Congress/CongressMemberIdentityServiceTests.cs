@@ -63,6 +63,38 @@ public class CongressMemberIdentityServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task ReconcileMembers_SplitSpellingsWithoutCanonicalRow_MergeIntoOldestRenamed()
+    {
+        var oldest = new CongressMember
+        {
+            Name = "Donald John Bacon",
+            StateDistrict = "NE02",
+            CreationTime = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var newer = new CongressMember
+        {
+            Name = "Donald J. Bacon",
+            StateDistrict = "NE02",
+            CreationTime = new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        DbContext.AddRange(oldest, newer);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await CreateSut().ReconcileMembers(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var member = await verify.Set<CongressMember>().AsNoTracking().SingleAsync();
+        member.Id.Should().Be(oldest.Id);
+        member.Name.Should().Be("Don Bacon");
+        member.BioguideId.Should().Be("B001298");
+        member.BioguideIdSource.Should().Be(CongressBioguideIdSource.Catalog);
+        var redirect = await verify.Set<CongressMemberRedirect>().AsNoTracking().SingleAsync();
+        redirect.Id.Should().Be(newer.Id);
+        redirect.MergedIntoId.Should().Be(oldest.Id);
+    }
+
+    [Fact]
     public async Task ReconcileMembers_AliasHasConflictingBioguideId_RefusesMerge()
     {
         var member = new CongressMember { Name = "James E. Banks", BioguideId = "X000001" };
