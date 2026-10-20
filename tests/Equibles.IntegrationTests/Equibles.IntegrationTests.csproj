@@ -17,6 +17,11 @@
       CopyToOutputDirectory="PreserveNewest"
     />
     <Content
+      Include="../Equibles.UnitTests/TestAssets/Holdings/13f-confidential-treatment-submission.txt"
+      Link="TestAssets/Holdings/13f-confidential-treatment-submission.txt"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
       Include="../Equibles.UnitTests/TestAssets/Holdings/13f-notices/*.tsv"
       Link="TestAssets/Holdings/13f-notices/%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"

@@ -1,3 +1,5 @@
+using Equibles.Holdings.Data.Models;
+
 namespace Equibles.Holdings.HostedService.Models;
 
 /// <summary>
@@ -11,4 +13,15 @@ public record RecoveryReplayResult(
     int Skipped,
     IReadOnlyList<string> Resolvable,
     bool Complete
-);
+)
+{
+    /// <summary>
+    /// The resolvable accessions that completed without storing a row, with the source proof that
+    /// there was nothing to store. A resolvable accession absent here went through the holdings
+    /// write.
+    /// </summary>
+    public IReadOnlyDictionary<
+        string,
+        HoldingsImportFailureReason
+    > ClosedWithoutRows { get; init; } = new Dictionary<string, HoldingsImportFailureReason>();
+}
