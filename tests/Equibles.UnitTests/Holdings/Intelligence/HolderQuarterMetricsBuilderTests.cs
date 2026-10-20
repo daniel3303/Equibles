@@ -195,6 +195,34 @@ public class HolderQuarterMetricsBuilderTests
     }
 
     [Fact]
+    public void Build_TheFiledValueVouchesForAPendingRowsShares()
+    {
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current =
+            [
+                Row(Kept, Quarter, 150, 0, valueMissing: true, filedValue: 1_500),
+                Row(Split, Quarter, 10, 0, valueMissing: true),
+            ],
+            Previous = [Row(Kept, Previous, 100, 1_000)],
+            AveragePrices = new Dictionary<HolderSecurityKey, decimal>
+            {
+                [new(Kept, null)] = 10m,
+                [new(Split, null)] = 10m,
+            },
+        };
+
+        var metrics = HolderQuarterMetricsBuilder.Build(input, 1).Metrics;
+
+        metrics.BuyValue.Should().Be(500m);
+        metrics
+            .UnpricedTradeCount.Should()
+            .Be(1, "a pending row with no filed value vouches nothing");
+    }
+
+    [Fact]
     public void Build_AQuarterOutsideCoverage_Throws()
     {
         var build = () =>
@@ -213,7 +241,8 @@ public class HolderQuarterMetricsBuilderTests
         long value,
         ShareType shareType = ShareType.Shares,
         OptionType? optionType = null,
-        bool valueMissing = false
+        bool valueMissing = false,
+        long? filedValue = null
     ) =>
         new()
         {
@@ -225,6 +254,7 @@ public class HolderQuarterMetricsBuilderTests
             Shares = shares,
             Value = value,
             ValueMissing = valueMissing,
+            FiledValue = filedValue,
         };
 
     private static long Mask(params int[] quarters) =>

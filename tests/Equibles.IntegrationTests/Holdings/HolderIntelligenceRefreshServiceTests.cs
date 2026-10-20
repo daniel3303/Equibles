@@ -851,6 +851,34 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .BeApproximately(100m * 210m / 26m, 0.01m, "the February split is not inside Q2");
     }
 
+    [Fact]
+    public async Task RebuildQuarter_LeavesSharesTheReportedValueCannotCoverUnpriced()
+    {
+        // The Q1 filing swapped its columns: 1,000 shares worth 10,000 read as 10,000 worth 1,000.
+        await Seed(seed =>
+        {
+            seed.AddRange(Bars(_apple, 8m, 10m));
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 10_000, 1_000),
+                Holding(_microsoft, _holder, Q1, 100, 1_000),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 1_000, 10_000)
+            );
+        });
+
+        await Rebuild(Q2);
+
+        var metrics = await Metrics(Q2);
+        metrics.UnpricedTradeCount.Should().Be(1);
+        metrics.ReducedCount.Should().Be(0, "inconsistent counts give no direction");
+        metrics.BuyValue.Should().Be(0m);
+        metrics.SellValue.Should().Be(1_000m, "only the Microsoft exit is priced");
+        (await SectorFlows(Q2))
+            .Should()
+            .BeEquivalentTo([(HolderFlowSectorGroup.Unclassified, (Guid?)null, 0m, 1_000m)]);
+    }
+
     private Task SeedAppleBoughtAndMicrosoftSold(List<EquityDailyStockPrice> bars) =>
         Seed(seed =>
         {
