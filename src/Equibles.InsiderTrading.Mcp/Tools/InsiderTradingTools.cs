@@ -655,19 +655,7 @@ public class InsiderTradingTools
         );
     }
 
-    private static string GetRole(InsiderOwner owner)
-    {
-        var roles = new List<string>();
-        if (owner.IsDirector)
-            roles.Add("Director");
-        if (owner.IsOfficer)
-            roles.Add(
-                string.IsNullOrWhiteSpace(owner.OfficerTitle) ? "Officer" : owner.OfficerTitle
-            );
-        if (owner.IsTenPercentOwner)
-            roles.Add("10% Owner");
-        return roles.Count > 0 ? string.Join(", ", roles) : "Insider";
-    }
+    private static string GetRole(InsiderOwner owner) => InsiderRoleLabel.Of(owner);
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
     private Task<(EquityIssuer Stock, string Error)> ResolveStockByTicker(string ticker) =>
