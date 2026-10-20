@@ -63,6 +63,27 @@ public class YahooPriceImportServiceCatalogStartDateTests
     }
 
     [Fact]
+    public void Uncovered_WeekendOnlyGap_NeedsNoFetch()
+    {
+        var friday = new DateOnly(2026, 9, 18);
+        DateOnly ResolveOn(DateOnly today) =>
+            YahooPriceImportService.ResolveCatalogStartDate(
+                friday,
+                null,
+                null,
+                today,
+                Now,
+                Floor,
+                Options
+            );
+
+        ResolveOn(new DateOnly(2026, 9, 20)).Should().Be(new DateOnly(2026, 9, 20));
+        ResolveOn(new DateOnly(2026, 9, 22))
+            .Should()
+            .Be(new DateOnly(2026, 9, 7), "Monday's session is missing");
+    }
+
+    [Fact]
     public void Covered_FetchesTheBoundedWindow_OncePerInterval()
     {
         var frozen = new DateOnly(2026, 8, 1);

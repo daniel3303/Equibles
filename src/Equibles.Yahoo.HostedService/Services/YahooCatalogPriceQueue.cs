@@ -24,17 +24,16 @@ internal static class YahooCatalogPriceQueue
                     )
             )
             .ToArray();
+        // A session nobody has asked for yet outranks a retry: rotating every market evenly let small
+        // markets' re-asked thin names hold Shanghai and Hong Kong to a few hundred closes a day.
         var current = new Queue<PriceSeriesTarget>(
-            RotateMarkets(
-                due.Where(Active)
-                    .OrderBy(target =>
-                        lastDates.GetValueOrDefault(target.EquityListingId)
-                        >= YahooListingSource.SettledBefore(target, now).AddDays(-1)
-                    )
-                    .ThenBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
-                    .ThenBy(target => lastDates.GetValueOrDefault(target.EquityListingId))
-                    .ThenBy(target => target.EquityListingId)
-            )
+            due.Where(Active)
+                .OrderBy(target => target.YahooPriceSyncAttemptedAt ?? DateTime.MinValue)
+                .ThenBy(target => lastDates.GetValueOrDefault(target.EquityListingId))
+                .ThenBy(target => target.EquityListingId)
+                .GroupBy(target => Priority(target, lastDates, now))
+                .OrderBy(tier => tier.Key)
+                .SelectMany(RotateMarkets)
         );
         var backfill = new Queue<PriceSeriesTarget>(
             RotateMarkets(
@@ -56,6 +55,28 @@ internal static class YahooCatalogPriceQueue
                 result.Add(next);
         }
         return result;
+    }
+
+    private enum SessionPriority
+    {
+        Unasked,
+        Retry,
+        Current,
+    }
+
+    private static SessionPriority Priority(
+        PriceSeriesTarget target,
+        IReadOnlyDictionary<Guid, DateOnly?> lastDates,
+        DateTime now
+    )
+    {
+        var settledBefore = YahooListingSource.SettledBefore(target, now);
+        var start = lastDates.GetValueOrDefault(target.EquityListingId)?.AddDays(1);
+        if (start is not { } from || !YahooListingSource.HasWeekdaySession(from, settledBefore))
+            return SessionPriority.Current;
+        return target.YahooPriceSyncAttemptedAt >= YahooListingSource.SettledSince(target, now)
+            ? SessionPriority.Retry
+            : SessionPriority.Unasked;
     }
 
     private static IEnumerable<PriceSeriesTarget> RotateMarkets(

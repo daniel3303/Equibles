@@ -3725,6 +3725,9 @@ public class YahooPriceImportService
         if (covered)
             return Min(latestVenueOwned.Value.AddDays(1), bounded);
         var forwardOnly = latestYahooOwned.Value.AddDays(1);
+        // A weekend-only gap has nothing to serve; without this every listing refetched all weekend.
+        if (forwardOnly < today && !YahooListingSource.HasWeekdaySession(forwardOnly, today))
+            return today;
         return forwardOnly < today ? Min(forwardOnly, bounded) : forwardOnly;
     }
 
