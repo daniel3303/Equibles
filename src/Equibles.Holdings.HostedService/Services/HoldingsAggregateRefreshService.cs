@@ -6,6 +6,7 @@ using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
@@ -343,6 +344,8 @@ public class HoldingsAggregateRefreshService
                 {
                     CurrentShares = group.Sum(row => row.CurrentShares),
                     PreviousShares = group.Sum(row => row.PreviousShares),
+                    UnmatchedCurrentShares = group.Sum(row => row.UnmatchedCurrentShares),
+                    UnmatchedPreviousShares = group.Sum(row => row.UnmatchedPreviousShares),
                 }
             );
         var rows = activity
@@ -364,6 +367,11 @@ public class HoldingsAggregateRefreshService
                     PreviousShares = listingTotals.PreviousShares,
                     CurrentValue = a.CurrentValue,
                     PreviousValue = a.PreviousValue,
+                    // Shares on the listing rows' restated basis, as the totals.
+                    UnmatchedCurrentShares = listingTotals.UnmatchedCurrentShares,
+                    UnmatchedPreviousShares = listingTotals.UnmatchedPreviousShares,
+                    UnmatchedCurrentValue = a.UnmatchedCurrentValue,
+                    UnmatchedPreviousValue = a.UnmatchedPreviousValue,
                     CurrentFilerCount = a.CurrentFilerCount,
                     PreviousFilerCount = a.PreviousFilerCount,
                     NewFilerCount = c?.NewFilerCount ?? 0,
@@ -388,6 +396,10 @@ public class HoldingsAggregateRefreshService
                             PreviousShares = incoming.PreviousShares,
                             CurrentValue = incoming.CurrentValue,
                             PreviousValue = incoming.PreviousValue,
+                            UnmatchedCurrentShares = incoming.UnmatchedCurrentShares,
+                            UnmatchedPreviousShares = incoming.UnmatchedPreviousShares,
+                            UnmatchedCurrentValue = incoming.UnmatchedCurrentValue,
+                            UnmatchedPreviousValue = incoming.UnmatchedPreviousValue,
                             CurrentFilerCount = incoming.CurrentFilerCount,
                             PreviousFilerCount = incoming.PreviousFilerCount,
                             NewFilerCount = incoming.NewFilerCount,
@@ -771,6 +783,11 @@ public class HoldingsAggregateRefreshService
             .OrderByDescending(d => d)
             .FirstOrDefaultAsync(cancellationToken);
         var hasPrevious = previousReportDate != default;
+        // Positions of filers without a 13F for the other quarter are kept apart, so the buy and
+        // sell movers compare like for like (see StockQuarterlyActivity.UnmatchedCurrentShares
+        // and Compared13FHolderIds, which also pairs the two sides of a comparable CIK move).
+        var comparedCurrent = dbContext.Compared13FHolderIds(reportDate, previousReportDate);
+        var comparedPrevious = dbContext.Compared13FHolderIds(previousReportDate, reportDate);
 
         var activity = await dbContext
             .Set<InstitutionalHolding>()
@@ -787,6 +804,28 @@ public class HoldingsAggregateRefreshService
                 PreviousShares = g.Sum(h => h.ReportDate == previousReportDate ? h.Shares : 0L),
                 CurrentValue = g.Sum(h => h.ReportDate == reportDate ? h.Value : 0L),
                 PreviousValue = g.Sum(h => h.ReportDate == previousReportDate ? h.Value : 0L),
+                UnmatchedCurrentShares = g.Sum(h =>
+                    h.ReportDate == reportDate && !comparedCurrent.Contains(h.InstitutionalHolderId)
+                        ? h.Shares
+                        : 0L
+                ),
+                UnmatchedPreviousShares = g.Sum(h =>
+                    h.ReportDate == previousReportDate
+                    && !comparedPrevious.Contains(h.InstitutionalHolderId)
+                        ? h.Shares
+                        : 0L
+                ),
+                UnmatchedCurrentValue = g.Sum(h =>
+                    h.ReportDate == reportDate && !comparedCurrent.Contains(h.InstitutionalHolderId)
+                        ? h.Value
+                        : 0L
+                ),
+                UnmatchedPreviousValue = g.Sum(h =>
+                    h.ReportDate == previousReportDate
+                    && !comparedPrevious.Contains(h.InstitutionalHolderId)
+                        ? h.Value
+                        : 0L
+                ),
                 CurrentFilerCount = g.Where(h => h.ReportDate == reportDate)
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
@@ -827,6 +866,18 @@ public class HoldingsAggregateRefreshService
                 PreviousShares = group.Sum(row =>
                     row.Holding.ReportDate == previousReportDate ? row.Holding.Shares : 0L
                 ),
+                UnmatchedCurrentShares = group.Sum(row =>
+                    row.Holding.ReportDate == reportDate
+                    && !comparedCurrent.Contains(row.Holding.InstitutionalHolderId)
+                        ? row.Holding.Shares
+                        : 0L
+                ),
+                UnmatchedPreviousShares = group.Sum(row =>
+                    row.Holding.ReportDate == previousReportDate
+                    && !comparedPrevious.Contains(row.Holding.InstitutionalHolderId)
+                        ? row.Holding.Shares
+                        : 0L
+                ),
             })
             .ToListAsync(cancellationToken);
 
@@ -852,6 +903,10 @@ public class HoldingsAggregateRefreshService
                     PreviousShares = a.PreviousShares,
                     CurrentValue = a.CurrentValue,
                     PreviousValue = a.PreviousValue,
+                    UnmatchedCurrentShares = a.UnmatchedCurrentShares,
+                    UnmatchedPreviousShares = a.UnmatchedPreviousShares,
+                    UnmatchedCurrentValue = a.UnmatchedCurrentValue,
+                    UnmatchedPreviousValue = a.UnmatchedPreviousValue,
                     CurrentFilerCount = a.CurrentFilerCount,
                     PreviousFilerCount = a.PreviousFilerCount,
                     NewFilerCount = c?.NewFilerCount ?? 0,
@@ -876,6 +931,10 @@ public class HoldingsAggregateRefreshService
                             PreviousShares = incoming.PreviousShares,
                             CurrentValue = incoming.CurrentValue,
                             PreviousValue = incoming.PreviousValue,
+                            UnmatchedCurrentShares = incoming.UnmatchedCurrentShares,
+                            UnmatchedPreviousShares = incoming.UnmatchedPreviousShares,
+                            UnmatchedCurrentValue = incoming.UnmatchedCurrentValue,
+                            UnmatchedPreviousValue = incoming.UnmatchedPreviousValue,
                             CurrentFilerCount = incoming.CurrentFilerCount,
                             PreviousFilerCount = incoming.PreviousFilerCount,
                             NewFilerCount = incoming.NewFilerCount,
@@ -915,6 +974,8 @@ public class HoldingsAggregateRefreshService
                         PriceSeriesTicker = row.PriceSeriesTicker,
                         CurrentShares = row.CurrentShares,
                         PreviousShares = row.PreviousShares,
+                        UnmatchedCurrentShares = row.UnmatchedCurrentShares,
+                        UnmatchedPreviousShares = row.UnmatchedPreviousShares,
                         CurrentValue = concentration?.TotalValue ?? 0L,
                         CurrentFilerCount = concentration?.HolderCount ?? 0,
                         HolderValueSquaredSum = concentration?.ValueSquaredSum ?? 0d,
@@ -961,6 +1022,8 @@ public class HoldingsAggregateRefreshService
                     {
                         CurrentShares = incoming.CurrentShares,
                         PreviousShares = incoming.PreviousShares,
+                        UnmatchedCurrentShares = incoming.UnmatchedCurrentShares,
+                        UnmatchedPreviousShares = incoming.UnmatchedPreviousShares,
                         CurrentValue = incoming.CurrentValue,
                         CurrentFilerCount = incoming.CurrentFilerCount,
                         HolderValueSquaredSum = incoming.HolderValueSquaredSum,

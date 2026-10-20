@@ -31,6 +31,16 @@ public class StockQuarterlyActivity
     public long CurrentValue { get; set; }
     public long PreviousValue { get; set; }
 
+    // The part of each total held by filers without a 13F for the other quarter: current
+    // positions of a filer with no prior-quarter 13F (a first 13F, or a return after a gap) and
+    // prior positions of a filer with no 13F this quarter (not yet filed, or withheld under
+    // confidential treatment). A missing filing is no trade, so the buy and sell movers compare
+    // the totals without them. Zero on a row written before these columns existed.
+    public long UnmatchedCurrentShares { get; set; }
+    public long UnmatchedPreviousShares { get; set; }
+    public long UnmatchedCurrentValue { get; set; }
+    public long UnmatchedPreviousValue { get; set; }
+
     public int CurrentFilerCount { get; set; }
     public int PreviousFilerCount { get; set; }
     public int NewFilerCount { get; set; }

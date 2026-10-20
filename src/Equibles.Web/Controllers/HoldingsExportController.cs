@@ -193,7 +193,7 @@ public class HoldingsExportController : BaseController
             previousDate,
             windowOpen
         );
-        var activity = activityRows.Where(a => a.CurrentShares != a.PreviousShares).ToList();
+        var activity = activityRows.Where(a => a.DeltaShares != 0).ToList();
         var topBuys = activity.TopBuyers().ToList();
         var topSells = activity.TopSellers().ToList();
 
