@@ -6,13 +6,20 @@ namespace Equibles.Holdings.BusinessLogic.Intelligence;
 /// A filer's equity trades between consecutive quarters, priced by each security's quarter average
 /// price when known, else its quarter-end value per share (an exit's from the quarter before).
 /// </summary>
+/// <remarks>
+/// Invariant: a trade is worth at most the larger of its two positions at the trade's price, and
+/// each position at that price stays within <see cref="HoldingValueDisagreement.CapMultiple"/> of
+/// the value it reports, the gap being the price move since its quarter end. A position past the
+/// cap holds shares on another unit or basis than its value (swapped columns, a sibling class's
+/// CUSIP), so its trade is unpriced.
+/// </remarks>
 public static class HolderTurnoverCalculator
 {
     /// <summary>
     /// <paramref name="previous"/> (null without a 13F the quarter before) and
     /// <paramref name="averagePrices"/> (a price of zero or less is missing) are on the current
-    /// quarter's share basis. A security held on both sides in <paramref name="unresolvedBasis"/> is
-    /// an unpriced trade of unknown direction.
+    /// quarter's share basis. A security held on both sides in <paramref name="unresolvedBasis"/>,
+    /// or whose positions break the invariant, is an unpriced trade of unknown direction.
     /// </summary>
     public static HolderTradeSummary Trades(
         IReadOnlyList<HolderEquityPosition> current,
@@ -48,14 +55,6 @@ public static class HolderTurnoverCalculator
             var traded = (now?.Shares ?? 0) - (before?.Shares ?? 0);
             if (traded == 0)
                 continue;
-            if ((before?.Shares ?? 0) == 0)
-                news++;
-            else if ((now?.Shares ?? 0) == 0)
-                exits++;
-            else if (traded > 0)
-                increases++;
-            else
-                reductions++;
 
             // Only an exit, which has no row this quarter, falls back to the quarter before.
             var price =
@@ -65,7 +64,23 @@ public static class HolderTurnoverCalculator
                     ? average
                 : now == null ? PerShare(before)
                 : PerShare(now);
-            if (price == null)
+            var plausible =
+                price == null || (Vouches(now, price.Value) && Vouches(before, price.Value));
+            if (now != null && before != null && !plausible)
+            {
+                unpriced++;
+                continue;
+            }
+
+            if (before == null)
+                news++;
+            else if (now == null)
+                exits++;
+            else if (traded > 0)
+                increases++;
+            else
+                reductions++;
+            if (price == null || !plausible)
             {
                 unpriced++;
                 continue;
@@ -109,8 +124,9 @@ public static class HolderTurnoverCalculator
             ? lastFourQuarters.Sum(turnover => turnover.GetValueOrDefault())
             : null;
 
-    // Rows of one security are summed; a value pending on any of them leaves the security unvalued.
-    private static Dictionary<HolderSecurityKey, HolderEquityPosition> BySecurity(
+    // Rows of one security are summed; a value pending on any of them leaves the security unvalued,
+    // and a row that reports no value at all leaves the security's shares unvouched.
+    private static Dictionary<HolderSecurityKey, SecurityBook> BySecurity(
         IReadOnlyList<HolderEquityPosition> positions
     ) =>
         positions
@@ -118,22 +134,31 @@ public static class HolderTurnoverCalculator
             .GroupBy(position => position.Security)
             .ToDictionary(
                 group => group.Key,
-                group => new HolderEquityPosition(
-                    group.Key,
+                group => new SecurityBook(
                     group.Sum(position => position.Shares),
                     group.All(position => position.Value != null)
                         ? group.Sum(position => position.Value.GetValueOrDefault())
+                        : null,
+                    group.All(position => position.ReportedValue != null)
+                        ? group.Sum(position => position.ReportedValue.GetValueOrDefault())
                         : null
                 )
             );
 
-    private static long PricedValue(IEnumerable<HolderEquityPosition> positions) =>
-        positions
-            .Where(position => position.Value > 0)
-            .Sum(position => position.Value.GetValueOrDefault());
+    // The invariant for one side: its shares at the trade's price within the cap of the value it
+    // reports. A side that reports no value cannot vouch for its shares.
+    private static bool Vouches(SecurityBook book, decimal price) =>
+        book == null
+        || book.Reported is { } reported
+            && !HoldingValueDisagreement.GrosslyExceeds(book.Shares * price, reported);
 
-    private static decimal? PerShare(HolderEquityPosition position) =>
-        position is { Value: long value and > 0, Shares: > 0 }
-            ? (decimal)value / position.Shares
-            : null;
+    private static long PricedValue(IEnumerable<SecurityBook> books) =>
+        books.Where(book => book.Value > 0).Sum(book => book.Value.GetValueOrDefault());
+
+    private static decimal? PerShare(SecurityBook book) =>
+        book is { Value: long value and > 0, Shares: > 0 } ? (decimal)value / book.Shares : null;
+
+    // One security's summed rows: the published value counts toward the book, the reported value
+    // (published, else filed) vouches for the shares.
+    private sealed record SecurityBook(long Shares, long? Value, long? Reported);
 }

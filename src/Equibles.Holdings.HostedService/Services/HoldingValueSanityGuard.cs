@@ -1,3 +1,5 @@
+using Equibles.Holdings.BusinessLogic;
+
 namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
@@ -37,9 +39,9 @@ internal static class HoldingValueSanityGuard
 
     /// <summary>
     /// A derivation more than this multiple above the filer's own value is treated as a basis
-    /// error rather than published.
+    /// error rather than published; holder trades share the bound.
     /// </summary>
-    internal const decimal DisagreementCapMultiple = 5m;
+    internal const decimal DisagreementCapMultiple = HoldingValueDisagreement.CapMultiple;
 
     /// <summary>A close this large cannot honestly price anything — refuse to derive.</summary>
     internal static bool IsImplausibleClose(decimal closePrice) =>
@@ -60,7 +62,8 @@ internal static class HoldingValueSanityGuard
     /// must be published instead. Only meaningful when the filer reported a positive value.
     /// </summary>
     internal static bool GrosslyExceedsFiled(decimal derivedValue, long? filedValue) =>
-        filedValue is > 0 && derivedValue > DisagreementCapMultiple * filedValue.Value;
+        filedValue is > 0
+        && HoldingValueDisagreement.GrosslyExceeds(derivedValue, filedValue.Value);
 
     /// <summary>
     /// Whether the filed figure itself is on a thousands basis: some filers still report the

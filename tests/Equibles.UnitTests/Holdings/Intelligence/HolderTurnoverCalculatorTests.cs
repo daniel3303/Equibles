@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 
@@ -205,6 +206,102 @@ public class HolderTurnoverCalculatorTests
         );
 
         trades.EquityAum.Should().Be(1_000);
+    }
+
+    [Fact]
+    public void Trades_SharesTheReportedValueCannotCover_AreAnUnpricedTradeOfUnknownDirection()
+    {
+        // Swapped columns: 343 shares worth $1,143,000 filed as 1,143,000 shares worth $343.
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Reduced, 535, 1_744_073)],
+            [new(Reduced, 1_143_000, 343)],
+            new Dictionary<HolderSecurityKey, decimal> { [Reduced] = 3_090m }
+        );
+
+        trades.UnpricedTradeCount.Should().Be(1);
+        trades.ReducedCount.Should().Be(0);
+        trades.IncreasedCount.Should().Be(0);
+        trades.SellValue.Should().Be(0m);
+        trades.SecurityTrades.Should().BeEmpty();
+        trades.PreviousEquityAum.Should().Be(343, "the book keeps the published value");
+    }
+
+    [Fact]
+    public void Trades_AnEntryTheReportedValueCannotCover_CountsTheEntryButNotItsValue()
+    {
+        // Class B shares filed under the class A CUSIP, priced at the class A average.
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Opened, 2_240, 400_000)],
+            [],
+            new Dictionary<HolderSecurityKey, decimal> { [Opened] = 274_034m }
+        );
+
+        trades.NewCount.Should().Be(1);
+        trades.UnpricedTradeCount.Should().Be(1);
+        trades.BuyValue.Should().Be(0m);
+    }
+
+    [Fact]
+    public void Trades_AQuarterEndPriceFromACorruptRow_CannotPriceTheOtherSide()
+    {
+        // One share filed at $1,250,000 is the only price for the 1,000,000 shares worth $3,000.
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Reduced, 1, 1_250_000)],
+            [new(Reduced, 1_000_000, 3_000)]
+        );
+
+        trades.UnpricedTradeCount.Should().Be(1);
+        trades.SellValue.Should().Be(0m);
+    }
+
+    [Theory]
+    [InlineData("50", true)]
+    [InlineData("50.01", false)]
+    public void Trades_EachSidesSharesAtTheTradePrice_StayWithinTheCapOfItsReportedValue(
+        string average,
+        bool priced
+    )
+    {
+        // 100 shares reported at 1,000: a price of 50 is the cap's five times, a real price move.
+        var price = decimal.Parse(average, CultureInfo.InvariantCulture);
+        var trades = HolderTurnoverCalculator.Trades(
+            [],
+            [new(Exited, 100, 1_000)],
+            new Dictionary<HolderSecurityKey, decimal> { [Exited] = price }
+        );
+
+        trades.ExitCount.Should().Be(1);
+        trades.SellValue.Should().Be(priced ? 100 * price : 0m);
+        trades.UnpricedTradeCount.Should().Be(priced ? 0 : 1);
+    }
+
+    [Fact]
+    public void Trades_APendingValueIsVouchedForByTheFiledValue()
+    {
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Increased, 150, null, 1_500), new(Opened, 10, null)],
+            [new(Increased, 100, 1_000)],
+            new Dictionary<HolderSecurityKey, decimal> { [Increased] = 10m, [Opened] = 20m }
+        );
+
+        trades.BuyValue.Should().Be(500m);
+        trades.NewCount.Should().Be(1);
+        trades
+            .UnpricedTradeCount.Should()
+            .Be(1, "a pending row with no filed value vouches nothing");
+    }
+
+    [Fact]
+    public void Trades_ARowWithoutAReportedValue_LeavesItsSecurityUnvouched()
+    {
+        var trades = HolderTurnoverCalculator.Trades(
+            [new(Increased, 150, 1_500), new(Increased, 50, null)],
+            [new(Increased, 100, 1_000)],
+            new Dictionary<HolderSecurityKey, decimal> { [Increased] = 10m }
+        );
+
+        trades.UnpricedTradeCount.Should().Be(1);
+        trades.BuyValue.Should().Be(0m);
     }
 
     [Fact]
