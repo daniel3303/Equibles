@@ -16,11 +16,11 @@ internal static class Corrupt13FShareCountRepairer
     // A filing is only suspect when nearly every comparable row duplicates the
     // value into the share count; scattered equalities (a stock trading at
     // exactly $1.00) must never flag a filing.
-    private const double SuspectRowFraction = 0.8;
+    internal const double SuspectRowFraction = 0.8;
 
     // Below this many comparable rows the fraction signal is meaningless — a
     // tiny filing could trip it on price coincidence alone.
-    private const int MinimumComparableRows = 5;
+    internal const int MinimumComparableRows = 5;
 
     /// <summary>
     /// True when the filing's share-count column duplicates its value column:

@@ -87,8 +87,15 @@ public class ProcessedDataSet
     /// restructured Vanguard entities, whose Q1 2026 XOM/BRK-B positions could
     /// never heal). The re-import walks history with the original + additive
     /// amendments both retained.
+    /// Version 10: swap back a filing's share-count and value columns when the
+    /// filer wrote each position's dollar value into SSHPRNAMT and its share
+    /// count into VALUE (Swapped13FColumnRepairer). Read as filed, those books
+    /// derived values inflated by the share price wherever the sanity guard's
+    /// cap did not catch them (a $0.11B book stored as $2.63B), and every
+    /// holder trade, turnover and flow built on them inherited the error. The
+    /// re-import re-derives the affected filings from the corrected columns.
     /// </summary>
-    public const int CurrentParserVersion = 9;
+    public const int CurrentParserVersion = 10;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
