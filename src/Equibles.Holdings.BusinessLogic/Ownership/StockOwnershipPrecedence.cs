@@ -46,7 +46,8 @@ public static class StockOwnershipPrecedence
             row.ParentRowKey = null;
             row.Covering13FCik = null;
             row.Children.Clear();
-            if (row.Shares <= 0)
+            // A non-US notification may state only a percentage of voting rights, never a count.
+            if (row.Shares <= 0 && !StatesOnlyAPercentage(row))
                 row.Flags |= StockHolderRowFlags.Stale;
             if (
                 row.Source == StockHolderSource.Insider
@@ -67,6 +68,16 @@ public static class StockOwnershipPrecedence
         var groupsBy13FHolder = groups
             .Where(group => group.Form13F?.InstitutionalHolderId != null)
             .ToDictionary(group => group.Form13F.InstitutionalHolderId!.Value);
+        // An LEI two 13F filers of the listing share names neither of them.
+        var groupsBy13FLei = groups
+            .Where(group => group.Form13F?.Lei != null)
+            .GroupBy(group => group.Form13F.Lei, StringComparer.OrdinalIgnoreCase)
+            .Where(sharing => sharing.Count() == 1)
+            .ToDictionary(
+                sharing => sharing.Key,
+                sharing => sharing.Single(),
+                StringComparer.OrdinalIgnoreCase
+            );
 
         foreach (var group in groups)
         {
@@ -77,7 +88,13 @@ public static class StockOwnershipPrecedence
                 MarkOlderSchedulesStale(group.Rows, group.Form13F.AsOf);
                 continue;
             }
-            var parent = ParentFor(group, groupsBy13FCik, groupsBy13FHolder, context);
+            var parent = ParentFor(
+                group,
+                groupsBy13FCik,
+                groupsBy13FHolder,
+                groupsBy13FLei,
+                context
+            );
             if (parent == null)
                 continue;
             group.Parent = parent;
@@ -135,6 +152,7 @@ public static class StockOwnershipPrecedence
         HolderGroup group,
         IReadOnlyDictionary<string, HolderGroup> groupsBy13FCik,
         IReadOnlyDictionary<Guid, HolderGroup> groupsBy13FHolder,
+        IReadOnlyDictionary<string, HolderGroup> groupsBy13FLei,
         Context context
     )
     {
@@ -143,6 +161,9 @@ public static class StockOwnershipPrecedence
             return top.AdviserHolderId is { } adviser
                 ? groupsBy13FHolder.GetValueOrDefault(adviser)
                 : null;
+        // A non-US disclosure nests only under the one 13F filer whose profile states its exact LEI.
+        if (top.Source == StockHolderSource.NonUs)
+            return top.Lei != null ? groupsBy13FLei.GetValueOrDefault(top.Lei) : null;
         if (top.Cik == null || !context.Rollups.TryGetValue(top.Cik, out var rollup))
             return null;
         var parent = ReportingParentCandidates(rollup)
@@ -168,6 +189,10 @@ public static class StockOwnershipPrecedence
         if (rollup.Basis == HolderRollupBasis.ReportingParent && rollup.UltimateCik != null)
             yield return rollup.UltimateCik;
     }
+
+    /// <summary>A non-US notification stating a percentage of voting rights and no share count.</summary>
+    public static bool StatesOnlyAPercentage(StockHolderRow row) =>
+        row.Source == StockHolderSource.NonUs && row.Shares <= 0 && row.FiledPercentOfClass is > 0;
 
     private static bool IsSchedule(StockHolderSource source) =>
         source is StockHolderSource.Schedule13D or StockHolderSource.Schedule13G;

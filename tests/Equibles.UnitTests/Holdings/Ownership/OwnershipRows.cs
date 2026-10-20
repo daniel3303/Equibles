@@ -43,6 +43,32 @@ internal static class OwnershipRows
             Flags = StockHolderRowFlags.NotSummed,
         };
 
+    /// <summary>A non-US notification stating only a percentage of voting rights, as filed.</summary>
+    public static StockHolderRow NonUsNotification(
+        string key,
+        decimal votingPercent,
+        string lei = null
+    ) =>
+        new()
+        {
+            HolderKey =
+                lei != null
+                    ? new StockHolderKey(StockHolderKeyKind.Lei, lei)
+                    : new StockHolderKey(StockHolderKeyKind.Opaque, key),
+            Source = StockHolderSource.NonUs,
+            Name = "Notifier " + key,
+            Lei = lei,
+            FiledPercentOfClass = votingPercent,
+            AsOf = new DateOnly(2026, 8, 15),
+            Flags = StockHolderRowFlags.NotSummed,
+        };
+
+    public static StockHolderRow WithLei(this StockHolderRow row, string lei)
+    {
+        row.Lei = lei;
+        return row;
+    }
+
     public static HolderRollup ReportsThrough(string childCik, string parentCik) =>
         new()
         {
