@@ -8,6 +8,7 @@ public class EquityQuotationUnitsTests
     [InlineData("EUR", "EUR", 1)]
     [InlineData("NOK", "NOK", 1)]
     [InlineData("GBP", "GBP", 1)]
+    [InlineData("CAD", "CAD", 1)]
     [InlineData("GBp", "GBP", 0.01)]
     [InlineData("GBX", "GBP", 0.01)]
     public void KnownTokens_ResolveToIsoCurrencyAndMajorUnitMultiplier(

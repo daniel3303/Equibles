@@ -322,6 +322,12 @@ public static class EquityMarketCatalog
             YahooNumericSymbolWidth: 4,
             NumericTickerWidth: 5
         ),
+        // Canada has no FIRDS register, so a host-owned venue directory states every listing. Continuous trading
+        // prints from 09:30 to 15:59 on each venue; only TSX runs a closing call, which prints at 16:00.
+        Canadian("tsx", "Toronto Stock Exchange", "XTSE", ".TO", "TOR"),
+        Canadian("tsx-venture", "TSX Venture Exchange", "XTSX", ".V", "VAN"),
+        Canadian("cse", "Canadian Securities Exchange", "XCNQ", ".CN", "CNQ"),
+        Canadian("cboe-canada", "Cboe Canada", "NEOE", ".NE", "NEO"),
         // Last on purpose: the FCA register homes the EEA issuers' London lines too, so their EEA directories
         // run first and hold the presentation before a London listing of the same share arrives. AIM is its own
         // venue code, so the growth market is a market identifier here rather than a segment of XLON.
@@ -393,6 +399,31 @@ public static class EquityMarketCatalog
             DirectorySource: "euronext",
             DelayedTradeSource: "euronext",
             DelayedTradeLocationCode: location
+        );
+
+    private static EquityMarket Canadian(
+        string code,
+        string name,
+        string mic,
+        string suffix,
+        string exchange
+    ) =>
+        new(
+            code,
+            name,
+            "CA",
+            [mic],
+            "CAD",
+            suffix,
+            exchange,
+            "America/Toronto",
+            new(9, 30),
+            new(16, 0),
+            new(16, 0),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null
         );
 
     // The directory names a main-market or First North line by its exchange; the lit MIC of each is what the

@@ -209,6 +209,105 @@ public class SourceInstrumentIdentityTests(ParadeDbFixture fixture) : ParadeDbMc
     }
 
     [Fact]
+    public async Task ProvenSecurityJoinsTheInterlistedShareWithoutAnotherIssuer()
+    {
+        var home = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "RY",
+            Name: "Royal Bank Of Canada",
+            Cik: "1000275",
+            Cusip: "780087102"
+        );
+        DbContext.Add(home);
+        await DbContext.SaveChangesAsync();
+        var security = home.Securities.Single();
+        await using var services = Services();
+        var importer = Importer(services);
+        var input = Input("share-ry", "line-ry", "RY", "CAD");
+        input.MarketIdentifierCode = "XTSE";
+        input.MarketCountryCode = "CA";
+        input.SecurityType = EquitySecurityKind.OrdinaryShare;
+        input.ProvenSecurityId = security.Id;
+
+        var listingId = await importer.ImportListing(input);
+        (await importer.ImportListing(input)).Should().Be(listingId);
+
+        DbContext.ChangeTracker.Clear();
+        var listing = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+                .ThenInclude(row => row.Issuer)
+                    .ThenInclude(row => row.Presentation)
+            .SingleAsync(row => row.Id == listingId);
+        listing.EquitySecurityId.Should().Be(security.Id);
+        listing.IdentityState.Should().Be(EquityIdentityState.Verified);
+        listing.Security.Issuer.Name.Should().Be("Royal Bank Of Canada");
+        listing.Security.Issuer.Presentation.EquityListingId.Should().NotBe(listingId);
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
+        (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("bound-elsewhere")]
+    [InlineData("missing")]
+    public async Task ProvenSecurityRefusesWhenTheSourceNamesAnotherShare(string conflict)
+    {
+        var home = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "RY", Name: "Home");
+        DbContext.Add(home);
+        await DbContext.SaveChangesAsync();
+        await using var services = Services();
+        var importer = Importer(services);
+        await importer.ImportListing(Input());
+        var input = Input();
+        input.ProvenSecurityId =
+            conflict == "missing" ? Guid.NewGuid() : home.Securities.Single().Id;
+        input.PayloadJson = "{\"changed\":true}";
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => importer.ImportListing(input));
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(2);
+        (await DbContext.Set<EquityListing>().CountAsync()).Should().Be(2);
+        (await DbContext.Set<EquityDirectorySourceRecord>().CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("CA7800871021", true)]
+    [InlineData("CA0636711016", false)]
+    [InlineData("GB0002875804", false)]
+    public async Task ProvenSecurityTakesOnlyAnIsinThatEmbedsItsCusip(string isin, bool joins)
+    {
+        var home = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "RY",
+            Name: "Royal Bank Of Canada",
+            Cik: "1000275",
+            Cusip: "780087102"
+        );
+        DbContext.Add(home);
+        await DbContext.SaveChangesAsync();
+        var security = home.Securities.Single();
+        await using var services = Services();
+        var importer = Importer(services);
+        var input = Input("share-ry", "line-ry", "RY", "CAD");
+        input.MarketIdentifierCode = "XTSE";
+        input.MarketCountryCode = "CA";
+        input.Isin = isin;
+        input.RelatedIsins = [isin];
+        input.ProvenSecurityId = security.Id;
+
+        if (joins)
+            await importer.ImportListing(input);
+        else
+            await Assert.ThrowsAsync<InvalidDataException>(() => importer.ImportListing(input));
+
+        DbContext.ChangeTracker.Clear();
+        var stored = await DbContext.Set<EquitySecurity>().SingleAsync();
+        stored.Isin.Should().Be(joins ? isin : null);
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
+        (await DbContext.Set<EquityListing>().CountAsync()).Should().Be(joins ? 2 : 1);
+        (await DbContext.Set<EquityDirectorySourceRecord>().CountAsync())
+            .Should()
+            .Be(joins ? 1 : 0);
+    }
+
+    [Fact]
     public async Task MissingListingBindingCannotReassignAnActiveTicker()
     {
         await using var services = Services();

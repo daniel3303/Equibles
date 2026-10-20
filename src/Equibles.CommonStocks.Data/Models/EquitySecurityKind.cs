@@ -8,4 +8,7 @@ public enum EquitySecurityKind
     PreferredShare = 2,
     DepositaryReceipt = 3,
     Other = 4,
+
+    // A listed unit of an operating trust or limited partnership (a REIT, income trust or LP unit), not a share.
+    TrustUnit = 5,
 }
