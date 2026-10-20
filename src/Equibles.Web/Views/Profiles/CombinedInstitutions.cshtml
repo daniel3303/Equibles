@@ -65,7 +65,7 @@
                     </thead>
                     <tbody>
                         @foreach (var row in overlap.Rows) {
-                            var heldBy = Model.FundsHoldingByStock.TryGetValue(row.CommonStockId, out var n) ? n : 0;
+                            var heldBy = Model.FundsHoldingByStock.TryGetValue(row, out var n) ? n : 0;
                             var heldByCss = heldBy == overlap.Funds.Count ? "badge-success" : heldBy >= overlap.Funds.Count / 2.0 ? "badge-info" : "badge-ghost";
                             // Avg % across only the funds that actually hold the stock — averaging across
                             // the zero slices would dilute and mislead.

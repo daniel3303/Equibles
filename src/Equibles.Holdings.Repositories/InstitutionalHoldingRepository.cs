@@ -192,19 +192,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return Get13FByHolder(holder, reportDate).Include(h => h.Issuer);
     }
 
-    // Minimal per-stock projection for portfolio-summary maths. Loading thousands of full
+    // Minimal per-security projection for portfolio-summary maths. Loading thousands of full
     // tracked holding entities for two quarters made a cold summary proportional to the raw
-    // filing row count even though concentration and turnover only use these three fields.
+    // filing row count even though concentration and turnover only use these fields.
     public IQueryable<InstitutionPortfolioPosition> Get13FPositionAggregatesByHolder(
         InstitutionalHolder holder,
         DateOnly reportDate
     )
     {
         return Get13FByHolder(holder, reportDate)
-            .GroupBy(h => h.EquityIssuerId)
+            .GroupBy(h => new { h.EquityIssuerId, h.ListedTicker })
             .Select(g => new InstitutionPortfolioPosition
             {
-                CommonStockId = g.Key,
+                CommonStockId = g.Key.EquityIssuerId,
+                ListedTicker = g.Key.ListedTicker,
                 Shares = g.Sum(h => h.Shares),
                 Value = g.Sum(h => h.Value),
             });
@@ -1787,7 +1788,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             : SplitAdjustment.AdjustShareCount(shares, sourceFactor / targetFactor);
     }
 
-    // Double-down report: per-(holder, stock) positions where the share-count
+    // Double-down report: per-(holder, security) positions where the share-count
     // increase from the prior quarter exceeds a given percentage threshold,
     // ranked by conviction (largest % increase first). Joins holder + stock
     // for display names so the caller doesn't need a second round trip.
@@ -1798,11 +1799,17 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var aggregated = BothQuarters(current, previous)
-            .GroupBy(h => new { h.InstitutionalHolderId, h.EquityIssuerId })
+            .GroupBy(h => new
+            {
+                h.InstitutionalHolderId,
+                h.EquityIssuerId,
+                h.ListedTicker,
+            })
             .Select(g => new DoubleDownAggregate
             {
                 InstitutionalHolderId = g.Key.InstitutionalHolderId,
                 CommonStockId = g.Key.EquityIssuerId,
+                ListedTicker = g.Key.ListedTicker,
                 CurrentShares = g.Sum(h => h.ReportDate == current ? h.Shares : 0L),
                 PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
                 CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
@@ -2520,11 +2527,17 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var aggregated = BothQuarters(current, previous)
-            .GroupBy(h => new { h.InstitutionalHolderId, h.EquityIssuerId })
+            .GroupBy(h => new
+            {
+                h.InstitutionalHolderId,
+                h.EquityIssuerId,
+                h.ListedTicker,
+            })
             .Select(g => new DoubleDownAggregate
             {
                 InstitutionalHolderId = g.Key.InstitutionalHolderId,
                 CommonStockId = g.Key.EquityIssuerId,
+                ListedTicker = g.Key.ListedTicker,
                 CurrentShares =
                     g.Where(h =>
                             h.ReportDate == current
@@ -2610,7 +2623,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         FilerName = x.FilerName,
                         FilerCik = x.FilerCik,
                         CommonStockId = x.a.CommonStockId,
-                        Ticker = s.Presentation.Listing.Ticker,
+                        ListedTicker = x.a.ListedTicker,
+                        Ticker = x.a.ListedTicker ?? s.Presentation.Listing.Ticker,
                         StockName = s.Name,
                         CurrentShares = x.a.CurrentShares,
                         PreviousShares = x.a.PreviousShares,
@@ -2663,6 +2677,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         public Guid InstitutionalHolderId { get; set; }
         public Guid CommonStockId { get; set; }
+        public string ListedTicker { get; set; }
         public long CurrentShares { get; set; }
         public long PreviousShares { get; set; }
         public long CurrentValue { get; set; }

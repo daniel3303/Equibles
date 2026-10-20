@@ -38,9 +38,10 @@ public static class IndustryAllocationCalculator
 
         var totalValue = currentQuarterHoldings.Sum(h => h.Value);
 
-        // Group by taxonomy id (null collapses into one bucket); the per-stock aggregation
-        // below ensures a holder reporting the same stock across multiple discretion rows
-        // is counted as ONE position in the allocation, not multiple.
+        // Group by taxonomy id (null collapses into one bucket); the per-security aggregation
+        // below ensures a holder reporting the same security across multiple discretion rows
+        // is counted as ONE position in the allocation, while a trust's separate funds (one
+        // issuer, different listed tickers) stay separate positions.
         var slices = currentQuarterHoldings
             .GroupBy(groupKey)
             .Select(group =>
@@ -50,7 +51,7 @@ public static class IndustryAllocationCalculator
                     group.Select(groupName).FirstOrDefault(n => n != null)
                     ?? IndustryAllocationSlice.UnclassifiedName;
                 var perStock = group
-                    .GroupBy(h => h.EquityIssuerId)
+                    .GroupBy(h => (h.EquityIssuerId, h.ListedTicker))
                     .Select(stockGroup => new { Value = stockGroup.Sum(h => h.Value) })
                     .ToList();
                 var groupValue = perStock.Sum(p => p.Value);

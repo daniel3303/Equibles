@@ -29,6 +29,9 @@ public class FundOverlapFund
 public class FundOverlapRow
 {
     public Guid CommonStockId { get; set; }
+
+    // Null is the issuer's primary listing; a trust's funds are separate rows.
+    public string ListedTicker { get; set; }
     public string Ticker { get; set; }
     public string Name { get; set; }
 
