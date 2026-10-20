@@ -185,6 +185,50 @@ public class YahooCatalogPriceQueueTests
             .Equal(thursday, friday);
     }
 
+    [Fact]
+    public void AVenueCoveredListingDueItsIntervalFetchPrecedesRetries()
+    {
+        // Euronext bars keep both Paris listings current through 2026-09-29.
+        var due = VenueTarget("DUE", "FR", "XPAR") with
+        {
+            YahooPriceSyncAttemptedAt = Now.AddHours(-25),
+        };
+        var fetched = VenueTarget("FETCHED", "FR", "XPAR") with
+        {
+            YahooPriceSyncAttemptedAt = Now.AddHours(-1),
+        };
+        var neverFetched = VenueTarget("FIRST", "FR", "XPAR");
+        // A London thin name already re-asked for the 2026-09-29 close this morning.
+        var retry = VenueTarget("THIN", "GB", "XLON") with
+        {
+            YahooPriceSyncAttemptedAt = Now.AddMinutes(-30),
+        };
+        var dates = new Dictionary<Guid, DateOnly?>
+        {
+            [due.EquityListingId] = new(2026, 9, 29),
+            [fetched.EquityListingId] = new(2026, 9, 29),
+            [neverFetched.EquityListingId] = new(2026, 9, 29),
+            [retry.EquityListingId] = new(2026, 9, 28),
+        };
+        var covered = new HashSet<Guid>
+        {
+            due.EquityListingId,
+            fetched.EquityListingId,
+            neverFetched.EquityListingId,
+        };
+
+        var ordered = YahooCatalogPriceQueue.Order(
+            [retry, fetched, due, neverFetched],
+            dates,
+            Now,
+            covered,
+            TimeSpan.FromHours(24)
+        );
+
+        ordered.Take(2).Should().BeEquivalentTo([neverFetched, due]);
+        ordered.Skip(2).Should().Equal(retry, fetched);
+    }
+
     // A security id makes the target a catalog listing, so the venue's own clock settles its sessions.
     private static PriceSeriesTarget VenueTarget(string ticker, string country, string mic) =>
         Target(ticker) with

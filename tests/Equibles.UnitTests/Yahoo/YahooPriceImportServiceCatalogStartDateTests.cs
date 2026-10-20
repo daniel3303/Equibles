@@ -97,6 +97,26 @@ public class YahooPriceImportServiceCatalogStartDateTests
     }
 
     [Fact]
+    public void Covered_ThroughFriday_WaitsForTheIntervalAllWeekend()
+    {
+        var sunday = new DateOnly(2026, 9, 20);
+        var now = new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc);
+        DateOnly ResolveOn(DateTime? stamp) =>
+            YahooPriceImportService.ResolveCatalogStartDate(
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 9, 18),
+                stamp,
+                sunday,
+                now,
+                Floor,
+                Options
+            );
+
+        ResolveOn(now.AddHours(-1)).Should().Be(sunday, "Friday's venue bar is the latest session");
+        ResolveOn(now.AddHours(-25)).Should().Be(sunday.AddDays(-15));
+    }
+
+    [Fact]
     public void Covered_WithoutYahooRows_StillFetchesFromTheFloor_OncePerInterval()
     {
         Resolve(null, Today.AddDays(-1), null).Should().Be(Floor);

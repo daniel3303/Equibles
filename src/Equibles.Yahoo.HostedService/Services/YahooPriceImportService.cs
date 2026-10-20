@@ -213,7 +213,7 @@ public class YahooPriceImportService
         var prices = scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var ids = targets.Select(target => target.EquityListingId).ToArray();
         // Each indexed latest-row lookup avoids rescanning the complete price history per batch.
-        var lastDates = await listings
+        var latest = await listings
             .GetAll()
             .Where(listing => ids.Contains(listing.Id))
             .Select(listing => new
@@ -225,9 +225,27 @@ public class YahooPriceImportService
                     .OrderByDescending(price => price.Date)
                     .Select(price => (DateOnly?)price.Date)
                     .FirstOrDefault(),
+                Source = prices
+                    .GetAllSeries()
+                    .Where(price => price.EquityListingId == listing.Id)
+                    .OrderByDescending(price => price.Date)
+                    .Select(price => price.SourceTicker)
+                    .FirstOrDefault(),
             })
-            .ToDictionaryAsync(row => row.Id, row => row.Date, cancellationToken);
-        var order = YahooCatalogPriceQueue.Order(targets, lastDates, DateTime.UtcNow);
+            .ToListAsync(cancellationToken);
+        var lastDates = latest.ToDictionary(row => row.Id, row => row.Date);
+        // A newest bar written by a venue marks the listing as covered, as ResolveCatalogStartDate decides.
+        var venueCovered = latest
+            .Where(row => VenuePriceSource.IsVenueKey(row.Source))
+            .Select(row => row.Id)
+            .ToHashSet();
+        var order = YahooCatalogPriceQueue.Order(
+            targets,
+            lastDates,
+            DateTime.UtcNow,
+            venueCovered,
+            TimeSpan.FromHours(Math.Max(1, _scraperOptions.CoveredListingFetchIntervalHours))
+        );
         var result = await ImportPriceBatch(order, cancellationToken, 200);
         HasCatalogPriceBacklog = result.HasMore;
         _logger.LogInformation(
@@ -3706,7 +3724,11 @@ public class YahooPriceImportService
         var covered =
             latestVenueOwned != null
             && (latestYahooOwned == null || latestVenueOwned > latestYahooOwned);
-        if (covered && latestVenueOwned >= today.AddDays(-1))
+        // Covered through the latest weekday session; a weekend after Friday's bar is not a gap.
+        if (
+            covered
+            && !YahooListingSource.HasWeekdaySession(latestVenueOwned.Value.AddDays(1), today)
+        )
         {
             var interval = TimeSpan.FromHours(
                 Math.Max(1, options.CoveredListingFetchIntervalHours)
