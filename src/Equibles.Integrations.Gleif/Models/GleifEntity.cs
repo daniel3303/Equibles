@@ -18,5 +18,10 @@ public class GleifEntity
     public string Category { get; set; }
     public string EntityStatus { get; set; }
     public string RegistrationStatus { get; set; }
+
+    // The register the entity is filed in (a GLEIF registration authority id such as RA000412) and its number
+    // there; null when GLEIF states none.
+    public string RegistrationAuthorityId { get; set; }
+    public string RegisteredAs { get; set; }
     public Uri SourceUrl { get; set; }
 }

@@ -17,3 +17,5 @@
   - `samsung-electronics-autocomplete.json` comes from `https://api.gleif.org/api/v1/autocompletions?field=fulltext&q=Samsung Electronics Co. Ltd.`. Two of its five suggestions ("SAMSUNG ELECTRONICS CO., LTD" and "Thai Samsung Electronics Co., Ltd.") carry no LEI.
   - `samsung-electronics-lei-records.json` comes from `/api/v1/lei-records?filter[lei]=254900SHHC9DE6P8N928,2549000PB5BA9MOMBQ96,254900UDOY5DHMH56386&page[size]=3`. GLEIF returns the three records in the reverse of the requested order.
 - On the same day, GLEIF's full-text search for "Google" did not return GOOGLE LLC (`7ZW8QJWVPR4P1J1KQY45`) in its first ten records, while autocomplete suggested it first.
+- Captured unchanged on 2026-10-20 for `GleifEntityClient.GetRegistered`:
+  - `toyota-registered-as.json` comes from `https://api.gleif.org/api/v1/lei-records?filter[entity.registeredAs]=1803-01-018771&page[size]=10`. Its one record is Toyota Motor Corporation (`5493006W3QUS5LMH6R84`), filed in Japan's commercial register (`RA000412`) under 1803-01-018771, which is Toyota's corporate number `1180301018771` without its leading check digit.

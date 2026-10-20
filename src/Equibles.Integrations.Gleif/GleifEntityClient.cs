@@ -12,6 +12,7 @@ namespace Equibles.Integrations.Gleif;
 public partial class GleifEntityClient
 {
     public const int MaxSearchResults = 20;
+    private const int MaxRegisteredCandidates = 10;
     private const int MaxQueryLength = 200;
 
     private readonly HttpClient _httpClient;
@@ -166,6 +167,56 @@ public partial class GleifEntityClient
         return entity;
     }
 
+    // The one active legal entity a national register files under this registration authority and number, or null
+    // when GLEIF holds none, several, or more than one page of candidates; a name is never consulted.
+    public virtual async Task<GleifEntity> GetRegistered(
+        string registrationAuthorityId,
+        string registeredAs,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!RegistrationAuthority().IsMatch(registrationAuthorityId ?? ""))
+            throw new ArgumentException(
+                "A GLEIF registration authority id is required.",
+                nameof(registrationAuthorityId)
+            );
+        if (string.IsNullOrWhiteSpace(registeredAs) || registeredAs.Length > MaxQueryLength)
+            throw new ArgumentException("A registered number is required.", nameof(registeredAs));
+        var source = new Uri(
+            GleifHttp.Origin,
+            "/api/v1/lei-records?filter%5Bentity.registeredAs%5D="
+                + Uri.EscapeDataString(registeredAs)
+                + "&page%5Bsize%5D="
+                + MaxRegisteredCandidates
+        );
+        var body = await GleifHttp.Read(_httpClient, source, _logger, cancellationToken);
+        return Parse(
+            body,
+            "GLEIF registration response has an invalid structure.",
+            root =>
+            {
+                var total = root.GetProperty("meta").GetProperty("pagination").GetProperty("total");
+                if (!total.TryGetInt32(out var count) || count < 0)
+                    throw new InvalidDataException("GLEIF total is invalid.");
+                var data = root.GetProperty("data");
+                if (data.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("GLEIF data must be an array.");
+                if (count > data.GetArrayLength())
+                    return null;
+                var matches = data.EnumerateArray()
+                    .Select(record => Entity(record, null))
+                    .Where(entity =>
+                        entity.RegistrationAuthorityId == registrationAuthorityId
+                        && entity.RegisteredAs == registeredAs
+                        && entity.EntityStatus == "ACTIVE"
+                        && entity.RegistrationStatus is "ISSUED" or "LAPSED"
+                    )
+                    .ToList();
+                return matches.Count == 1 ? matches[0] : null;
+            }
+        );
+    }
+
     // The entity's direct accounting parent, or null when GLEIF records none. The LEI must come from a GLEIF
     // record: GLEIF answers 404 both for an entity without a parent and for an LEI it does not hold.
     public virtual Task<GleifEntity> GetDirectParent(
@@ -244,6 +295,12 @@ public partial class GleifEntityClient
             Category = OptionalText(entity, "category"),
             EntityStatus = Text(entity, "status"),
             RegistrationStatus = Text(attributes.GetProperty("registration"), "status"),
+            RegistrationAuthorityId =
+                entity.TryGetProperty("registeredAt", out var registeredAt)
+                && registeredAt.ValueKind == JsonValueKind.Object
+                    ? OptionalText(registeredAt, "id")
+                    : null,
+            RegisteredAs = OptionalText(entity, "registeredAs"),
             SourceUrl = source ?? new Uri(GleifHttp.Origin, "/api/v1/lei-records/" + lei),
         };
         AddNames(result.OtherNames, entity, "otherNames", false);
@@ -328,4 +385,7 @@ public partial class GleifEntityClient
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Spaces();
+
+    [GeneratedRegex("^RA[0-9]{6}$")]
+    private static partial Regex RegistrationAuthority();
 }

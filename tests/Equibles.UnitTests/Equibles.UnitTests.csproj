@@ -112,6 +112,7 @@
     <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.HostedService\Equibles.FdaCatalysts.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Euronext\Equibles.Integrations.Euronext.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.OpenFigi\Equibles.Integrations.OpenFigi.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Esma\Equibles.Integrations.Esma.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.XbrlFilings\Equibles.Integrations.XbrlFilings.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Xetra\Equibles.Integrations.Xetra.csproj" />
