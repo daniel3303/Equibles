@@ -99,13 +99,20 @@ public class HolderStyleDescriptionsTests
             );
     }
 
-    [Fact]
-    public void BenchmarkSummary_UnmeasuredBookHasNone()
+    [Theory]
+    [InlineData(0.70)]
+    [InlineData(null)]
+    public void BenchmarkSummary_ARowNotYetRecomputedSaysSo(double? aggregateActiveShare)
     {
+        // A row measured before index benchmarks has only the combined-book active share, which
+        // is not the closest benchmark and must never read as one.
         var metrics = Metrics();
-        metrics.AggregateActiveShare = null;
+        metrics.AggregateActiveShare = (decimal?)aggregateActiveShare;
 
-        HolderStyleDescriptions.BenchmarkSummary(metrics).Should().BeNull();
+        HolderStyleDescriptions
+            .BenchmarkSummary(metrics)
+            .Should()
+            .Be("Closest benchmark: not yet computed");
     }
 
     [Fact]
@@ -329,7 +336,7 @@ public class HolderStyleDescriptionsTests
                 "tested in this order. Unknown: under $10,000,000 of valued equity or 5 stocks."
             )
             .And.Contain(
-                "Index-like (100+ stocks): active share of 20% or less against the closest benchmark, which is the S&P 500, S&P MidCap 400, S&P SmallCap 600, Russell 1000, Russell 2000, Nasdaq-100 or Dow Jones Industrial Average (weighted by an index-tracking fund's reported holdings or the index's constituents, nearest the quarter end) or every 13F filer's combined book, or index series holding 80%+"
+                "Index-like (100+ stocks): active share of 20% or less against the closest benchmark, which is the S&P 500, S&P MidCap 400, S&P SmallCap 600, Russell 1000, Russell 2000, Nasdaq-100 or Dow Jones Industrial Average (weighted by an index-tracking fund's reported holdings or the index's constituents nearest the quarter end, over the names resolved to companies, and only when those are 90%+ of its weight) or every 13F filer's combined book, or index series holding 80%+"
             )
             .And.Contain("equal to 50%+ of its book")
             .And.Contain("500+ stocks, 100%+ annual turnover and a top 10 weight of 25% or less")

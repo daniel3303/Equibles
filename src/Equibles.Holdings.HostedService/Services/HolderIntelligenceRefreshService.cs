@@ -10,9 +10,11 @@ using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
+using Equibles.Holdings.HostedService.Services.Benchmarks;
 using Equibles.Holdings.Repositories;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Equibles.Holdings.HostedService.Services;
 
@@ -55,18 +57,21 @@ public class HolderIntelligenceRefreshService
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly HoldingsCorpusCoverage _corpusCoverage;
     private readonly IEnumerable<IHolderBenchmarkProvider> _benchmarkProviders;
+    private readonly decimal _minimumBenchmarkCoverage;
     private readonly ILogger<HolderIntelligenceRefreshService> _logger;
 
     public HolderIntelligenceRefreshService(
         EquiblesFinancialDbContext dbContext,
         HoldingsCorpusCoverage corpusCoverage,
         IEnumerable<IHolderBenchmarkProvider> benchmarkProviders,
+        IOptions<HolderBenchmarkOptions> benchmarkOptions,
         ILogger<HolderIntelligenceRefreshService> logger
     )
     {
         _dbContext = dbContext;
         _corpusCoverage = corpusCoverage;
         _benchmarkProviders = benchmarkProviders;
+        _minimumBenchmarkCoverage = Math.Clamp(benchmarkOptions.Value.MinimumCoverage, 0, 1);
         _logger = logger;
     }
 
@@ -329,6 +334,7 @@ public class HolderIntelligenceRefreshService
                         ),
                     FirstCoveredQuarter = HolderTenureCalculator.QuarterIndex(firstQuarter).Value,
                     Benchmarks = benchmarks,
+                    MinimumBenchmarkCoverage = _minimumBenchmarkCoverage,
                     AggregateSectorWeights = aggregateSectorWeights,
                     AveragePrices = averagePrices,
                     PriorTurnovers = priorDates
@@ -683,7 +689,17 @@ public class HolderIntelligenceRefreshService
                 unknown.Key,
                 unknown.Source
             );
-        return HolderBenchmarkSelection.Choose(candidates, reportDate);
+        var chosen = HolderBenchmarkSelection.Choose(candidates, reportDate);
+        foreach (var thin in chosen.Where(c => c.Coverage < _minimumBenchmarkCoverage))
+            _logger.LogWarning(
+                "Holder benchmark {Key} from {Source} resolves {Coverage:P1} of its weight to issuers, under the {Minimum:P0} floor; it is stored but never the closest benchmark for {ReportDate}",
+                thin.Key,
+                thin.Source,
+                thin.Coverage,
+                _minimumBenchmarkCoverage,
+                reportDate
+            );
+        return chosen;
     }
 
     // Successor to predecessor for each comparable succession that pairs one filer with one, whose

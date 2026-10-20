@@ -46,6 +46,12 @@ public sealed record HolderQuarterInput
     public IReadOnlyList<HolderBenchmark> Benchmarks { get; init; } = [];
 
     /// <summary>
+    /// A benchmark resolved below this share of its weight is still measured and stored, but never
+    /// becomes the closest benchmark the index-like band reads.
+    /// </summary>
+    public decimal MinimumBenchmarkCoverage { get; init; } = HolderBenchmark.DefaultMinimumCoverage;
+
+    /// <summary>
     /// The combined 13F book's value per sector (<see cref="HolderSectorWeights"/>), the benchmark
     /// of sector active share; empty leaves it unmeasured.
     /// </summary>

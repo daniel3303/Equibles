@@ -285,6 +285,49 @@ public class HolderQuarterMetricsBuilderTests
             .OnlyContain(row => row.InstitutionalHolderId == Holder && row.ReportDate == Quarter);
     }
 
+    [Theory]
+    [InlineData(0.90, 0.90, HolderBenchmarkCatalog.Russell2000)]
+    [InlineData(0.8999, 0.90, HolderBenchmarkCatalog.Aggregate)]
+    [InlineData(0.80, 0.80, HolderBenchmarkCatalog.Russell2000)]
+    public void Build_ABenchmarkUnderTheCoverageFloorIsStoredButNeverTheClosest(
+        double coverage,
+        double floor,
+        string closest
+    )
+    {
+        // 120 equal positions that are the index, far from a combined book of other names.
+        var issuers = Enumerable.Range(0, 120).Select(_ => Guid.NewGuid()).ToList();
+        var weights = issuers.ToDictionary(issuer => issuer, _ => 1m);
+        var input = new HolderQuarterInput
+        {
+            InstitutionalHolderId = Holder,
+            ReportDate = Quarter,
+            Current = issuers.Select(issuer => Row(issuer, Quarter, 1_000, 100_000)).ToList(),
+            Benchmarks =
+            [
+                Benchmark(HolderBenchmarkCatalog.Russell2000, Quarter, weights, (decimal)coverage),
+                Aggregate(new Dictionary<Guid, decimal> { [Guid.NewGuid()] = 1 }),
+            ],
+            MinimumBenchmarkCoverage = (decimal)floor,
+        };
+
+        var result = HolderQuarterMetricsBuilder.Build(input, 6);
+
+        result.Metrics.ClosestBenchmark.Should().Be(closest);
+        result
+            .Metrics.StyleBand.Should()
+            .Be(
+                closest == HolderBenchmarkCatalog.Aggregate
+                    ? HolderStyleBand.DiversifiedActive
+                    : HolderStyleBand.IndexLike
+            );
+        var index = result.BenchmarkActiveShares.Single(row =>
+            row.BenchmarkKey == HolderBenchmarkCatalog.Russell2000
+        );
+        index.ActiveShare.Should().BeApproximately(0m, Tolerance);
+        index.Coverage.Should().Be((decimal)coverage);
+    }
+
     [Fact]
     public void Build_ATieKeepsThePublishedIndex()
     {

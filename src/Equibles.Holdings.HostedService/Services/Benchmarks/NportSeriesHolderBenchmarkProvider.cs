@@ -284,19 +284,18 @@ public class NportSeriesHolderBenchmarkProvider : IHolderBenchmarkProvider
             foreach (var holding in holdingsByFiling[filing.Id])
             {
                 total += holding.ValueUsd;
-                // An unresolved name keeps its weight under its own row id, a key no issuer has.
-                var key = holding.Id;
+                // Only resolved names weigh: no 13F book can hold an unresolved one, so keeping it
+                // would floor every book's active share at its weight. Coverage records the gap.
                 if (
-                    CusipOf(holding.Cusip, holding.Isin) is { } cusip
-                    && issuersByCusip.TryGetValue(cusip, out var target)
+                    CusipOf(holding.Cusip, holding.Isin) is not { } cusip
+                    || !issuersByCusip.TryGetValue(cusip, out var target)
                 )
-                {
-                    key = target.CommonStockId;
-                    resolved += holding.ValueUsd;
-                }
-                weights[key] = weights.GetValueOrDefault(key) + holding.ValueUsd;
+                    continue;
+                resolved += holding.ValueUsd;
+                weights[target.CommonStockId] =
+                    weights.GetValueOrDefault(target.CommonStockId) + holding.ValueUsd;
             }
-            if (total <= 0)
+            if (resolved <= 0)
                 continue;
             benchmarks.Add(
                 new HolderBenchmark

@@ -34,8 +34,9 @@ public class HolderQuarterlyBenchmarkActiveShare
     public decimal Overlap { get; set; }
 
     /// <summary>
-    /// The benchmark's weight in names resolved to a tracked issuer, from 0 to 1. An unresolved
-    /// name stays in the benchmark as a name no filer holds, so a low coverage raises active share.
+    /// The benchmark's weight in names resolved to a tracked issuer, from 0 to 1. Active share and
+    /// overlap are measured over the resolved names reweighted to sum to one, and a benchmark under
+    /// the minimum coverage is never the closest one.
     /// </summary>
     [Precision(12, 6)]
     public decimal Coverage { get; set; }

@@ -36,11 +36,15 @@ public static class HolderQuarterMetricsBuilder
         var concentration = HolderConcentrationCalculator.Measure(current);
         var issuerValues = HolderConcentrationCalculator.IssuerValues(current);
         var benchmarks = MeasureBenchmarks(input, issuerValues);
-        // Benchmarks arrive in catalog order, so a tie keeps the published index.
+        // Benchmarks arrive in catalog order, so a tie keeps the published index. A benchmark too
+        // little of which resolved to issuers is reported but never decides the band.
+        var eligible = benchmarks
+            .Where(row => row.Benchmark.Coverage >= input.MinimumBenchmarkCoverage)
+            .ToList();
         var closest =
-            benchmarks.Count == 0
+            eligible.Count == 0
                 ? default
-                : benchmarks.MinBy(row => row.Measurement.Value.ActiveShare);
+                : eligible.MinBy(row => row.Measurement.Value.ActiveShare);
         var sectorActiveShare = ActiveShareCalculator.ActiveShare(
             HolderSectorWeights.Of(issuerValues, input.IssuerSectors),
             input.AggregateSectorWeights

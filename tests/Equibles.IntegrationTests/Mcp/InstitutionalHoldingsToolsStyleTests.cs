@@ -274,9 +274,7 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             .And.Contain(
                 "| Horizon | Long horizon: value-weighted holding period 14.2 quarters (12+) |"
             )
-            .And.Contain(
-                "| Benchmark | Closest benchmark: every 13F filer's combined book, active share 70.0% |"
-            );
+            .And.Contain("| Benchmark | Closest benchmark: not yet computed |");
         december
             .Should()
             .Contain(

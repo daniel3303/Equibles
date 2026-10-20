@@ -222,7 +222,47 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RebuildQuarter_ATrackerNameWithoutAnIssuerStaysInTheIndex()
+    public async Task RebuildQuarter_ATrackerIsWeighedOverTheNamesThatResolve()
+    {
+        await SeedTrustBookAndReport(resolved: 95, unresolved: 5);
+
+        (await Rebuild(Q2)).Should().BeTrue();
+
+        var metrics = await Metrics(Q2);
+        metrics.ClosestBenchmark.Should().Be("dow-jones");
+        metrics.ClosestBenchmarkName.Should().Be("Dow Jones Industrial Average");
+        metrics
+            .ClosestActiveShare.Should()
+            .Be(0m, "the book holds every resolved name, reweighted to sum to one");
+        metrics.AggregateActiveShare.Should().Be(0.9m);
+        var row = await BenchmarkRow("dow-jones");
+        row.Coverage.Should().Be(0.95m);
+        row.Overlap.Should().Be(1m);
+        row.ActiveShare.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_ATrackerResolvedUnderTheFloorIsStoredButNeverTheClosest()
+    {
+        await SeedTrustBookAndReport(resolved: 75, unresolved: 25);
+
+        (await Rebuild(Q2)).Should().BeTrue();
+
+        var row = await BenchmarkRow("dow-jones");
+        row.Coverage.Should().Be(0.75m);
+        row.ActiveShare.Should().Be(0m, "the book matches the resolved three quarters exactly");
+        var metrics = await Metrics(Q2);
+        metrics
+            .ClosestBenchmark.Should()
+            .Be("13f-aggregate", "a benchmark under 90% coverage never decides the band");
+        metrics.ClosestActiveShare.Should().Be(0.9m);
+        metrics.StyleBand.Should().NotBe(HolderStyleBand.IndexLike);
+    }
+
+    // The filer holds only First; another filer holds Apple nine times over. The Dow tracker is a
+    // unit investment trust, filing without a series id and read by its own CIK, whose report
+    // holds First and a CUSIP no issuer has.
+    private async Task SeedTrustBookAndReport(int resolved, int unresolved)
     {
         var first = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "AAA",
@@ -230,13 +270,18 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             Cusip: "000111AA1"
         );
         var other = new InstitutionalHolder { Cik = "0000000004", Name = "Other Filer" };
-        // A unit investment trust files without a series id and is read by its own CIK.
         var trust = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "DIA",
             Name: "Average Trust",
             Cik: "0001041130"
         );
-        var report = Tracker(null, Q2, reported: null, ("000111AA1", 75), ("999999ZZ9", 25));
+        var report = Tracker(
+            null,
+            Q2,
+            reported: null,
+            ("000111AA1", resolved),
+            ("999999ZZ9", unresolved)
+        );
         report.RegistrantCik = null;
         report.EquityIssuerId = trust.Id;
         await Seed(seed =>
@@ -249,20 +294,13 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
                 Holding(_apple, other, Q2, 100, 900_000)
             );
         });
+    }
 
-        (await Rebuild(Q2)).Should().BeTrue();
-
-        var metrics = await Metrics(Q2);
-        metrics.ClosestBenchmark.Should().Be("dow-jones");
-        metrics.ClosestBenchmarkName.Should().Be("Dow Jones Industrial Average");
-        metrics.ClosestActiveShare.Should().Be(0.25m, "the unresolved quarter is held by no one");
+    private async Task<HolderQuarterlyBenchmarkActiveShare> BenchmarkRow(string key)
+    {
         await using var read = _fixture.CreateDbContext();
-        var row = await read.Set<HolderQuarterlyBenchmarkActiveShare>()
-            .SingleAsync(row =>
-                row.InstitutionalHolderId == _holder.Id && row.BenchmarkKey == "dow-jones"
-            );
-        row.Coverage.Should().Be(0.75m);
-        row.Overlap.Should().Be(0.75m);
+        return await read.Set<HolderQuarterlyBenchmarkActiveShare>()
+            .SingleAsync(row => row.InstitutionalHolderId == _holder.Id && row.BenchmarkKey == key);
     }
 
     [Fact]
@@ -1487,6 +1525,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             dbContext,
             corpusCoverage,
             [new AggregateHolderBenchmarkProvider(dbContext)],
+            Options.Create(new HolderBenchmarkOptions()),
             NullLogger<HolderIntelligenceRefreshService>.Instance
         )
     {

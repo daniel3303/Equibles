@@ -12,6 +12,12 @@ public class HolderBenchmarkOptions
 
     public List<HolderBenchmarkTracker> Trackers { get; set; } = [];
 
+    /// <summary>
+    /// The least share of a benchmark's weight that must resolve to issuers for it to be the
+    /// closest benchmark (<see cref="HolderBenchmark.DefaultMinimumCoverage"/> explains 0.90).
+    /// </summary>
+    public decimal MinimumCoverage { get; set; } = HolderBenchmark.DefaultMinimumCoverage;
+
     public IReadOnlyList<HolderBenchmarkTracker> EffectiveTrackers =>
         Trackers is { Count: > 0 } ? Trackers : Defaults;
 

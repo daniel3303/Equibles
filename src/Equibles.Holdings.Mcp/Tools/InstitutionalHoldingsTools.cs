@@ -2462,7 +2462,7 @@ public class InstitutionalHoldingsTools
             return;
         result.AppendLine();
         result.AppendLine(
-            $"**Active share by benchmark, {FormatDate(reportDate)}** (overlap is the benchmark's weight in names the filer holds; coverage is the benchmark's weight matched to tracked stocks):"
+            $"**Active share by benchmark, {FormatDate(reportDate)}** (measured over the benchmark names matched to tracked stocks; overlap is the benchmark's weight in names the filer holds; coverage is the share of the benchmark's weight matched, and one under {(int)(HolderBenchmark.DefaultMinimumCoverage * 100)}% is never the closest):"
         );
         result.AppendLine();
         result.AppendLine("| Benchmark | As of | Active share | Overlap | Coverage |");
