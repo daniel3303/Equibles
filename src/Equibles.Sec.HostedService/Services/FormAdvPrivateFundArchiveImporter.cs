@@ -15,9 +15,9 @@ namespace Equibles.Sec.HostedService.Services;
 /// Imports Schedule D 7.B.(1) private funds from SEC's Form ADV filing archive, which ends with
 /// filings submitted on 2024-12-31 (SEC publishes later Schedule D data only per firm). Each
 /// fund row names only its filing, so the archive's base table supplies the filing's CRD and
-/// submission date. Funds are summed by type per filing, and an adviser's filing is kept only
-/// when its sums differ from its previous kept filing. Only the needed tables are read, with
-/// byte-range requests, instead of the whole 1.1 GB archive.
+/// submission date. Funds are summed by type per filing, and every filing of an adviser from its
+/// first one listing funds is kept, so a repeat of unchanged figures still dates them. Only the
+/// needed tables are read, with byte-range requests, instead of the whole 1.1 GB archive.
 /// </summary>
 [Service]
 public class FormAdvPrivateFundArchiveImporter
@@ -106,7 +106,7 @@ public class FormAdvPrivateFundArchiveImporter
             using (var reader = OpenTable(archives, filingTable))
                 filings = ReadFilings(CsvRecordReader.Read(reader), funds.Keys.ToHashSet());
 
-            var rows = Collapse(filings, funds, registration);
+            var rows = Filings(filings, funds, registration);
             await Replace(registration, rows, cancellationToken);
             _logger.LogInformation(
                 "Form ADV archive {Roster}: {Funds} filings list private funds, {Unmatched} without a filing record; kept {Kept} filings of {Advisers} advisers",
@@ -226,10 +226,11 @@ public class FormAdvPrivateFundArchiveImporter
     }
 
     /// <summary>
-    /// Each adviser's filings in submission order, kept only when their fund sums differ from the
-    /// previous kept filing; a filing without funds is kept only after one with funds.
+    /// Each adviser's filings from its first one listing private funds, in submission order. A
+    /// filing repeating unchanged figures is kept, since its date is what makes them recent; a
+    /// filing without funds records that the adviser listed none then.
     /// </summary>
-    internal static List<FormAdvPrivateFundFiling> Collapse(
+    internal static List<FormAdvPrivateFundFiling> Filings(
         IEnumerable<FormAdvFilingRow> filings,
         IReadOnlyDictionary<int, FormAdvPrivateFundSums> funds,
         FormAdvRegistration registration
@@ -238,17 +239,16 @@ public class FormAdvPrivateFundArchiveImporter
         var kept = new List<FormAdvPrivateFundFiling>();
         foreach (var adviser in filings.DistinctBy(filing => filing.FilingId).GroupBy(f => f.Crd))
         {
-            FormAdvPrivateFundSums previous = null;
+            var listed = false;
             foreach (
                 var filing in adviser.OrderBy(filing => filing.FiledOn).ThenBy(f => f.FilingId)
             )
             {
                 var current =
                     funds.GetValueOrDefault(filing.FilingId) ?? FormAdvPrivateFundSums.None;
-                if (previous == null ? current.FundCount == 0 : current.SameAs(previous))
-                    continue;
-                kept.Add(current.ToFiling(filing, registration));
-                previous = current;
+                listed |= current.FundCount > 0;
+                if (listed)
+                    kept.Add(current.ToFiling(filing, registration));
             }
         }
         return kept;

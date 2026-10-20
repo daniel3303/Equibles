@@ -6,9 +6,10 @@ namespace Equibles.Sec.Data.Models;
 /// <summary>
 /// The private funds one Form ADV filing lists on Schedule D 7.B.(1), counted and summed by fund
 /// type, from SEC's Form ADV filing archive. SEC's bulk archive ends with filings submitted on
-/// 2024-12-31, so every row is a dated snapshot, never a current figure. A filing is kept only
-/// when its sums differ from the adviser's previous kept filing; a kept filing with no funds
-/// records that the adviser stopped listing them.
+/// 2024-12-31, so every row is a dated snapshot, never a current figure. Every filing of an
+/// adviser from its first one listing funds is kept, a repeat of unchanged figures included, so
+/// the newest filing on or before a date says how recent its figures are; a filing with no funds
+/// records that the adviser listed none then.
 /// </summary>
 [Index(nameof(Registration), nameof(FilingId), IsUnique = true)]
 [Index(nameof(Crd), nameof(FiledOn))]

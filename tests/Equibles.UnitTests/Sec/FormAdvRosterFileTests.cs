@@ -80,6 +80,17 @@ public class FormAdvRosterFileTests
         adviser.LatestFilingDate.Should().Be(new DateOnly(2019, 10, 23));
     }
 
+    [Fact]
+    public void FilingDate_ReadsAnUnpaddedMonthAndDay()
+    {
+        // SEC's June 2022 exempt reporting adviser roster writes 3/18/2022.
+        var csv = "Organization CRD#,Firm Type,Latest ADV Filing Date\n231,ERA,3/8/2022\n";
+
+        var adviser = FormAdvCsvParser.Parse(new StringReader(csv)).Single();
+
+        adviser.LatestFilingDate.Should().Be(new DateOnly(2022, 3, 8));
+    }
+
     private static MemoryStream ZipOf(string path, string entryName)
     {
         var buffer = new MemoryStream();

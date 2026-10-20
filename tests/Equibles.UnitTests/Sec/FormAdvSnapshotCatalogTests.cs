@@ -144,6 +144,42 @@ public class FormAdvSnapshotCatalogTests
     }
 
     [Fact]
+    public void All_ExemptRostersUnderEitherLabel_FormOneHistory()
+    {
+        // SEC labelled exempt rosters "Exempt Reporting Advisers" through January 2024 and for
+        // March and April 2026.
+        var html = """
+            <a href="/files/ia050126-exempt.zip">Exempt Investment Advisers, May 2026</a>
+            <a href="/files/ia040126-exempt.zip">Exempt Reporting Advisers, April 2026</a>
+            <a href="/files/ia020124-exempt.xlsx">Exempt Investment Advisers, February 2024</a>
+            <a href="/files/ia010224-exempt.xlsx">Exempt Reporting Advisers, January 2024</a>
+            <a href="/files/ia120219-exempt.zip">Exempt Reporting Advisers, December 2019</a>
+            <a href="/files/ia110119-exempt.zip">Exempt Reporting Advisers, November 2019</a>
+            """;
+
+        var rosters = FormAdvSnapshotCatalog.All(
+            html,
+            FormAdvRegistration.ExemptReporting,
+            new DateOnly(2019, 12, 1)
+        );
+
+        rosters
+            .Select(roster => roster.ReportDate)
+            .Should()
+            .Equal(
+                new DateOnly(2019, 12, 1),
+                new DateOnly(2024, 1, 1),
+                new DateOnly(2024, 2, 1),
+                new DateOnly(2026, 4, 1),
+                new DateOnly(2026, 5, 1)
+            );
+        FormAdvSnapshotCatalog
+            .Latest(html, FormAdvRegistration.ExemptReporting)
+            .ReportDate.Should()
+            .Be(new DateOnly(2026, 5, 1));
+    }
+
+    [Fact]
     public void All_AmbiguousMonth_IsPassedOverLikeAMonthWithoutData()
     {
         var html =

@@ -260,13 +260,14 @@ public static class FormAdvCsvParser
     private static bool? ParseOptionalYesNo(string value) =>
         value == null ? null : ParseYesNo(value);
 
-    // Spreadsheet rosters store dates as Excel serial numbers (43761 is 2019-10-23).
+    // Some CSV rosters leave month and day unpadded (3/18/2022); spreadsheet rosters store dates
+    // as Excel serial numbers (43761 is 2019-10-23).
     private static DateOnly? ParseDate(string value)
     {
         if (
             DateOnly.TryParseExact(
                 value,
-                "MM/dd/yyyy",
+                ["MM/dd/yyyy", "M/d/yyyy"],
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
                 out var date

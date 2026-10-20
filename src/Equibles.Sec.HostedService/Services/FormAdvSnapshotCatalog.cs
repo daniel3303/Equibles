@@ -8,8 +8,15 @@ internal static class FormAdvSnapshotCatalog
 {
     internal const string PageUrl =
         "https://www.sec.gov/data-research/sec-markets-data/information-about-registered-investment-advisers-exempt-reporting-advisers";
-    private const string RegisteredLabel = "Registered Investment Advisers, ";
-    private const string ExemptLabel = "Exempt Investment Advisers, ";
+    private static readonly string[] RegisteredLabels = ["Registered Investment Advisers, "];
+
+    // SEC labels exempt rosters "Exempt Reporting Advisers" through January 2024 and again for
+    // March and April 2026, "Exempt Investment Advisers" otherwise.
+    private static readonly string[] ExemptLabels =
+    [
+        "Exempt Investment Advisers, ",
+        "Exempt Reporting Advisers, ",
+    ];
 
     /// <summary>
     /// The newest published roster of one kind. A month SEC published as a PDF notice (the
@@ -101,7 +108,8 @@ internal static class FormAdvSnapshotCatalog
         FormAdvRegistration registration
     )
     {
-        var label = registration == FormAdvRegistration.Registered ? RegisteredLabel : ExemptLabel;
+        var labels =
+            registration == FormAdvRegistration.Registered ? RegisteredLabels : ExemptLabels;
         var document = new HtmlDocument();
         document.LoadHtml(html);
         var snapshots = new List<FormAdvSnapshot>();
@@ -111,7 +119,10 @@ internal static class FormAdvSnapshotCatalog
         )
         {
             var text = HtmlEntity.DeEntitize(link.InnerText).Trim();
-            if (!text.StartsWith(label, StringComparison.Ordinal))
+            var label = labels.FirstOrDefault(prefix =>
+                text.StartsWith(prefix, StringComparison.Ordinal)
+            );
+            if (label == null)
                 continue;
             var month = text[label.Length..].Split(" - ", 2, StringSplitOptions.None)[0];
             if (

@@ -33,12 +33,6 @@ internal sealed class FormAdvPrivateFundSums
 
     internal long Assets(FormAdvPrivateFundType type) => _assets[(int)type];
 
-    internal bool SameAs(FormAdvPrivateFundSums other) =>
-        FundCount == other.FundCount
-        && GrossAssets == other.GrossAssets
-        && _counts.AsSpan().SequenceEqual(other._counts)
-        && _assets.AsSpan().SequenceEqual(other._assets);
-
     internal FormAdvPrivateFundFiling ToFiling(
         FormAdvFilingRow filing,
         FormAdvRegistration registration

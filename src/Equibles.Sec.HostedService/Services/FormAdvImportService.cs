@@ -79,8 +79,8 @@ public class FormAdvImportService : IImporter
     }
 
     /// <summary>
-    /// The first roster the version history reads. SEC publishes exempt reporting adviser rosters
-    /// only from February 2024, so that history starts there.
+    /// The first roster the version history reads, for registered and exempt reporting advisers
+    /// alike.
     /// </summary>
     internal static readonly DateOnly HistoryStart = new(2019, 12, 1);
 

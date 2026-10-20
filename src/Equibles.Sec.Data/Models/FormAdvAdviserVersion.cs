@@ -18,8 +18,7 @@ namespace Equibles.Sec.Data.Models;
 /// stretch but not hashed, since a new filing often changes nothing tracked.
 /// </para>
 /// <para>
-/// Registered-adviser history starts with the December 2019 roster; SEC publishes exempt
-/// reporting adviser rosters only from February 2024.
+/// The history of both rosters starts with SEC's December 2019 roster.
 /// </para>
 /// </summary>
 [Index(nameof(Crd), nameof(Registration), nameof(ReportDate), IsUnique = true)]

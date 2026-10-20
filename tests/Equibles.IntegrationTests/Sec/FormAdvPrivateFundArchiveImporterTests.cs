@@ -17,7 +17,8 @@ namespace Equibles.IntegrationTests.Sec;
 /// <summary>
 /// The Schedule D 7.B.(1) archive import against Postgres: tables are read from SEC's two-part
 /// archive by byte range, funds are summed by type per filing and joined to the filing's CRD and
-/// date, repeats collapse, and each part is recorded in its ledger so it is read once.
+/// date, every filing from the first listing funds is kept, and each part is recorded in its
+/// ledger so it is read once.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FormAdvPrivateFundArchiveImporterTests : IAsyncLifetime
@@ -40,7 +41,7 @@ public class FormAdvPrivateFundArchiveImporterTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ImportNext_ReadsEachPartOnce_AndKeepsOnlyChangedFilings()
+    public async Task ImportNext_ReadsEachPartOnce_AndKeepsEveryFilingFromTheFirstListingFunds()
     {
         var (client, requests) = ArchiveClient();
         var sut = new FormAdvPrivateFundArchiveImporter(
@@ -63,8 +64,11 @@ public class FormAdvPrivateFundArchiveImporterTests : IAsyncLifetime
             .Where(filing => filing.Registration == FormAdvRegistration.Registered)
             .OrderBy(filing => filing.FiledOn)
             .ToListAsync();
-        // Filing 11 repeats filing 10, so only 10, the changed 12 and the empty 13 remain.
-        registered.Select(filing => filing.FilingId).Should().Equal(10, 12, 13);
+        // Filing 11 repeats filing 10 and is kept, since its later date is what keeps the
+        // figures recent; 13 lists no funds after funds were listed.
+        registered.Select(filing => filing.FilingId).Should().Equal(10, 11, 12, 13);
+        registered[1].FiledOn.Should().Be(new DateOnly(2023, 6, 2));
+        registered[1].HedgeFundGrossAssets.Should().Be(1_000);
         registered[0].Crd.Should().Be(105958);
         registered[0].FiledOn.Should().Be(new DateOnly(2023, 3, 28));
         registered[0].FundCount.Should().Be(3);
@@ -72,8 +76,8 @@ public class FormAdvPrivateFundArchiveImporterTests : IAsyncLifetime
         registered[0].HedgeFundCount.Should().Be(2);
         registered[0].HedgeFundGrossAssets.Should().Be(1_000);
         registered[0].PrivateEquityFundCount.Should().Be(1);
-        registered[1].HedgeFundGrossAssets.Should().Be(1_500);
-        registered[2].FundCount.Should().Be(0, "a filing after funds stopped records it");
+        registered[2].HedgeFundGrossAssets.Should().Be(1_500);
+        registered[3].FundCount.Should().Be(0, "a filing after funds stopped records it");
 
         var exempt = await verify
             .Set<FormAdvPrivateFundFiling>()

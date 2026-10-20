@@ -2313,9 +2313,7 @@ public class InstitutionalHoldingsTools
                 result.AppendLine(
                     $"_{changes.Count - AdviserHistoryRows} earlier changes not shown._"
                 );
-            result.AppendLine(
-                "_The history starts with SEC's December 2019 roster (February 2024 for exempt reporting advisers)._"
-            );
+            result.AppendLine("_The history starts with SEC's December 2019 roster._");
         }
         if (scheduleD != null)
         {
