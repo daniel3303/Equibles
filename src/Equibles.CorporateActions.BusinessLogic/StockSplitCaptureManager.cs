@@ -124,7 +124,7 @@ public class StockSplitCaptureManager
         if (
             expectedDelistedOn.HasValue
             && await _stockRepository
-                .GetForeignSymbolClaims(stock.Id, listing.Ticker, expectedDelistedOn.Value)
+                .GetForeignSymbolClaims(commonStockId, listing.Ticker, expectedDelistedOn.Value)
                 .AnyAsync(cancellationToken)
         )
         {
