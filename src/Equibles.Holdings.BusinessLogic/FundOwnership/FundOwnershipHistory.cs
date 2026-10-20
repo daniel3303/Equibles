@@ -16,6 +16,9 @@ public sealed class FundOwnershipHistory
     /// <summary>Today's shares outstanding of the presentation security; null when unknown.</summary>
     public long? SharesOutstanding { get; init; }
 
+    /// <summary>Why no percentage of shares outstanding is given, or null when one is.</summary>
+    public string PercentUnavailable { get; init; }
+
     /// <summary>Why there is nothing to show, or null.</summary>
     public string Unavailable { get; init; }
 

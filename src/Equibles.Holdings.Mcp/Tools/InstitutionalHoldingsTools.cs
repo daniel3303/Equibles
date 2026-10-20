@@ -945,7 +945,7 @@ public class InstitutionalHoldingsTools
             $"| Fund type | {string.Join(" | ", quarters.Select(quarter => FormatDate(quarter.ReportDate)))} | Chg (QoQ) | Series | Report dates |";
         var separator = $"|---|{string.Join("|", quarters.Select(_ => "---"))}|---|---|---|";
         var result = MarkdownTable.Start(
-            $"Registered-fund ownership of {StockListingLabel(stock, ticker)} by N-CEN fund type: each bucket's shares {(percent ? "as % of shares outstanding" : "(shares outstanding unknown, so share counts)")}",
+            $"Registered-fund ownership of {StockListingLabel(stock, ticker)} by N-CEN fund type: each bucket's shares {(percent ? "as % of shares outstanding" : $"as share counts ({history.PercentUnavailable ?? "a split after a quarter end could not be attributed"})")}",
             header,
             separator
         );

@@ -85,7 +85,12 @@ public class FundOwnershipReader
             .GetEffectiveByStock(stock.Id, today)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-        var sharesOutstanding = stock.Presentation.Listing.Security?.SharesOutstanding;
+        // Shares outstanding counts the whole company, so a sibling class or another fund of the
+        // trust read on its own shows share counts only, as the holder list does.
+        var otherListing = exactListing && listingKey != null;
+        var sharesOutstanding = otherListing
+            ? null
+            : stock.Presentation.Listing.Security?.SharesOutstanding;
         var outstanding = sharesOutstanding > 0 ? sharesOutstanding : null;
 
         var quarters = states
@@ -130,15 +135,20 @@ public class FundOwnershipReader
             ExactListing = exactListing,
             Quarters = quarters,
             SharesOutstanding = outstanding,
+            PercentUnavailable =
+                otherListing ? "shares outstanding is an issuer-wide count, not one listing's"
+                : outstanding == null ? "no shares outstanding count is on record"
+                : null,
         };
     }
 
     /// <summary>
-    /// Every issuer's registered-fund shares of its primary listing in the newest computed quarter,
-    /// restated onto today's split basis: the index funds' and index ETFs' shares and every fund's.
-    /// Sibling classes are left out, so the figures divide by the primary security's shares
-    /// outstanding. An issuer whose split basis after the quarter cannot be attributed is listed as
-    /// unresolved.
+    /// Every issuer's registered-fund shares in the newest computed quarter, restated onto today's
+    /// split basis: the index funds' and index ETFs' shares and every fund's. An operating company
+    /// counts every class of its common stock, as its 13F holder mix does, so the figures divide by
+    /// its issuer-wide shares outstanding; an exchange-traded product counts its own listing only,
+    /// since a trust's other listings are other funds. An issuer whose split basis after the
+    /// quarter cannot be attributed is listed as unresolved.
     /// </summary>
     public Task<FundIndexOwnershipSnapshot> ReadLatestByIssuer(
         CancellationToken cancellationToken = default
@@ -169,10 +179,7 @@ public class FundOwnershipReader
                 new HashSet<Guid>()
             );
 
-        var quarterRows = _repository
-            .GetByQuarter(reportDate)
-            .AsNoTracking()
-            .Where(row => row.ListedTicker == null);
+        var quarterRows = _repository.GetByQuarter(reportDate).AsNoTracking();
         if (issuerIds != null)
             quarterRows = quarterRows.Where(row => issuerIds.Contains(row.EquityIssuerId));
         var rows = await quarterRows
@@ -204,12 +211,18 @@ public class FundOwnershipReader
         )
             .GroupBy(split => split.EquityIssuerId)
             .ToDictionary(group => group.Key, group => group.ToList());
-        var splitIssuers = splits.Keys.ToList();
+        // Listings place a sibling row's split history and tell a fund trust from a company.
+        var listingIssuers = splits
+            .Keys.Concat(
+                rows.Where(row => row.ListedTicker != null).Select(row => row.EquityIssuerId)
+            )
+            .Distinct()
+            .ToList();
         var listings =
-            splitIssuers.Count == 0
+            listingIssuers.Count == 0
                 ? []
                 : await _repository
-                    .GetUsListings(splitIssuers)
+                    .GetUsListings(listingIssuers)
                     .AsNoTracking()
                     .ToListAsync(cancellationToken);
         var listingsByIssuer = listings
@@ -222,11 +235,18 @@ public class FundOwnershipReader
         {
             if (excluded.Contains(row.EquityIssuerId))
                 continue;
+            var issuerListings = listingsByIssuer.GetValueOrDefault(row.EquityIssuerId) ?? [];
+            if (
+                row.ListedTicker != null
+                && issuerListings.Any(listing =>
+                    listing.IsPresentation && listing.IsReferenceListed
+                )
+            )
+                continue;
             long indexShares = row.IndexShares,
                 fundShares = row.FundShares;
             if (splits.TryGetValue(row.EquityIssuerId, out var issuerSplits))
             {
-                var issuerListings = listingsByIssuer.GetValueOrDefault(row.EquityIssuerId) ?? [];
                 var primary = issuerListings.FirstOrDefault(listing => listing.IsPresentation);
                 var listing =
                     row.ListedTicker == null

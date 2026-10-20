@@ -74,6 +74,7 @@ public class FundOwnershipRepository : BaseRepository<StockQuarterlyFundOwnershi
                 ListingId = listing.Id,
                 Ticker = listing.Ticker,
                 IsPresentation = listing.Security.Issuer.Presentation.EquityListingId == listing.Id,
+                IsReferenceListed = listing.IsReferenceListed,
             });
 }
 
@@ -84,4 +85,7 @@ public class FundOwnershipListing
     public Guid ListingId { get; set; }
     public string Ticker { get; set; }
     public bool IsPresentation { get; set; }
+
+    /// <summary>An exchange-traded product's listing, from the security-type reference feed.</summary>
+    public bool IsReferenceListed { get; set; }
 }

@@ -210,6 +210,90 @@ public class FundOwnershipRefreshServiceTests : ParadeDbMcpTestBase
             );
     }
 
+    // Shares outstanding counts the whole company: an operating company's figures sum every class
+    // of its stock, a single class read on its own gives share counts only, and an exchange-traded
+    // trust's other listings are other funds.
+    [Fact]
+    public async Task Reader_CountsEveryClassAgainstTheIssuerWideShareCount()
+    {
+        var company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Two Class Corp",
+            Cik: "0001652044",
+            SharesOutStanding: 1_000
+        );
+        var trust = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TRST",
+            Name: "Exchange Traded Trust",
+            Cik: "0001100663",
+            SharesOutStanding: 1_000
+        );
+        DbContext.AddRange(company, trust);
+        Equibles
+            .TestSupport.NativeListingSeed.ForStock(DbContext, company, "GOOG")
+            .IsDirectoryListed = true;
+        Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, trust, "TRS2");
+        trust.Presentation.Listing.IsReferenceListed = true;
+        DbContext.Add(
+            new FundOwnershipQuarterState
+            {
+                ReportDate = Q2,
+                InputFingerprint = "fp",
+                ComputedAt = DateTime.UtcNow,
+            }
+        );
+        DbContext.AddRange(
+            FundRow(company, null, FundOwnershipBucket.IndexEtf, 60),
+            FundRow(company, "GOOG", FundOwnershipBucket.IndexEtf, 40),
+            FundRow(company, "GOOG", FundOwnershipBucket.ActiveFund, 10),
+            FundRow(trust, null, FundOwnershipBucket.IndexFund, 10),
+            FundRow(trust, "TRS2", FundOwnershipBucket.IndexFund, 90)
+        );
+        await DbContext.SaveChangesAsync();
+        var reader = new FundOwnershipReader(
+            new FundOwnershipRepository(DbContext),
+            new StockSplitRepository(DbContext)
+        );
+
+        var byIssuer = await reader.ReadByIssuer(Q2, [company.Id, trust.Id]);
+        byIssuer.ByIssuer[company.Id].Should().Be(new IssuerFundShares(100, 110));
+        byIssuer.IndexFraction(company.Id, 1_000).Should().Be(0.1m);
+        byIssuer.ByIssuer[trust.Id].Should().Be(new IssuerFundShares(10, 10));
+
+        var whole = await reader.ReadRecent(company, "GOOGL");
+        whole.Latest.Total.Shares.Should().Be(110);
+        whole.Latest.IndexPercentOfOutstanding.Should().Be(10m);
+        whole.PercentUnavailable.Should().BeNull();
+
+        var sibling = await reader.ReadRecent(company, "GOOG");
+        sibling.ExactListing.Should().BeTrue();
+        sibling.Latest.Total.Shares.Should().Be(50);
+        sibling.Latest.Total.PercentOfOutstanding.Should().BeNull();
+        sibling.SharesOutstanding.Should().BeNull();
+        sibling
+            .PercentUnavailable.Should()
+            .Be("shares outstanding is an issuer-wide count, not one listing's");
+    }
+
+    private static StockQuarterlyFundOwnership FundRow(
+        EquityIssuer issuer,
+        string listedTicker,
+        FundOwnershipBucket bucket,
+        long shares
+    ) =>
+        new()
+        {
+            EquityIssuerId = issuer.Id,
+            ListedTicker = listedTicker,
+            ReportDate = Q2,
+            Bucket = bucket,
+            Shares = shares,
+            Value = shares * 10m,
+            SeriesCount = 1,
+            OldestReportPeriod = Q2,
+            NewestReportPeriod = Q2,
+        };
+
     private Task<bool> Rebuild(string fingerprint = "fp-1") =>
         Service().RebuildQuarter(Q2, fingerprint, Today, default);
 
