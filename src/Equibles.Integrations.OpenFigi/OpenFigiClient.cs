@@ -39,12 +39,11 @@ public sealed partial class OpenFigiClient(HttpClient http, ILogger<OpenFigiClie
             })
         ).ToString(Formatting.None);
         using var response = await HttpRetry.Send(
-            () =>
-                http.PostAsync(
-                    MappingUrl,
-                    new StringContent(body, Encoding.UTF8, "application/json"),
-                    token
-                ),
+            async () =>
+            {
+                using var content = new StringContent(body, Encoding.UTF8, "application/json");
+                return await http.PostAsync(MappingUrl, content, token);
+            },
             Pace,
             3,
             "OpenFIGI kept failing.",
