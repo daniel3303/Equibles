@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020093116_AddFundOwnership")]
+    [Migration("20261020104959_AddFundOwnership")]
     partial class AddFundOwnership
     {
         /// <inheritdoc />
@@ -3721,9 +3721,6 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<int>("Classification")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("ConfidentialTreatmentRequested")
                         .HasColumnType("boolean");
 
@@ -3758,8 +3755,6 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("Cik")
                         .IsUnique();
-
-                    b.HasIndex("Classification");
 
                     b.HasIndex("Name");
 
