@@ -51,9 +51,9 @@ public sealed class StockHolderRow
 
     /// <summary>
     /// The purpose a 13D states in Item 4, as <see cref="IBeneficialOwnershipPurposeSource"/>
-    /// describes it; null for other sources or without a reading.
+    /// reads it; null for other sources or without a reading.
     /// </summary>
-    public string Purpose { get; set; }
+    public StatedPurpose Purpose { get; set; }
 
     /// <summary>A 13F row carried from the previous quarter while its filer has not filed the open one.</summary>
     public bool Carried { get; init; }

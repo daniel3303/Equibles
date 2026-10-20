@@ -142,7 +142,7 @@ public class StockBeneficialOwnershipReader
             .ThenBy(block => block.FilerName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(block => block.AccessionNumber, StringComparer.Ordinal)
             .ToList();
-        await StockOwnershipReader.DescribePurposes(
+        await StockOwnershipReader.ReadPurposes(
             blocks.Where(block => block.FilingType == FilingType.Schedule13D).ToList(),
             block => block.AccessionNumber,
             (block, purpose) => block.Purpose = purpose,

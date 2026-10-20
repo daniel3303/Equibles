@@ -150,7 +150,7 @@ public class StockOwnershipReader
         var rows = new List<StockHolderRow>();
         foreach (var contributor in _contributors)
             rows.AddRange(await contributor.Read(scope, cancellationToken));
-        await DescribePurposes(
+        await ReadPurposes(
             rows.Where(row => row.Source == StockHolderSource.Schedule13D).ToList(),
             row => row.Accession,
             (row, purpose) => row.Purpose = purpose,
@@ -298,10 +298,10 @@ public class StockOwnershipReader
     }
 
     /// <summary>Sets each 13D's Item 4 purpose from the deployment's source, when it has one.</summary>
-    internal static async Task DescribePurposes<T>(
+    internal static async Task ReadPurposes<T>(
         IReadOnlyList<T> schedules13D,
         Func<T, string> accessionOf,
-        Action<T, string> setPurpose,
+        Action<T, StatedPurpose> setPurpose,
         IBeneficialOwnershipPurposeSource purposeSource,
         CancellationToken cancellationToken
     )
@@ -313,7 +313,7 @@ public class StockOwnershipReader
             .ToList();
         if (purposeSource == null || accessions.Count == 0)
             return;
-        var purposes = await purposeSource.Describe(accessions, cancellationToken);
+        var purposes = await purposeSource.Read(accessions, cancellationToken);
         foreach (var schedule in schedules13D)
             if (
                 accessionOf(schedule) is { } accession

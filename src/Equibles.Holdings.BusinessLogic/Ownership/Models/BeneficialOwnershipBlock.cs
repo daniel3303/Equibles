@@ -35,7 +35,7 @@ public sealed class BeneficialOwnershipBlock
 
     /// <summary>
     /// The purpose a 13D states in Item 4, as <see cref="IBeneficialOwnershipPurposeSource"/>
-    /// describes it; null for a 13G or without a reading.
+    /// reads it; null for a 13G or without a reading.
     /// </summary>
-    public string Purpose { get; set; }
+    public StatedPurpose Purpose { get; set; }
 }

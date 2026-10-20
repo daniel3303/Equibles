@@ -223,7 +223,13 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Purposes_DescribeEach13DOnTheListAndTheRecord()
     {
-        var purposes = new StubPurposes("d-act-1", "Control or board");
+        var purposes = new StubPurposes(
+            "d-act-1",
+            new StatedPurpose(
+                StatedPurposeState.Stated,
+                [new("ControlOrBoard", "Control or board seats", "We intend to seek board seats.")]
+            )
+        );
         var tools = new StockOwnershipTools(
             new EquityIssuerRepository(DbContext),
             Reader(purposeSource: purposes),
@@ -238,30 +244,31 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         );
 
         var holders = await tools.GetAllHolders("NVDA", source: "13d");
-        holders.Should().Contain("purpose: Control or board");
+        holders.Should().Contain("purpose: Control or board seats");
         var record = await tools.GetBeneficialOwnership("NVDA");
-        record.Should().Contain("Purpose (Item 4): Control or board");
+        record.Should().Contain("Purpose (Item 4): Control or board seats");
+        record.Should().Contain("- Control or board seats: \"We intend to seek board seats.\"");
         record.Split("Purpose (Item 4)").Should().HaveCount(2, "a 13G states no Item 4 purpose");
         purposes
             .Requested.Should()
             .OnlyContain(accession => accession == "d-act-1", "only 13D accessions are described");
     }
 
-    private sealed class StubPurposes(string accession, string purpose)
+    private sealed class StubPurposes(string accession, StatedPurpose purpose)
         : IBeneficialOwnershipPurposeSource
     {
         public List<string> Requested { get; } = [];
 
-        public Task<IReadOnlyDictionary<string, string>> Describe(
+        public Task<IReadOnlyDictionary<string, StatedPurpose>> Read(
             IReadOnlyCollection<string> accessionNumbers,
             CancellationToken cancellationToken = default
         )
         {
             Requested.AddRange(accessionNumbers);
-            IReadOnlyDictionary<string, string> described = accessionNumbers
+            IReadOnlyDictionary<string, StatedPurpose> read = accessionNumbers
                 .Where(requested => requested == accession)
                 .ToDictionary(requested => requested, _ => purpose);
-            return Task.FromResult(described);
+            return Task.FromResult(read);
         }
     }
 
