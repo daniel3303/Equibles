@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Advisers;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
@@ -10,26 +11,6 @@ namespace Equibles.Holdings.HostedService.Services;
 /// <summary>Collects one holder's regulatory evidence and derives its profile from it.</summary>
 internal static class HolderProfileBuilder
 {
-    private static readonly IReadOnlyDictionary<FormAdvClientType, HolderClientBase> ClientBases =
-        new Dictionary<FormAdvClientType, HolderClientBase>
-        {
-            [FormAdvClientType.Individuals] = HolderClientBase.Individuals,
-            [FormAdvClientType.HighNetWorthIndividuals] = HolderClientBase.Individuals,
-            [FormAdvClientType.BanksOrThrifts] = HolderClientBase.BanksAndThrifts,
-            [FormAdvClientType.InvestmentCompanies] = HolderClientBase.RegisteredFunds,
-            [FormAdvClientType.BusinessDevelopmentCompanies] = HolderClientBase.RegisteredFunds,
-            [FormAdvClientType.PooledInvestmentVehicles] =
-                HolderClientBase.PooledInvestmentVehicles,
-            [FormAdvClientType.PensionAndProfitSharingPlans] = HolderClientBase.PensionPlans,
-            [FormAdvClientType.CharitableOrganizations] = HolderClientBase.CharitableOrganizations,
-            [FormAdvClientType.GovernmentEntities] = HolderClientBase.GovernmentAndSovereign,
-            [FormAdvClientType.SovereignWealthFunds] = HolderClientBase.GovernmentAndSovereign,
-            [FormAdvClientType.OtherInvestmentAdvisers] = HolderClientBase.OtherInvestmentAdvisers,
-            [FormAdvClientType.InsuranceCompanies] = HolderClientBase.InsuranceCompanies,
-            [FormAdvClientType.Corporations] = HolderClientBase.Corporations,
-            [FormAdvClientType.Other] = HolderClientBase.Other,
-        };
-
     internal static List<HolderClassificationEvidence> CollectEvidence(
         HolderIdentityRow holder,
         HolderProfileSources sources
@@ -164,9 +145,23 @@ internal static class HolderProfileBuilder
             profile.AdvisesPrivateFunds = adviser.AdvisesPrivateFunds;
             profile.PrivateFundCount = adviser.PrivateFundCount;
             profile.PrivateFundGrossAssets = adviser.PrivateFundGrossAssets;
-            profile.PrivateFundFocus = Focus(adviser);
+            if (adviser.AdvisesPrivateFunds != false)
+                (
+                    profile.PrivateFundFocus,
+                    profile.PrivateFundFocusBasis,
+                    profile.PrivateFundFocusAsOf
+                ) = AdviserPrivateFundFocus.Decide(
+                    RosterFundCounts.Of(adviser),
+                    adviser.ReportDate,
+                    sources.PrivateFundFilingsByCrd.GetValueOrDefault(adviser.Crd),
+                    context.Today
+                );
             (profile.ClientBase, profile.ClientBaseAumShare, profile.PooledVehicleAumShare) =
-                ClientBase(sources.ClientTypesByCrd.GetValueOrDefault(adviser.Crd) ?? []);
+                AdviserClientBase.Of(
+                    (sources.ClientTypesByCrd.GetValueOrDefault(adviser.Crd) ?? []).Select(row =>
+                        (row.ClientType, row.RegulatoryAum)
+                    )
+                );
         }
 
         var seriesCrd = profile.AdviserCrd ?? HolderIdentifierRules.ParseCrd(holder.CrdNumber);
@@ -187,51 +182,5 @@ internal static class HolderProfileBuilder
         if (cik != null && sources.FilerProfilesByCik.TryGetValue(cik, out var filerProfile))
             profile.Sic = filerProfile.Sic?.Trim();
         return profile;
-    }
-
-    /// <summary>
-    /// The client group holding at least half of the regulatory assets, else Diversified; Unknown
-    /// when no assets are reported (an exempt reporting adviser files no Item 5).
-    /// </summary>
-    internal static (HolderClientBase Base, decimal? Share, decimal? PooledShare) ClientBase(
-        IReadOnlyCollection<FormAdvAdviserClientType> clientTypes
-    )
-    {
-        var total = clientTypes.Sum(row => row.RegulatoryAum ?? 0);
-        if (total <= 0)
-            return (HolderClientBase.Unknown, null, null);
-
-        var shares = clientTypes
-            .Where(row => ClientBases.ContainsKey(row.ClientType))
-            .GroupBy(row => ClientBases[row.ClientType])
-            .ToDictionary(
-                group => group.Key,
-                group => (decimal)group.Sum(row => row.RegulatoryAum ?? 0) / total
-            );
-        var pooled = shares.GetValueOrDefault(HolderClientBase.PooledInvestmentVehicles);
-        var majority = shares.Where(pair => pair.Value >= 0.5m).ToList();
-        return majority.Count == 1
-            ? (majority[0].Key, majority[0].Value, pooled)
-            : (HolderClientBase.Diversified, null, pooled);
-    }
-
-    /// <summary>The private fund type that is more than half of the adviser's private funds by count.</summary>
-    internal static PrivateFundFocus Focus(FormAdvAdviser adviser)
-    {
-        (PrivateFundFocus Focus, int Count)[] counts =
-        [
-            (PrivateFundFocus.Hedge, adviser.HedgeFundCount ?? 0),
-            (PrivateFundFocus.PrivateEquity, adviser.PrivateEquityFundCount ?? 0),
-            (PrivateFundFocus.VentureCapital, adviser.VentureCapitalFundCount ?? 0),
-            (PrivateFundFocus.RealEstate, adviser.RealEstateFundCount ?? 0),
-            (PrivateFundFocus.Liquidity, adviser.LiquidityFundCount ?? 0),
-            (PrivateFundFocus.Securitized, adviser.SecuritizedAssetFundCount ?? 0),
-            (PrivateFundFocus.Other, adviser.OtherPrivateFundCount ?? 0),
-        ];
-        var total = counts.Sum(item => item.Count);
-        if (total <= 0)
-            return PrivateFundFocus.None;
-        var majority = counts.FirstOrDefault(item => item.Count * 2 > total);
-        return majority.Count > 0 ? majority.Focus : PrivateFundFocus.Mixed;
     }
 }

@@ -103,6 +103,78 @@ public class HolderProfileRefreshServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Run_PublishedRosterNotImportedYet_KeepsTheCurrentListings()
+    {
+        // The history walk records November as published before the current view imports it;
+        // until then October's listings stay current.
+        var adviser = Holder("102909", crd: "000105958");
+        DbContext.AddRange(
+            new FormAdvRosterImport
+            {
+                Registration = FormAdvRegistration.Registered,
+                ReportDate = Roster,
+                ParserVersion = 1,
+                AdviserCount = 1,
+            },
+            new FormAdvRosterImport
+            {
+                Registration = FormAdvRegistration.Registered,
+                ReportDate = Roster.AddMonths(1),
+            },
+            Adviser(105958, Roster, aum: 1_000)
+        );
+        await DbContext.SaveChangesAsync();
+
+        await Sut().Run(Today, CancellationToken.None);
+
+        var vanguard = (await Profiles())[adviser];
+        vanguard.EntityType.Should().Be(HolderEntityType.RegisteredAdviser);
+        vanguard.AdviserCrd.Should().Be(105958);
+    }
+
+    [Fact]
+    public async Task Run_RecentScheduleD_DecidesThePrivateFundFocusByGrossAssets()
+    {
+        var adviser = Holder("102909", crd: "000105958");
+        var listing = Adviser(105958, Roster, aum: 1_000);
+        listing.AdvisesPrivateFunds = true;
+        listing.PrivateFundCount = 3;
+        listing.HedgeFundCount = 2;
+        listing.RealEstateFundCount = 1;
+        DbContext.AddRange(
+            new FormAdvRosterImport
+            {
+                Registration = FormAdvRegistration.Registered,
+                ReportDate = Roster,
+                ParserVersion = 1,
+                AdviserCount = 1,
+            },
+            listing,
+            new FormAdvPrivateFundFiling
+            {
+                Crd = 105958,
+                Registration = FormAdvRegistration.Registered,
+                FilingId = 1,
+                FiledOn = new DateOnly(2024, 12, 20),
+                FundCount = 3,
+                GrossAssets = 1_000,
+                HedgeFundCount = 2,
+                HedgeFundGrossAssets = 100,
+                RealEstateFundCount = 1,
+                RealEstateFundGrossAssets = 900,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        await Sut().Run(Today, CancellationToken.None);
+
+        var vanguard = (await Profiles())[adviser];
+        vanguard.PrivateFundFocus.Should().Be(PrivateFundFocus.RealEstate);
+        vanguard.PrivateFundFocusBasis.Should().Be(PrivateFundFocusBasis.GrossAssets);
+        vanguard.PrivateFundFocusAsOf.Should().Be(new DateOnly(2024, 12, 20));
+    }
+
+    [Fact]
     public async Task Run_JointThirteenGUnderRule13d1bWithOneItem3Code_TypesItsFiler()
     {
         var parent = Holder("315066");

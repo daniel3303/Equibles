@@ -2,7 +2,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.Holdings.Data.Models;
 
-/// <summary>The private fund type making up more than half of an adviser's private funds by count (Form ADV Item 7.B).</summary>
+/// <summary>
+/// The private fund type making up more than half of an adviser's private funds: by gross asset
+/// value when a Schedule D 7.B.(1) filing at most 24 months old lists them, else by count on the
+/// Form ADV roster (<see cref="PrivateFundFocusBasis"/>).
+/// </summary>
 public enum PrivateFundFocus
 {
     [Display(Name = "None")]

@@ -50,6 +50,13 @@ public class InstitutionalHolderProfile
     public bool? AdvisesPrivateFunds { get; set; }
     public int? PrivateFundCount { get; set; }
     public PrivateFundFocus PrivateFundFocus { get; set; }
+
+    /// <summary>What decided <see cref="PrivateFundFocus"/>; null when there is none.</summary>
+    public PrivateFundFocusBasis? PrivateFundFocusBasis { get; set; }
+
+    /// <summary>The roster or Schedule D filing date behind <see cref="PrivateFundFocus"/>.</summary>
+    public DateOnly? PrivateFundFocusAsOf { get; set; }
+
     public long? PrivateFundGrossAssets { get; set; }
 
     /// <summary>Registered fund series the adviser manages as primary adviser, from their latest N-CEN.</summary>
