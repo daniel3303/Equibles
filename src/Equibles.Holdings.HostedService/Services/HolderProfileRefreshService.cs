@@ -33,6 +33,25 @@ public class HolderProfileRefreshService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Runs the refresh only when a stored profile was derived under an older
+    /// <see cref="HolderEntityTypeDeriver.Version"/>; returns whether it ran.
+    /// </summary>
+    public async Task<bool> RunIfStale(DateOnly today, CancellationToken cancellationToken)
+    {
+        var stale = await _dbContext
+            .Set<InstitutionalHolderProfile>()
+            .AnyAsync(
+                profile => profile.DerivationVersion < HolderEntityTypeDeriver.Version,
+                cancellationToken
+            );
+        if (!stale)
+            return false;
+
+        await Run(today, cancellationToken);
+        return true;
+    }
+
     /// <summary>Returns the number of profiles written.</summary>
     public async Task<int> Run(DateOnly today, CancellationToken cancellationToken)
     {
