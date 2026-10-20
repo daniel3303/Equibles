@@ -460,7 +460,7 @@ public class YahooPriceImportService
         // here per row) is never fetched for this listing; it is selected only while it still
         // stores a bar the purge may remove: one dated after its delisting, or one written after
         // it retired on a date the holder also has a bar (PurgePricesAfterHistoricalCutoff then
-        // keeps only the bars that are not copies of the holder's).
+        // removes them only when, as a whole, they copy the holder's series).
         var candidates = stockRepository
             .GetDelistedListings()
             .Where(evidence =>
@@ -1923,10 +1923,10 @@ public class YahooPriceImportService
             return;
         }
 
-        // A bar dated after the delisting is never this listing's own. Inside its window, only a
-        // bar written after it retired, on a date another issuer's listing of the symbol also
-        // holds a session that this bar copies (see CopiedBarEvidence), came from that holder's
-        // series; everything else is kept.
+        // A bar dated after the delisting is never this listing's own. Inside its window, bars
+        // written after it retired go only when, as a whole, they copy one holder listing's
+        // series (CopiedBarEvidence); a few sessions that happen to agree prove nothing, so
+        // everything else is kept.
         var cutoff = target.HistoryEndDate!.Value;
         var retiredBy = cutoff
             .AddDays(LiveWriteGraceDays)
@@ -1945,7 +1945,7 @@ public class YahooPriceImportService
             var claimIds = claims.Select(claim => claim.Id).ToList();
             var claimIssuerIds = claims.Select(claim => claim.EquityIssuerId).Distinct().ToList();
             var firstDate = inWindow.Min(price => price.Date);
-            var holderSessions = (
+            var holderSeries = (
                 await repo.GetAllSeries()
                     .Where(price =>
                         claimIds.Contains(price.EquityListingId)
@@ -1954,6 +1954,7 @@ public class YahooPriceImportService
                     )
                     .Select(price => new
                     {
+                        price.EquityListingId,
                         price.Date,
                         price.Open,
                         price.High,
@@ -1961,9 +1962,15 @@ public class YahooPriceImportService
                         price.Close,
                     })
                     .ToListAsync(cancellationToken)
-            ).ToLookup(
-                price => price.Date,
-                price => new CopiedBarEvidence.Ohlc(price.Open, price.High, price.Low, price.Close)
+            ).GroupBy(
+                price => price.EquityListingId,
+                price => new CopiedBarEvidence.Bar(
+                    price.Date,
+                    price.Open,
+                    price.High,
+                    price.Low,
+                    price.Close
+                )
             );
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var factors = CopiedBarEvidence.BasisFactors(
@@ -1984,15 +1991,21 @@ public class YahooPriceImportService
                         .ToListAsync(cancellationToken)
                 ).Select(split => (split.EffectiveDate, split.Numerator, split.Denominator))
             );
-            recycledRows.AddRange(
-                inWindow.Where(price =>
-                    CopiedBarEvidence.IsCopy(
-                        new CopiedBarEvidence.Ohlc(price.Open, price.High, price.Low, price.Close),
-                        holderSessions[price.Date],
-                        factors
-                    )
+            var ownBars = inWindow
+                .Select(price => new CopiedBarEvidence.Bar(
+                    price.Date,
+                    price.Open,
+                    price.High,
+                    price.Low,
+                    price.Close
+                ))
+                .ToList();
+            var copiedDates = holderSeries
+                .SelectMany(series =>
+                    CopiedBarEvidence.CopiedDates(ownBars, series.ToList(), factors)
                 )
-            );
+                .ToHashSet();
+            recycledRows.AddRange(inWindow.Where(price => copiedDates.Contains(price.Date)));
         }
         if (recycledRows.Count > 0)
         {

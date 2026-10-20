@@ -35,15 +35,17 @@ namespace Equibles.IntegrationTests.Yahoo;
 // Paper's retired IPW listing stored).
 public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
 {
-    private static readonly DateOnly MmmwFirst = new(2024, 3, 25);
+    private static readonly DateOnly MmmwFirst = new(2023, 10, 2);
     private static readonly DateOnly MmmwDelisted = new(2024, 4, 1);
+    private static readonly DateOnly IpwFirst = new(2021, 5, 12);
+    private static readonly DateOnly IpwDelisted = new(2021, 10, 1);
 
     [Fact]
     public async Task Import_RetiredSymbolHeldByAnotherIssuer_NeverTakesTheHoldersSeries()
     {
         _workerOptions.MinSyncDate = MmmwFirst.ToDateTime(TimeOnly.MinValue);
         var chart = await RecordedChart(
-            "mmmw-2024-03-25-to-2024-04-01.json",
+            "mmmw-2023-10-02-to-2024-04-01.json",
             "MMMW",
             MmmwFirst,
             MmmwDelisted
@@ -69,7 +71,7 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
     {
         _workerOptions.MinSyncDate = MmmwFirst.ToDateTime(TimeOnly.MinValue);
         var chart = await RecordedChart(
-            "mmmw-2024-03-25-to-2024-04-01.json",
+            "mmmw-2023-10-02-to-2024-04-01.json",
             "MMMW",
             MmmwFirst,
             MmmwDelisted
@@ -108,11 +110,11 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
     [Fact]
     public async Task Import_RetiredListingStoringTheHoldersSeriesOnAnotherSplitBasis_PurgesThem()
     {
-        var first = new DateOnly(2021, 9, 27);
-        var delistedOn = new DateOnly(2021, 10, 1);
+        var first = IpwFirst;
+        var delistedOn = IpwDelisted;
         _workerOptions.MinSyncDate = first.ToDateTime(TimeOnly.MinValue);
         var chart = await RecordedChart(
-            "ipw-2021-09-27-to-2021-10-01.json",
+            "ipw-2021-05-12-to-2021-10-01.json",
             "IPW",
             first,
             delistedOn
@@ -175,31 +177,121 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
     [Fact]
     public async Task Import_RetiredListingWithACopiedGap_PurgesOnlyTheCopies()
     {
-        var delistedOn = new DateOnly(2024, 4, 1);
-        var liveDate = new DateOnly(2024, 3, 28);
-        var copiedDates = new[] { new DateOnly(2024, 3, 25), new DateOnly(2024, 3, 26) };
-        _workerOptions.MinSyncDate = new DateOnly(2024, 3, 1).ToDateTime(TimeOnly.MinValue);
-        var holder = CreateStock("GAPS", "Holder of the symbol");
-        var retiredIssuer = CreateStock("PARENT", "Retired when-issued filer");
+        _workerOptions.MinSyncDate = IpwFirst.ToDateTime(TimeOnly.MinValue);
+        var chart = await RecordedChart(
+            "ipw-2021-05-12-to-2021-10-01.json",
+            "IPW",
+            IpwFirst,
+            IpwDelisted
+        );
+        var holder = CreateStock("IPW", "Current holder of the symbol");
+        var retiredIssuer = CreateStock("IP", "Retired when-issued filer");
         await SeedStocks(holder, retiredIssuer);
         var retired = await SeedRetiredListing(
             retiredIssuer,
-            "GAPS",
-            delistedOn,
+            "IPW",
+            IpwDelisted,
             backfilledAt: DateTime.UtcNow.AddDays(-60)
         );
-        await SeedBars(
-            holder.Presentation.Listing,
-            Bars(5m, copiedDates.Append(liveDate).ToArray())
-        );
-        await SeedBars(retired, Bars(20m, liveDate), createdOn: liveDate.AddDays(1));
-        await SeedBars(retired, Bars(5m, copiedDates));
+        await SeedBars(holder.Presentation.Listing, chart.Prices);
+        // The listing's own sessions, written while it traded, then a backfilled gap that copies
+        // the holder's series.
+        var live = chart.Prices.Take(30).ToList();
+        var copied = chart.Prices.Skip(30).ToList();
+        foreach (var bar in live)
+            await SeedBars(retired, [bar], createdOn: bar.Date.AddDays(1), priceFactor: 2m);
+        await SeedBars(retired, copied);
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        BarDates(retired).Should().Equal(liveDate);
-        BarDates(holder.Presentation.Listing).Should().HaveCount(3);
+        BarDates(retired).Should().Equal(live.Select(bar => bar.Date));
+        BarDates(holder.Presentation.Listing).Should().HaveCount(chart.Prices.Count);
         ReloadListing(retired).PriceHistoryBackfilled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Import_FlatSpacSessionsThatMatchByChance_AreKept()
+    {
+        // Two blank-check trusts both print flat $10.00 sessions; agreeing on them proves nothing.
+        var dates = Weekdays(new DateOnly(2024, 1, 2), 40);
+        var delistedOn = dates[^1];
+        _workerOptions.MinSyncDate = dates[0].ToDateTime(TimeOnly.MinValue);
+        var holder = CreateStock("SPAC", "Later blank-check holder");
+        var retiredIssuer = CreateStock("OLDS", "Earlier blank-check holder");
+        await SeedStocks(holder, retiredIssuer);
+        var retired = await SeedRetiredListing(
+            retiredIssuer,
+            "SPAC",
+            delistedOn,
+            backfilledAt: DateTime.UtcNow.AddDays(-60)
+        );
+        await SeedBars(holder.Presentation.Listing, Bars(10m, dates));
+        await SeedBars(retired, Bars(10m, dates));
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        BarDates(retired).Should().Equal(dates);
+        ReloadListing(retired).PriceHistoryBackfilled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Import_EtfRenamedIntoTheSymbol_KeepsTheRetiredFundsHistory()
+    {
+        // Two funds trading at the same net asset value agree on their quiet sessions, but not on
+        // the sessions either one actually traded.
+        var dates = Weekdays(new DateOnly(2024, 1, 2), 40);
+        var delistedOn = dates[^1];
+        _workerOptions.MinSyncDate = dates[0].ToDateTime(TimeOnly.MinValue);
+        var renamed = CreateStock("FUND", "Fund that renamed into the symbol");
+        var retiredIssuer = CreateStock("OLDF", "Fund that held the symbol");
+        await SeedStocks(renamed, retiredIssuer);
+        var retired = await SeedRetiredListing(
+            retiredIssuer,
+            "FUND",
+            delistedOn,
+            backfilledAt: DateTime.UtcNow.AddDays(-60)
+        );
+        var quiet = dates.Take(30).ToArray();
+        var traded = dates.Skip(30).ToArray();
+        await SeedBars(
+            renamed.Presentation.Listing,
+            Bars(25m, quiet).Concat(Traded(25m, 0.30m, traded))
+        );
+        await SeedBars(retired, Bars(25m, quiet).Concat(Traded(25m, 0.10m, traded)));
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        BarDates(retired).Should().Equal(dates);
+        ReloadListing(retired).PriceHistoryBackfilled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Import_PartialCopyBelowTheThreshold_IsKept()
+    {
+        // 36 of 40 sessions agree, every one of them traded: not nearly all, so not a copy.
+        var dates = Weekdays(new DateOnly(2024, 1, 2), 40);
+        var delistedOn = dates[^1];
+        _workerOptions.MinSyncDate = dates[0].ToDateTime(TimeOnly.MinValue);
+        var holder = CreateStock("PART", "Holder of the symbol");
+        var retiredIssuer = CreateStock("OLDP", "Earlier holder of the symbol");
+        await SeedStocks(holder, retiredIssuer);
+        var retired = await SeedRetiredListing(
+            retiredIssuer,
+            "PART",
+            delistedOn,
+            backfilledAt: DateTime.UtcNow.AddDays(-60)
+        );
+        await SeedBars(holder.Presentation.Listing, Traded(8m, 0.40m, dates));
+        await SeedBars(
+            retired,
+            Traded(8m, 0.40m, dates.Take(36).ToArray())
+                .Concat(Traded(9m, 0.40m, dates.Skip(36).ToArray()))
+        );
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        BarDates(retired).Should().Equal(dates);
+        ReloadListing(retired).PriceHistoryBackfilled.Should().BeTrue();
     }
 
     [Fact]
@@ -275,11 +367,11 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
     [Fact]
     public async Task Import_SymbolClaimedDuringTheFetch_RefusesTheWrite()
     {
-        var first = new DateOnly(2021, 9, 27);
-        var delistedOn = new DateOnly(2021, 10, 1);
+        var first = IpwFirst;
+        var delistedOn = IpwDelisted;
         _workerOptions.MinSyncDate = first.ToDateTime(TimeOnly.MinValue);
         var chart = await RecordedChart(
-            "ipw-2021-09-27-to-2021-10-01.json",
+            "ipw-2021-05-12-to-2021-10-01.json",
             "IPW",
             first,
             delistedOn
@@ -491,6 +583,37 @@ public class YahooPriceImportServiceRecycledSymbolTests : IDisposable
             AdjustedClose = close,
             Volume = 1_000,
         });
+
+    // Sessions that traded: a range of the given width around a price that steps each day.
+    private static IEnumerable<HistoricalPrice> Traded(
+        decimal price,
+        decimal range,
+        params DateOnly[] dates
+    ) =>
+        dates.Select(
+            (date, index) =>
+            {
+                var close = price + index * 0.01m;
+                return new HistoricalPrice
+                {
+                    Date = date,
+                    Open = close,
+                    High = close + range,
+                    Low = close - range,
+                    Close = close,
+                    AdjustedClose = close,
+                    Volume = 1_000,
+                };
+            }
+        );
+
+    private static DateOnly[] Weekdays(DateOnly from, int count) =>
+        Enumerable
+            .Range(0, count * 2)
+            .Select(from.AddDays)
+            .Where(date => date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            .Take(count)
+            .ToArray();
 
     private List<DateOnly> BarDates(EquityListing listing) =>
         _priceRepo
