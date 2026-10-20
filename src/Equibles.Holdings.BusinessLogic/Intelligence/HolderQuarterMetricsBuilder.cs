@@ -41,10 +41,8 @@ public static class HolderQuarterMetricsBuilder
         var eligible = benchmarks
             .Where(row => row.Benchmark.Coverage >= input.MinimumBenchmarkCoverage)
             .ToList();
-        var closest =
-            eligible.Count == 0
-                ? default
-                : eligible.MinBy(row => row.Measurement.Value.ActiveShare);
+        (HolderBenchmark Benchmark, ActiveShareMeasurement Measurement)? closest =
+            eligible.Count == 0 ? null : eligible.MinBy(row => row.Measurement.ActiveShare);
         var sectorActiveShare = ActiveShareCalculator.ActiveShare(
             HolderSectorWeights.Of(issuerValues, input.IssuerSectors),
             input.AggregateSectorWeights
@@ -96,7 +94,7 @@ public static class HolderQuarterMetricsBuilder
             {
                 EquityAum = trades.EquityAum,
                 StockCount = concentration.StockCount,
-                ClosestActiveShare = closest.Measurement?.ActiveShare,
+                ClosestActiveShare = closest?.Measurement.ActiveShare,
                 TrailingAnnualTurnover = trailing,
                 TopTenWeight = concentration.TopTenWeight,
                 EffectivePositions = concentration.EffectivePositions,
@@ -129,12 +127,13 @@ public static class HolderQuarterMetricsBuilder
             ValueWeightedTenureQuarters = tenure.ValueWeightedQuarters,
             CensoredValueShare = tenure.CensoredValueShare,
             AggregateActiveShare = benchmarks
-                .FirstOrDefault(row => row.Benchmark.Key == HolderBenchmarkCatalog.Aggregate)
-                .Measurement?.ActiveShare,
-            ClosestBenchmark = closest.Benchmark?.Key,
-            ClosestBenchmarkName = HolderBenchmarkCatalog.Name(closest.Benchmark?.Key),
-            ClosestBenchmarkAsOf = closest.Benchmark?.AsOf,
-            ClosestActiveShare = closest.Measurement?.ActiveShare,
+                .Where(row => row.Benchmark.Key == HolderBenchmarkCatalog.Aggregate)
+                .Select(row => (decimal?)row.Measurement.ActiveShare)
+                .FirstOrDefault(),
+            ClosestBenchmark = closest?.Benchmark.Key,
+            ClosestBenchmarkName = HolderBenchmarkCatalog.Name(closest?.Benchmark.Key),
+            ClosestBenchmarkAsOf = closest?.Benchmark.AsOf,
+            ClosestActiveShare = closest?.Measurement.ActiveShare,
             SectorActiveShare = sectorActiveShare,
             ComparedHolderId =
                 input.Previous == null
@@ -170,8 +169,8 @@ public static class HolderQuarterMetricsBuilder
                 ReportDate = input.ReportDate,
                 BenchmarkKey = row.Benchmark.Key,
                 BenchmarkAsOf = row.Benchmark.AsOf,
-                ActiveShare = row.Measurement.Value.ActiveShare,
-                Overlap = row.Measurement.Value.Overlap,
+                ActiveShare = row.Measurement.ActiveShare,
+                Overlap = row.Measurement.Overlap,
                 Coverage = Math.Clamp(row.Benchmark.Coverage, 0, 1),
             })
             .ToList();
@@ -182,20 +181,15 @@ public static class HolderQuarterMetricsBuilder
     // over the book's issuers per benchmark, so a benchmark's size never multiplies the work.
     private static List<(
         HolderBenchmark Benchmark,
-        ActiveShareMeasurement? Measurement
-    )> MeasureBenchmarks(
-        HolderQuarterInput input,
-        IReadOnlyDictionary<Guid, decimal> issuerValues
-    ) =>
-        input
-            .Benchmarks.Select(benchmark =>
-                (
-                    Benchmark: benchmark,
-                    Measurement: ActiveShareCalculator.Measure(issuerValues, benchmark.Weights)
-                )
-            )
-            .Where(row => row.Measurement != null)
-            .ToList();
+        ActiveShareMeasurement Measurement
+    )> MeasureBenchmarks(HolderQuarterInput input, IReadOnlyDictionary<Guid, decimal> issuerValues)
+    {
+        var measured = new List<(HolderBenchmark, ActiveShareMeasurement)>();
+        foreach (var benchmark in input.Benchmarks)
+            if (ActiveShareCalculator.Measure(issuerValues, benchmark.Weights) is { } measurement)
+                measured.Add((benchmark, measurement));
+        return measured;
+    }
 
     // Common shares only: put/call and principal legs never count as the filer's equity book.
     private static List<HolderEquityPosition> EquityPositions(

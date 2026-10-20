@@ -129,18 +129,18 @@ public class NportSeriesHolderBenchmarkProvider : IHolderBenchmarkProvider
         ).ToDictionary(issuer => issuer.Id, issuer => CikNormalizer.Canonicalize(issuer.Cik));
         var trustIssuerIds = trustCikByIssuer.Keys.Select(id => (Guid?)id).ToList();
 
+        // A tracker's own series, or a trust's filing without one, inside the window.
         var rows = await _dbContext
             .Set<NportFiling>()
             .AsNoTracking()
             .Where(filing =>
-                filing.ReportPeriodDate >= floor
-                && filing.ReportPeriodDate <= reportDate
-                && (
-                    seriesIds.Contains(filing.SeriesId)
-                    || (
-                        (filing.SeriesId == null || filing.SeriesId == "")
-                        && trustIssuerIds.Contains(filing.EquityIssuerId)
-                    )
+                filing.ReportPeriodDate >= floor && filing.ReportPeriodDate <= reportDate
+            )
+            .Where(filing =>
+                seriesIds.Contains(filing.SeriesId)
+                || (
+                    string.IsNullOrEmpty(filing.SeriesId)
+                    && trustIssuerIds.Contains(filing.EquityIssuerId)
                 )
             )
             .Select(filing => new
