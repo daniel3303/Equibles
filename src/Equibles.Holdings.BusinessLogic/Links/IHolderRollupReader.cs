@@ -27,6 +27,12 @@ public interface IHolderRollupReader
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// When the links were last replaced, null before the first refresh; caches of anything nested
+    /// or grouped by the links key on it.
+    /// </summary>
+    Task<DateTime?> GetComputedAt(CancellationToken cancellationToken = default);
+
     /// <summary>The 13F filer link of each requested fund series that has one, keyed by series ID.</summary>
     Task<IReadOnlyDictionary<string, FundSeriesHolderLink>> GetFundSeriesLinks(
         IEnumerable<string> seriesIds,
