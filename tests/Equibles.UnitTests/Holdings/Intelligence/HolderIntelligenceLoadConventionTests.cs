@@ -9,6 +9,7 @@ public class HolderIntelligenceLoadConventionTests
     [Theory]
     [InlineData("", "HolderIntelligenceRefreshService.cs")]
     [InlineData("Benchmarks", "AggregateHolderBenchmarkProvider.cs")]
+    [InlineData("", "FundOwnershipRefreshService.cs")]
     public void IntelligenceHoldingLoads_Are13FFiltered(string folder, string file)
     {
         var source = File.ReadAllText(

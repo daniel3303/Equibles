@@ -394,6 +394,44 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             .IsUnique()
             .AreNullsDistinct(false);
 
+        // Registered-fund ownership by N-CEN fund type, published per closed quarter by its own
+        // drain; unique per exact listing with a null primary, and a retired issuer keeps its rows.
+        builder.Entity<FundOwnershipQuarterState>();
+        builder
+            .Entity<StockQuarterlyFundOwnership>()
+            .HasOne<EquityIssuer>()
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<StockQuarterlyFundOwnership>()
+            .HasIndex(row => new
+            {
+                row.EquityIssuerId,
+                row.ListedTicker,
+                row.ReportDate,
+                row.Bucket,
+            })
+            .IsUnique()
+            .AreNullsDistinct(false);
+        builder
+            .Entity<HolderStockAdvisedFundShares>()
+            .HasOne<EquityIssuer>()
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<HolderStockAdvisedFundShares>()
+            .HasIndex(row => new
+            {
+                row.InstitutionalHolderId,
+                row.EquityIssuerId,
+                row.ListedTicker,
+                row.ReportDate,
+            })
+            .IsUnique()
+            .AreNullsDistinct(false);
+
         // Audit trail for on-demand 13F reconciliation runs; its CreationTime and
         // InstitutionalHolderId indexes are declared as attributes on the entity.
         builder.Entity<HoldingsReconciliationLog>();

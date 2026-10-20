@@ -14,8 +14,8 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261020112545_AddHolderOwnershipSignals")]
-    partial class AddHolderOwnershipSignals
+    [Migration("20261020110506_AddFundOwnership")]
+    partial class AddFundOwnership
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2770,6 +2770,47 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("Form13FNoticeReporter");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.FundOwnershipQuarterState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CalculationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FailureCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InputFingerprint")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("SeriesCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnclassifiedSeriesCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportDate")
+                        .IsUnique();
+
+                    b.ToTable("FundOwnershipQuarterState");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.FundScore", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3014,38 +3055,6 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("ChildCik", "Kind", "ReportDate");
 
                     b.ToTable("HolderLinkEvidence");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderPositionCostBasis", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.PrimitiveCollection<float[]>("CostPerShare")
-                        .IsRequired()
-                        .HasColumnType("real[]");
-
-                    b.Property<Guid>("EquityIssuerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("InstitutionalHolderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ListedTicker")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<long>("UnpricedMask")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker")
-                        .IsUnique();
-
-                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker"), false);
-
-                    b.ToTable("HolderPositionCostBasis");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyBenchmarkActiveShare", b =>
@@ -3350,6 +3359,56 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("UltimateCik");
 
                     b.ToTable("HolderRollup");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockAdvisedFundShares", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EquityIssuerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("FundShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("HolderShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("IndexFundShares")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("IndexSeriesCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("InstitutionalHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsCapped")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ListedTicker")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("SeriesCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportDate");
+
+                    b.HasIndex("EquityIssuerId", "ReportDate");
+
+                    b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker", "ReportDate")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker", "ReportDate"), false);
+
+                    b.ToTable("HolderStockAdvisedFundShares");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockPresence", b =>
@@ -4194,11 +4253,13 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("StockQuarterlyActivityCombined");
                 });
 
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.StockQuarterlyHolderOverlap", b =>
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.StockQuarterlyFundOwnership", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<int>("Bucket")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("EquityIssuerId")
                         .HasColumnType("uuid");
@@ -4207,184 +4268,38 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<Guid>("PeerEquityIssuerId")
-                        .HasColumnType("uuid");
+                    b.Property<DateOnly>("NewestReportPeriod")
+                        .HasColumnType("date");
 
-                    b.Property<string>("PeerListedTicker")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<int>("Rank")
-                        .HasColumnType("integer");
+                    b.Property<DateOnly>("OldestReportPeriod")
+                        .HasColumnType("date");
 
                     b.Property<DateOnly>("ReportDate")
                         .HasColumnType("date");
 
-                    b.Property<int>("SharedHolders")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("Similarity")
-                        .HasPrecision(8, 6)
-                        .HasColumnType("numeric(8,6)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReportDate");
-
-                    b.HasIndex("EquityIssuerId", "ListedTicker", "ReportDate", "PeerEquityIssuerId", "PeerListedTicker")
-                        .IsUnique();
-
-                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("EquityIssuerId", "ListedTicker", "ReportDate", "PeerEquityIssuerId", "PeerListedTicker"), false);
-
-                    b.ToTable("StockQuarterlyHolderOverlap");
-                });
-
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.StockQuarterlyHolderSignals", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<long?>("ActiveLikeForLikePreviousShares")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("ActiveLikeForLikeShares")
-                        .HasColumnType("bigint");
-
-                    b.Property<decimal?>("AverageWeight")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<int>("ConvictionHolders")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CrowdedHolders")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("CrowdedShares")
-                        .HasColumnType("bigint");
-
-                    b.Property<decimal?>("CrowdingPercentile")
-                        .HasPrecision(8, 4)
-                        .HasColumnType("numeric(8,4)");
-
-                    b.Property<Guid>("EquityIssuerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("EstimatedCostPerShare")
-                        .HasPrecision(20, 6)
-                        .HasColumnType("numeric(20,6)");
-
-                    b.Property<int>("Filers")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("Herfindahl")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<int>("HoldersAboveFivePercent")
-                        .HasColumnType("integer");
-
-                    b.Property<long?>("InsiderShares")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("ListedTicker")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<decimal?>("MedianWeight")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<long>("PricedShares")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("PricedValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("PrivateFundAdviserShares")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateOnly>("ReportDate")
-                        .HasColumnType("date");
-
-                    b.Property<int>("Schedule13DFilers")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Schedule13GExemptInvestors")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Schedule13GFilers")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Schedule13GPassiveInvestors")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Schedule13GQualifiedInstitutions")
+                    b.Property<int>("SeriesCount")
                         .HasColumnType("integer");
 
                     b.Property<long>("Shares")
                         .HasColumnType("bigint");
 
-                    b.Property<long?>("SharesOutstanding")
+                    b.Property<long>("SplitUnresolvedShares")
                         .HasColumnType("bigint");
 
-                    b.Property<DateOnly?>("SharesOutstandingAsOf")
-                        .HasColumnType("date");
-
-                    b.Property<int>("SharesOutstandingBasis")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("TenureCensoredValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("TenureLongValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("TenureMediumValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("TenureShortValue")
-                        .HasColumnType("bigint");
-
-                    b.Property<int?>("TopScoreBuyers")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("TopScoreNetBuyValue")
+                    b.Property<decimal>("Value")
                         .HasPrecision(20, 2)
                         .HasColumnType("numeric(20,2)");
-
-                    b.Property<int?>("TopScoreSellers")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("TopTenHolderShare")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<decimal?>("UnderwaterValueShare")
-                        .HasPrecision(12, 6)
-                        .HasColumnType("numeric(12,6)");
-
-                    b.Property<long>("Value")
-                        .HasColumnType("bigint");
-
-                    b.Property<decimal?>("ValueWeightedTenureQuarters")
-                        .HasPrecision(10, 4)
-                        .HasColumnType("numeric(10,4)");
-
-                    b.Property<long>("ValuedShares")
-                        .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ReportDate");
 
-                    b.HasIndex("EquityIssuerId", "ListedTicker", "ReportDate")
+                    b.HasIndex("EquityIssuerId", "ListedTicker", "ReportDate", "Bucket")
                         .IsUnique();
 
-                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("EquityIssuerId", "ListedTicker", "ReportDate"), false);
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("EquityIssuerId", "ListedTicker", "ReportDate", "Bucket"), false);
 
-                    b.ToTable("StockQuarterlyHolderSignals");
+                    b.ToTable("StockQuarterlyFundOwnership");
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.StockQuarterlyListingActivity", b =>
@@ -7615,17 +7530,6 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("InstitutionalHolder");
                 });
 
-            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderPositionCostBasis", b =>
-                {
-                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
-                        .WithMany()
-                        .HasForeignKey("InstitutionalHolderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InstitutionalHolder");
-                });
-
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderQuarterlyBenchmarkActiveShare", b =>
                 {
                     b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
@@ -7665,6 +7569,23 @@ namespace Equibles.Migrations.Migrations
                         .WithMany()
                         .HasForeignKey("SectorId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("InstitutionalHolder");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HolderStockAdvisedFundShares", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", null)
+                        .WithMany()
+                        .HasForeignKey("EquityIssuerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Equibles.Holdings.Data.Models.InstitutionalHolder", "InstitutionalHolder")
+                        .WithMany()
+                        .HasForeignKey("InstitutionalHolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("InstitutionalHolder");
                 });
@@ -7791,6 +7712,15 @@ namespace Equibles.Migrations.Migrations
                 });
 
             modelBuilder.Entity("Equibles.Holdings.Data.Models.StockQuarterlyActivityCombined", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", null)
+                        .WithMany()
+                        .HasForeignKey("EquityIssuerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.StockQuarterlyFundOwnership", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", null)
                         .WithMany()

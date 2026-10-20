@@ -106,6 +106,25 @@ public class HolderLinkRefreshService
         return links.Evidence.Count;
     }
 
+    /// <summary>
+    /// Runs the refresh only when a stored rollup was derived under an older
+    /// <see cref="HolderLinkRule.Version"/>; returns whether it ran.
+    /// </summary>
+    public async Task<bool> RunIfStale(DateOnly today, CancellationToken cancellationToken)
+    {
+        var stale = await _dbContext
+            .Set<HolderRollup>()
+            .AnyAsync(
+                rollup => rollup.DerivationVersion < HolderLinkRule.Version,
+                cancellationToken
+            );
+        if (!stale)
+            return false;
+
+        await Run(today, cancellationToken);
+        return true;
+    }
+
     // The newest closed quarter and the ones before it: notices arrive only with the quarterly
     // data sets, so an open quarter's included edges would lack the child's confirming notice.
     internal static List<DateOnly> Quarters(DateOnly today)
