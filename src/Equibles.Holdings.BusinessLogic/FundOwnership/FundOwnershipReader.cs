@@ -136,22 +136,41 @@ public class FundOwnershipReader
     /// <summary>
     /// Every issuer's registered-fund shares in the newest computed quarter, all listings summed and
     /// restated onto today's split basis: the index funds' and index ETFs' shares and every fund's.
-    /// An issuer whose split basis after the quarter cannot be attributed is left out.
+    /// An issuer whose split basis after the quarter cannot be attributed is listed as unresolved.
     /// </summary>
-    public async Task<FundIndexOwnershipSnapshot> ReadLatestByIssuer(
+    public Task<FundIndexOwnershipSnapshot> ReadLatestByIssuer(
+        CancellationToken cancellationToken = default
+    ) => ReadByIssuer(null, null, cancellationToken);
+
+    /// <summary>
+    /// The registered-fund shares of <paramref name="issuerIds"/> (every issuer when null) in the
+    /// newest computed quarter on or before <paramref name="onOrBefore"/> (the newest when null),
+    /// restated as <see cref="ReadLatestByIssuer"/> restates them. An issuer the quarter's funds did
+    /// not hold is absent, which reads as none held.
+    /// </summary>
+    public async Task<FundIndexOwnershipSnapshot> ReadByIssuer(
+        DateOnly? onOrBefore,
+        IReadOnlyCollection<Guid> issuerIds,
         CancellationToken cancellationToken = default
     )
     {
-        var latest = await _repository
-            .GetComputedQuarters()
+        var quarters = _repository.GetComputedQuarters();
+        if (onOrBefore is { } ceiling)
+            quarters = quarters.Where(date => date <= ceiling);
+        var latest = await quarters
             .Select(date => (DateOnly?)date)
             .FirstOrDefaultAsync(cancellationToken);
         if (latest is not { } reportDate)
-            return new FundIndexOwnershipSnapshot(null, new Dictionary<Guid, IssuerFundShares>());
+            return new FundIndexOwnershipSnapshot(
+                null,
+                new Dictionary<Guid, IssuerFundShares>(),
+                new HashSet<Guid>()
+            );
 
-        var rows = await _repository
-            .GetByQuarter(reportDate)
-            .AsNoTracking()
+        var quarterRows = _repository.GetByQuarter(reportDate).AsNoTracking();
+        if (issuerIds != null)
+            quarterRows = quarterRows.Where(row => issuerIds.Contains(row.EquityIssuerId));
+        var rows = await quarterRows
             .GroupBy(row => new { row.EquityIssuerId, row.ListedTicker })
             .Select(group => new
             {
@@ -245,7 +264,7 @@ public class FundOwnershipReader
                 (current?.FundShares ?? 0) + fundShares
             );
         }
-        return new FundIndexOwnershipSnapshot(reportDate, byIssuer);
+        return new FundIndexOwnershipSnapshot(reportDate, byIssuer, excluded);
     }
 
     /// <summary>
@@ -391,8 +410,23 @@ public class FundOwnershipReader
 /// <summary>An issuer's registered-fund shares on today's split basis.</summary>
 public sealed record IssuerFundShares(long IndexShares, long FundShares);
 
-/// <summary>Every issuer's registered-fund shares in the newest computed quarter.</summary>
+/// <summary>
+/// Issuers' registered-fund shares in one computed quarter; <paramref name="Unresolved"/> lists the
+/// issuers whose split basis after it cannot be attributed, so they have no figure.
+/// </summary>
 public sealed record FundIndexOwnershipSnapshot(
     DateOnly? ReportDate,
-    IReadOnlyDictionary<Guid, IssuerFundShares> ByIssuer
-);
+    IReadOnlyDictionary<Guid, IssuerFundShares> ByIssuer,
+    IReadOnlySet<Guid> Unresolved
+)
+{
+    /// <summary>
+    /// The index funds' and index ETFs' share of <paramref name="sharesOutstanding"/> as a fraction:
+    /// zero when the quarter's funds held none, null without a quarter, a share count or a basis.
+    /// </summary>
+    public decimal? IndexFraction(Guid issuerId, long? sharesOutstanding) =>
+        ReportDate == null || sharesOutstanding is not > 0 || Unresolved.Contains(issuerId)
+            ? null
+            : (decimal)(ByIssuer.GetValueOrDefault(issuerId)?.IndexShares ?? 0)
+                / sharesOutstanding.Value;
+}

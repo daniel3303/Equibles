@@ -164,6 +164,14 @@ public class FundOwnershipRefreshServiceTests : ParadeDbMcpTestBase
         var latest = await reader.ReadLatestByIssuer();
         latest.ReportDate.Should().Be(Q2);
         latest.ByIssuer[_nvda.Id].Should().Be(new IssuerFundShares(176, 265));
+        latest.IndexFraction(_nvda.Id, 100_000).Should().Be(0.00176m);
+        // A computed quarter in which no fund held the issuer reads as none held.
+        latest.IndexFraction(Guid.NewGuid(), 1_000).Should().Be(0m);
+        var subset = await reader.ReadByIssuer(Q2, [_xyz.Id]);
+        subset.ByIssuer.Keys.Should().Equal(_xyz.Id);
+        var before = await reader.ReadByIssuer(new DateOnly(2026, 3, 31), null);
+        before.ReportDate.Should().BeNull();
+        before.IndexFraction(_nvda.Id, 100_000).Should().BeNull();
 
         var tools = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(DbContext),
