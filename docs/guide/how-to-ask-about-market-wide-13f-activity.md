@@ -27,6 +27,6 @@ A ranked table for the leaderboard you asked about:
 - **New positions** — stocks ranked by how many filers initiated a position this quarter. Only filers that also reported a 13F the quarter before count, so a first-time filer's book is not a buy.
 - **Sold-out positions** — stocks ranked by how many filers exited entirely. Only filers that reported a 13F this quarter count, so a filer that has not filed, or withheld its positions under confidential treatment, has not sold.
 
-For top buys and sells, `Δ Value` includes the quarter's stock-price move on shares merely held; it is the ranking key, not a pure trading-flow measure. Read `Δ Shares` to identify the position change itself.
+For top buys and sells, `Δ Value` includes the quarter's stock-price move on shares merely held; it is the ranking key, not a pure trading-flow measure. Read `Δ Shares` to identify the position change itself. Both deltas count only filers that reported a 13F for both quarters, so a first-time filer's book is not a buy and a filer that has not filed, or withheld its positions under confidential treatment, has not sold.
 
 If the reply is empty, only one quarter of 13F data has likely been imported so far — there's nothing to compare against yet. Let the worker keep running and try again once a second quarter has loaded.

@@ -848,12 +848,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // a set-difference between (stock, holder) pairs across the two quarters and don't
     // fit cleanly inside this single GROUP BY.
     // Both quarters are filtered in a single round trip; the conditional Sum / nested
-    // Distinct().Count() forms translate server-side in EF Core.
+    // Distinct().Count() forms translate server-side in EF Core. The unmatched sums carry the
+    // positions of filers without a 13F for the other quarter, which the deltas leave out.
     public IQueryable<MarketWideStockActivity> GetQuarterlyActivity(
         DateOnly current,
         DateOnly previous
     )
     {
+        var filedCurrent = DbContext.Filed13FHolderIds(current);
+        var filedPrevious = DbContext.Filed13FHolderIds(previous);
         return BothQuarters(current, previous)
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockActivity
@@ -863,6 +866,26 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
                 CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
                 PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
+                UnmatchedCurrentShares = g.Sum(h =>
+                    h.ReportDate == current && !filedPrevious.Contains(h.InstitutionalHolderId)
+                        ? h.Shares
+                        : 0L
+                ),
+                UnmatchedPreviousShares = g.Sum(h =>
+                    h.ReportDate == previous && !filedCurrent.Contains(h.InstitutionalHolderId)
+                        ? h.Shares
+                        : 0L
+                ),
+                UnmatchedCurrentValue = g.Sum(h =>
+                    h.ReportDate == current && !filedPrevious.Contains(h.InstitutionalHolderId)
+                        ? h.Value
+                        : 0L
+                ),
+                UnmatchedPreviousValue = g.Sum(h =>
+                    h.ReportDate == previous && !filedCurrent.Contains(h.InstitutionalHolderId)
+                        ? h.Value
+                        : 0L
+                ),
                 CurrentFilerCount = g.Where(h => h.ReportDate == current)
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
@@ -1671,6 +1694,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
         if (!combined)
         {
+            var filedCurrent = DbContext.Filed13FHolderIds(current);
+            var filedPrevious = DbContext.Filed13FHolderIds(previous);
             return await GetAll()
                 .Where(Is13F)
                 .Where(holding =>
@@ -1700,6 +1725,18 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     ),
                     PreviousShares = group.Sum(row =>
                         row.Holding.ReportDate == previous ? row.Holding.Shares : 0L
+                    ),
+                    UnmatchedCurrentShares = group.Sum(row =>
+                        row.Holding.ReportDate == current
+                        && !filedPrevious.Contains(row.Holding.InstitutionalHolderId)
+                            ? row.Holding.Shares
+                            : 0L
+                    ),
+                    UnmatchedPreviousShares = group.Sum(row =>
+                        row.Holding.ReportDate == previous
+                        && !filedCurrent.Contains(row.Holding.InstitutionalHolderId)
+                            ? row.Holding.Shares
+                            : 0L
                     ),
                 })
                 .ToListAsync(cancellationToken);

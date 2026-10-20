@@ -11,10 +11,22 @@ public static class Filed13FHolderQueries
     /// set for the other quarter; a first-time filer's prior quarter and a confidential-treatment
     /// quarter publish no rows and stay outside it.
     /// </summary>
+    /// <remarks>
+    /// Read as one index probe per filer rather than a scan of the quarter's rows: a quarter
+    /// holds about 2.4M rows from under 10k filers, and the churn and mover aggregates hash
+    /// this set up to four times per statement.
+    /// </remarks>
     public static IQueryable<Guid> Filed13FHolderIds(this DbContext db, DateOnly reportDate) =>
-        db.Set<InstitutionalHolding>()
-            .Where(h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F)
-            .Select(h => h.InstitutionalHolderId)
+        db.Set<InstitutionalHolder>()
+            .Where(holder =>
+                db.Set<InstitutionalHolding>()
+                    .Any(h =>
+                        h.InstitutionalHolderId == holder.Id
+                        && h.ReportDate == reportDate
+                        && h.FilingType == FilingType.Form13F
+                    )
+            )
+            .Select(holder => holder.Id)
             .Union(
                 db.Set<InstitutionalFiling>()
                     .Zero13FRestatements()

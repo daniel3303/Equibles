@@ -4,7 +4,9 @@ namespace Equibles.Holdings.Repositories.Extensions;
 
 // Market-wide 13F leaderboard buckets. The same four filter+order definitions are
 // consumed by the holdings activity views, the CSV export, and the MCP tools, so they
-// live here to keep a single source of truth for what each bucket means.
+// live here to keep a single source of truth for what each bucket means. Buys and sells
+// compare only filers with a 13F in both quarters (see MarketWideStockActivity.DeltaShares);
+// the expressions are spelled out so the IQueryable overloads translate.
 // IQueryable overloads translate to SQL for callers that page straight from the database;
 // IEnumerable overloads serve callers (e.g. the CSV export) that fetch once and split the
 // movers/churn sets in memory.
@@ -14,32 +16,56 @@ public static class MarketWideActivityQueryExtensions
         this IQueryable<MarketWideStockActivity> source
     ) =>
         source
-            .Where(a => a.CurrentShares > a.PreviousShares)
-            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+            .Where(a =>
+                a.CurrentShares - a.UnmatchedCurrentShares
+                > a.PreviousShares - a.UnmatchedPreviousShares
+            )
+            .OrderByDescending(a =>
+                (a.CurrentValue - a.UnmatchedCurrentValue)
+                - (a.PreviousValue - a.UnmatchedPreviousValue)
+            )
             .ThenBy(a => a.CommonStockId);
 
     public static IEnumerable<MarketWideStockActivity> TopBuyers(
         this IEnumerable<MarketWideStockActivity> source
     ) =>
         source
-            .Where(a => a.CurrentShares > a.PreviousShares)
-            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+            .Where(a =>
+                a.CurrentShares - a.UnmatchedCurrentShares
+                > a.PreviousShares - a.UnmatchedPreviousShares
+            )
+            .OrderByDescending(a =>
+                (a.CurrentValue - a.UnmatchedCurrentValue)
+                - (a.PreviousValue - a.UnmatchedPreviousValue)
+            )
             .ThenBy(a => a.CommonStockId);
 
     public static IQueryable<MarketWideStockActivity> TopSellers(
         this IQueryable<MarketWideStockActivity> source
     ) =>
         source
-            .Where(a => a.CurrentShares < a.PreviousShares)
-            .OrderBy(a => a.CurrentValue - a.PreviousValue)
+            .Where(a =>
+                a.CurrentShares - a.UnmatchedCurrentShares
+                < a.PreviousShares - a.UnmatchedPreviousShares
+            )
+            .OrderBy(a =>
+                (a.CurrentValue - a.UnmatchedCurrentValue)
+                - (a.PreviousValue - a.UnmatchedPreviousValue)
+            )
             .ThenBy(a => a.CommonStockId);
 
     public static IEnumerable<MarketWideStockActivity> TopSellers(
         this IEnumerable<MarketWideStockActivity> source
     ) =>
         source
-            .Where(a => a.CurrentShares < a.PreviousShares)
-            .OrderBy(a => a.CurrentValue - a.PreviousValue)
+            .Where(a =>
+                a.CurrentShares - a.UnmatchedCurrentShares
+                < a.PreviousShares - a.UnmatchedPreviousShares
+            )
+            .OrderBy(a =>
+                (a.CurrentValue - a.UnmatchedCurrentValue)
+                - (a.PreviousValue - a.UnmatchedPreviousValue)
+            )
             .ThenBy(a => a.CommonStockId);
 
     public static IQueryable<MarketWideStockChurn> NewPositions(

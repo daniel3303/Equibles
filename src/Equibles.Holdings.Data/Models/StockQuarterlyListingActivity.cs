@@ -32,6 +32,12 @@ public class StockQuarterlyListingActivity
 
     public long PreviousShares { get; set; }
 
+    // This listing's shares held by filers without a 13F for the other quarter, restated beside
+    // the totals (see StockQuarterlyActivity.UnmatchedCurrentShares). Zero on the combined lane.
+    public long UnmatchedCurrentShares { get; set; }
+
+    public long UnmatchedPreviousShares { get; set; }
+
     // Current-quarter figures over this exact listing's 13F rows, so exact-listing request
     // reads never group the holdings corpus; a rebuilt closed-quarter row carries them, zero
     // when sold out. Null means the combined lane wrote the row.

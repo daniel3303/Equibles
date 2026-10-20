@@ -37,14 +37,15 @@
             @{
                 var deltaBoards = new[]
                 {
-                    new { Label = "Top Buys", Rows = Model.TopBuys, BadgeCss = "badge-success", TestId = "activity-top-buys" },
-                    new { Label = "Top Sells", Rows = Model.TopSells, BadgeCss = "badge-error", TestId = "activity-top-sells" },
+                    new { Label = "Top Buys", Rows = Model.TopBuys, BadgeCss = "badge-success", TestId = "activity-top-buys", Note = "Changes over filers that reported a 13F for both quarters; a first-time filer's book is not a buy." },
+                    new { Label = "Top Sells", Rows = Model.TopSells, BadgeCss = "badge-error", TestId = "activity-top-sells", Note = "Changes over filers that reported a 13F for both quarters; a filer that has not filed, or withheld its positions under confidential treatment, has not sold." },
                 };
             }
             @foreach (var board in deltaBoards) {
                 <div class="card bg-base-100 shadow-sm" data-testid="@board.TestId">
                     <div class="card-body p-4">
                         <partial name="_SectionHeading" model='(Title: board.Label, BadgeClass: board.BadgeCss, BadgeContent: board.Rows.Count.ToString("N0"))' />
+                        <div class="text-xs text-base-content/50 mb-2" data-testid="@(board.TestId)-note">@board.Note</div>
                         @if (board.Rows.Count == 0) {
                             <div class="text-xs text-base-content/50">No stocks in this bucket for the selected quarter.</div>
                         } else {
