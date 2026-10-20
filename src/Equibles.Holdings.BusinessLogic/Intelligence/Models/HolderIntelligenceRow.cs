@@ -14,6 +14,9 @@ public sealed record HolderIntelligenceRow
     public long Shares { get; init; }
     public long Value { get; init; }
 
+    /// <summary>The filer's own reported value in dollars; null when it reported none.</summary>
+    public long? FiledValue { get; init; }
+
     /// <summary>True when the row's value is pending or unavailable, so it carries no weight.</summary>
     public bool ValueMissing { get; init; }
 
