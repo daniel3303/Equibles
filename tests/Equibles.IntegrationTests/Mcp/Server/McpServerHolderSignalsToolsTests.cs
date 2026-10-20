@@ -72,7 +72,8 @@ public class McpServerHolderSignalsToolsTests : IAsyncLifetime
                 {
                     EquityIssuerId = nvidia.Id,
                     ReportDate = Quarter,
-                    Filers = 1,
+                    // Enough filers to rank, or the conviction sort leaves it out.
+                    Filers = StockHolderSignalsCalculator.MinimumRankedFilers,
                     Shares = 1_000_000,
                     Value = 100_000_000,
                     ValuedShares = 1_000_000,

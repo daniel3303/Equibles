@@ -13,6 +13,7 @@ using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services.Benchmarks;
 using Equibles.Holdings.HostedService.Services.Signals;
 using Equibles.Holdings.Repositories;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
@@ -197,7 +198,16 @@ public class HolderIntelligenceRefreshService
             ? await StockHolderSignalsInputsLoader.TopScored(_dbContext, cancellationToken)
             : [];
         var signals = new StockHolderSignalsCalculator();
-        var overlap = computesOverlap ? new HolderOverlapCalculator() : null;
+        var overlap = computesOverlap
+            ? new HolderOverlapCalculator(
+                await FundSecurities.Load(
+                    _dbContext.Set<EquityIssuer>().AsNoTracking(),
+                    _dbContext.Set<FundSeries>().AsNoTracking(),
+                    null,
+                    cancellationToken
+                )
+            )
+            : null;
 
         var presenceChanged = await ClearNonFilers(reportDate, bit, cancellationToken);
         var costChanged = false;

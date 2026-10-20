@@ -4,17 +4,21 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Signals.Models;
+using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Equibles.Holdings.BusinessLogic.Signals;
 
 /// <summary>
-/// Shareholder targeting: the 13F filers of the newest closed quarter that hold a listing's
+/// Shareholder targeting: the 13F filers of the newest closed quarter that hold a company's
 /// holder-overlap peers (or, without peers, its sector's largest 13F holdings) but no class of the
 /// stock itself, ranked by the money they have in those peers. Computed at read time from the
-/// overlap rows, the presence masks and one bounded 13F read of the peers.
+/// overlap rows, the presence masks and one bounded 13F read of the peers. Subject and peers are
+/// operating companies (<see cref="FundSecurities"/>); a peer counts once whatever classes a filer
+/// holds.
 /// </summary>
 [Service]
 public class HolderTargetsReader
@@ -31,6 +35,8 @@ public class HolderTargetsReader
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly SectorRepository _sectorRepository;
     private readonly HolderSignalsReader _signalsReader;
+    private readonly EquityIssuerRepository _issuerRepository;
+    private readonly FundSeriesRepository _fundSeriesRepository;
     private readonly IMemoryCache _memoryCache;
 
     public HolderTargetsReader(
@@ -39,6 +45,8 @@ public class HolderTargetsReader
         InstitutionalHolderRepository holderRepository,
         SectorRepository sectorRepository,
         HolderSignalsReader signalsReader,
+        EquityIssuerRepository issuerRepository,
+        FundSeriesRepository fundSeriesRepository,
         IMemoryCache memoryCache
     )
     {
@@ -47,6 +55,8 @@ public class HolderTargetsReader
         _holderRepository = holderRepository;
         _sectorRepository = sectorRepository;
         _signalsReader = signalsReader;
+        _issuerRepository = issuerRepository;
+        _fundSeriesRepository = fundSeriesRepository;
         _memoryCache = memoryCache;
     }
 
@@ -96,8 +106,15 @@ public class HolderTargetsReader
         CancellationToken cancellationToken
     )
     {
+        if ((await Funds([stock.Id], cancellationToken)).IsFund(new HolderSecurityKey(stock.Id, listedTicker)))
+            return new StockHolderTargets
+            {
+                Sort = sort,
+                Unavailable =
+                    "Shareholder targeting covers operating companies; this listing is a fund by its exchange-traded product listing or its Form N-PORT filings.",
+            };
         var overlap = await _signalsRepository
-            .GetOverlap(stock.Id, listedTicker)
+            .GetOverlap(stock.Id, null)
             .AsNoTracking()
             .Where(row => row.ReportDate <= latest)
             .ToListAsync(cancellationToken);
@@ -105,14 +122,7 @@ public class HolderTargetsReader
         var peerKeys = overlap
             .Where(row => row.ReportDate == reportDate)
             .OrderBy(row => row.Rank)
-            .Select(row =>
-                (
-                    Issuer: row.PeerEquityIssuerId,
-                    Ticker: row.PeerListedTicker,
-                    row.SharedHolders,
-                    row.Similarity
-                )
-            )
+            .Select(row => (Issuer: row.PeerEquityIssuerId, row.SharedHolders, row.Similarity))
             .ToList();
 
         string sectorName = null;
@@ -144,17 +154,17 @@ public class HolderTargetsReader
                 .Select(row => new { row.EquityIssuerId, row.Value })
                 .Take(SectorPeers * 20)
                 .ToListAsync(cancellationToken);
-            var candidateNames = await _signalsReader.IssuerNames(
-                candidates.Select(row => row.EquityIssuerId).ToList(),
-                cancellationToken
-            );
+            var candidateIds = candidates.Select(row => row.EquityIssuerId).ToList();
+            var candidateNames = await _signalsReader.IssuerNames(candidateIds, cancellationToken);
+            var candidateFunds = await Funds(candidateIds, cancellationToken);
             peerKeys = candidates
                 .Where(row =>
                     candidateNames.TryGetValue(row.EquityIssuerId, out var name)
                     && name.SectorId == sectorId
+                    && !candidateFunds.IsFundIssuer(row.EquityIssuerId)
                 )
                 .Take(SectorPeers)
-                .Select(row => (row.EquityIssuerId, (string)null, 0, 0m))
+                .Select(row => (row.EquityIssuerId, 0, 0m))
                 .ToList();
             if (peerKeys.Count == 0)
                 return new StockHolderTargets
@@ -179,19 +189,17 @@ public class HolderTargetsReader
                     new StockOverlapPeer(
                         index + 1,
                         peer.Issuer,
-                        peer.Ticker ?? names[peer.Issuer].Ticker,
+                        names[peer.Issuer].Ticker,
                         names[peer.Issuer].Name,
                         peer.SharedHolders,
                         peer.Similarity
                     )
             )
             .ToList();
-        var peerLabels = peerKeys
-            .Where(peer => names.ContainsKey(peer.Issuer))
-            .ToDictionary(
-                peer => (peer.Issuer, peer.Ticker),
-                peer => peer.Ticker ?? names[peer.Issuer].Ticker
-            );
+        // One label per peer company, its presentation ticker; a fund listing of a peer issuer
+        // (an operating company's exchange-traded note) is not the company.
+        var peerLabels = peers.ToDictionary(peer => peer.IssuerId, peer => peer.Ticker);
+        var peerFunds = await Funds(peerLabels.Keys.ToList(), cancellationToken);
 
         var quarter = HolderTenureCalculator.QuarterIndex(reportDate);
         var holdersOfStock =
@@ -203,16 +211,14 @@ public class HolderTargetsReader
                         .ToListAsync(cancellationToken)
                 ).ToHashSet();
         var positions = await _holdingRepository
-            .Get13FListingValuesAt(
-                peerLabels.Keys.Select(peer => peer.Issuer).Distinct().ToList(),
-                reportDate
-            )
+            .Get13FListingValuesAt(peerLabels.Keys.ToList(), reportDate)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
         var byHolder = positions
             .Where(row =>
                 row.Value > 0
-                && peerLabels.ContainsKey((row.EquityIssuerId, row.ListedTicker))
+                && peerLabels.ContainsKey(row.EquityIssuerId)
+                && !peerFunds.IsFund(new HolderSecurityKey(row.EquityIssuerId, row.ListedTicker))
                 && !holdersOfStock.Contains(row.InstitutionalHolderId)
             )
             .GroupBy(row => row.InstitutionalHolderId)
@@ -245,18 +251,23 @@ public class HolderTargetsReader
             .Select(group =>
             {
                 var book = books[group.Key];
-                var peerValue = group.Sum(row => row.Value);
+                var byPeer = group
+                    .GroupBy(row => row.EquityIssuerId)
+                    .Select(peer => (Issuer: peer.Key, Value: peer.Sum(row => row.Value)))
+                    .ToList();
+                var peerValue = byPeer.Sum(peer => peer.Value);
                 return (
                     HolderId: group.Key,
                     PeerValue: peerValue,
                     PeerWeight: Math.Min(1m, (decimal)peerValue / book.EquityAum),
                     book.EquityAum,
                     book.StyleBand,
-                    PeersHeld: group.Count(),
-                    TopPeers: group
-                        .OrderByDescending(row => row.Value)
+                    PeersHeld: byPeer.Count,
+                    TopPeers: byPeer
+                        .OrderByDescending(peer => peer.Value)
+                        .ThenBy(peer => peer.Issuer)
                         .Take(TopPeersShown)
-                        .Select(row => peerLabels[(row.EquityIssuerId, row.ListedTicker)])
+                        .Select(peer => peerLabels[peer.Issuer])
                         .ToList()
                 );
             });
@@ -312,4 +323,15 @@ public class HolderTargetsReader
                 .ToList(),
         };
     }
+
+    private Task<FundSecurities> Funds(
+        IReadOnlyCollection<Guid> issuerIds,
+        CancellationToken cancellationToken
+    ) =>
+        FundSecurities.Load(
+            _issuerRepository.GetAll().AsNoTracking(),
+            _fundSeriesRepository.GetAll().AsNoTracking(),
+            issuerIds,
+            cancellationToken
+        );
 }

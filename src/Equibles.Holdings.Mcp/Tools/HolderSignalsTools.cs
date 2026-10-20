@@ -52,7 +52,7 @@ public class HolderSignalsTools
 
     [McpServerTool(Name = "GetOwnershipSignals", Title = "13F Ownership Signals", ReadOnly = true)]
     [Description(
-        "Who holds a stock and how, measured across every 13F book of the newest closed quarter, beside the quarter before: conviction (filers holding it among their ten largest positions, its weight in their books), crowding (shares held by high-turnover filers and private-fund advisers as % of shares outstanding, with its percentile), institutional ownership of the estimated free float, holder concentration (Herfindahl, largest ten holders), how long holders have held it, the holders' estimated average cost per share and the share of 13F value held at a loss, active holders' like-for-like change, top-scored managers' net buying, Schedule 13D and 13G filers on record, holder-overlap peers (stocks whose active holders overlap most), and the filers with the highest weight in it. Cost is an estimate from quarter average prices, never a filed figure."
+        "Who holds a stock and how, measured across every 13F book of the newest closed quarter, beside the quarter before: conviction (filers holding it among their ten largest positions, its weight in their books), crowding (shares held by high-turnover filers and private-fund advisers as % of shares outstanding, with its percentile among stocks at least 10 filers hold), institutional ownership of the estimated free float, holder concentration (Herfindahl, largest ten holders), how long holders have held it, the holders' estimated average cost per share and the share of 13F value held at a loss, active holders' like-for-like change, top-scored managers' net buying, Schedule 13D and 13G filers on record, holder-overlap peers (operating companies whose active holders overlap most, one row per company, funds excluded), and the filers with the highest weight in it. Cost is an estimate from quarter average prices, never a filed figure."
     )]
     public Task<string> GetOwnershipSignals(
         [Description("Listed security ticker (e.g., NVDA)")] string ticker,
@@ -83,7 +83,7 @@ public class HolderSignalsTools
 
     [McpServerTool(Name = "GetHolderTargets", Title = "Shareholder Targets", ReadOnly = true)]
     [Description(
-        "Shareholder targeting for a stock: the 13F filers of the newest closed quarter that hold its holder-overlap peers (stocks whose active holders overlap most) but hold no class of the stock itself, ranked by the money they have in those peers. A stock with no overlap peers falls back to its sector's largest 13F holdings. Each target shows its 13F book, the peers' share of it, the peers it holds most of, its measured style and its holder type from regulatory records."
+        "Shareholder targeting for a stock: the 13F filers of the newest closed quarter that hold its holder-overlap peers (operating companies whose active holders overlap most, funds excluded) but hold no class of the stock itself, ranked by the money they have in those peers. A stock with no overlap peers falls back to its sector's largest operating-company 13F holdings; a fund has no targets. Each target shows its 13F book, the peers' share of it, the peers it holds most of, its measured style and its holder type from regulatory records."
     )]
     public Task<string> GetHolderTargets(
         [Description("Listed security ticker (e.g., NVDA)")] string ticker,
@@ -165,7 +165,7 @@ public class HolderSignalsTools
             "Crowding: high-turnover and private-fund adviser shares, % of shares outstanding",
             row =>
                 StockHolderSignalsMath.Crowding(row) is { } crowding
-                    ? $"{Percent(crowding)} ({PercentileText(row.CrowdingPercentile)}, {McpFormat.WholeNumber(row.CrowdedHolders)} filers)"
+                    ? $"{Percent(crowding)} ({PercentileText(row)}, {McpFormat.WholeNumber(row.CrowdedHolders)} filers)"
                     : Dash
         );
         Row(
@@ -259,7 +259,7 @@ public class HolderSignalsTools
         {
             result.AppendLine();
             result.AppendLine(
-                $"Holder-overlap peers ({FormatDate(view.PeersAsOf.Value)}): stocks whose concentrated and diversified active holders overlap most"
+                $"Holder-overlap peers ({FormatDate(view.PeersAsOf.Value)}): operating companies whose concentrated and diversified active holders overlap most, one row per company"
             );
             result.AppendLine();
             result.AppendNumberedTable(
@@ -335,10 +335,12 @@ public class HolderSignalsTools
             ? $"{Percent(mix.Short)} / {Percent(mix.Medium)} / {Percent(mix.Long)} / {Percent(mix.Censored)}"
             : Dash;
 
-    private static string PercentileText(decimal? percentile) =>
-        percentile is { } value
+    private static string PercentileText(StockQuarterlyHolderSignals row) =>
+        row.CrowdingPercentile is { } value
             ? $"{McpFormat.Invariant(Math.Round(value), "F0")}th percentile"
-            : "no percentile";
+            : StockHolderSignalsMath.NotRankedReason(row) is { } reason
+                ? $"not ranked: {reason}"
+                : "no percentile";
 
     private static string Label(EquityIssuer stock, string listedTicker) =>
         listedTicker == null

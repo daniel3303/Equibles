@@ -225,32 +225,46 @@ public sealed class StockHolderSignalsCalculator
 
     /// <summary>
     /// Whether a row's shares outstanding can divide its own holders: the primary listing of an
-    /// issuer whose count is one consolidated figure in the listed unit.
+    /// issuer whose count is one consolidated figure in the listed unit, current for the quarter
+    /// and at least the 13F shares it would divide.
     /// </summary>
     public static bool CountDividesListing(StockQuarterlyHolderSignals row) =>
         row.ListedTicker == null
         && row.SharesOutstandingBasis == SharesOutstandingBasis.Consolidated
         && row.SharesOutstanding > 0
+        && !CountIsStale(row)
         && !HeldBeyondCount(row);
 
     /// <summary>
-    /// 13F filers can together report more shares than a cover page counts (lent shares reported
-    /// by lender and borrower alike, shared discretion reported twice), but not this many times
-    /// more. Past it the count is a filing artifact (a dropped digit, a thousands-scaled entry, a
-    /// shell's nominal shares) or predates a large issuance, so nothing divides by it.
+    /// A cover-page count dated more than this many days before the quarter end is stale: at least
+    /// one periodic report passed without a newer count, so shares issued since can be missing.
     /// </summary>
-    public const long MaximumHeldMultipleOfOutstanding = 2;
+    public const int MaximumCountAgeDays = 183;
 
-    /// <summary>Whether the 13F shares exceed what the stored count can plausibly hold.</summary>
+    /// <summary>Whether the row's count is dated more than two quarters before its quarter end.</summary>
+    public static bool CountIsStale(StockQuarterlyHolderSignals row) =>
+        row.SharesOutstandingAsOf is { } asOf && asOf.AddDays(MaximumCountAgeDays) < row.ReportDate;
+
+    /// <summary>
+    /// Whether 13F filers report more shares than the count. Lent shares reported by lender and
+    /// borrower alike can do that, but more often the count predates an issuance or is misstated
+    /// (a shell's nominal shares, a thousands-scaled entry); either way no share of it is
+    /// meaningful, so nothing divides by it.
+    /// </summary>
     public static bool HeldBeyondCount(StockQuarterlyHolderSignals row) =>
-        row.SharesOutstanding is > 0 and var outstanding
-        && row.Shares > outstanding * MaximumHeldMultipleOfOutstanding;
+        row.SharesOutstanding is > 0 and var outstanding && row.Shares > outstanding;
 
-    // Crowded shares over shares outstanding, as the percentile among the quarter's rows a count
-    // can divide; ties share the highest rank.
+    /// <summary>A stock held by fewer filers than this is reported but never ranked.</summary>
+    public const int MinimumRankedFilers = 10;
+
+    /// <summary>Whether enough filers hold the row's listing to rank its crowding and conviction.</summary>
+    public static bool Ranks(StockQuarterlyHolderSignals row) => row.Filers >= MinimumRankedFilers;
+
+    // Crowded shares over shares outstanding, as the percentile among the quarter's ranked rows a
+    // count can divide; ties share the highest rank.
     private static void RankCrowding(List<StockQuarterlyHolderSignals> rows)
     {
-        var measured = rows.Where(CountDividesListing)
+        var measured = rows.Where(row => CountDividesListing(row) && Ranks(row))
             .Select(row =>
                 (Row: row, Ratio: (decimal)row.CrowdedShares / row.SharesOutstanding.Value)
             )

@@ -33,21 +33,93 @@ public class HolderOverlapCalculatorTests
     }
 
     [Fact]
-    public void Build_NeverPairsASecurityWithItsSiblingClass()
+    public void Build_CountsAnIssuersShareClassesAsOneCompany()
     {
+        // Alphabet-like: one filer holds both classes, two hold only one each.
         var classA = Key();
-        var classB = classA with { ListedTicker = "CLS.B" };
+        var classC = classA with { ListedTicker = "CLS.C" };
         var other = Key();
         var calculator = new HolderOverlapCalculator();
+        calculator.Add([Position(classA), Position(classC), Position(other)]);
+        calculator.Add([Position(classA), Position(other)]);
+        calculator.Add([Position(classC), Position(other)]);
+
+        var rows = calculator.Build(Quarter);
+
+        var peers = rows.Where(row => row.EquityIssuerId == other.IssuerId).ToList();
+        peers.Should().ContainSingle();
+        peers[0].PeerEquityIssuerId.Should().Be(classA.IssuerId);
+        peers[0].PeerListedTicker.Should().BeNull();
+        peers[0].SharedHolders.Should().Be(3, "each filer counts the company once");
+        rows.Should().NotContain(row => row.ListedTicker != null || row.PeerListedTicker != null);
+        rows.Should()
+            .NotContain(row =>
+                row.EquityIssuerId == classA.IssuerId && row.PeerEquityIssuerId == classA.IssuerId
+            );
+    }
+
+    [Fact]
+    public void Build_LeavesFundsOutOfThePeers()
+    {
+        // An index ETF, a registered closed-end fund and an operating company's exchange-traded
+        // note, all held beside two operating companies.
+        var stock = Key();
+        var peer = Key();
+        var etf = Key();
+        var closedEnd = Key();
+        var bank = Key();
+        var note = bank with { ListedTicker = "NOTE" };
+        var funds = new FundSecurities([note], [etf.IssuerId, closedEnd.IssuerId]);
+        var calculator = new HolderOverlapCalculator(funds);
         for (var holder = 0; holder < 3; holder++)
-            calculator.Add([Position(classA), Position(classB), Position(other)]);
+            calculator.Add(
+                [
+                    Position(stock),
+                    Position(peer),
+                    Position(etf, 10_000),
+                    Position(closedEnd, 10_000),
+                    Position(note, 10_000),
+                ]
+            );
+        calculator.Add([Position(stock), Position(bank)]);
+        calculator.Add([Position(stock), Position(bank)]);
+        calculator.Add([Position(stock), Position(bank)]);
 
-        var peers = calculator
-            .Build(Quarter)
-            .Where(row => row.EquityIssuerId == classA.IssuerId && row.ListedTicker == null)
+        var rows = calculator.Build(Quarter);
+
+        rows.Select(row => row.EquityIssuerId)
+            .Concat(rows.Select(row => row.PeerEquityIssuerId))
+            .Should()
+            .NotContain([etf.IssuerId, closedEnd.IssuerId]);
+        rows.Where(row => row.EquityIssuerId == stock.IssuerId)
+            .Select(row => (row.PeerEquityIssuerId, row.SharedHolders))
+            .Should()
+            .BeEquivalentTo([(peer.IssuerId, 3), (bank.IssuerId, 3)], "the bank's note is not the bank");
+    }
+
+    [Fact]
+    public void Add_FillsTheHundredWithOperatingCompaniesWhenFundsAreLarger()
+    {
+        var stock = Key();
+        var fund = Key();
+        var calculator = new HolderOverlapCalculator(new FundSecurities([], [fund.IssuerId]));
+        var others = Enumerable
+            .Range(0, HolderOverlapCalculator.PositionsPerHolder - 1)
+            .Select(_ => Key())
             .ToList();
+        for (var holder = 0; holder < 3; holder++)
+            calculator.Add(
+                [
+                    Position(fund, 1_000_000),
+                    .. others.Select(other => Position(other, 1_000)),
+                    Position(stock, 1),
+                ]
+            );
 
-        peers.Should().ContainSingle(row => row.PeerEquityIssuerId == other.IssuerId);
+        calculator
+            .Build(Quarter)
+            .Should()
+            .Contain(row => row.EquityIssuerId == stock.IssuerId, "the fund frees its slot");
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Signals;
@@ -47,30 +48,24 @@ public class StockHolderSignalsCalculatorTests
         var calm = new HolderSecurityKey(Guid.NewGuid(), null);
         var multiClass = new HolderSecurityKey(Guid.NewGuid(), null);
         var calculator = new StockHolderSignalsCalculator();
-        calculator.Add(
-            Holder(
-                3_000,
-                [new(crowded, 300, 1_000), new(calm, 10, 1_000), new(multiClass, 50, 1_000)],
-                turnover: HolderTurnoverBand.High
-            )
-        );
+        for (var filer = 0; filer < StockHolderSignalsCalculator.MinimumRankedFilers; filer++)
+            calculator.Add(
+                Holder(
+                    3_000,
+                    [new(crowded, 30, 100), new(calm, 1, 100), new(multiClass, 5, 100)],
+                    turnover: HolderTurnoverBand.High
+                )
+            );
         calculator.Add(Holder(1_000, [new(calm, 500, 1_000)], privateFunds: true));
 
         var rows = calculator
             .Build(
                 Quarter,
-                new StockHolderSignalsQuarterInputs
-                {
-                    SharesOutstanding = new Dictionary<
-                        Guid,
-                        (long, DateOnly, SharesOutstandingBasis)
-                    >
-                    {
-                        [crowded.IssuerId] = (1_000, Quarter, SharesOutstandingBasis.Consolidated),
-                        [calm.IssuerId] = (10_000, Quarter, SharesOutstandingBasis.Consolidated),
-                        [multiClass.IssuerId] = (100, Quarter, SharesOutstandingBasis.ClassSum),
-                    },
-                }
+                Counts(
+                    (crowded, 1_000, Quarter, SharesOutstandingBasis.Consolidated),
+                    (calm, 10_000, Quarter, SharesOutstandingBasis.Consolidated),
+                    (multiClass, 100, Quarter, SharesOutstandingBasis.ClassSum)
+                )
             )
             .ToDictionary(row => row.EquityIssuerId);
 
@@ -87,53 +82,130 @@ public class StockHolderSignalsCalculatorTests
     }
 
     [Fact]
-    public void Build_ACountFarBelowThe13FSharesDividesNothing()
+    public void Build_ACountBelowThe13FSharesDividesNothing()
     {
-        // A shell's nominal 100 shares against 16M held, and a stale count 1.6x below the holdings.
+        // A shell's nominal 100 shares against 16M held, a count that predates an issuance (1,600
+        // held against 1,000), and a count the holdings fit under.
         var shell = new HolderSecurityKey(Guid.NewGuid(), null);
-        var stale = new HolderSecurityKey(Guid.NewGuid(), null);
+        var issued = new HolderSecurityKey(Guid.NewGuid(), null);
+        var counted = new HolderSecurityKey(Guid.NewGuid(), null);
         var calculator = new StockHolderSignalsCalculator();
-        calculator.Add(
-            Holder(
-                3_000,
-                [new(shell, 16_000_000, 1_000), new(stale, 1_600, 1_000)],
-                turnover: HolderTurnoverBand.High
-            )
-        );
+        for (var filer = 0; filer < StockHolderSignalsCalculator.MinimumRankedFilers; filer++)
+            calculator.Add(
+                Holder(
+                    3_000,
+                    [
+                        new(shell, 1_600_000, 100),
+                        new(issued, 160, 100),
+                        new(counted, 160, 100),
+                    ],
+                    turnover: HolderTurnoverBand.High
+                )
+            );
 
         var rows = calculator
             .Build(
                 Quarter,
-                new StockHolderSignalsQuarterInputs
-                {
-                    SharesOutstanding = new Dictionary<
-                        Guid,
-                        (long, DateOnly, SharesOutstandingBasis)
-                    >
-                    {
-                        [shell.IssuerId] = (100, Quarter, SharesOutstandingBasis.Consolidated),
-                        [stale.IssuerId] = (1_000, Quarter, SharesOutstandingBasis.Consolidated),
-                    },
-                }
+                Counts(
+                    (shell, 100, Quarter, SharesOutstandingBasis.Consolidated),
+                    (issued, 1_000, Quarter, SharesOutstandingBasis.Consolidated),
+                    (counted, 2_000, Quarter, SharesOutstandingBasis.Consolidated)
+                )
             )
             .ToDictionary(row => row.EquityIssuerId);
 
-        var shellRow = rows[shell.IssuerId];
-        StockHolderSignalsCalculator.CountDividesListing(shellRow).Should().BeFalse();
-        shellRow.CrowdingPercentile.Should().BeNull();
-        shellRow.SharesOutstanding.Should().Be(100, "the count is kept as read");
-        StockHolderSignalsMath.Crowding(shellRow).Should().BeNull();
-        StockHolderSignalsMath.InstitutionalShareOfOutstanding(shellRow).Should().BeNull();
+        foreach (var key in new[] { shell, issued })
+        {
+            var row = rows[key.IssuerId];
+            StockHolderSignalsCalculator.CountDividesListing(row).Should().BeFalse();
+            row.CrowdingPercentile.Should().BeNull();
+            StockHolderSignalsMath.Crowding(row).Should().BeNull();
+            StockHolderSignalsMath.InstitutionalShareOfOutstanding(row).Should().BeNull();
+            StockHolderSignalsMath.InstitutionalShareOfFloat(row).Should().BeNull();
+            StockHolderSignalsMath
+                .OutstandingUnavailableReason(row)
+                .Should()
+                .StartWith("holders exceed shares outstanding");
+        }
+        rows[shell.IssuerId].SharesOutstanding.Should().Be(100, "the count is kept as read");
+        rows[counted.IssuerId].CrowdingPercentile.Should().Be(100m, "it ranks alone");
         StockHolderSignalsMath
-            .OutstandingUnavailableReason(shellRow)
+            .InstitutionalShareOfOutstanding(rows[counted.IssuerId])
             .Should()
-            .Contain("more than twice");
-        // Above 100% but within twice the count stays measured, and alone in the ranking.
-        rows[stale.IssuerId].CrowdingPercentile.Should().Be(100m);
+            .Be(0.8m);
+    }
+
+    [Fact]
+    public void Build_ACountMoreThanTwoQuartersOldDividesNothing()
+    {
+        var stale = new HolderSecurityKey(Guid.NewGuid(), null);
+        var current = new HolderSecurityKey(Guid.NewGuid(), null);
+        var calculator = new StockHolderSignalsCalculator();
+        for (var filer = 0; filer < StockHolderSignalsCalculator.MinimumRankedFilers; filer++)
+            calculator.Add(
+                Holder(3_000, [new(stale, 10, 100), new(current, 10, 100)], turnover: HolderTurnoverBand.High)
+            );
+        var oldest = Quarter.AddDays(-StockHolderSignalsCalculator.MaximumCountAgeDays);
+
+        var rows = calculator
+            .Build(
+                Quarter,
+                Counts(
+                    (stale, 1_000, oldest.AddDays(-1), SharesOutstandingBasis.Consolidated),
+                    (current, 1_000, oldest, SharesOutstandingBasis.Consolidated)
+                )
+            )
+            .ToDictionary(row => row.EquityIssuerId);
+
+        var staleRow = rows[stale.IssuerId];
+        StockHolderSignalsCalculator.CountIsStale(staleRow).Should().BeTrue();
+        StockHolderSignalsMath.Crowding(staleRow).Should().BeNull();
+        staleRow.CrowdingPercentile.Should().BeNull();
         StockHolderSignalsMath
-            .InstitutionalShareOfOutstanding(rows[stale.IssuerId])
+            .OutstandingUnavailableReason(staleRow)
             .Should()
-            .Be(1.6m);
+            .StartWith("share count stale")
+            .And.Contain(oldest.AddDays(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        StockHolderSignalsMath.Crowding(rows[current.IssuerId]).Should().Be(0.1m);
+        rows[current.IssuerId].CrowdingPercentile.Should().Be(100m);
+    }
+
+    [Fact]
+    public void Build_TooFewFilersReportCrowdingAndConvictionWithoutRanking()
+    {
+        var thin = new HolderSecurityKey(Guid.NewGuid(), null);
+        var broad = new HolderSecurityKey(Guid.NewGuid(), null);
+        var calculator = new StockHolderSignalsCalculator();
+        for (var filer = 0; filer < StockHolderSignalsCalculator.MinimumRankedFilers; filer++)
+            calculator.Add(
+                Holder(
+                    3_000,
+                    filer == 0 ? [new(broad, 10, 100)] : [new(thin, 50, 100), new(broad, 10, 100)],
+                    turnover: HolderTurnoverBand.High
+                )
+            );
+
+        var rows = calculator
+            .Build(
+                Quarter,
+                Counts(
+                    (thin, 1_000, Quarter, SharesOutstandingBasis.Consolidated),
+                    (broad, 1_000, Quarter, SharesOutstandingBasis.Consolidated)
+                )
+            )
+            .ToDictionary(row => row.EquityIssuerId);
+
+        var thinRow = rows[thin.IssuerId];
+        thinRow.Filers.Should().Be(StockHolderSignalsCalculator.MinimumRankedFilers - 1);
+        StockHolderSignalsMath.Crowding(thinRow).Should().Be(0.45m, "the value is still reported");
+        StockHolderSignalsMath.ConvictionShare(thinRow).Should().Be(1m);
+        thinRow.CrowdingPercentile.Should().BeNull();
+        StockHolderSignalsMath.RankedCrowding(thinRow).Should().BeNull();
+        StockHolderSignalsMath.RankedConvictionShare(thinRow).Should().BeNull();
+        StockHolderSignalsMath.NotRankedReason(thinRow).Should().Contain("fewer than 10");
+        rows[broad.IssuerId].CrowdingPercentile.Should().Be(100m, "it ranks alone");
+        StockHolderSignalsMath.RankedCrowding(rows[broad.IssuerId]).Should().Be(0.1m);
+        StockHolderSignalsMath.NotRankedReason(rows[broad.IssuerId]).Should().BeNull();
     }
 
     [Fact]
@@ -219,6 +291,17 @@ public class StockHolderSignalsCalculatorTests
         row.TenureCensoredValue.Should().Be(400);
         row.ValueWeightedTenureQuarters.Should().Be((200m + 1_200m + 4_200m + 3_200m) / 1_000m);
     }
+
+    private static StockHolderSignalsQuarterInputs Counts(
+        params (HolderSecurityKey Security, long Count, DateOnly AsOf, SharesOutstandingBasis Basis)[] counts
+    ) =>
+        new()
+        {
+            SharesOutstanding = counts.ToDictionary(
+                count => count.Security.IssuerId,
+                count => (count.Count, count.AsOf, count.Basis)
+            ),
+        };
 
     private static HolderSignalsContribution Holder(
         long aum,

@@ -2076,7 +2076,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetMostHeldStocks", Title = "Most Widely Held Stocks", ReadOnly = true)]
     [Description(
-        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a quarter. Rank by filer count (default), quarter-over-quarter filer-count change, total published position value, conviction (filers holding the stock among their ten largest positions) or crowding (shares held by high-turnover filers and private-fund advisers as % of shares outstanding). Conviction and crowding read the newest closed quarter measured across every 13F book (an open or unmeasured quarter snaps to it, noted). Values use report-date closing prices, may fall back to filer values, and can be zero when unvalued. Includes Δ filers, total value, Δ value, and share of the 13F universe. The first complete report quarter is published; earlier rankings and boundary-quarter deltas are unavailable. Only currently-held stocks rank; sold-out names use GetMarketWide13FActivity. During the newest quarter's open filing window, non-filers carry prior-quarter positions (noted in output)."
+        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a quarter. Rank by filer count (default), quarter-over-quarter filer-count change, total published position value, conviction (filers holding it among their ten largest positions) or crowding (high-turnover and private-fund adviser shares as % of shares outstanding), both among stocks 10+ filers hold. Conviction and crowding read the newest closed quarter measured across every 13F book (an open or unmeasured quarter snaps to it, noted). Values use report-date closing prices, may fall back to filer values, and can be zero when unvalued. Includes Δ filers, total value, Δ value, and share of the 13F universe. The first complete report quarter is published; earlier rankings and boundary-quarter deltas are unavailable. Only currently-held stocks rank; sold-out names use GetMarketWide13FActivity. During the newest quarter's open filing window, non-filers carry prior-quarter positions (noted in output)."
     )]
     public Task<string> GetMostHeldStocks(
         [Description(
@@ -2229,8 +2229,8 @@ public class InstitutionalHoldingsTools
         );
         result.AppendLine(
             sort == StockSignalsSort.Crowding
-                ? $"{McpFormat.WholeNumber(rows.Count)} primary listings with a single-class share count; crowding is shares held by high-turnover filers and private-fund advisers over shares outstanding"
-                : $"{McpFormat.WholeNumber(rows.Count)} primary listings; conviction holders are filers with the stock among their ten largest positions"
+                ? $"{McpFormat.WholeNumber(rows.Count)} primary listings held by at least {StockHolderSignalsCalculator.MinimumRankedFilers} filers, with a current single-class share count; crowding is shares held by high-turnover filers and private-fund advisers over shares outstanding"
+                : $"{McpFormat.WholeNumber(rows.Count)} primary listings held by at least {StockHolderSignalsCalculator.MinimumRankedFilers} filers; conviction holders are filers with the stock among their ten largest positions"
         );
         result.AppendLine();
         result.AppendNumberedTable(
@@ -2256,7 +2256,7 @@ public class InstitutionalHoldingsTools
             targetDate == latest
                 ? null
                 : $"Note: the newest measured quarter is {FormatDate(latest)}.",
-            "Note: measured once the quarter's filing window closes, from each filer's own 13F; shares outstanding is the cover-page count dated on or before the quarter end, and a multi-class or foreign issuer shows no percentage."
+            "Note: measured once the quarter's filing window closes, from each filer's own 13F; shares outstanding is the cover-page count dated on or before the quarter end, and a multi-class or foreign issuer, a count more than two quarters old or one below the 13F shares held shows no percentage."
         );
         return notes == null ? result.ToString() : $"{result}\n{notes}";
     }

@@ -109,8 +109,8 @@ public class HolderSignalsReader
     }
 
     /// <summary>
-    /// The primary listings of one closed quarter ranked by <paramref name="sort"/>; crowding
-    /// ranks only listings whose share count divides their holders.
+    /// The primary listings of one closed quarter ranked by <paramref name="sort"/>: only listings
+    /// enough filers hold rank, and crowding only those whose share count divides their holders.
     /// </summary>
     public async Task<List<StockSignalsRankingRow>> RankQuarter(
         DateOnly reportDate,
@@ -142,13 +142,14 @@ public class HolderSignalsReader
                 var ranked = sort switch
                 {
                     StockSignalsSort.Crowding => rows.Where(row =>
-                            StockHolderSignalsMath.Crowding(row) != null
+                            StockHolderSignalsMath.RankedCrowding(row) != null
                         )
-                        .OrderByDescending(row => StockHolderSignalsMath.Crowding(row))
+                        .OrderByDescending(row => StockHolderSignalsMath.RankedCrowding(row))
                         .ThenByDescending(row => row.Value)
                         .ThenBy(row => row.EquityIssuerId)
                         .ToList(),
-                    _ => rows.OrderByDescending(row => row.ConvictionHolders)
+                    _ => rows.Where(StockHolderSignalsCalculator.Ranks)
+                        .OrderByDescending(row => row.ConvictionHolders)
                         .ThenByDescending(row => row.Value)
                         .ThenBy(row => row.EquityIssuerId)
                         .ToList(),
@@ -210,11 +211,17 @@ public class HolderSignalsReader
                 ? rows[1]
                 : null;
 
-        var overlap = await _signalsRepository
-            .GetOverlap(stock.Id, listedTicker)
-            .AsNoTracking()
-            .Where(row => row.ReportDate <= latest)
-            .ToListAsync(cancellationToken);
+        // Peers are measured per company, so every class of an operating company shares them; an
+        // exchange-traded listing is a fund and has none.
+        var overlap =
+            listedTicker != null
+            && SecondaryTickerPolicy.IsExchangeTradedListing(stock, listedTicker)
+                ? []
+                : await _signalsRepository
+                    .GetOverlap(stock.Id, null)
+                    .AsNoTracking()
+                    .Where(row => row.ReportDate <= latest)
+                    .ToListAsync(cancellationToken);
         var peersAsOf = overlap.Count == 0 ? (DateOnly?)null : overlap.Max(row => row.ReportDate);
         var peerRows = overlap
             .Where(row => row.ReportDate == peersAsOf)
@@ -229,7 +236,7 @@ public class HolderSignalsReader
             .Select(row => new StockOverlapPeer(
                 row.Rank,
                 row.PeerEquityIssuerId,
-                row.PeerListedTicker ?? names[row.PeerEquityIssuerId].Ticker,
+                names[row.PeerEquityIssuerId].Ticker,
                 names[row.PeerEquityIssuerId].Name,
                 row.SharedHolders,
                 row.Similarity

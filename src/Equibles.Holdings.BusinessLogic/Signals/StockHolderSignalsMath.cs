@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.Data.Models;
 
@@ -90,6 +91,20 @@ public static class StockHolderSignalsMath
     public static decimal? ConvictionShare(StockQuarterlyHolderSignals row) =>
         row.Filers > 0 ? (decimal)row.ConvictionHolders / row.Filers : null;
 
+    /// <summary>Crowding where the row may be ranked: rankings, sorts and screens read this.</summary>
+    public static decimal? RankedCrowding(StockQuarterlyHolderSignals row) =>
+        StockHolderSignalsCalculator.Ranks(row) ? Crowding(row) : null;
+
+    /// <summary>The conviction share where the row may be ranked: rankings, sorts and screens read this.</summary>
+    public static decimal? RankedConvictionShare(StockQuarterlyHolderSignals row) =>
+        StockHolderSignalsCalculator.Ranks(row) ? ConvictionShare(row) : null;
+
+    /// <summary>Why the row takes no rank among the quarter's stocks; null when it can.</summary>
+    public static string NotRankedReason(StockQuarterlyHolderSignals row) =>
+        StockHolderSignalsCalculator.Ranks(row)
+            ? null
+            : $"fewer than {StockHolderSignalsCalculator.MinimumRankedFilers} 13F filers, too few to rank";
+
     /// <summary>Why a percentage of shares outstanding cannot be given for this row; null when it can.</summary>
     public static string OutstandingUnavailableReason(StockQuarterlyHolderSignals row) =>
         row.ListedTicker != null
@@ -102,8 +117,10 @@ public static class StockHolderSignalsMath
                     "the issuer has more than one class of common stock, so its count is the total across classes",
                 SharesOutstandingBasis.ForeignOrdinary =>
                     "a foreign private issuer reports ordinary shares, a different unit from the listed shares",
+                _ when StockHolderSignalsCalculator.CountIsStale(row) =>
+                    $"share count stale: the newest cover-page count is dated {row.SharesOutstandingAsOf.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}, more than two quarters before the quarter end, so shares issued since may be missing",
                 _ when StockHolderSignalsCalculator.HeldBeyondCount(row) =>
-                    "13F filers report more than twice the cover-page count, so that count is misstated or predates an issuance",
+                    "holders exceed shares outstanding: 13F filers report more shares than the cover-page count, which predates an issuance, is misstated, or misses shares lent and reported twice",
                 _ => row.SharesOutstanding is > 0 ? null : "no share count is on record",
             };
 }

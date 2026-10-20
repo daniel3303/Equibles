@@ -4,10 +4,12 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.Data.Models;
 
 /// <summary>
-/// One of a listed security's closest holder-overlap peers at a closed 13F quarter: the securities
+/// One of a company's closest holder-overlap peers at a closed 13F quarter: the operating companies
 /// most often found among the same active filers' hundred largest positions, by cosine similarity
 /// of their holder sets. Only filers measured concentrated or diversified active count, since an
-/// index-like or systematic book holds everything together.
+/// index-like or systematic book holds everything together. Peers are measured per issuer, its
+/// share classes summed and funds left out, so the drain writes both listed tickers null (the
+/// presentation listing) and one company appears once.
 /// </summary>
 [Index(nameof(ReportDate))]
 public class StockQuarterlyHolderOverlap

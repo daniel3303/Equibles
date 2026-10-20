@@ -4,14 +4,17 @@ using Equibles.Holdings.Data.Models;
 namespace Equibles.Holdings.BusinessLogic.Intelligence;
 
 /// <summary>
-/// Each security's closest holder-overlap peers: the securities that share the most active filers'
+/// Each company's closest holder-overlap peers: the companies that share the most active filers'
 /// hundred largest positions with it, by cosine similarity of the two holder sets. Only filers
 /// measured concentrated or diversified active count, since an index-like or systematic book holds
 /// everything together and would make every large stock every other's peer.
 /// </summary>
 /// <remarks>
-/// A filer keeps only its hundred largest positions as security indexes; peers are then counted
-/// one security at a time over an inverted index, so memory never holds a pair table.
+/// Peers are operating companies, measured per issuer: a fund (<see cref="FundSecurities"/>) never
+/// counts, and a filer's positions in an issuer's share classes add up to one position, so one
+/// company appears once (rows carry no listed ticker). A filer keeps only its hundred largest
+/// companies as indexes; peers are then counted one company at a time over an inverted index, so
+/// memory never holds a pair table.
 /// </remarks>
 public sealed class HolderOverlapCalculator
 {
@@ -21,70 +24,71 @@ public sealed class HolderOverlapCalculator
     /// <summary>Peers must share at least this many filers.</summary>
     public const int MinimumSharedHolders = 3;
 
-    /// <summary>Peers kept per security.</summary>
+    /// <summary>Peers kept per company.</summary>
     public const int PeersPerSecurity = 20;
 
-    private readonly Dictionary<HolderSecurityKey, int> _indexes = new();
-    private readonly List<HolderSecurityKey> _securities = [];
+    private readonly FundSecurities _funds;
+    private readonly Dictionary<Guid, int> _indexes = new();
+    private readonly List<Guid> _issuers = [];
     private readonly List<int[]> _holders = [];
+
+    public HolderOverlapCalculator(FundSecurities funds = null)
+    {
+        _funds = funds ?? FundSecurities.None;
+    }
 
     /// <summary>Whether a filer's book counts toward the overlap.</summary>
     public static bool Counts(HolderStyleBand band) =>
         band is HolderStyleBand.Concentrated or HolderStyleBand.DiversifiedActive;
 
-    /// <summary>Adds one active filer's book; only its largest valued positions are kept.</summary>
+    /// <summary>
+    /// Adds one active filer's book; only its largest valued operating companies are kept, each
+    /// issuer's classes summed, and a company with any unvalued class is left out.
+    /// </summary>
     public void Add(IReadOnlyList<HolderEquityPosition> book)
     {
-        var top = book.Where(position => position.Shares > 0)
-            .GroupBy(position => position.Security)
+        var top = book.Where(position => position.Shares > 0 && !_funds.IsFund(position.Security))
+            .GroupBy(position => position.Security.IssuerId)
             .Where(group => group.All(position => position.Value != null))
             .Select(group =>
-                (
-                    Security: group.Key,
-                    Value: group.Sum(position => position.Value.GetValueOrDefault())
-                )
+                (Issuer: group.Key, Value: group.Sum(position => position.Value.GetValueOrDefault()))
             )
             .Where(position => position.Value > 0)
             .OrderByDescending(position => position.Value)
-            .ThenBy(position => position.Security.IssuerId)
-            .ThenBy(position => position.Security.ListedTicker, StringComparer.Ordinal)
+            .ThenBy(position => position.Issuer)
             .Take(PositionsPerHolder)
-            .Select(position => Index(position.Security))
+            .Select(position => Index(position.Issuer))
             .ToArray();
         if (top.Length > 1)
             _holders.Add(top);
     }
 
-    /// <summary>The peers of every security held by enough filers, ranked from 1.</summary>
+    /// <summary>The peers of every company held by enough filers, ranked from 1.</summary>
     public List<StockQuarterlyHolderOverlap> Build(DateOnly reportDate)
     {
-        var holdersOf = new List<int>[_securities.Count];
-        for (var security = 0; security < holdersOf.Length; security++)
-            holdersOf[security] = [];
+        var holdersOf = new List<int>[_issuers.Count];
+        for (var company = 0; company < holdersOf.Length; company++)
+            holdersOf[company] = [];
         for (var holder = 0; holder < _holders.Count; holder++)
-            foreach (var security in _holders[holder])
-                holdersOf[security].Add(holder);
+            foreach (var company in _holders[holder])
+                holdersOf[company].Add(holder);
 
         var rows = new List<StockQuarterlyHolderOverlap>();
-        var shared = new int[_securities.Count];
+        var shared = new int[_issuers.Count];
         var touched = new List<int>();
-        for (var security = 0; security < holdersOf.Length; security++)
+        for (var company = 0; company < holdersOf.Length; company++)
         {
-            var own = holdersOf[security].Count;
+            var own = holdersOf[company].Count;
             if (own < MinimumSharedHolders)
                 continue;
-            foreach (var holder in holdersOf[security])
+            foreach (var holder in holdersOf[company])
             foreach (var peer in _holders[holder])
-                if (peer != security && shared[peer]++ == 0)
+                if (peer != company && shared[peer]++ == 0)
                     touched.Add(peer);
 
-            var key = _securities[security];
-            // A sibling class of the same issuer is the same company, never its peer.
+            var issuer = _issuers[company];
             var peers = touched
-                .Where(peer =>
-                    shared[peer] >= MinimumSharedHolders
-                    && _securities[peer].IssuerId != key.IssuerId
-                )
+                .Where(peer => shared[peer] >= MinimumSharedHolders)
                 .Select(peer =>
                     (
                         Peer: peer,
@@ -94,22 +98,18 @@ public sealed class HolderOverlapCalculator
                 )
                 .OrderByDescending(peer => peer.Similarity)
                 .ThenByDescending(peer => peer.Shared)
-                .ThenBy(peer => _securities[peer.Peer].IssuerId)
-                .ThenBy(peer => _securities[peer.Peer].ListedTicker, StringComparer.Ordinal)
+                .ThenBy(peer => _issuers[peer.Peer])
                 .Take(PeersPerSecurity)
                 .ToList();
             for (var rank = 0; rank < peers.Count; rank++)
             {
-                var peerKey = _securities[peers[rank].Peer];
                 rows.Add(
                     new StockQuarterlyHolderOverlap
                     {
-                        EquityIssuerId = key.IssuerId,
-                        ListedTicker = key.ListedTicker,
+                        EquityIssuerId = issuer,
                         ReportDate = reportDate,
                         Rank = rank + 1,
-                        PeerEquityIssuerId = peerKey.IssuerId,
-                        PeerListedTicker = peerKey.ListedTicker,
+                        PeerEquityIssuerId = _issuers[peers[rank].Peer],
                         SharedHolders = peers[rank].Shared,
                         Similarity = Math.Round((decimal)peers[rank].Similarity, 6),
                     }
@@ -122,13 +122,13 @@ public sealed class HolderOverlapCalculator
         return rows;
     }
 
-    private int Index(HolderSecurityKey security)
+    private int Index(Guid issuer)
     {
-        if (!_indexes.TryGetValue(security, out var index))
+        if (!_indexes.TryGetValue(issuer, out var index))
         {
-            index = _securities.Count;
-            _indexes[security] = index;
-            _securities.Add(security);
+            index = _issuers.Count;
+            _indexes[issuer] = index;
+            _issuers.Add(issuer);
         }
         return index;
     }
