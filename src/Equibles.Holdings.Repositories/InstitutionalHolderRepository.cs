@@ -418,6 +418,14 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             .Set<HolderQuarterlyMetrics>()
             .Where(metrics => metrics.InstitutionalHolderId == holder.Id);
 
+    // The holder's active share against each benchmark, one row per benchmark per measured quarter.
+    public IQueryable<HolderQuarterlyBenchmarkActiveShare> GetQuarterlyBenchmarkActiveShares(
+        InstitutionalHolder holder
+    ) =>
+        DbContext
+            .Set<HolderQuarterlyBenchmarkActiveShare>()
+            .Where(row => row.InstitutionalHolderId == holder.Id);
+
     // The listed holders' profiles; a holder not yet profiled has none.
     public IQueryable<InstitutionalHolderProfile> GetProfiles(
         IReadOnlyCollection<Guid> holderIds

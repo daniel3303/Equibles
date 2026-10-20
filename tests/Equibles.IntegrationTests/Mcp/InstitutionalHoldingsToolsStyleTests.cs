@@ -142,12 +142,21 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
         var stock = Stock();
         var old = Holder("1364742", "Focused Capital (old)");
         var holder = Holder("2012383", "Focused Capital");
+        var measured = Metrics(holder, December, HolderStyleBand.Concentrated);
+        measured.ClosestBenchmark = "sp-500";
+        measured.ClosestBenchmarkName = "S&P 500";
+        measured.ClosestBenchmarkAsOf = December;
+        measured.ClosestActiveShare = 0.41m;
+        measured.SectorActiveShare = 0.087m;
         DbContext.AddRange(
             Holding(stock, old, 6_000, new DateOnly(2024, 6, 30)),
             Holding(stock, holder, 6_000, December),
             Holding(stock, holder, 6_000, March),
             Metrics(holder, September, HolderStyleBand.DiversifiedActive),
-            Metrics(holder, December, HolderStyleBand.Concentrated),
+            measured,
+            Benchmark(holder, December, "sp-500", 0.41m, 0.60m, 0.98m),
+            Benchmark(holder, December, "13f-aggregate", 0.70m, 0.50m, 1m),
+            Benchmark(holder, September, "sp-500", 0.52m, 0.40m, 0.98m),
             new HolderSuccession
             {
                 PredecessorHolderId = old.Id,
@@ -177,9 +186,18 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
                 "Note: its 2025-03-31 13F is not measured yet; quarters are measured from the first covered 13F quarter, once each filing window closes."
             )
             .And.Contain(
-                "| 2024-12-31 | Concentrated | Medium turnover | Long horizon | 1,000.0 | 300 | 70.0% | 65.0% | 9.5 | 50.0% | 14.2 |"
+                "| 2024-12-31 | Concentrated | Medium turnover | Long horizon | 1,000.0 | 300 | 70.0% | S&P 500 41.0% (2024-12-31) | 8.7% | 65.0% | 9.5 | 50.0% | 14.2 |"
             )
-            .And.Contain("| 2024-09-30 | Diversified active |")
+            .And.Contain(
+                "| 2024-09-30 | Diversified active | Medium turnover | Long horizon | 1,000.0 | 300 | 70.0% | — | — |"
+            )
+            .And.Contain(
+                "- Closest benchmark: the S&P 500 as of 2024-12-31, active share 41.0%; sector active share 8.7% against the combined 13F book's sector weights"
+            )
+            .And.Contain("**Active share by benchmark, 2024-12-31**")
+            .And.Contain("| S&P 500 | 2024-12-31 | 41.0% | 60.0% | 98.0% |")
+            .And.Contain("| 13F combined book | 2024-12-31 | 70.0% | 50.0% | 100.0% |")
+            .And.NotContain("52.0%")
             .And.Contain("**Latest quarter, 2024-12-31:**")
             .And.Contain("- Concentrated: the top 10 positions are 65.0% of the book (60%+)")
             .And.Contain("- Medium turnover: 50.0% over the last four quarters")
@@ -255,6 +273,9 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             )
             .And.Contain(
                 "| Horizon | Long horizon: value-weighted holding period 14.2 quarters (12+) |"
+            )
+            .And.Contain(
+                "| Benchmark | Closest benchmark: every 13F filer's combined book, active share 70.0% |"
             );
         december
             .Should()
@@ -313,6 +334,25 @@ public class InstitutionalHoldingsToolsStyleTests : ParadeDbMcpTestBase
             HorizonBand = HolderHorizonBand.Long,
             BandVersion = 1,
             CalculationVersion = 1,
+        };
+
+    private static HolderQuarterlyBenchmarkActiveShare Benchmark(
+        InstitutionalHolder holder,
+        DateOnly reportDate,
+        string key,
+        decimal activeShare,
+        decimal overlap,
+        decimal coverage
+    ) =>
+        new()
+        {
+            InstitutionalHolderId = holder.Id,
+            ReportDate = reportDate,
+            BenchmarkKey = key,
+            BenchmarkAsOf = reportDate,
+            ActiveShare = activeShare,
+            Overlap = overlap,
+            Coverage = coverage,
         };
 
     private static InstitutionalHolding Holding(

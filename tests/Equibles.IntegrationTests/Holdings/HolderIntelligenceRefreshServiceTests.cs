@@ -9,13 +9,16 @@ using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
+using Equibles.Holdings.HostedService.Extensions;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.HostedService.Services.Benchmarks;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -57,6 +60,9 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
                 Options.Create(new WorkerOptions { MinSyncDate = new DateTime(2024, 1, 1) })
             )
         );
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddScoped<EquityIssuerRepository>();
+        services.AddHolderBenchmarks();
         services.AddScoped<HolderIntelligenceRefreshService>();
         _provider = services.BuildServiceProvider();
 
@@ -121,6 +127,187 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .AggregateActiveShare.Should()
             .Be(0m, "the benchmark is the 13F aggregate, which here is this book alone");
         second.CalculationVersion.Should().Be(HolderIntelligenceRefreshService.CalculationVersion);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_StoresTheCombinedBookRowAsTheAggregateActiveShare()
+    {
+        var other = new InstitutionalHolder { Cik = "0000000003", Name = "Filer Three" };
+        await Seed(seed =>
+        {
+            seed.Add(other);
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 30_000),
+                Holding(_microsoft, _holder, Q1, 100, 10_000),
+                Filing(other, Q1),
+                Holding(_microsoft, other, Q1, 100, 60_000)
+            );
+        });
+
+        (await Rebuild(Q1)).Should().BeTrue();
+
+        await using var read = _fixture.CreateDbContext();
+        var metrics = await read.Set<HolderQuarterlyMetrics>().ToListAsync();
+        var rows = await read.Set<HolderQuarterlyBenchmarkActiveShare>().ToListAsync();
+        rows.Should().HaveCount(2).And.OnlyContain(row => row.BenchmarkKey == "13f-aggregate");
+        foreach (var filer in metrics)
+        {
+            var row = rows.Single(row => row.InstitutionalHolderId == filer.InstitutionalHolderId);
+            row.ActiveShare.Should().Be(filer.AggregateActiveShare.Value);
+            row.BenchmarkAsOf.Should().Be(Q1);
+            row.Coverage.Should().Be(1m);
+            filer.ClosestBenchmark.Should().Be("13f-aggregate");
+            filer.ClosestActiveShare.Should().Be(filer.AggregateActiveShare);
+            filer.ClosestBenchmarkAsOf.Should().Be(Q1);
+        }
+        // Apple is 30% of the 100,000 combined book; this filer holds 75% Apple, 25% Microsoft.
+        var mine = metrics.Single(row => row.InstitutionalHolderId == _holder.Id);
+        mine.AggregateActiveShare.Should().Be(0.45m, "half of |0.75 - 0.30| + |0.25 - 0.70|");
+        mine.SectorActiveShare.Should().Be(0m, "neither issuer has a sector");
+        rows.Single(row => row.InstitutionalHolderId == _holder.Id).Overlap.Should().Be(1m);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_MeasuresEachIndexByItsTrackersReportInsideTheWindow()
+    {
+        var first = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAA",
+            Name: "First",
+            Cusip: "000111AA1"
+        );
+        var second = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BBB",
+            Name: "Second",
+            Cusip: "000222BB2"
+        );
+        await Seed(seed =>
+        {
+            seed.AddRange(first, second);
+            seed.AddRange(
+                Filing(_holder, Q2),
+                Holding(first, _holder, Q2, 100, 60_000),
+                Holding(second, _holder, Q2, 100, 40_000),
+                Holding(_apple, _holder, Q2, 100, 100_000)
+            );
+            // Russell 2000 (iShares, a fiscal-month report 30 days back): the two names 60/40.
+            seed.Add(Tracker("S000004344", Q2.AddDays(-30), ("000111AA1", 60), ("000222BB2", 40)));
+            // Russell 1000 reported 100 days back is stale; an S&P 500 report narrowed on the way
+            // in is incomplete; an S&P SmallCap 600 series that N-CEN no longer calls an index fund
+            // is skipped.
+            seed.Add(Tracker("S000004347", Q2.AddDays(-100), ("000111AA1", 1)));
+            seed.Add(Tracker("S000004310", Q2, reported: 3, ("000111AA1", 1), ("000222BB2", 1)));
+            seed.Add(Tracker("S000004313", Q2, ("000111AA1", 1)));
+            Series(seed, "ncen-600", Q2.AddDays(-90), "S000004313", 7, NCenFundTypes.None, 1m);
+        });
+
+        (await Rebuild(Q2)).Should().BeTrue();
+
+        await using var read = _fixture.CreateDbContext();
+        var rows = await read.Set<HolderQuarterlyBenchmarkActiveShare>()
+            .Where(row => row.InstitutionalHolderId == _holder.Id)
+            .ToListAsync();
+        rows.Select(row => row.BenchmarkKey)
+            .Should()
+            .BeEquivalentTo(["russell-2000", "13f-aggregate"]);
+        var index = rows.Single(row => row.BenchmarkKey == "russell-2000");
+        index.BenchmarkAsOf.Should().Be(Q2.AddDays(-30));
+        index.Coverage.Should().Be(1m);
+        index.Overlap.Should().Be(1m);
+        // The book is 30% / 20% / 50% Apple against 60% / 40%: half of 0.3 + 0.2 + 0.5.
+        index.ActiveShare.Should().Be(0.5m);
+        var metrics = await Metrics(Q2);
+        metrics.ClosestBenchmark.Should().Be("13f-aggregate", "the combined book is this book");
+        metrics.ClosestActiveShare.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_ATrackerNameWithoutAnIssuerStaysInTheIndex()
+    {
+        var first = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAA",
+            Name: "First",
+            Cusip: "000111AA1"
+        );
+        var other = new InstitutionalHolder { Cik = "0000000004", Name = "Other Filer" };
+        // A unit investment trust files without a series id and is read by its own CIK.
+        var trust = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "DIA",
+            Name: "Average Trust",
+            Cik: "0001041130"
+        );
+        var report = Tracker(null, Q2, reported: null, ("000111AA1", 75), ("999999ZZ9", 25));
+        report.RegistrantCik = null;
+        report.EquityIssuerId = trust.Id;
+        await Seed(seed =>
+        {
+            seed.AddRange(first, other, trust, report);
+            seed.AddRange(
+                Filing(_holder, Q2),
+                Holding(first, _holder, Q2, 100, 100_000),
+                Filing(other, Q2),
+                Holding(_apple, other, Q2, 100, 900_000)
+            );
+        });
+
+        (await Rebuild(Q2)).Should().BeTrue();
+
+        var metrics = await Metrics(Q2);
+        metrics.ClosestBenchmark.Should().Be("dow-jones");
+        metrics.ClosestBenchmarkName.Should().Be("Dow Jones Industrial Average");
+        metrics.ClosestActiveShare.Should().Be(0.25m, "the unresolved quarter is held by no one");
+        await using var read = _fixture.CreateDbContext();
+        var row = await read.Set<HolderQuarterlyBenchmarkActiveShare>()
+            .SingleAsync(row =>
+                row.InstitutionalHolderId == _holder.Id && row.BenchmarkKey == "dow-jones"
+            );
+        row.Coverage.Should().Be(0.75m);
+        row.Overlap.Should().Be(0.75m);
+    }
+
+    [Fact]
+    public async Task RebuildQuarter_ASuccessorTradesAgainstTheOnePredecessorItContinues()
+    {
+        var predecessor = new InstitutionalHolder { Cik = "0000000005", Name = "Old CIK" };
+        var merged = new[]
+        {
+            new InstitutionalHolder { Cik = "0000000006", Name = "Merged A" },
+            new InstitutionalHolder { Cik = "0000000007", Name = "Merged B" },
+        };
+        var mergedSuccessor = new InstitutionalHolder { Cik = "0000000008", Name = "Merged" };
+        await Seed(seed =>
+        {
+            seed.AddRange(predecessor, mergedSuccessor);
+            seed.AddRange(merged);
+            seed.AddRange(
+                Filing(predecessor, Q1),
+                Holding(_apple, predecessor, Q1, 100, 10_000),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 150, 18_000),
+                Succession(predecessor, _holder, 10_000, 12_000)
+            );
+            foreach (var filer in merged)
+                seed.AddRange(
+                    Filing(filer, Q1),
+                    Holding(_apple, filer, Q1, 50, 5_000),
+                    Succession(filer, mergedSuccessor, 10_000, 12_000)
+                );
+            seed.AddRange(
+                Filing(mergedSuccessor, Q2),
+                Holding(_apple, mergedSuccessor, Q2, 100, 12_000)
+            );
+        });
+
+        (await Rebuild(Q2)).Should().BeTrue();
+
+        var continued = await Metrics(Q2);
+        continued.ComparedHolderId.Should().Be(predecessor.Id);
+        continued.PreviousEquityAum.Should().Be(10_000);
+        continued.IncreasedCount.Should().Be(1);
+        continued.BuyValue.Should().Be(6_000m, "50 shares at the 120 quarter-end price");
+        var group = await Metrics(Q2, mergedSuccessor);
+        group.ComparedHolderId.Should().BeNull("a merged group's prior book cannot be divided");
+        group.BuyValue.Should().BeNull();
     }
 
     [Fact]
@@ -1213,6 +1400,68 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         seed.AddRange(report, fund);
     }
 
+    private static HolderSuccession Succession(
+        InstitutionalHolder predecessor,
+        InstitutionalHolder successor,
+        long predecessorGroupValue,
+        long successorGroupValue
+    ) =>
+        new()
+        {
+            PredecessorHolderId = predecessor.Id,
+            SuccessorHolderId = successor.Id,
+            PredecessorLastReportDate = Q1,
+            SuccessorFirstReportDate = Q2,
+            Basis = default,
+            PredecessorGroupValue = predecessorGroupValue,
+            SuccessorGroupValue = successorGroupValue,
+        };
+
+    // One index-tracking fund's NPORT-P report of equity-common lines, stored whole unless the
+    // reported count says otherwise.
+    private static NportFiling Tracker(
+        string seriesId,
+        DateOnly period,
+        params (string Cusip, decimal Value)[] lines
+    ) => Tracker(seriesId, period, lines.Length, lines);
+
+    private static NportFiling Tracker(
+        string seriesId,
+        DateOnly period,
+        int? reported,
+        params (string Cusip, decimal Value)[] lines
+    )
+    {
+        var filing = new NportFiling
+        {
+            RegistrantCik = "1100663",
+            AccessionNumber = $"nport-{seriesId}-{period:yyyyMMdd}",
+            FilingDate = period.AddDays(55),
+            SeriesId = seriesId,
+            SeriesName = "Tracker " + seriesId,
+            ReportPeriodDate = period,
+            ReportPeriodEnd = period,
+            ReportedHoldingCount = reported ?? lines.Length,
+            ParserVersion = NportFiling.CurrentParserVersion,
+        };
+        filing.Holdings.AddRange(
+            lines.Select(line => new NportHolding
+            {
+                NportFilingId = filing.Id,
+                Name = "Line " + line.Cusip,
+                Cusip = line.Cusip,
+                Balance = 1,
+                Units = "NS",
+                Currency = "USD",
+                ValueUsd = line.Value,
+                PayoffProfile = "Long",
+                AssetCategory = "EC",
+                IssuerCategory = "CORP",
+            })
+        );
+        return filing;
+    }
+
     private static StockSplit Split(
         EquityIssuer issuer,
         DateOnly effective,
@@ -1237,6 +1486,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         : HolderIntelligenceRefreshService(
             dbContext,
             corpusCoverage,
+            [new AggregateHolderBenchmarkProvider(dbContext)],
             NullLogger<HolderIntelligenceRefreshService>.Instance
         )
     {

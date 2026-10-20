@@ -41,6 +41,74 @@ public class HolderStyleDescriptionsTests
     }
 
     [Fact]
+    public void Style_IndexLikeByTheClosestIndex_NamesItAndItsDate()
+    {
+        var metrics = Metrics();
+        metrics.StyleBand = HolderStyleBand.IndexLike;
+        metrics.IndexLikeEvidence = HolderIndexLikeEvidence.ActiveShare;
+        metrics.AggregateActiveShare = 0.52m;
+        metrics.ClosestBenchmark = "russell-2000";
+        metrics.ClosestBenchmarkName = "Russell 2000";
+        metrics.ClosestBenchmarkAsOf = new DateOnly(2026, 5, 31);
+        metrics.ClosestActiveShare = 0.031m;
+        metrics.StockCount = 1_912;
+
+        HolderStyleDescriptions
+            .Style(metrics)
+            .Should()
+            .Be(
+                "Index-like: active share 3.1% against the Russell 2000 as of 2026-05-31, across 1,912 stocks (index-like at 20% or less with 100+ stocks)"
+            );
+    }
+
+    [Fact]
+    public void Style_IndexLikeByTheCombinedBook_KeepsItsWording()
+    {
+        var metrics = Metrics();
+        metrics.StyleBand = HolderStyleBand.IndexLike;
+        metrics.IndexLikeEvidence = HolderIndexLikeEvidence.ActiveShare;
+        metrics.ClosestBenchmark = "13f-aggregate";
+        metrics.ClosestBenchmarkName = "every 13F filer's combined book";
+        metrics.ClosestBenchmarkAsOf = new DateOnly(2026, 6, 30);
+        metrics.ClosestActiveShare = 0.142m;
+        metrics.StockCount = 3_456;
+
+        HolderStyleDescriptions
+            .Style(metrics)
+            .Should()
+            .Be(
+                "Index-like: active share 14.2% against every 13F filer's combined book, across 3,456 stocks (index-like at 20% or less with 100+ stocks)"
+            );
+    }
+
+    [Fact]
+    public void BenchmarkSummary_NamesTheClosestBenchmarkAndSectorActiveShare()
+    {
+        var metrics = Metrics();
+        metrics.ClosestBenchmark = "sp-500";
+        metrics.ClosestBenchmarkName = "S&P 500";
+        metrics.ClosestBenchmarkAsOf = new DateOnly(2026, 6, 30);
+        metrics.ClosestActiveShare = 0.412m;
+        metrics.SectorActiveShare = 0.087m;
+
+        HolderStyleDescriptions
+            .BenchmarkSummary(metrics)
+            .Should()
+            .Be(
+                "Closest benchmark: the S&P 500 as of 2026-06-30, active share 41.2%; sector active share 8.7% against the combined 13F book's sector weights"
+            );
+    }
+
+    [Fact]
+    public void BenchmarkSummary_UnmeasuredBookHasNone()
+    {
+        var metrics = Metrics();
+        metrics.AggregateActiveShare = null;
+
+        HolderStyleDescriptions.BenchmarkSummary(metrics).Should().BeNull();
+    }
+
+    [Fact]
     public void Style_IndexLikeByIndexFundAssets_StatesBothSharesAndTheNCenDate()
     {
         var metrics = Metrics();
@@ -109,7 +177,7 @@ public class HolderStyleDescriptionsTests
             .Style(Metrics())
             .Should()
             .Be(
-                "Diversified active: top 10 weight 35.0%, 60.0 effective positions, active share 70.0%; it meets none of the index-like, systematic-like or concentrated tests"
+                "Diversified active: top 10 weight 35.0%, 60.0 effective positions, active share 70.0% against every 13F filer's combined book; it meets none of the index-like, systematic-like or concentrated tests"
             );
     }
 
@@ -261,7 +329,7 @@ public class HolderStyleDescriptionsTests
                 "tested in this order. Unknown: under $10,000,000 of valued equity or 5 stocks."
             )
             .And.Contain(
-                "Index-like (100+ stocks): active share against every 13F filer's combined book at 20% or less, or index series holding 80%+"
+                "Index-like (100+ stocks): active share of 20% or less against the closest benchmark, which is the S&P 500, S&P MidCap 400, S&P SmallCap 600, Russell 1000, Russell 2000, Nasdaq-100 or Dow Jones Industrial Average (weighted by an index-tracking fund's reported holdings or the index's constituents, nearest the quarter end) or every 13F filer's combined book, or index series holding 80%+"
             )
             .And.Contain("equal to 50%+ of its book")
             .And.Contain("500+ stocks, 100%+ annual turnover and a top 10 weight of 25% or less")
