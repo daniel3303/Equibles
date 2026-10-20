@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13g" xmlns:com="http://www.sec.gov/edgar/common">
+ <headerData>
+  <submissionType>SCHEDULE 13G/A</submissionType>
+  <previousAccessionNumber>0000315066-23-001827</previousAccessionNumber>
+  <filerInfo>
+   <filer>
+    <filerCredentials>
+     <cik>0000315066</cik>
+     <ccc>XXXXXXXX</ccc>
+    </filerCredentials>
+   </filer>
+   <liveTestFlag>LIVE</liveTestFlag>
+
+
+  </filerInfo>
+ </headerData>
+ <formData>
+  <coverPageHeader>
+   <amendmentNo>2</amendmentNo>
+   <securitiesClassTitle>COMMON STOCK</securitiesClassTitle>
+   <eventDateRequiresFilingThisStatement>12/31/2024</eventDateRequiresFilingThisStatement>
+   <issuerInfo>
+    <issuerCik>0001898601</issuerCik>
+    <issuerName>IPERIONX LTD</issuerName>
+    <issuerCusip>Q4789U120</issuerCusip>
+    <issuerPrincipalExecutiveOfficeAddress>
+     <com:street1>129 W TRADE STREET</com:street1>
+     <com:street2>SUITE 1405</com:street2>
+     <com:city>CHARLOTTE</com:city>
+     <com:stateOrCountry>NC</com:stateOrCountry>
+     <com:zipCode>28202</com:zipCode>
+    </issuerPrincipalExecutiveOfficeAddress>
+   </issuerInfo>
+   <designateRulesPursuantThisScheduleFiled>
+    <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>
+   </designateRulesPursuantThisScheduleFiled>
+  </coverPageHeader>
+  <coverPageHeaderReportingPersonDetails>
+
+   <reportingPersonName>FMR LLC</reportingPersonName>
+   <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+   <reportingPersonBeneficiallyOwnedNumberOfShares>
+    <soleVotingPower>26017582.00</soleVotingPower>
+    <sharedVotingPower>0.00</sharedVotingPower>
+    <soleDispositivePower>26017582.00</soleDispositivePower>
+    <sharedDispositivePower>0.00</sharedDispositivePower>
+   </reportingPersonBeneficiallyOwnedNumberOfShares>
+   <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>26017582.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+   <classPercent>8.2</classPercent>
+   <typeOfReportingPerson>HC</typeOfReportingPerson>
+  </coverPageHeaderReportingPersonDetails>
+  <coverPageHeaderReportingPersonDetails>
+   <reportingPersonName>Abigail P. Johnson</reportingPersonName>
+   <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+   <reportingPersonBeneficiallyOwnedNumberOfShares>
+    <soleVotingPower>0.00</soleVotingPower>
+    <sharedVotingPower>0.00</sharedVotingPower>
+    <soleDispositivePower>26017582.00</soleDispositivePower>
+    <sharedDispositivePower>0.00</sharedDispositivePower>
+   </reportingPersonBeneficiallyOwnedNumberOfShares>
+   <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>26017582.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>
+   <classPercent>8.2</classPercent>
+   <typeOfReportingPerson>IN</typeOfReportingPerson>
+  </coverPageHeaderReportingPersonDetails>
+  <items>
+   <item1>
+    <issuerName>IPERIONX LTD</issuerName>
+    <issuerPrincipalExecutiveOfficeAddress>129 W TRADE STREET,SUITE 1405,CHARLOTTE,NC,USA,28202</issuerPrincipalExecutiveOfficeAddress>
+   </item1>
+   <item2>
+    <filingPersonName>FMR LLC</filingPersonName>
+    <principalBusinessOfficeOrResidenceAddress>245 Summer Street, Boston, Massachusetts 02210</principalBusinessOfficeOrResidenceAddress>
+    <citizenship>Not applicable</citizenship>
+   </item2>
+   <item3>
+    <notApplicableFlag>N</notApplicableFlag>
+    <typeOfPersonFiling>HC</typeOfPersonFiling>
+   </item3>
+   <item4>
+    <amountBeneficiallyOwned>26017582.00</amountBeneficiallyOwned>
+    <classPercent>8.2</classPercent>
+    <numberOfSharesPersonHas>
+     <solePowerOrDirectToVote>Please see the responses to Items 5 and 6 on the cover page.</solePowerOrDirectToVote>
+     <sharedPowerOrDirectToVote>0.00</sharedPowerOrDirectToVote>
+     <solePowerOrDirectToDispose>26017582.00</solePowerOrDirectToDispose>
+     <sharedPowerOrDirectToDispose>0.00</sharedPowerOrDirectToDispose>
+    </numberOfSharesPersonHas>
+   </item4>
+   <item5>
+    <notApplicableFlag>Y</notApplicableFlag>
+    <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>
+   </item5>
+   <item6>
+    <notApplicableFlag>N</notApplicableFlag>
+    <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>One or more other persons are known to have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, the COMMON STOCK of IPERIONX LTD. The interest of Fidelity International Discovery Fund, in the COMMON STOCK of IPERIONX LTD, amounted to 22329668.00 shares or 7.1% of the total outstanding COMMON STOCK at 12/31/2024.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>
+   </item6>
+   <item7>
+    <notApplicableFlag>N</notApplicableFlag>
+    <subsidiaryIdentificationAndClassification>See attached Exhibit 99.</subsidiaryIdentificationAndClassification>
+   </item7>
+   <item8>
+    <notApplicableFlag>Y</notApplicableFlag>
+   </item8>
+   <item9>
+    <notApplicableFlag>Y</notApplicableFlag>
+   </item9>
+   <item10>
+    <notApplicableFlag>N</notApplicableFlag>
+    <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under ?? 240.14a-11.</certifications>
+   </item10>
+  </items>
+  <exhibitInfo>Please see Exhibit 99 for 13d-1(k) (1) agreement.</exhibitInfo>
+  <signatureInformation>
+   <reportingPersonName>FMR LLC</reportingPersonName>
+   <signatureDetails>
+    <signature>Stephanie J. Brown</signature>
+    <title>Duly authorized under Power of Attorney effective as of January 3, 2023, by and on behalf of FMR LLC and its direct and indirect subsidiaries*</title>
+    <date>02/11/2025</date>
+   </signatureDetails>
+  </signatureInformation>
+  <signatureInformation>
+   <reportingPersonName>Abigail P. Johnson</reportingPersonName>
+   <signatureDetails>
+    <signature>Stephanie J. Brown</signature>
+    <title>Duly authorized under Power of Attorney effective as of January 26, 2023, by and on behalf of Abigail P. Johnson**</title>
+    <date>02/11/2025</date>
+   </signatureDetails>
+  </signatureInformation>
+  <signatureComments>* This power of attorney is incorporated herein by reference to Exhibit 24 to the Schedule 13G filed by FMR LLC on January 10, 2023, accession number: 0000315066-23-000003.** This power of attorney is incorporated herein by reference to Exhibit 24 to the Schedule 13G filed by FMR LLC on January 31, 2023, accession number: 0000315066-23-000038.</signatureComments>
+ </formData>
+
+</edgarSubmission>
