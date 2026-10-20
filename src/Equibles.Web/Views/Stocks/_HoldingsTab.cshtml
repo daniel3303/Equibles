@@ -104,6 +104,7 @@
                 <span class="text-xs text-base-content/60">Filter:</span>
                 @foreach (var bucket in Buckets) {
                     var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
+                    if (bucket.Type == PositionChangeType.NoPriorFiling && count == 0) continue;
                     var isActive = Model.IsTypeActive(bucket.Type);
                     var btnCss = isActive ? "btn-primary" : "btn-ghost border border-base-300";
                     <a href="@TypesUrl(bucket.Type)" class="btn btn-xs @btnCss">
@@ -290,6 +291,8 @@
     @foreach (var bucket in Buckets) {
         if (!Model.IsTypeActive(bucket.Type)) continue;
         var count = Model.BucketCounts.TryGetValue(bucket.Type, out var c) ? c : 0;
+        // Only shown when some holder lacks a prior-quarter 13F.
+        if (bucket.Type == PositionChangeType.NoPriorFiling && count == 0) continue;
         var entries = Model.GroupedHolders.TryGetValue(bucket.Type, out var list) ? list : new List<HolderPositionChange>();
         var sorted = SortBucket(bucket.Type, entries).ToList();
         var ariaTestId = $"holdings-bucket-{bucket.Type.ToString().ToLowerInvariant()}";
