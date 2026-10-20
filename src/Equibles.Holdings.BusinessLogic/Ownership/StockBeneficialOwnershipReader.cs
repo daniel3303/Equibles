@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic.Ownership.Models;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,14 +17,17 @@ public class StockBeneficialOwnershipReader
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly TimeProvider _timeProvider;
+    private readonly IBeneficialOwnershipPurposeSource _purposeSource;
 
     public StockBeneficialOwnershipReader(
         InstitutionalHoldingRepository holdingRepository,
         StockSplitRepository stockSplitRepository,
-        TimeProvider timeProvider = null
+        TimeProvider timeProvider = null,
+        IBeneficialOwnershipPurposeSource purposeSource = null
     )
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _purposeSource = purposeSource;
         _holdingRepository = holdingRepository;
         _stockSplitRepository = stockSplitRepository;
     }
@@ -86,7 +90,7 @@ public class StockBeneficialOwnershipReader
             .GroupBy(person => person.AccessionNumber)
             .ToDictionary(group => group.Key, group => group.OrderBy(p => p.Ordinal).ToList());
 
-        return positions
+        var blocks = positions
             .Select(p =>
             {
                 long Restate(long shares) => scope.Restate(shares, p.EventDate, p.ListedTicker);
@@ -138,5 +142,13 @@ public class StockBeneficialOwnershipReader
             .ThenBy(block => block.FilerName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(block => block.AccessionNumber, StringComparer.Ordinal)
             .ToList();
+        await StockOwnershipReader.ReadPurposes(
+            blocks.Where(block => block.FilingType == FilingType.Schedule13D).ToList(),
+            block => block.AccessionNumber,
+            (block, purpose) => block.Purpose = purpose,
+            _purposeSource,
+            cancellationToken
+        );
+        return blocks;
     }
 }
