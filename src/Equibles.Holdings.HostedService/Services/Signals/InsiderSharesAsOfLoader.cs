@@ -161,12 +161,4 @@ internal static class InsiderSharesAsOfLoader
                 SecurityKind = row.SecurityKind,
             })
             .ToListAsync(cancellationToken);
-
-    private sealed class NewestInsiderRow
-    {
-        public Guid EquityIssuerId { get; init; }
-        public Guid InsiderOwnerId { get; init; }
-        public string AccessionNumber { get; init; }
-        public Guid Id { get; init; }
-    }
 }
