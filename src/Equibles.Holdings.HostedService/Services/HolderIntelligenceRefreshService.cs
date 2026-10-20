@@ -26,8 +26,11 @@ public class HolderIntelligenceRefreshService
     /// Bump when the metrics change meaning, so the drain recomputes every quarter. 2: trades are
     /// priced at the quarter average price. 3: N-CEN index series assets feed the index-like band.
     /// 4: trades are also stored per sector (<see cref="HolderSectorFlowCalculator.FirstVersion"/>).
+    /// 5: a trade whose shares, at its price, grossly exceed a position's reported value is unpriced
+    /// (<see cref="HolderTurnoverCalculator"/>), which heals buy, sell, turnover, style bands and
+    /// sector flows built on swapped share and value columns or a sibling class's CUSIP.
     /// </summary>
-    public const int CalculationVersion = HolderSectorFlowCalculator.FirstVersion;
+    public const int CalculationVersion = 5;
 
     /// <summary>A stamp this old is past the drain's cooldown and is picked up on its next tick.</summary>
     public static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
@@ -197,6 +200,7 @@ public class HolderIntelligenceRefreshService
                 OptionType = holding.OptionType,
                 Shares = holding.Shares,
                 Value = holding.Value,
+                FiledValue = holding.FiledValue,
                 ValueMissing = holding.ValuePending || holding.ValueUnavailable,
             })
             .ToListAsync(cancellationToken);

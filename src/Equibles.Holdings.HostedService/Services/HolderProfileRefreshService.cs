@@ -157,6 +157,8 @@ public class HolderProfileRefreshService
                 filing.FilingDate,
                 filing.FilerCik,
                 filing.FilingPersonTypes,
+                filing.Rules,
+                filing.UnrecognizedFilingPersonTypeCodes,
                 Persons = filing
                     .ReportingPersons.OrderBy(person => person.Ordinal)
                     .Select(person => new { person.Cik, person.Types })
@@ -171,7 +173,11 @@ public class HolderProfileRefreshService
                 filing.FilerCik,
                 filing.FilingPersonTypes,
                 filing.Persons.Select(person => (person.Cik, person.Types)).ToList()
-            ))
+            )
+            {
+                Rules = filing.Rules,
+                UnrecognizedFilingPersonTypeCodes = filing.UnrecognizedFilingPersonTypeCodes,
+            })
             .ToList();
     }
 

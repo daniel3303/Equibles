@@ -39,8 +39,29 @@ public class HolderBucketTokensTests
         error
             .Should()
             .Be(
-                "Unknown holder type 'hedge'. Use one or more of: adv, era, ia, bank, ins, bd, fund, plan, nonus, unk."
+                "Unknown holder type 'hedge'. Use one or more of: adv, era, ia, bank, ins, bd, fund, plan, nonus, hc, unk."
             );
+    }
+
+    [Fact]
+    public void ParseEntityTypes_HoldingCompanyToken_ReadsInAnyCase()
+    {
+        var (types, error) = HolderBucketTokens.ParseEntityTypes(["HC", "bank"]);
+
+        error.Should().BeNull();
+        types.Should().BeEquivalentTo([HolderEntityType.HoldingCompany, HolderEntityType.Bank]);
+        HolderBucketTokens.Label(HolderEntityType.HoldingCompany).Should().Be("Holding company");
+        HolderBucketTokens
+            .Describe(
+                new HashSet<HolderEntityType>
+                {
+                    HolderEntityType.Unknown,
+                    HolderEntityType.HoldingCompany,
+                    HolderEntityType.NonUsInstitution,
+                }
+            )
+            .Should()
+            .Be("nonus, hc, unk");
     }
 
     [Fact]

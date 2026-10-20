@@ -49,6 +49,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryConfidentialWarni
                     null,
                     null,
                     null,
+                    null,
                 ]
             );
 

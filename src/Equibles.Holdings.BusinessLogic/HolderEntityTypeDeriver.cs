@@ -7,11 +7,17 @@ namespace Equibles.Holdings.BusinessLogic;
 /// Decides a holder's entity type from its stored regulatory evidence, strongest source first:
 /// its own Form ADV listing, its SEC SIC code, its recent 13D/13G self-report, then an N-CEN
 /// registrant report. No current evidence means Unknown; nothing is ever read from a name.
+/// A parent holding company (13D/13G code HC) is the weakest evidence: any current operating
+/// type, from any source, decides instead.
 /// </summary>
 public static class HolderEntityTypeDeriver
 {
-    /// <summary>Stamped on every profile; bump when the rules change so readers can tell them apart.</summary>
-    public const int Version = 1;
+    /// <summary>
+    /// Stamped on every profile; bump when the rules change so readers can tell them apart.
+    /// 2: HC reads HoldingCompany, and a multi-person 13G filed only under Rule 13d-1(b) with
+    /// one Item 3 code speaks for its filer.
+    /// </summary>
+    public const int Version = 2;
 
     public const int BeneficialOwnershipLookbackMonths = 36;
     public const int NCenLookbackMonths = 24;
@@ -43,7 +49,8 @@ public static class HolderEntityTypeDeriver
     };
 
     // A person stating several mappable codes (a broker-dealer that is also an adviser) takes
-    // the first in this order, and the profile is flagged.
+    // the first in this order, and the profile is flagged. HC comes last: a parent that is also
+    // an adviser or a bank reads as that, and the pair is not a conflict.
     private static readonly (ReportingPersonTypes Codes, HolderEntityType Type)[] PersonTypes =
     [
         (
@@ -59,6 +66,7 @@ public static class HolderEntityTypeDeriver
             HolderEntityType.BenefitPlan
         ),
         (ReportingPersonTypes.NonUsInstitution, HolderEntityType.NonUsInstitution),
+        (ReportingPersonTypes.ParentHoldingCompany, HolderEntityType.HoldingCompany),
     ];
 
     private static readonly HolderEvidenceSource[] Precedence =
@@ -90,9 +98,14 @@ public static class HolderEntityTypeDeriver
                 .Select(item => item.Fact.SourceKey)
                 .Distinct()
                 .Count() > 1;
+        // A fact implying only HoldingCompany decides only when no current fact of any source
+        // implies an operating type: not an older 13D/13G, not the other half of the same filing
+        // (an HC cover page beside an FI Item 3), not a lower-ranked N-CEN registrant report.
+        var operating = current.Where(item => !IsHoldingCompanyOnly(item.Types)).ToList();
+        var candidates = operating.Count > 0 ? operating : current;
         var decisive = Precedence
             .Select(source =>
-                current
+                candidates
                     .Where(item => Rank(item.Fact.Source) == source)
                     .OrderBy(item => item.Fact.MatchedOn)
                     .ThenByDescending(item => item.Fact.AsOf)
@@ -174,10 +187,15 @@ public static class HolderEntityTypeDeriver
     private static HolderEvidenceSource Rank(HolderEvidenceSource source) =>
         source == HolderEvidenceSource.Schedule13G ? HolderEvidenceSource.Schedule13D : source;
 
-    // An adviser by SIC or self-report agrees with an adviser on either Form ADV roster.
+    private static bool IsHoldingCompanyOnly(IReadOnlyList<HolderEntityType> types) =>
+        types.All(type => type == HolderEntityType.HoldingCompany);
+
+    // An adviser by SIC or self-report agrees with an adviser on either Form ADV roster, and a
+    // parent holding company agrees with whatever else the holder is.
     private static bool HasConflict(IEnumerable<HolderEntityType> types)
     {
         var distinct = types.ToHashSet();
+        distinct.Remove(HolderEntityType.HoldingCompany);
         if (
             distinct.Contains(HolderEntityType.RegisteredAdviser)
             || distinct.Contains(HolderEntityType.ExemptReportingAdviser)

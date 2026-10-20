@@ -126,8 +126,6 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Before the walk, so a replay finds each stored position under its current label.
         await ConvergeHoldingLabels(stoppingToken);
 
-        await BackfillHolderClassifications(stoppingToken);
-
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
         var minReportDate = DateOnly.FromDateTime(startDate);
         var fileNames = HoldingsDataSetClient.GetDataSetFileNames(startDate);
@@ -191,6 +189,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
         await SyncForm13FNotices(fileNames, stoppingToken);
         // After the notices, which name the managers that report for a filer that stopped.
         await RefreshHolderSuccessions(stoppingToken);
+        // After the successions, which a parent link must never repeat.
+        await RefreshHolderLinks(stoppingToken);
 
         // Position coverage does not depend on valuation. Check it before maintenance can
         // spend the cycle repricing a large backlog, but let maintenance survive SEC outages.
@@ -817,6 +817,21 @@ public class HoldingsScraperWorker : BaseScraperWorker
         }
     }
 
+    private async Task RefreshHolderLinks(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<HolderLinkRefreshService>()
+                .Run(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogError(exception, "Holder link refresh failed; retrying next cycle");
+        }
+    }
+
     private async Task RefreshHolderSuccessions(CancellationToken cancellationToken)
     {
         try
@@ -829,37 +844,6 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "Holder succession refresh failed; retrying next cycle");
-        }
-    }
-
-    private async Task BackfillHolderClassifications(CancellationToken cancellationToken)
-    {
-        await using var scope = ScopeFactory.CreateAsyncScope();
-        var repo = scope.ServiceProvider.GetRequiredService<InstitutionalHolderRepository>();
-
-        var unclassified = await repo.GetUnclassified().ToListAsync(cancellationToken);
-        if (unclassified.Count == 0)
-            return;
-
-        var classified = 0;
-        foreach (var holder in unclassified)
-        {
-            var result = FundClassifierService.Classify(holder.Name);
-            if (result != FundClassification.Unknown)
-            {
-                holder.Classification = result;
-                classified++;
-            }
-        }
-
-        if (classified > 0)
-        {
-            await repo.SaveChanges();
-            Logger.LogInformation(
-                "Backfilled fund classification for {Classified}/{Total} unclassified holders",
-                classified,
-                unclassified.Count
-            );
         }
     }
 }

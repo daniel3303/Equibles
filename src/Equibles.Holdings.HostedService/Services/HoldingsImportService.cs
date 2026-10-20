@@ -1282,7 +1282,6 @@ public class HoldingsImportService
                 Form13FFileNumber = ClampLength(coverPage?.Form13FFileNumber, 32),
                 CrdNumber = ClampLength(coverPage?.CrdNumber, 32),
                 SecFileNumber = ClampLength(coverPage?.SecFileNumber, 32),
-                Classification = FundClassifierService.Classify(coverPage?.CompanyName),
                 ConfidentialTreatmentRequested = confidentialOmitted,
             };
 

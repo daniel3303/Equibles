@@ -10,4 +10,11 @@ public record BeneficialOwnershipEvidenceRow(
     string FilerCik,
     ReportingPersonTypes FilingPersonTypes,
     IReadOnlyList<(string Cik, ReportingPersonTypes Types)> Persons
-);
+)
+{
+    /// <summary>The Rule 13d-1 paragraphs a 13G is filed under.</summary>
+    public Schedule13GRules Rules { get; init; }
+
+    /// <summary>Item 3 codes outside SEC's list, as filed; null when none.</summary>
+    public string UnrecognizedFilingPersonTypeCodes { get; init; }
+}
