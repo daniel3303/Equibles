@@ -14,6 +14,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Holdings.BusinessLogic;
+using Equibles.Holdings.BusinessLogic.Contracts;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
@@ -88,6 +89,10 @@ public class InstitutionalHoldingsTools
     private readonly HolderMixReader _holderMixReader;
     private readonly McpToolRunner _runner;
 
+    // Injected as a sequence so the dependency stays optional: a deployment without a stated-strategy
+    // source registers nothing and resolves an empty one.
+    private readonly IHolderStrategyStatements _strategyStatements;
+
     public InstitutionalHoldingsTools(
         InstitutionalHoldingRepository holdingRepository,
         InstitutionalHolderRepository holderRepository,
@@ -100,9 +105,11 @@ public class InstitutionalHoldingsTools
         IMemoryCache memoryCache = null,
         InstitutionPortfolioSummaryProvider summaryProvider = null,
         MarketActivityShareRestater marketActivityShareRestater = null,
-        HolderMixReader holderMixReader = null
+        HolderMixReader holderMixReader = null,
+        IEnumerable<IHolderStrategyStatements> strategyStatements = null
     )
     {
+        _strategyStatements = strategyStatements?.FirstOrDefault();
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
         _commonStockRepository = commonStockRepository;
@@ -2169,7 +2176,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, and earlier or later CIKs its 13F reports continue under, then its style, turnover and horizon bands measured from its filed book. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
+        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database, then the holder's profile from regulatory records: entity type and the record that decided it, Form ADV adviser facts (regulatory assets, client base, private funds, LEI), registered funds it advises, and earlier or later CIKs its 13F reports continue under, then any strategy the firm states in its own filed brochure (quoted, dated, linked), then its style, turnover and horizon bands measured from its filed book. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
     )]
     public Task<string> GetInstitutionSummary(
         [Description(
@@ -2208,6 +2215,8 @@ public class InstitutionalHoldingsTools
                     .OrderByDescending(metrics => metrics.ReportDate)
                     .AsNoTracking()
                     .FirstOrDefaultAsync();
+                var statedStrategy =
+                    _strategyStatements == null ? null : await _strategyStatements.Get(holder);
 
                 return RenderInstitutionSummary(
                         holder,
@@ -2217,7 +2226,9 @@ public class InstitutionalHoldingsTools
                         notes,
                         profile,
                         links
-                    ) + RenderStyleBlock(style, targetDate);
+                    )
+                    + RenderStatedStrategy(statedStrategy)
+                    + RenderStyleBlock(style, targetDate);
             },
             "GetInstitutionSummary",
             $"institution: {institutionName}"
@@ -2239,6 +2250,30 @@ public class InstitutionalHoldingsTools
                 SuccessorFirstReportDate = succession.SuccessorFirstReportDate,
             })
             .ToListAsync();
+
+    // The firm's own description from a document it filed, kept apart from the measured bands.
+    private static string RenderStatedStrategy(HolderStatedStrategy strategy)
+    {
+        if (strategy == null || strategy.Statements.Count == 0)
+            return "";
+        var result = new StringBuilder();
+        result.AppendLine();
+        result.AppendLine(
+            $"**Stated strategy ({strategy.SourceName}, {FormatDate(strategy.AsOf)})** (the firm's own description; it never decides the holder type or style bands):"
+        );
+        result.AppendLine();
+        foreach (var statement in strategy.Statements)
+            result.AppendLine($"- {statement.Category}: \"{OneLine(statement.Quote)}\"");
+        if (!string.IsNullOrWhiteSpace(strategy.SourceUrl))
+        {
+            result.AppendLine();
+            result.AppendLine($"_Source: {strategy.SourceUrl}_");
+        }
+        return result.ToString();
+    }
+
+    private static string OneLine(string text) =>
+        string.Join(' ', (text ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
 
     // The holder's bands in the newest measured quarter on or before the summary's quarter.
     private static string RenderStyleBlock(HolderQuarterlyMetrics style, DateOnly targetDate)
