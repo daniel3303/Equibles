@@ -1,6 +1,8 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
+using Equibles.InsiderTrading.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.InsiderTrading.Repositories;
@@ -44,6 +46,70 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     {
         return GetAll().Where(t => t.EquityIssuerId == stock);
     }
+
+    /// <summary>
+    /// Every actual-share row of each insider's newest filing for the issuer, with the owner. A
+    /// filing reports one closing balance per ownership bucket, so its last line alone understates
+    /// an insider holding under several classes or vehicles. A row without an accession number
+    /// degrades to the insider's single newest row, and the accession clause is correlated per
+    /// insider, so a joint filing never leaks another owner's rows in.
+    /// </summary>
+    public IQueryable<InsiderTransaction> GetCurrentPositionRows(Guid stock)
+    {
+        // The pre-v6 "no securities owned" sentinels (SecurityKind Unknown) and derivative rows
+        // are other balances, never the actual-share position.
+        var byStock = GetByIssuerId(stock)
+            .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative);
+        var currentByStock = byStock.OrderCurrentPositionFirst();
+        return GetByIssuerIdWithOwner(stock)
+            .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative)
+            .Where(t =>
+                t.Id
+                    == currentByStock
+                        .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
+                        .Select(t2 => t2.Id)
+                        .First()
+                || (
+                    t.AccessionNumber != null
+                    && t.AccessionNumber
+                        == currentByStock
+                            .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
+                            .Select(t2 => t2.AccessionNumber)
+                            .First()
+                )
+            );
+    }
+
+    /// <summary>
+    /// The issuer's actual-share filings, one row per insider and accession, with the keys that
+    /// order them newest first the way <see cref="InsiderTradingQueryOrderExtensions.OrderCurrentPositionFirst"/>
+    /// orders their rows. Rows without an accession number cannot be grouped into a filing.
+    /// </summary>
+    public IQueryable<InsiderFilingKey> GetFilingKeys(Guid stock) =>
+        GetByIssuerId(stock)
+            .Where(t =>
+                t.SecurityKind == InsiderSecurityKind.NonDerivative && t.AccessionNumber != null
+            )
+            .GroupBy(t => new { t.InsiderOwnerId, t.AccessionNumber })
+            .Select(g => new InsiderFilingKey
+            {
+                InsiderOwnerId = g.Key.InsiderOwnerId,
+                AccessionNumber = g.Key.AccessionNumber,
+                TransactionDate = g.Max(t => t.TransactionDate),
+                FilingDate = g.Max(t => t.FilingDate),
+            });
+
+    /// <summary>Every actual-share row of these filings, whichever insider filed them.</summary>
+    public IQueryable<InsiderTransaction> GetFilingRows(
+        Guid stock,
+        IReadOnlyCollection<string> accessionNumbers
+    ) =>
+        GetByIssuerId(stock)
+            .Where(t =>
+                t.SecurityKind == InsiderSecurityKind.NonDerivative
+                && t.AccessionNumber != null
+                && accessionNumbers.Contains(t.AccessionNumber)
+            );
 
     /// <summary>
     /// Rows from any amendment that restates transaction and/or holding sections

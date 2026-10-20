@@ -15,6 +15,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
+using Equibles.InsiderTrading.Repositories.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -315,49 +316,8 @@ public class InsiderTradingTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                // An ownership summary's Shares Owned must come from the non-derivative
-                // (actual shares) table — an options/derivative row is a different balance,
-                // and the pre-v6 "no securities owned" sentinels (SecurityKind Unknown) are
-                // zero positions by construction.
-                var byStock = _transactionRepository
-                    .GetByIssuerId((stock).Id)
-                    .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative);
-
-                // Every row of each insider's NEWEST filing — not just its last line. A
-                // filing reports one closing balance PER OWNERSHIP BUCKET (security title ×
-                // direct or indirect), so the last line alone is only the final bucket's
-                // balance and understates every insider who also holds under another class
-                // or vehicle — the old single-row read published whichever bucket happened
-                // to sit on the filing's last line. Materialize them ALL before ranking:
-                // each row sits on its own split basis, and cutting on the raw counts would
-                // under-rank insiders whose last filing predates a large split. The Id
-                // clause keeps rows without an accession number reachable (they degrade to
-                // the old single-row read); the accession clause is correlated per insider,
-                // so a joint filing cannot leak another owner's rows in.
-                var currentByStock = byStock.OrderCurrentPositionFirst();
-                var latestTransactions = await _transactionRepository
-                    .GetByIssuerIdWithOwner((stock).Id)
-                    .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative)
-                    .Where(t =>
-                        t.Id
-                            == currentByStock
-                                .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
-                                .Select(t2 => t2.Id)
-                                .First()
-                        || (
-                            t.AccessionNumber != null
-                            && t.AccessionNumber
-                                == currentByStock
-                                    .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
-                                    .Select(t2 => t2.AccessionNumber)
-                                    .First()
-                        )
-                    )
-                    .ToListAsync();
-
-                // Restate every balance onto today's basis, then rank and cut on the
-                // adjusted total so the ordering — and the top-N cut itself — compares
-                // like with like.
+                // Each insider's newest filing, restated onto today's basis, then ranked and cut
+                // on the adjusted total so the ordering and the top-N cut compare like with like.
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
@@ -366,10 +326,9 @@ public class InsiderTradingTools
                     stock.Presentation.Listing.Ticker,
                     stock.Presentation.Listing.Ticker
                 );
-                var positions = latestTransactions
-                    .GroupBy(t => t.InsiderOwnerId)
-                    .Select(group => BuildOwnershipPosition([.. group], splits))
-                    .ToList();
+                var positions = await new InsiderOwnershipPositionCalculator(
+                    _transactionRepository
+                ).GetCurrentPositions(stock, splits);
                 offset = McpLimit.ClampOffset(offset);
                 // Adjusted holdings tie constantly (zero-share former insiders), so the
                 // ordering ends on stable keys — an offset over a partial order would
@@ -429,50 +388,6 @@ public class InsiderTradingTools
             "GetInsiderOwnership",
             $"ticker: {ticker}, offset: {offset}"
         );
-    }
-
-    private sealed record InsiderOwnershipPosition(
-        InsiderTransaction Anchor,
-        long DirectShares,
-        long IndirectShares
-    );
-
-    // One insider's current position from their newest filing's rows. A multi-row filing lists
-    // intermediate balances per bucket, so only each (security title, direct/indirect) bucket's
-    // LAST row — filing order, mirroring OrderCurrentPositionFirst — is that bucket's closing
-    // balance; those are restated onto today's split basis and summed per nature. The anchor is
-    // the filing's overall last row (the row the tool previously showed alone).
-    private static InsiderOwnershipPosition BuildOwnershipPosition(
-        List<InsiderTransaction> rows,
-        List<StockSplit> splits
-    )
-    {
-        var ordered = rows.OrderByDescending(t => t.TransactionDate)
-            .ThenByDescending(t => t.FilingDate)
-            .ThenByDescending(t => t.AccessionNumber, StringComparer.Ordinal)
-            .ThenByDescending(t => t.TransactionOrder)
-            .ThenByDescending(t => t.Id)
-            .ToList();
-
-        long direct = 0;
-        long indirect = 0;
-        foreach (
-            var bucket in ordered.GroupBy(t => (Title: t.SecurityTitle ?? "", t.OwnershipNature))
-        )
-        {
-            var closing = bucket.First();
-            var adjusted = SplitAdjustment.AdjustShareCount(
-                closing.SharesOwnedAfter,
-                closing.TransactionDate,
-                splits
-            );
-            if (bucket.Key.OwnershipNature == OwnershipNature.Direct)
-                direct += adjusted;
-            else
-                indirect += adjusted;
-        }
-
-        return new InsiderOwnershipPosition(ordered[0], direct, indirect);
     }
 
     [McpServerTool(
