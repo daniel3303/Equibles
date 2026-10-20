@@ -1,3 +1,5 @@
+using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories.Models;
 
@@ -167,7 +169,7 @@ public static class FundOverlapCalculator
                 {
                     CommonStockId = g.Key.CommonStockId,
                     Ticker = g.Key.ListedTicker ?? g.First().Issuer?.Presentation?.Listing?.Ticker,
-                    Name = g.First().Issuer?.Name,
+                    Name = ProductName(g.First().Issuer, g.Key.ListedTicker),
                     Shares = g.Sum(h => h.Shares),
                     Value = g.Sum(h => h.Value),
                 }
@@ -179,6 +181,14 @@ public static class FundOverlapCalculator
             TotalValue = perStock.Values.Sum(s => s.Value),
         };
     }
+
+    // A share class carries its issuer's name, but a trust's listed fund is its own product and
+    // the trust's name can belong to a sibling fund, so such a row is left unnamed rather than
+    // labelled with another product's name.
+    private static string ProductName(EquityIssuer issuer, string listedTicker) =>
+        listedTicker != null && SecondaryTickerPolicy.IsExchangeTradedListing(issuer, listedTicker)
+            ? null
+            : issuer?.Name;
 
     private class FundAggregate
     {

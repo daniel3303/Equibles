@@ -57,6 +57,7 @@ public class MultiSeriesTrustHolderGrainPostgresTests(ParadeDbFixture fixture)
         position.CommonStockId.Should().Be(trust.Id);
         position.ListedTicker.Should().Be("IVV");
         position.Ticker.Should().Be("IVV");
+        position.StockName.Should().BeNull("the trust's name is not the fund's");
         position.PreviousShares.Should().Be(100);
         position.CurrentShares.Should().Be(300);
     }

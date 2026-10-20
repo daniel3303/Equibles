@@ -17,6 +17,7 @@ public class MultiSeriesTrustPositionGrainTests
         Ticker: "AAXJ",
         Name: "Fund Trust",
         Cik: "C1100663",
+        SecondaryTickers: ["CLSB"],
         ReferenceTickers: ["IVV", "EFA", "EEM"]
     );
 
@@ -42,19 +43,28 @@ public class MultiSeriesTrustPositionGrainTests
                         [
                             Holding(b, "IVV", Current, 500, 300_000),
                             Holding(b, null, Current, 100, 10_000),
+                            Holding(b, "CLSB", Current, 100, 5_000),
                         ]
                 ),
             ],
             Current
         );
 
-        result.Rows.Select(row => row.Ticker).Should().BeEquivalentTo("IVV", "EFA", "AAXJ");
-        result.Rows.Select(row => row.ListedTicker).Should().BeEquivalentTo("IVV", "EFA", null);
+        result.Rows.Select(row => row.Ticker).Should().BeEquivalentTo("IVV", "EFA", "AAXJ", "CLSB");
+        result
+            .Rows.Select(row => row.ListedTicker)
+            .Should()
+            .BeEquivalentTo("IVV", "EFA", null, "CLSB");
         result.Rows.Single(row => row.Ticker == "IVV").IsCommon.Should().BeTrue();
         result.Rows.Single(row => row.Ticker == "EFA").IsCommon.Should().BeFalse();
-        result.Funds.Select(fund => fund.PositionCount).Should().Equal(2, 2);
-        result.UnionPositionCount.Should().Be(3);
+        result.Funds.Select(fund => fund.PositionCount).Should().Equal(2, 3);
+        result.UnionPositionCount.Should().Be(4);
         result.IntersectionPositionCount.Should().Be(1);
+        // A listed fund is its own product, so the trust's name is not its name; the primary
+        // line and a share class keep the issuer's.
+        result.Rows.Single(row => row.Ticker == "IVV").Name.Should().BeNull();
+        result.Rows.Single(row => row.Ticker == "AAXJ").Name.Should().Be("Fund Trust");
+        result.Rows.Single(row => row.Ticker == "CLSB").Name.Should().Be("Fund Trust");
     }
 
     [Fact]

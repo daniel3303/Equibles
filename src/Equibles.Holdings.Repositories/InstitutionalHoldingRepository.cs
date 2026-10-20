@@ -2667,7 +2667,19 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         CommonStockId = x.a.CommonStockId,
                         ListedTicker = x.a.ListedTicker,
                         Ticker = x.a.ListedTicker ?? s.Presentation.Listing.Ticker,
-                        StockName = s.Name,
+                        // A trust's listed fund is its own product, so the trust's name is not
+                        // its name (FundOverlapCalculator.ProductName). The stored row label is
+                        // the listing's own ticker, so an exact comparison is the right one.
+                        StockName =
+                            x.a.ListedTicker != null
+                            && s.Securities.SelectMany(security => security.Listings)
+                                .Any(listing =>
+                                    listing.MarketCountryCode == "US"
+                                    && listing.IsReferenceListed
+                                    && listing.Ticker == x.a.ListedTicker
+                                )
+                                ? null
+                                : s.Name,
                         CurrentShares = x.a.CurrentShares,
                         PreviousShares = x.a.PreviousShares,
                         CurrentValue = x.a.CurrentValue,
