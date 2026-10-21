@@ -70,14 +70,13 @@ public class GleifLegalEntityTests
 
     private const string ToyotaLei = "5493006W3QUS5LMH6R84";
 
-    private static Task<string> Toyota(string name) =>
+    private const string KyokuyoLei = "353800PIEETYXIDK6K51";
+
+    private static Task<string> Toyota(string name) => Recorded("toyota-" + name);
+
+    private static Task<string> Recorded(string name) =>
         File.ReadAllTextAsync(
-            Path.Combine(
-                AppContext.BaseDirectory,
-                "TestAssets",
-                "Gleif",
-                "toyota-" + name + ".json"
-            )
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Gleif", name + ".json")
         );
 
     [Fact]
@@ -124,6 +123,34 @@ public class GleifLegalEntityTests
             NullLogger<GleifIdentityClient>.Instance
         ).GetIsinsForLei(ToyotaLei);
 
+        identity.RelatedIsins.Should().BeEmpty();
+        identity.RelatedIsinCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task IsinsForLeiReadsTheSecuritiesPageWhenTheRecordLinksNone()
+    {
+        // GLEIF leaves the isins relationship out of the record of an entity it relates no ISIN to.
+        var handler = new EuronextDirectoryTestHandler([
+            await Recorded("kyokuyo-lei-record"),
+            await Recorded("kyokuyo-isins"),
+        ]);
+        using var http = new HttpClient(handler);
+
+        var identity = await new GleifIdentityClient(
+            http,
+            NullLogger<GleifIdentityClient>.Instance
+        ).GetIsinsForLei(KyokuyoLei);
+
+        handler
+            .Requests.Select(request => request.Url.AbsoluteUri)
+            .Should()
+            .Equal(
+                "https://api.gleif.org/api/v1/lei-records/" + KyokuyoLei,
+                "https://api.gleif.org/api/v1/lei-records/"
+                    + KyokuyoLei
+                    + "/isins?page%5Bsize%5D=200"
+            );
         identity.RelatedIsins.Should().BeEmpty();
         identity.RelatedIsinCount.Should().Be(0);
     }

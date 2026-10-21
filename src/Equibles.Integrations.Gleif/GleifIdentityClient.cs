@@ -159,12 +159,15 @@ public class GleifIdentityClient
         {
             using var json = JsonDocument.Parse(result.ResponseBodies[0]);
             var root = json.RootElement;
-            var related = root.GetProperty("data")
-                .GetProperty("relationships")
-                .GetProperty("isins")
-                .GetProperty("links");
+            var relationships = root.GetProperty("data").GetProperty("relationships");
             var path = $"/api/v1/lei-records/{lei}/isins";
-            var next = WithPageSize(ValidateRelatedUrl(Text(related, "related"), path));
+            // GLEIF leaves the relationship out of the record of an entity it relates no ISIN to; its securities
+            // page is read all the same, so "none" is what GLEIF states rather than what a missing link implies.
+            var next = WithPageSize(
+                relationships.TryGetProperty("isins", out var isins)
+                    ? ValidateRelatedUrl(Text(isins.GetProperty("links"), "related"), path)
+                    : new Uri(Origin, path)
+            );
             var publishDate = Text(
                 root.GetProperty("meta").GetProperty("goldenCopy"),
                 "publishDate"
