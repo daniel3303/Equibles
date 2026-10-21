@@ -60,6 +60,8 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
     private readonly bool _reducedTimesOut;
     private readonly List<Chunk> _conjunctivePartial;
     private readonly List<Chunk> _disjunctivePartial;
+    private readonly int _coldPasses;
+    private int _fullPasses;
     private string _originalText;
 
     public List<int?> ConjunctiveBudgets { get; } = [];
@@ -91,10 +93,12 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         List<Chunk> reducedResults = null,
         bool reducedTimesOut = false,
         List<Chunk> conjunctivePartial = null,
-        List<Chunk> disjunctivePartial = null
+        List<Chunk> disjunctivePartial = null,
+        int coldPasses = 0
     )
         : base(null)
     {
+        _coldPasses = coldPasses;
         _conjunctivePartial = conjunctivePartial ?? [];
         _disjunctivePartial = disjunctivePartial ?? [];
         _reducedResults = reducedResults ?? [];
@@ -138,6 +142,13 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         (conjunctive ? ConjunctiveBudgets : DisjunctiveBudgets).Add(commandTimeoutSeconds);
         if (conjunctive && _conjunctiveError != null)
             throw _conjunctiveError;
+        // A cold index under load: the first full-query passes run out of budget, later ones
+        // land on the pages those passes warmed.
+        if (++_fullPasses <= _coldPasses)
+            throw new ChunkSearchTimeoutException(
+                "statement budget elapsed",
+                new TimeoutException()
+            );
         // A timed-out pass carries whatever its completed ranked-prefix rounds validated.
         if (conjunctive ? _conjunctiveTimesOut : _disjunctiveTimesOut)
             throw new ChunkSearchTimeoutException(
