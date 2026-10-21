@@ -20,6 +20,10 @@ public class ImportContext
     public TimeSpan BatchPause { get; init; }
     internal Parsed13FFiling ConfirmedZeroRestatement { get; init; }
 
+    // Set only for a bulk data set import, which records each committed accession so a restart
+    // resumes after it.
+    internal DataSetCheckpoint Checkpoint { get; set; }
+
     // Populated by phases
     public Dictionary<string, SubmissionRow> Submissions { get; set; }
     public Dictionary<string, CoverPageRow> CoverPages { get; set; }
@@ -113,3 +117,15 @@ public class ImportContext
     // Accessions whose rows outside their period of report were already swept this import.
     public HashSet<string> PeriodSweptAccessions { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
+
+/// <summary>
+/// Where a bulk data set import records committed accessions, and the ones an earlier,
+/// interrupted import of the same archive committed. <see cref="Committed"/> is read once before
+/// the walk and never grows, so an accession whose rows arrive in a second segment still flushes.
+/// </summary>
+internal sealed record DataSetCheckpoint(
+    string FileName,
+    int ParserVersion,
+    string ArchiveFingerprint,
+    IReadOnlySet<string> Committed
+);

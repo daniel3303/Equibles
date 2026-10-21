@@ -4098,6 +4098,32 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("ProcessedDataSet");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.ProcessedDataSetAccession", b =>
+                {
+                    b.Property<string>("FileName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AccessionNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ArchiveFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ParserVersion")
+                        .HasColumnType("integer");
+
+                    b.HasKey("FileName", "AccessionNumber");
+
+                    b.ToTable("ProcessedDataSetAccession");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.ProcessedFiling", b =>
                 {
                     b.Property<Guid>("Id")

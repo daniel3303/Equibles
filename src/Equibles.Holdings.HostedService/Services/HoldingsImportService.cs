@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
@@ -69,7 +71,25 @@ public class HoldingsImportService
         DateOnly minReportDate,
         TimeSpan batchPause,
         CancellationToken cancellationToken
-    ) => ImportDataSetCore(archive, minReportDate, batchPause, null, cancellationToken);
+    ) => ImportDataSet(archive, minReportDate, batchPause, null, cancellationToken);
+
+    // A bulk data set records each accession it commits under its file name, so an import the
+    // process stopped part way through resumes after the accessions already stored.
+    public virtual Task<ImportResult> ImportDataSet(
+        ZipArchive archive,
+        DateOnly minReportDate,
+        TimeSpan batchPause,
+        string dataSetFileName,
+        CancellationToken cancellationToken
+    ) =>
+        ImportDataSetCore(
+            archive,
+            minReportDate,
+            batchPause,
+            null,
+            dataSetFileName,
+            cancellationToken
+        );
 
     internal async Task<ImportResult> ImportZeroRestatement(
         Parsed13FFiling filing,
@@ -88,6 +108,7 @@ public class HoldingsImportService
             minReportDate,
             TimeSpan.Zero,
             filing,
+            null,
             cancellationToken
         );
     }
@@ -97,6 +118,7 @@ public class HoldingsImportService
         DateOnly minReportDate,
         TimeSpan batchPause,
         Parsed13FFiling confirmedZeroRestatement,
+        string dataSetFileName,
         CancellationToken cancellationToken
     )
     {
@@ -153,6 +175,8 @@ public class HoldingsImportService
         await ParseOtherManagers(context, cancellationToken);
         await ParseOtherManagerCoverList(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
+        if (dataSetFileName != null)
+            context.Checkpoint = await LoadCheckpoint(dataSetFileName, archive, cancellationToken);
         var holdingsResult = await StreamAndInsertHoldings(context, cancellationToken);
         await FlushFilingOtherManagers(context, cancellationToken);
         await RecordConflictedFilings(
@@ -184,6 +208,51 @@ public class HoldingsImportService
             ConflictedFilings: holdingsResult.ConflictedAccessions
         );
     }
+
+    private async Task<DataSetCheckpoint> LoadCheckpoint(
+        string fileName,
+        ZipArchive archive,
+        CancellationToken cancellationToken
+    )
+    {
+        var fingerprint = ArchiveFingerprint(archive);
+        using var scope = _scopeFactory.CreateScope();
+        var committed = await scope
+            .ServiceProvider.GetRequiredService<ProcessedDataSetRepository>()
+            .GetCommittedAccessions(
+                fileName,
+                ProcessedDataSet.CurrentParserVersion,
+                fingerprint,
+                cancellationToken
+            );
+        if (committed.Count > 0)
+            _logger.LogInformation(
+                "Resuming data set {FileName}: {Count} accession(s) an interrupted import committed stay as stored",
+                fileName,
+                committed.Count
+            );
+        return new DataSetCheckpoint(
+            fileName,
+            ProcessedDataSet.CurrentParserVersion,
+            fingerprint,
+            committed
+        );
+    }
+
+    // Every entry's name, length and checksum, so a republished archive starts over.
+    internal static string ArchiveFingerprint(ZipArchive archive) =>
+        Convert.ToHexString(
+            SHA256.HashData(
+                Encoding.UTF8.GetBytes(
+                    string.Join(
+                        "\n",
+                        archive
+                            .Entries.OrderBy(entry => entry.FullName, StringComparer.Ordinal)
+                            .Select(entry => $"{entry.FullName}\t{entry.Length}\t{entry.Crc32}")
+                    )
+                )
+            )
+        );
 
     internal async Task<ImportContext> ReadCoverageContext(
         ZipArchive archive,
@@ -1914,6 +1983,10 @@ public class HoldingsImportService
         CancellationToken cancellationToken
     )
     {
+        // An interrupted import of this archive already committed the filing.
+        if (context.Checkpoint?.Committed.Contains(accession) == true)
+            return (0, 0, 0, false, false);
+
         // Preserve source identity before repair can remove an unpriceable source leg.
         // Identity-only copies also validate groups with no surviving writable rows.
         var identityRows = bufferedRows
@@ -2503,6 +2576,7 @@ public class HoldingsImportService
             if (context.ConfirmedZeroRestatement is { } zero && zero.AccessionNumber == accession)
                 await StoreZeroRestatement(dbContext, zero, holderId, cancellationToken);
             await MarkVacatedQuartersDirty(dbContext, vacatedDates, cancellationToken);
+            await RecordCommitted(dbContext, accession, context, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return new HoldingsFlushResult(0, SkippedStaleParent: false);
         }
@@ -2596,11 +2670,30 @@ public class HoldingsImportService
         // Stamped last: the snapshot rows carry the drain's lease, so they must not stay locked
         // behind the position upsert.
         await MarkVacatedQuartersDirty(dbContext, vacatedDates, cancellationToken);
+        await RecordCommitted(dbContext, accession, context, cancellationToken);
         if (transaction != null)
             await transaction.CommitAsync(cancellationToken);
 
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
     }
+
+    // Inside the accession's own transaction, so every recorded accession is a committed one.
+    private static Task RecordCommitted(
+        EquiblesFinancialDbContext dbContext,
+        string accession,
+        ImportContext context,
+        CancellationToken cancellationToken
+    ) =>
+        context.Checkpoint is not { } checkpoint
+            ? Task.CompletedTask
+            : dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO "ProcessedDataSetAccession" ("FileName", "AccessionNumber", "ParserVersion", "ArchiveFingerprint", "CreationTime")
+                VALUES ({checkpoint.FileName}, {accession}, {checkpoint.ParserVersion}, {checkpoint.ArchiveFingerprint}, clock_timestamp())
+                ON CONFLICT ("FileName", "AccessionNumber") DO NOTHING
+                """,
+                cancellationToken
+            );
 
     // A filing's rows live only under its period of report; rows of this accession stored under
     // any other quarter are stale labels of this same filing.
