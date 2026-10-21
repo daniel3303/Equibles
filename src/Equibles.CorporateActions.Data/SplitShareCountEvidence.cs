@@ -105,17 +105,21 @@ public static class SplitShareCountEvidence
     {
         if (events.Count > MaxEventsBetweenCounts)
             return true;
+        var eventRatios = events
+            .Select(rows =>
+                rows.Select(SplitEvents.Ratio)
+                    .OfType<decimal>()
+                    .Where(ratio => !SplitEvents.IsSameBasis(ratio, 1m))
+                    .Distinct()
+                    .ToList()
+            )
+            .ToList();
+        // An event whose every ratio sits on the basis of 1 could hide inside any count.
+        if (eventRatios.Any(ratios => ratios.Count == 0))
+            return true;
         var products = new List<decimal>();
-        foreach (var rows in events)
+        foreach (var ratios in eventRatios)
         {
-            var ratios = rows.Select(SplitEvents.Ratio)
-                .OfType<decimal>()
-                .Where(ratio => !SplitEvents.IsSameBasis(ratio, 1m))
-                .Distinct()
-                .ToList();
-            // An event whose every ratio sits on the basis of 1 could hide inside any count.
-            if (ratios.Count == 0)
-                return true;
             products.AddRange(
                 products.SelectMany(product => ratios.Select(ratio => product * ratio)).ToList()
             );
