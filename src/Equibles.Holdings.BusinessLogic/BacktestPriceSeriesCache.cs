@@ -27,8 +27,8 @@ public sealed class BacktestPriceSeriesCache : IDisposable
     public const int UnsettledTailDays = 20;
 
     // One tail read serves every backtest of that listing for this long, so a scoring cycle over
-    // thousands of overlapping portfolios reads each tail once instead of once per filer. It
-    // matches the clone card's own cache, so no surface shows an older close than it already could.
+    // thousands of overlapping portfolios reads each tail once instead of once per filer. It is the
+    // clone card's own cache duration, so a card's newest close lags by at most two of them.
     public static readonly TimeSpan TailRecheckInterval = TimeSpan.FromMinutes(10);
 
     private readonly MemoryCache _cache;
