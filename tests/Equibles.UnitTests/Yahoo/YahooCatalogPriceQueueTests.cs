@@ -38,6 +38,8 @@ public class YahooCatalogPriceQueueTests
         {
             [current.EquityListingId] = new(2026, 9, 29),
             [recent.EquityListingId] = new(2026, 9, 29),
+            [failed.EquityListingId] = new(2026, 8, 3),
+            [retry.EquityListingId] = new(2026, 8, 3),
         };
         YahooCatalogPriceQueue
             .Order([failed, retry, untouched, recent, current], dates, Now)
@@ -48,6 +50,46 @@ public class YahooCatalogPriceQueueTests
             .Should()
             .Contain(failed)
             .And.Contain(recent);
+    }
+
+    [Fact]
+    public void SymbolsYahooNeverPricedRetryDailyAndLeaveBackfillToANewVenue()
+    {
+        // Yahoo served nothing for these London symbols two hours ago; Toronto was just admitted.
+        var unpriced = Enumerable
+            .Range(0, 50)
+            .Select(index =>
+                Target("DEAD" + index) with
+                {
+                    MarketCountryCode = "GB",
+                    MarketIdentifierCode = "XLON",
+                    YahooPriceSyncAttemptedAt = Now.AddHours(-2),
+                }
+            )
+            .ToArray();
+        var admitted = Enumerable
+            .Range(0, 50)
+            .Select(index =>
+                Target("NEW" + index) with
+                {
+                    MarketCountryCode = "CA",
+                    MarketIdentifierCode = "XTSE",
+                }
+            )
+            .ToArray();
+        var dormant = Target("DORMANT") with { YahooPriceSyncAttemptedAt = Now.AddHours(-2) };
+        var dates = new Dictionary<Guid, DateOnly?> { [dormant.EquityListingId] = new(2026, 8, 3) };
+        var targets = unpriced.Concat(admitted).Append(dormant).ToArray();
+
+        YahooCatalogPriceQueue
+            .Order(targets, dates, Now)
+            .Should()
+            .BeEquivalentTo(admitted.Append(dormant));
+        YahooCatalogPriceQueue
+            .Order(targets, dates, Now.AddHours(21))
+            .Should()
+            .NotContain(unpriced);
+        YahooCatalogPriceQueue.Order(targets, dates, Now.AddHours(22)).Should().Contain(unpriced);
     }
 
     [Theory]

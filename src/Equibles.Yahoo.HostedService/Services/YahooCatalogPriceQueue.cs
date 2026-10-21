@@ -15,15 +15,17 @@ internal static class YahooCatalogPriceQueue
         var activeSince = DateOnly.FromDateTime(now).AddDays(-10);
         bool Active(PriceSeriesTarget target) =>
             lastDates.GetValueOrDefault(target.EquityListingId) >= activeSince;
-        // Persisted attempts rotate the unfinished tail across restarts. Unsupported symbols
-        // retry hourly, while recently trading series can discover a newly published bar in five minutes.
+        // Persisted attempts rotate the unfinished tail across restarts. Recently trading series can
+        // discover a newly published bar in five minutes and dormant ones retry hourly, while a symbol
+        // Yahoo has never priced retries daily: hourly, those spent a third of the catalog budget.
+        TimeSpan RetryAfter(PriceSeriesTarget target) =>
+            lastDates.GetValueOrDefault(target.EquityListingId) == null ? TimeSpan.FromDays(1)
+            : Active(target) ? TimeSpan.FromMinutes(5)
+            : TimeSpan.FromHours(1);
         var due = targets
             .Where(target =>
                 target.YahooPriceSyncAttemptedAt == null
-                || target.YahooPriceSyncAttemptedAt
-                    <= now.Subtract(
-                        Active(target) ? TimeSpan.FromMinutes(5) : TimeSpan.FromHours(1)
-                    )
+                || target.YahooPriceSyncAttemptedAt <= now.Subtract(RetryAfter(target))
             )
             .ToArray();
         // A session nobody has asked for yet outranks a retry: rotating every market evenly let small
