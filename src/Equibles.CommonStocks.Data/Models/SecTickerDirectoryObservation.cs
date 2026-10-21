@@ -47,7 +47,4 @@ public class SecTickerDirectoryObservation
     public DateOnly FirstObservedOn { get; set; }
 
     public DateOnly LastObservedOn { get; set; }
-
-    public bool IsOverTheCounter =>
-        string.Equals(Exchange, OverTheCounter, StringComparison.OrdinalIgnoreCase);
 }
