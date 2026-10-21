@@ -166,7 +166,8 @@ These sources publish a continuous time series rather than discrete filings. Eac
 
 The cursor pattern means re-running is cheap (a single query for `max(date)` per cycle); duplicate ingestion is prevented by the per-source unique index (`[Index(nameof(CommonStockId), nameof(Date), IsUnique = true)]` etc.).
 
-- Catalog prices rotate across venue identities inside both the recent-price and historical queues; a larger market cannot fill each bounded request batch ahead of smaller markets.
+- Recent catalog prices run in three tiers: a settled session not yet asked for since it closed (or a venue-covered listing due its interval fetch), then retries of a session already asked for, then current series. Each tier rotates across venue identities, and so does the historical queue, so a larger market cannot fill a tier ahead of smaller markets, and a retry never outranks another market's unasked session.
+- A catalog listing whose missing days are only a weekend fetches nothing; every catalog venue trades Monday to Friday.
 - Each venue retains oldest-attempt ordering across restarts, with four recent-price candidates per historical candidate and unchanged retry intervals.
 
 ### FDA catalysts — watermark-less re-read + upsert

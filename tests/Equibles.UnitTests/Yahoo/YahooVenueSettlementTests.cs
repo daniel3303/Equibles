@@ -34,6 +34,35 @@ public class YahooVenueSettlementTests
     }
 
     [Theory]
+    [InlineData("HK", "XHKG", "00700", "2026-09-30T12:00:00Z", "2026-09-30T08:40:00Z")]
+    [InlineData("HK", "XHKG", "00700", "2026-09-30T08:39:59Z", "2026-09-29T08:40:00Z")]
+    [InlineData("HK", "XHKG", "00700", "2026-10-05T03:00:00Z", "2026-10-02T08:40:00Z")]
+    [InlineData("GB", "XLON", "VOD", "2026-10-03T18:00:00Z", "2026-10-02T16:05:00Z")]
+    [InlineData("GB", "XLON", "VOD", "2026-12-01T17:05:00Z", "2026-12-01T17:05:00Z")]
+    public void The_newest_weekday_session_settles_at_the_venue_cutoff(
+        string country,
+        string mic,
+        string ticker,
+        string now,
+        string expected
+    )
+    {
+        YahooListingSource
+            .SettledSince(
+                Target(country, mic, ticker),
+                DateTime.Parse(now, null, System.Globalization.DateTimeStyles.AdjustToUniversal)
+            )
+            .Should()
+            .Be(
+                DateTime.Parse(
+                    expected,
+                    null,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal
+                )
+            );
+    }
+
+    [Theory]
     [InlineData("US", "XNAS", "AAPL", false)]
     [InlineData("CN", "BJSE", "920000", false)]
     [InlineData("CN", "XSHG", "600000", true)]

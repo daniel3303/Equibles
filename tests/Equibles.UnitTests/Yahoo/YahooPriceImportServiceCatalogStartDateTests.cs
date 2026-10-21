@@ -63,6 +63,27 @@ public class YahooPriceImportServiceCatalogStartDateTests
     }
 
     [Fact]
+    public void Uncovered_WeekendOnlyGap_NeedsNoFetch()
+    {
+        var friday = new DateOnly(2026, 9, 18);
+        DateOnly ResolveOn(DateOnly today) =>
+            YahooPriceImportService.ResolveCatalogStartDate(
+                friday,
+                null,
+                null,
+                today,
+                Now,
+                Floor,
+                Options
+            );
+
+        ResolveOn(new DateOnly(2026, 9, 20)).Should().Be(new DateOnly(2026, 9, 20));
+        ResolveOn(new DateOnly(2026, 9, 22))
+            .Should()
+            .Be(new DateOnly(2026, 9, 7), "Monday's session is missing");
+    }
+
+    [Fact]
     public void Covered_FetchesTheBoundedWindow_OncePerInterval()
     {
         var frozen = new DateOnly(2026, 8, 1);
@@ -73,6 +94,26 @@ public class YahooPriceImportServiceCatalogStartDateTests
             .Should()
             .Be(Today, "attempted inside the interval");
         Resolve(frozen, Today.AddDays(-1), Now.AddHours(-25)).Should().Be(Today.AddDays(-15));
+    }
+
+    [Fact]
+    public void Covered_ThroughFriday_WaitsForTheIntervalAllWeekend()
+    {
+        var sunday = new DateOnly(2026, 9, 20);
+        var now = new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc);
+        DateOnly ResolveOn(DateTime? stamp) =>
+            YahooPriceImportService.ResolveCatalogStartDate(
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 9, 18),
+                stamp,
+                sunday,
+                now,
+                Floor,
+                Options
+            );
+
+        ResolveOn(now.AddHours(-1)).Should().Be(sunday, "Friday's venue bar is the latest session");
+        ResolveOn(now.AddHours(-25)).Should().Be(sunday.AddDays(-15));
     }
 
     [Fact]

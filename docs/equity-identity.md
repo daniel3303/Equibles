@@ -138,6 +138,6 @@
 - Both generations serialize on native issuer locks; original position IDs, source facts and attribution IDs remain intact through replay and final storage retirement.
 
 - Each catalog price batch reserves at most 25 due enrichment attempts, even when price retries replenish the queue.
-- Within each market's recent-price queue, listings missing a settled close precede already-current series; oldest-attempt ordering still rotates each group across restarts.
+- Recent-price listings never asked for their newest settled close precede retries, which precede already-current series; each tier rotates across markets and keeps oldest-attempt ordering across restarts.
 - A newer venue-owned bar permits the longer fallback interval only while it covers the latest settled date; stale venue coverage resumes from its last observation through the normal resettle window.
 - A non-US history replacement refuses a response whose settlement cutoff predates an already stored session; the next reconciliation fetches a complete current basis.

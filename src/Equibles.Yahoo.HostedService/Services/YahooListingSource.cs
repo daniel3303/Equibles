@@ -20,12 +20,44 @@ internal static class YahooListingSource
             TimeZoneInfo.FindSystemTimeZoneById(market.TimeZoneId)
         );
         var day = DateOnly.FromDateTime(local);
+        return local >= PublishAfter(market, day) ? day.AddDays(1) : day;
+    }
+
+    // The UTC instant the newest weekday session settled. An attempt before it has not yet asked the
+    // provider for that session; one after it is a retry of the same session.
+    internal static DateTime SettledSince(PriceSeriesTarget target, DateTime utcNow)
+    {
+        var cutoff = SettledBefore(target, utcNow);
+        if (target.IsUs || target.IsHistorical || Market(target) is not { } market)
+            return cutoff.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var session = cutoff.AddDays(-1);
+        while (!HasWeekdaySession(session, session.AddDays(1)))
+            session = session.AddDays(-1);
+        return TimeZoneInfo.ConvertTimeToUtc(
+            PublishAfter(market, session),
+            TimeZoneInfo.FindSystemTimeZoneById(market.TimeZoneId)
+        );
+    }
+
+    // Every catalog venue trades Monday to Friday, so a range holding only a weekend has no session
+    // the provider could serve. Holidays are not modeled; only returned bars prove a trading date.
+    internal static bool HasWeekdaySession(DateOnly start, DateOnly endExclusive)
+    {
+        for (var date = start; date < endExclusive; date = date.AddDays(1))
+        {
+            if (date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+                return true;
+        }
+        return false;
+    }
+
+    private static DateTime PublishAfter(EquityMarket market, DateOnly day)
+    {
         var close =
             market.ClosingAuctionEnd > market.SessionClose
                 ? market.ClosingAuctionEnd
                 : market.SessionClose;
-        var publishAfter = day.ToDateTime(close).AddMinutes(30);
-        return local >= publishAfter ? day.AddDays(1) : day;
+        return day.ToDateTime(close).AddMinutes(30);
     }
 
     // The catalog's suffix is only a candidate symbol: returned chart metadata must also pass MatchesChart,
