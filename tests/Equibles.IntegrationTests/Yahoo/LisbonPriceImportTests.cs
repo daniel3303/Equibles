@@ -514,4 +514,57 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         dividend.Currency.Should().Be("EUR");
         dividend.PriceAdjustmentAppliedTime.Should().NotBeNull();
     }
+
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    public async Task FullHistory_UnattributedIssuerSplitRefusesOnlyWhenTheVenueChartOmitsItsEvent(
+        int legacyNumerator,
+        bool installs
+    )
+    {
+        var listing = await SeedLisbon();
+        DbContext.Add(
+            new StockSplit
+            {
+                EquityIssuerId = listing.Security.EquityIssuerId,
+                EffectiveDate = new(2025, 7, 3),
+                Numerator = legacyNumerator,
+                Denominator = 1,
+                Source = StockSplitSource.Yahoo,
+                PriceAdjustmentAppliedTime = new DateTime(2025, 7, 4, 0, 0, 0, DateTimeKind.Utc),
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        var chart = Chart();
+        chart.Prices.Insert(
+            0,
+            new HistoricalPrice
+            {
+                Date = new(2025, 7, 1),
+                Open = 11,
+                High = 11,
+                Low = 11,
+                Close = 11,
+                AdjustedClose = 11,
+                Volume = 100,
+            }
+        );
+        chart.Splits.Add(
+            new StockSplitEvent
+            {
+                Date = new(2025, 7, 2),
+                Numerator = 2,
+                Denominator = 1,
+            }
+        );
+        _client.GetChart("SAME.LS", Arg.Any<DateOnly>(), Arg.Any<DateOnly>()).Returns(chart);
+
+        await Import(Service(), Target(listing), Session.AddDays(1));
+
+        // A sibling line's legacy capture of the event the venue chart states cannot change this
+        // series' basis; a ratio the chart never states may be an adjustment its bars lack.
+        await using var read = Fixture.CreateDbContext();
+        (await read.Set<EquityDailyStockPrice>().CountAsync()).Should().Be(installs ? 2 : 0);
+    }
 }

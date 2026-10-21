@@ -1777,23 +1777,22 @@ public class YahooPriceImportService
                 return false;
             }
             var firstPriceDate = prices.Min(price => price.Date);
-            if (
-                await splitRepo
-                    .GetEffectiveByStock(target.EquityIssuerId, settledBefore)
-                    .AnyAsync(
-                        split =>
-                            split.PriceSeriesTicker == null && split.EffectiveDate > firstPriceDate,
-                        cancellationToken
-                    )
-            )
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                _logger.LogWarning(
-                    "Cannot replace {Ticker} history while captured split source identity is unresolved",
-                    target.Ticker
-                );
-                return false;
-            }
+            var unresolvedSplits = await splitRepo
+                .GetEffectiveByStock(target.EquityIssuerId, settledBefore)
+                .Where(split =>
+                    split.PriceSeriesTicker == null && split.EffectiveDate > firstPriceDate
+                )
+                .Select(split => new
+                {
+                    split.EquityListingId,
+                    Boundary = new SplitBasisDefinition(
+                        split.EffectiveDate,
+                        split.Numerator,
+                        split.Denominator,
+                        split.Source
+                    ),
+                })
+                .ToListAsync(cancellationToken);
             var capturedBoundaries = await splitRepo
                 .GetEffectiveByStock(target.EquityIssuerId, settledBefore)
                 .Where(split =>
@@ -1810,11 +1809,30 @@ public class YahooPriceImportService
                     split.Source
                 ))
                 .ToListAsync(cancellationToken);
+            var seriesBoundaries = responseBoundaries.ToList();
+            if (
+                unresolvedSplits.Any(split =>
+                    target.IsUs
+                    || split.EquityListingId != null
+                    || !IsStatedBySeries(
+                        split.Boundary,
+                        capturedBoundaries.Concat(seriesBoundaries)
+                    )
+                )
+            )
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogWarning(
+                    "Cannot replace {Ticker} history while captured split source identity is unresolved",
+                    target.Ticker
+                );
+                return false;
+            }
             if (
                 !TryResolveSplitBoundaries(
                     target.Ticker,
                     capturedBoundaries,
-                    responseBoundaries,
+                    seriesBoundaries,
                     out var boundaries
                 )
             )
@@ -1864,6 +1882,22 @@ public class YahooPriceImportService
             throw;
         }
     }
+
+    // An issuer split no listing or series claims (a legacy capture from a sibling line) is moot
+    // for a venue series that states the same event itself; one it does not state may be an
+    // adjustment the fetched bars lack, so it still refuses the replacement.
+    private static bool IsStatedBySeries(
+        SplitBasisDefinition unresolved,
+        IEnumerable<SplitBasisDefinition> seriesBoundaries
+    ) =>
+        unresolved.Numerator > 0m
+        && unresolved.Denominator > 0m
+        && seriesBoundaries.Any(boundary =>
+            Math.Abs(boundary.EffectiveDate.DayNumber - unresolved.EffectiveDate.DayNumber)
+                <= SplitEvents.SameEventWindowDays
+            && boundary.Numerator * unresolved.Denominator
+                == unresolved.Numerator * boundary.Denominator
+        );
 
     // The locked database row is the current authoritative definition, while selection and chart
     // definitions can predate a concurrent correction. Two ratios for one effective date make the
