@@ -1803,7 +1803,7 @@ public class HoldingsImportService
         // Each pass contains at most one filing per manager/report/form book. SEC's
         // physical TSV order is not amendment order; bases must commit before additions.
         // Re-reading the compressed entry keeps memory bounded to one filing.
-        var passes = context
+        var books = context
             .Submissions.Values.GroupBy(submission => new
             {
                 Cik = CikNormalizer.Canonicalize(submission.Cik),
@@ -1812,20 +1812,33 @@ public class HoldingsImportService
                     : DateOnly.MinValue,
                 FilingType = submission.FormType.ToHoldingsFilingType(),
             })
-            .SelectMany(group =>
+            .Select(group =>
                 group
                     .OrderBy(
                         submission => submission,
                         Comparer<SubmissionRow>.Create(CompareByFilingDateThenAccession)
                     )
-                    .Select((submission, index) => (submission.AccessionNumber, Pass: index))
+                    .Select(submission => submission.AccessionNumber)
+                    .ToList()
+            )
+            .ToList();
+        // A recorded filing stays as stored only while every earlier filing of its book did too:
+        // an unrecorded original flushed after its recorded restatement would undo it.
+        if (context.Checkpoint is { } checkpoint)
+            context.Checkpoint = checkpoint with
+            {
+                Committed = books
+                    .SelectMany(book => book.TakeWhile(checkpoint.Committed.Contains))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase),
+            };
+        var passes = books
+            .SelectMany(book =>
+                book.Select((accession, index) => (Accession: accession, Pass: index))
             )
             .GroupBy(item => item.Pass)
             .OrderBy(group => group.Key)
             .Select(group =>
-                group
-                    .Select(item => item.AccessionNumber)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                group.Select(item => item.Accession).ToHashSet(StringComparer.OrdinalIgnoreCase)
             );
         foreach (var pass in passes)
         {

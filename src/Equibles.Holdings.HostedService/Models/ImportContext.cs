@@ -121,7 +121,8 @@ public class ImportContext
 /// <summary>
 /// Where a bulk data set import records committed accessions, and the ones an earlier,
 /// interrupted import of the same archive committed. <see cref="Committed"/> is read once before
-/// the walk and never grows, so an accession whose rows arrive in a second segment still flushes.
+/// the walk, trimmed to each book's leading run of recorded filings, and never grows, so an
+/// accession whose rows arrive in a second segment still flushes.
 /// </summary>
 internal sealed record DataSetCheckpoint(
     string FileName,

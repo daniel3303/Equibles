@@ -167,6 +167,48 @@ public class HoldingsImportResumeTests : IAsyncLifetime
             .AllBe(HoldingsImportService.ArchiveFingerprint(archive));
     }
 
+    [Fact]
+    public async Task ImportDataSet_FlushesARecordedAmendmentAgainAfterItsUnrecordedOriginal()
+    {
+        using var archive = OriginalWithNewHoldingsAmendment();
+        // The interrupted import refused the original (an issuer removed before its flush) and
+        // committed the NEW HOLDINGS amendment, so the book holds only the amendment's row.
+        using (
+            var amendment = Archive(
+                Submissions + "13F-HR/A\tACC-AMEND\t2024-11-20\t2024-09-30\t0001067983\n",
+                Cover + "ACC-AMEND\tY\tNEW HOLDINGS\tBig Fund\n",
+                InfoHeader + "ACC-AMEND\t037833100\t1500\tSH\t\tSOLE\t1500\t0\t0\tCOM\t\n"
+            )
+        )
+            await Importer().ImportDataSet(amendment, Since, default);
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<ProcessedDataSetAccession>()
+                .Add(
+                    Committed(
+                        DataSet,
+                        "ACC-AMEND",
+                        HoldingsImportService.ArchiveFingerprint(archive)
+                    )
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        await Importer().ImportDataSet(archive, Since, TimeSpan.Zero, DataSet, default);
+
+        await using var read = _fixture.CreateDbContext();
+        var holdings = await read.Set<InstitutionalHolding>().ToListAsync();
+        holdings
+            .Should()
+            .ContainSingle(h => h.EquityIssuerId == _apple.Id)
+            .Which.Should()
+            .Match<InstitutionalHolding>(
+                h => h.AccessionNumber == "ACC-AMEND" && h.Shares == 1500,
+                "the original flushed now must not overwrite the amendment filed after it"
+            );
+        holdings.Should().ContainSingle(h => h.EquityIssuerId == _microsoft.Id);
+    }
+
     private static DateOnly Since => new(2024, 1, 1);
 
     // The original's rows as its own flush writes them, with the MSFT count changed to 777 so a
