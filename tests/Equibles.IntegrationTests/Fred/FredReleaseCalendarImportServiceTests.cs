@@ -1,9 +1,11 @@
+using System.Net;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Fred.Data;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.HostedService.Services;
 using Equibles.Fred.Repositories;
+using Equibles.Integrations.Fred;
 using Equibles.Integrations.Fred.Contracts;
 using Equibles.Integrations.Fred.Models;
 using Equibles.IntegrationTests.Helpers;
@@ -388,6 +390,45 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         dates.Should().ContainSingle("the CPI date must land even though the PPI fetch failed");
         dates[0].FredReleaseId.Should().Be(cpi.Id);
         dates[0].Date.Should().Be(new DateOnly(2026, 7, 14));
+    }
+
+    [Fact]
+    public async Task Import_FredOutagePage_AbortsCycleInsteadOfSkippingTheRelease()
+    {
+        // Unlike one release's 504, an outage page answers every release the same way, so the
+        // per-release skip must not swallow it.
+        var cpi = new FredRelease { ReleaseId = 10, Name = "Consumer Price Index" };
+        var ppi = new FredRelease { ReleaseId = 46, Name = "Producer Price Index" };
+        _releaseRepo.Add(cpi);
+        _releaseRepo.Add(ppi);
+        await _releaseRepo.SaveChanges();
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "CPIAUCSL",
+                Title = "CPI All Items",
+                FredReleaseId = cpi.Id,
+            }
+        );
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "PPIFIS",
+                Title = "PPI Final Demand",
+                FredReleaseId = ppi.Id,
+            }
+        );
+        await _seriesRepo.SaveChanges();
+        _fredClient
+            .GetReleaseDates(10, Arg.Any<DateOnly?>())
+            .Returns<Task<List<FredReleaseDateRecord>>>(_ =>
+                throw new FredUnavailableException("outage page", HttpStatusCode.OK)
+            );
+
+        var act = () => _sut.Import(CancellationToken.None);
+
+        await act.Should().ThrowAsync<FredUnavailableException>();
+        await _fredClient.DidNotReceive().GetReleaseDates(46, Arg.Any<DateOnly?>());
     }
 
     [Fact]
