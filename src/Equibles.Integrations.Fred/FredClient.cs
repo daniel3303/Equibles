@@ -222,8 +222,21 @@ public class FredClient : IFredClient
                     MaxRetries
                 )
         );
-        return await response.Content.ReadAsStringAsync();
+        var content = await response.Content.ReadAsStringAsync();
+        // FRED's outage page arrives as a 200 HTML body. Parsing it as JSON failed once per
+        // request and reported every curated series as its own error, hiding that the whole
+        // API was down.
+        if (IsHtmlPage(response, content))
+            throw new FredUnavailableException(
+                $"FRED answered {(int)response.StatusCode} with an HTML page instead of JSON",
+                response.StatusCode
+            );
+        return content;
     }
+
+    private static bool IsHtmlPage(HttpResponseMessage response, string content) =>
+        response.Content.Headers.ContentType?.MediaType == "text/html"
+        || content.TrimStart().StartsWith('<');
 
     // Thin forwarder so existing reflection-based backoff tests still find the method.
     private static TimeSpan ExponentialBackoff(int attempt) => RetryBackoff.Exponential(attempt);

@@ -4,6 +4,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
+using Equibles.Integrations.Fred;
 using Equibles.Integrations.Fred.Contracts;
 using Equibles.Integrations.Fred.Models;
 using Equibles.Worker;
@@ -51,6 +52,15 @@ public class FredReleaseCalendarImportService : IImporter
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            throw;
+        }
+        catch (FredUnavailableException ex)
+        {
+            // The worker's consecutive-failure streak owns reporting and backoff for an outage.
+            _logger.LogWarning(
+                "FRED unavailable while importing the release calendar ({Reason}); aborting this cycle",
+                ex.Message
+            );
             throw;
         }
         catch (HttpRequestException ex)
@@ -191,7 +201,7 @@ public class FredReleaseCalendarImportService : IImporter
             {
                 records = await _fredClient.GetReleaseDates(fredReleaseId, realtimeStart);
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException ex) when (ex is not FredUnavailableException)
             {
                 _logger.LogWarning(
                     ex,
