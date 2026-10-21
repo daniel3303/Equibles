@@ -17,9 +17,9 @@ namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
 /// The series cache must change what the backtest reads, never what it computes: a cached
-/// listing is served from memory outside its unsettled tail, re-read inside it, extended with
-/// closes stored later, re-read whole after a split or a new window start, and rows keep the
-/// symbol they were stored under.
+/// listing is served from memory outside its unsettled tail, re-read inside it once the recheck
+/// interval has passed, extended with closes stored later, re-read whole after a split or a new
+/// window start, and rows keep the symbol they were stored under.
 /// </summary>
 public class BacktestPriceLoaderSeriesCacheTests : IDisposable
 {
@@ -30,10 +30,12 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
     );
 
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly BacktestPriceSeriesCache _cache = new();
+    private readonly Clock _clock = new();
+    private readonly BacktestPriceSeriesCache _cache;
 
     public BacktestPriceLoaderSeriesCacheTests()
     {
+        _cache = new BacktestPriceSeriesCache(_clock);
         _dbContext = TestDbContextFactory.Create(
             new CorporateActionsModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
@@ -62,8 +64,14 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
         await SetClose(listingId, From, 8m);
         (await RunBacktest(stock, benchmark, From)).Points[^1].PortfolioValue.Should().Be(120m);
 
-        // The last close is inside the tail and is re-read on the next request.
+        // The last close is inside the tail: the tail read a moment ago still serves it, and
+        // the next request after the recheck interval re-reads it.
         await SetClose(listingId, To, 15m);
+        (await RunBacktest(stock, benchmark, From))
+            .Points[^1]
+            .PortfolioValue.Should()
+            .Be(120m, "the tail was read within the recheck interval");
+        _clock.Advance(BacktestPriceSeriesCache.TailRecheckInterval);
         (await RunBacktest(stock, benchmark, From))
             .Points[^1]
             .PortfolioValue.Should()
@@ -90,7 +98,7 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
                 EffectiveDate = To,
                 Numerator = 2,
                 Denominator = 1,
-                CreationTime = DateTime.UtcNow.AddMinutes(1),
+                CreationTime = _clock.GetUtcNow().UtcDateTime.AddMinutes(1),
             }
         );
         await _dbContext.SaveChangesAsync();
@@ -113,12 +121,33 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
         AddPrice(stock, later, 13m);
         AddPrice(benchmark, later, 100m);
         await _dbContext.SaveChangesAsync();
+        _clock.Advance(BacktestPriceSeriesCache.TailRecheckInterval);
 
         var extended = await RunBacktest(stock, benchmark, From, later);
         extended.Points[^1].PortfolioValue.Should().Be(130m);
         _cache.TryGet(stock.Presentation.Listing.Id, WindowFrom, out var cached).Should().BeTrue();
         cached.MaxDate.Should().Be(later);
         cached.RowCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task RunBacktest_EndLaterThanTheLastTailRead_ReReadsItWithinTheInterval()
+    {
+        var (stock, benchmark) = await SeedPair();
+        var earlierEnd = From.AddDays(7);
+        AddPrice(stock, earlierEnd, 11m);
+        AddPrice(benchmark, earlierEnd, 100m);
+        await _dbContext.SaveChangesAsync();
+        (await RunBacktest(stock, benchmark, From, earlierEnd))
+            .Points[^1]
+            .PortfolioValue.Should()
+            .Be(110m);
+
+        // Same clock: only the later requested end forces the read past the earlier one.
+        (await RunBacktest(stock, benchmark, From))
+            .Points[^1]
+            .PortfolioValue.Should()
+            .Be(120m, "the close after the earlier read's end is read, not served from memory");
     }
 
     [Fact]
@@ -160,6 +189,7 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
         AddPrice(empty, From, 50m);
         AddPrice(empty, To, 55m);
         await _dbContext.SaveChangesAsync();
+        _clock.Advance(BacktestPriceSeriesCache.TailRecheckInterval);
         var after = await loader.RunBacktest(snapshots, benchmark, "SPY", From, To);
         after.Reason.Should().BeNull();
         after.Points[^1].PortfolioValue.Should().Be(115m, "equal weights of +20% and +10%");
@@ -225,6 +255,7 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
 
         await SetClose(stock.Presentation.Listing.Id, betweenTheTails, 99m);
         await SetClose(gone.Presentation.Listing.Id, betweenTheTails, 77m);
+        _clock.Advance(BacktestPriceSeriesCache.TailRecheckInterval);
         await loader.RunBacktest(snapshots, benchmark, "SPY", From, To);
 
         _cache.TryGet(stock.Presentation.Listing.Id, WindowFrom, out var live).Should().BeTrue();
@@ -239,6 +270,15 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
             .Segments.Single()
             .Closes.Should()
             .Equal([10m, 77m, 11m], "Jan 13 is inside the delisted listing's own tail");
+    }
+
+    private sealed class Clock : TimeProvider
+    {
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
     }
 
     private async Task SetClose(Guid listingId, DateOnly date, decimal close)

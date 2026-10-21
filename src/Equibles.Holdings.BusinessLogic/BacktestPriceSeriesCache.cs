@@ -22,19 +22,28 @@ public sealed class BacktestPriceSeriesCache : IDisposable
     public static readonly TimeSpan EntryLifetime = TimeSpan.FromHours(36);
 
     // The price lane resettles a bar's OHLC and volume for VolumeResettleWindowDays after it is
-    // first stored (15 on production); every read re-reads this tail so an unsettled close
-    // never outlives the next request.
+    // first stored (15 on production), so a read re-reads this tail unless another read did so
+    // within TailRecheckInterval.
     public const int UnsettledTailDays = 20;
 
+    // One tail read serves every backtest of that listing for this long, so a scoring cycle over
+    // thousands of overlapping portfolios reads each tail once instead of once per filer. It is the
+    // clone card's own cache duration, so a card's newest close lags by at most two of them.
+    public static readonly TimeSpan TailRecheckInterval = TimeSpan.FromMinutes(10);
+
     private readonly MemoryCache _cache;
+    private readonly TimeProvider _timeProvider;
 
-    public BacktestPriceSeriesCache()
-        : this(DefaultRowCapacity) { }
+    public BacktestPriceSeriesCache(TimeProvider timeProvider = null)
+        : this(DefaultRowCapacity, timeProvider) { }
 
-    internal BacktestPriceSeriesCache(long rowCapacity)
+    internal BacktestPriceSeriesCache(long rowCapacity, TimeProvider timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _cache = new MemoryCache(new MemoryCacheOptions { SizeLimit = rowCapacity });
     }
+
+    public DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
     public bool TryGet(Guid listingId, DateOnly windowFrom, out CachedListingSeries series) =>
         _cache.TryGetValue((listingId, windowFrom), out series);
@@ -71,7 +80,26 @@ public sealed class CachedListingSeries
 
     public required IReadOnlyList<CachedSeriesSegment> Segments { get; init; }
 
+    /// <summary>When the unsettled tail was last read; the default is never, so it is re-read.</summary>
+    public DateTime TailReadAt { get; init; }
+
+    /// <summary>The last date that tail read covered; a later requested end re-reads it.</summary>
+    public DateOnly TailReadThrough { get; init; }
+
     public int RowCount => Segments.Sum(segment => segment.Dates.Length);
+
+    public bool TailIsCurrent(DateTime now, DateOnly to) =>
+        TailReadThrough >= to && now - TailReadAt < BacktestPriceSeriesCache.TailRecheckInterval;
+
+    public CachedListingSeries WithTailRead(DateTime readAt, DateOnly through) =>
+        new()
+        {
+            LoadedAt = LoadedAt,
+            MaxDate = MaxDate,
+            Segments = Segments,
+            TailReadAt = readAt,
+            TailReadThrough = through,
+        };
 }
 
 public sealed record CachedSeriesSegment(string SourceTicker, DateOnly[] Dates, decimal[] Closes);
