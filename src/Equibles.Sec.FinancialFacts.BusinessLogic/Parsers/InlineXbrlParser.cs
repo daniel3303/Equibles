@@ -27,11 +27,12 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 /// </para>
 ///
 /// <para>
-/// Scope: <c>ix:nonFraction</c> (numeric) facts, plus exactly one narrative
-/// use of <c>ix:nonNumeric</c> — the three cover-page 12(b) registration tags
+/// Scope: <c>ix:nonFraction</c> (numeric) facts, plus a whitelist of short
+/// cover-page <c>ix:nonNumeric</c> values — the three 12(b) registration tags
 /// (<c>dei:Security12bTitle</c> / <c>dei:TradingSymbol</c> /
 /// <c>dei:SecurityExchangeName</c>), whose short text values pair into
-/// security listings by shared context. General narrative text,
+/// security listings by shared context, the current fiscal year end, and the
+/// registrant's file number and shell-company flag. General narrative text,
 /// <c>continuation</c> elements, fragmented values, and <c>typedMember</c>
 /// dimensions remain out of scope; <c>decimals="INF"</c> resolves to
 /// <see cref="int.MaxValue"/>.
@@ -48,6 +49,27 @@ public class InlineXbrlParser
     private const string Security12bTitleName = "dei:Security12bTitle";
     private const string TradingSymbolName = "dei:TradingSymbol";
     private const string SecurityExchangeName = "dei:SecurityExchangeName";
+
+    // Cover-page facts about the registrant itself, matched by local name once the prefix is
+    // proven to be the SEC dei namespace.
+    private const string EntityFileNumberName = "EntityFileNumber";
+    private const string EntityShellCompanyName = "EntityShellCompany";
+
+    // The SEC transformation registry's ixt-sec:boolballotbox: an empty box is false, a checked or
+    // crossed box is true.
+    private const string BallotBox = "☐";
+    private const string BallotBoxWithCheck = "☑";
+    private const string BallotBoxWithX = "☒";
+
+    // Hosts of the XBRL International (ixt) and SEC (ixt-sec) transformation registries.
+    private static readonly HashSet<string> TransformationRegistryHosts = new(
+        StringComparer.OrdinalIgnoreCase
+    )
+    {
+        "www.xbrl.org",
+        "www.sec.gov",
+    };
+
     private const string ContextLocalName = "xbrli:context";
     private const string UnitLocalName = "xbrli:unit";
     private const string PeriodLocalName = "xbrli:period";
@@ -105,7 +127,135 @@ public class InlineXbrlParser
             Facts = facts,
             CoverListings = ExtractCoverListings(document),
             FiscalYearEnds = ExtractFiscalYearEnds(document, contexts, namespaces),
+            RegistrantCovers = ExtractRegistrantCovers(document, contexts, namespaces),
         };
+    }
+
+    /// <summary>
+    /// The registrant's file number and shell-company flag, per unqualified CIK context. Only the
+    /// SEC dei namespace counts, and a co-registrant's dimensioned context never answers for the
+    /// filer. A fact stated twice with different values is left null rather than chosen by order.
+    /// </summary>
+    private static List<ParsedRegistrantCover> ExtractRegistrantCovers(
+        IDocument document,
+        Dictionary<string, ParsedContext> contexts,
+        Dictionary<string, string> namespaces
+    )
+    {
+        var fileNumbers = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var shellFlags = new Dictionary<string, HashSet<bool?>>(StringComparer.Ordinal);
+        foreach (var element in FindByLocalName(document, NonNumericLocalName))
+        {
+            var nil = element.GetAttribute("xsi:nil") ?? element.GetAttribute("nil");
+            if (nil == "1" || string.Equals(nil, "true", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var parts = (element.GetAttribute("name") ?? "").Split(':');
+            if (
+                parts.Length != 2
+                || parts[1] is not (EntityFileNumberName or EntityShellCompanyName)
+                || !IsSecDeiNamespace(namespaces.GetValueOrDefault(parts[0]))
+            )
+                continue;
+            var contextRef =
+                element.GetAttribute("contextRef") ?? element.GetAttribute("contextref");
+            if (
+                contextRef == null
+                || !contexts.TryGetValue(contextRef, out var context)
+                || string.IsNullOrWhiteSpace(context.ConsolidatedCik)
+            )
+                continue;
+            var cik = context.ConsolidatedCik;
+
+            if (parts[1] == EntityFileNumberName)
+            {
+                var fileNumber = CollapseWhitespace(element.TextContent);
+                if (fileNumber == null)
+                    continue;
+                if (!fileNumbers.TryGetValue(cik, out var numbers))
+                    fileNumbers[cik] = numbers = new HashSet<string>(StringComparer.Ordinal);
+                numbers.Add(fileNumber);
+            }
+            else
+            {
+                if (!shellFlags.TryGetValue(cik, out var flags))
+                    shellFlags[cik] = flags = [];
+                // An undecodable rendering is recorded as unknown so it blocks, rather than
+                // silently yields to, a decodable one elsewhere on the page.
+                flags.Add(TryDecodeBoolean(element, namespaces, out var value) ? value : null);
+            }
+        }
+
+        return fileNumbers
+            .Keys.Union(shellFlags.Keys)
+            .Select(cik => new ParsedRegistrantCover(
+                cik,
+                fileNumbers.TryGetValue(cik, out var numbers) && numbers.Count == 1
+                    ? numbers.Single()
+                    : null,
+                shellFlags.TryGetValue(cik, out var flags) && flags.Count == 1
+                    ? flags.Single()
+                    : null
+            ))
+            .ToList();
+    }
+
+    private static bool IsSecDeiNamespace(string namespaceValue) =>
+        Uri.TryCreate(namespaceValue, UriKind.Absolute, out var namespaceUri)
+        && namespaceUri.Host == "xbrl.sec.gov"
+        && namespaceUri.AbsolutePath.StartsWith("/dei/", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Decodes an inline-XBRL boolean. A fixed-value transformation states its value in the format
+    /// alone, so the rendered glyph is ignored (filers draw any box, letter or Wingdings character
+    /// under it); the SEC ballot-box transformation reads the box; an untransformed fact must be
+    /// the literal word. Any other format is not a boolean this parser can vouch for.
+    /// </summary>
+    private static bool TryDecodeBoolean(
+        IElement element,
+        Dictionary<string, string> namespaces,
+        out bool value
+    )
+    {
+        value = false;
+        var text = CollapseWhitespace(element.TextContent);
+        var format = element.GetAttribute("format");
+        if (string.IsNullOrWhiteSpace(format))
+            return bool.TryParse(text, out value);
+
+        var formatParts = format.Split(':');
+        if (formatParts.Length != 2)
+            return false;
+        var formatNamespace =
+            ResolveNamespace(element, formatParts[0])
+            ?? namespaces.GetValueOrDefault(formatParts[0]);
+        if (
+            !Uri.TryCreate(formatNamespace, UriKind.Absolute, out var formatUri)
+            || !TransformationRegistryHosts.Contains(formatUri.Host)
+        )
+            return false;
+
+        switch (formatParts[1].ToLowerInvariant())
+        {
+            case "fixed-true":
+            case "booleantrue":
+                value = true;
+                return true;
+            case "fixed-false":
+            case "booleanfalse":
+                value = false;
+                return true;
+            case "boolballotbox":
+                if (text == BallotBox)
+                    return true;
+                if (text is BallotBoxWithCheck or BallotBoxWithX)
+                {
+                    value = true;
+                    return true;
+                }
+                return false;
+            default:
+                return false;
+        }
     }
 
     private static List<ParsedFiscalYearEnd> ExtractFiscalYearEnds(
