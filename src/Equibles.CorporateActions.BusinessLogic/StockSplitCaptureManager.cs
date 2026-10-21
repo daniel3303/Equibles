@@ -328,11 +328,11 @@ public class StockSplitCaptureManager
     // A source that re-dates a split (a record date corrected to the ex-date, a postponed reverse
     // split) re-reports it on the new date and stops listing the old one, which can sit further
     // away than SameEventWindowDays. Its own row on a date its complete report no longer lists is
-    // that withdrawn date when the report carries the same ratio on a date that had not passed
-    // when the row was captured; an event already history by then was a different one. The row
-    // merges into one already holding the reported date, whose applied marker stands, or moves
-    // there and reopens reconciliation like any revised definition. A different ratio holding the
-    // reported date, or no same-ratio report at all, leaves the row alone.
+    // that withdrawn date when the report's nearest same-ratio date had not passed when the row
+    // was captured; an event already history by then was a different one. The row merges into one
+    // already holding the reported date, whose applied marker stands, or moves there and reopens
+    // reconciliation like any revised definition. A different ratio holding the reported date, or
+    // no same-ratio report at all, leaves the row alone.
     private void SupersedeMovedDates(
         List<StockSplit> existing,
         EquityListing listing,
@@ -359,19 +359,23 @@ public class StockSplitCaptureManager
             .ToList();
         foreach (var stale in withdrawn)
         {
+            // A row reported after its date had long passed was history when captured, not an
+            // event the source could still re-date.
             var capturedOn = DateOnly.FromDateTime(stale.CreationTime);
+            if (stale.EffectiveDate.AddDays(SplitEvents.SameEventWindowDays) < capturedOn)
+                continue;
+            // The nearest same-ratio report is the candidate; filtering before choosing would let
+            // an unrelated later event of that ratio stand in for a re-date the guard refused.
             var replacement = reported
                 .Where(split =>
-                    split.Numerator == stale.Numerator
-                    && split.Denominator == stale.Denominator
-                    && split.EffectiveDate >= capturedOn
+                    split.Numerator == stale.Numerator && split.Denominator == stale.Denominator
                 )
                 .OrderBy(split =>
                     Math.Abs(split.EffectiveDate.DayNumber - stale.EffectiveDate.DayNumber)
                 )
                 .ThenByDescending(split => split.EffectiveDate)
                 .FirstOrDefault();
-            if (replacement == null)
+            if (replacement == null || replacement.EffectiveDate < capturedOn)
                 continue;
 
             var holder = existing.FirstOrDefault(action =>

@@ -196,14 +196,50 @@ public class StockSplitCaptureMovedDateTests
     }
 
     [Fact]
-    public async Task SupersedeMovedDates_OnlySameRatioReportWasAlreadyHistoryAtCapture_KeepsTheRow()
+    public async Task SupersedeMovedDates_NearestReportPredatesTheCapture_NeverFallsBackToALaterSplit()
     {
         var (context, stock) = await SeedIssuer();
         await using var _ = context;
-        // A split the report no longer lists cannot be the same event as one that had already
-        // happened when the row was captured.
-        context.Add(
-            Stored(stock, new DateOnly(2024, 6, 12), Utc(2026, 7, 3), applied: Utc(2026, 7, 4))
+        // Captured two days late, then re-dated a day earlier: the nearest report was already
+        // history at capture, so the row is not this event's withdrawn date, and a genuine later
+        // split of the same ratio must not absorb it.
+        var reported = Stored(stock, ExDate, Utc(2026, 9, 5), applied: Utc(2026, 9, 6));
+        var later = Stored(
+            stock,
+            new DateOnly(2028, 6, 12),
+            Utc(2028, 6, 1),
+            applied: Utc(2028, 6, 13)
+        );
+        context.AddRange(reported, later);
+        await context.SaveChangesAsync();
+
+        (
+            await NewManager(context)
+                .SupersedeMovedDates(
+                    stock.Id,
+                    stock.Presentation.EquityListingId,
+                    "APH",
+                    new DateOnly(2020, 1, 2),
+                    [Reported(ExDate.AddDays(-1)), Reported(new DateOnly(2028, 6, 12))]
+                )
+        )
+            .Should()
+            .Be(0);
+
+        context.ChangeTracker.Clear();
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task SupersedeMovedDates_RowCapturedLongAfterItsDate_IsNotJudged()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        // A history row upgraded in place keeps a capture time years after its date; the report
+        // dropping it is not a re-date onto the next split of that ratio.
+        context.AddRange(
+            Stored(stock, new DateOnly(2021, 3, 5), Utc(2026, 7, 7), applied: Utc(2026, 8, 5)),
+            Stored(stock, ExDate, Utc(2026, 8, 7), applied: Utc(2026, 9, 4))
         );
         await context.SaveChangesAsync();
 
@@ -214,16 +250,14 @@ public class StockSplitCaptureMovedDateTests
                     stock.Presentation.EquityListingId,
                     "APH",
                     new DateOnly(2020, 1, 2),
-                    [Reported(new DateOnly(2021, 3, 5))]
+                    [Reported(ExDate)]
                 )
         )
             .Should()
             .Be(0);
 
         context.ChangeTracker.Clear();
-        (await context.Set<StockSplit>().SingleAsync())
-            .EffectiveDate.Should()
-            .Be(new DateOnly(2024, 6, 12));
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
     }
 
     [Fact]
