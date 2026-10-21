@@ -356,6 +356,74 @@ public class HybridChunkSearcherBm25TimeoutTests
         );
     }
 
+    // Every full pass ran out of budget on a cold index during a burst: the widest pass the caller
+    // opted into runs once more on the degraded budget, over warmed pages, and its answer stands.
+    [Fact]
+    public async Task AllPassesTimeout_WarmRetryOfTheWidestPassAnswers()
+    {
+        var chunk = new Chunk { Id = Guid.NewGuid(), Content = "investment in Anthropic" };
+        var chunkRepository = new TimeoutChunkRepository(
+            coldPasses: 2,
+            disjunctiveResults: [chunk],
+            allChunks: [chunk]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var outcome = await searcher.SearchDetailed(
+            "Anthropic investment Gemini competition",
+            5,
+            disjunctiveFallback: true
+        );
+
+        Assert.Equal(chunk.Id, Assert.Single(outcome.Chunks).Id);
+        Assert.False(outcome.Incomplete);
+        Assert.Single(chunkRepository.ConjunctiveBudgets);
+        Assert.Equal(new int?[] { 3, 3 }, chunkRepository.DisjunctiveBudgets);
+    }
+
+    // Without the any-term opt-in the warm retry is the conjunctive pass itself, so a ticker-scoped
+    // search whose fallback and vector arm found nothing still answers from the keyword index.
+    [Fact]
+    public async Task ConjunctiveTimeout_WithoutOptIn_WarmConjunctiveRetryAnswers()
+    {
+        var chunk = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "GOOGL",
+            Content = "Gemini",
+        };
+        var chunkRepository = new TimeoutChunkRepository(
+            coldPasses: 1,
+            conjunctiveResults: [chunk],
+            allChunks: [chunk]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var results = await searcher.Search("Gemini competition", 5, ticker: "GOOGL");
+
+        Assert.Equal(chunk.Id, Assert.Single(results).Id);
+        Assert.Equal(new int?[] { 3, 3 }, chunkRepository.ConjunctiveBudgets);
+        Assert.Empty(chunkRepository.DisjunctiveBudgets);
+    }
+
+    // A warm retry that completes empty has proven "no matches" for the widest pass, so the search
+    // returns empty instead of a timeout the caller would retry for nothing.
+    [Fact]
+    public async Task AllPassesTimeout_WarmRetryCompletesEmpty_ReturnsProvenEmpty()
+    {
+        var chunkRepository = new TimeoutChunkRepository(coldPasses: 2);
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var outcome = await searcher.SearchDetailed(
+            "query matching nothing",
+            5,
+            disjunctiveFallback: true
+        );
+
+        Assert.Empty(outcome.Chunks);
+        Assert.False(outcome.Incomplete);
+    }
+
     // A pass that answered, or a scoped fallback that answered, never pays for the extra pass.
     [Fact]
     public async Task HealthyOrScopedAnswer_NeverRunsTheShortenedPass()
