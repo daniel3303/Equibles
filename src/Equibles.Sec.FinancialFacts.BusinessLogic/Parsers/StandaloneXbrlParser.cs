@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using Equibles.Core.AutoWiring;
@@ -109,7 +110,7 @@ public class StandaloneXbrlParser
                     continue;
                 }
 
-                var rawValue = reader.ReadElementContentAsString();
+                var rawValue = ReadElementText(reader);
                 if (!FiscalYearEndValueParser.TryParse(rawValue, out var date))
                     continue;
                 observations.Add(
@@ -350,13 +351,6 @@ public class StandaloneXbrlParser
     }
 
     /// <summary>
-    /// Second pass: one <see cref="ParsedXbrlFact"/> per numeric fact element
-    /// under the root. Same accept/reject rules as the old XElement walk — the
-    /// only mechanical difference is that the element's value is read from the
-    /// reader instead of from a materialised tree, which advances the reader
-    /// past the element, so every attribute-derived decision is made first.
-    /// </summary>
-    /// <summary>
     /// True when the depth-1 element at the reader is the SEC dei
     /// <c>CurrentFiscalYearEndDate</c> and its context carries a consolidated CIK.
     /// Returns false without advancing the reader.
@@ -388,6 +382,40 @@ public class StandaloneXbrlParser
         return true;
     }
 
+    /// <summary>
+    /// Character data of the current element, concatenated across child elements
+    /// exactly like <c>XElement.Value</c>, leaving the reader past the element.
+    /// <see cref="XmlReader.ReadElementContentAsString"/> cannot be used here: it
+    /// throws <see cref="XmlException"/> when the element has element children.
+    /// Measured on an XBRL fraction item (<c>&lt;a:R&gt;&lt;xbrli:numerator/&gt;…</c>),
+    /// where that exception reached Parse's catch and the WHOLE document came back
+    /// empty instead of just that one fact being misread as the old code did.
+    /// </summary>
+    private static string ReadElementText(XmlReader reader)
+    {
+        if (reader.IsEmptyElement)
+        {
+            reader.Read();
+            return string.Empty;
+        }
+
+        var depth = reader.Depth;
+        var text = new StringBuilder();
+        while (reader.Read() && reader.Depth > depth)
+        {
+            switch (reader.NodeType)
+            {
+                case XmlNodeType.Text:
+                case XmlNodeType.CDATA:
+                case XmlNodeType.Whitespace:
+                case XmlNodeType.SignificantWhitespace:
+                    text.Append(reader.Value);
+                    break;
+            }
+        }
+        return text.ToString();
+    }
+
     private static List<ParsedXbrlFact> ReadFacts(
         string xml,
         Dictionary<string, ParsedContext> contexts,
@@ -415,9 +443,14 @@ public class StandaloneXbrlParser
                 continue;
             }
 
-            if (!TryReadFact(reader, contexts, units, out var fact))
+            if (!TryReadFact(reader, contexts, units, out var fact, out var consumed))
             {
-                reader.Skip();
+                // Only skip an element the fact reader left in place. A reject AFTER
+                // the content read has already advanced past it, and skipping again
+                // would swallow the following sibling - which in compact XML is the
+                // next fact. That is the silent-drop bug this flag exists to stop.
+                if (!consumed)
+                    reader.Skip();
                 continue;
             }
             facts.Add(fact);
@@ -427,18 +460,22 @@ public class StandaloneXbrlParser
     }
 
     /// <summary>
-    /// Consumes one depth-1 element if it is a numeric fact. Returns false WITHOUT
-    /// advancing the reader (the caller decides how to step over it), and true
-    /// having read the element's content — which leaves the reader past it.
+    /// Consumes one depth-1 element and reports the fact it holds, if any.
+    /// <c>consumed</c> says whether the reader was advanced: every reject that
+    /// happens BEFORE the content read leaves the element in place (the caller
+    /// steps over it with Skip), while a reject after the content read has already
+    /// consumed it. Getting that distinction wrong drops facts silently.
     /// </summary>
     private static bool TryReadFact(
         XmlReader reader,
         Dictionary<string, ParsedContext> contexts,
         Dictionary<string, string> units,
-        out ParsedXbrlFact fact
+        out ParsedXbrlFact fact,
+        out bool consumed
     )
     {
         fact = null;
+        consumed = false;
 
         // xbrli: namespace elements (context, unit, …) are XBRL machinery, not facts.
         if (reader.NamespaceURI == XbrliNamespace)
@@ -472,7 +509,9 @@ public class StandaloneXbrlParser
         var decimals = XbrlValueParser.ParseDecimals(reader.GetAttribute("decimals"));
         var tag = reader.LocalName;
         var elementNamespace = reader.NamespaceURI;
-        var rawValue = reader.ReadElementContentAsString();
+        // From here on the element has been consumed, so the caller must not Skip().
+        var rawValue = ReadElementText(reader);
+        consumed = true;
         if (
             !decimal.TryParse(
                 rawValue,
