@@ -89,4 +89,54 @@ public class StandaloneXbrlParserStreamingTests
         facts[count - 1].Tag.Should().Be($"Line{count - 1}");
         facts.Should().OnlyContain(f => !f.IsInstant);
     }
+
+    // Both regressions below were reported by @daniel3303 on PR #4814 and are
+    // reproduced from his examples. They matter because each one drops facts
+    // SILENTLY - no exception, no error row, just a smaller list.
+
+    [Fact]
+    public void Parse_NonNumericFactBetweenNumericOnes_DoesNotDropTheNextFact()
+    {
+        // Compact XML on purpose: with pretty-printed XML the swallowed node is
+        // whitespace and the bug hides. A fact whose text is not a number is
+        // rejected AFTER its content has been read, so the caller must not Skip()
+        // it again - doing so ate the following fact.
+        var xml =
+            $"<xbrli:xbrl xmlns:xbrli=\"{XbrliNs}\" xmlns:a=\"{UsGaapNs}\">"
+            + "<xbrli:context id=\"c\"><xbrli:entity><xbrli:identifier scheme=\"s\">1</xbrli:identifier></xbrli:entity>"
+            + "<xbrli:period><xbrli:instant>2024-01-01</xbrli:instant></xbrli:period></xbrli:context>"
+            + "<xbrli:unit id=\"u\"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>"
+            + "<a:X contextRef=\"c\" unitRef=\"u\">abc</a:X>"
+            + "<a:Y contextRef=\"c\" unitRef=\"u\">5</a:Y>"
+            + "</xbrli:xbrl>";
+
+        var facts = new StandaloneXbrlParser().Parse(xml);
+
+        facts.Should().ContainSingle();
+        facts[0].Tag.Should().Be("Y");
+        facts[0].Value.Should().Be(5m);
+    }
+
+    [Fact]
+    public void Parse_FractionItemWithChildElements_DoesNotEmptyTheDocument()
+    {
+        // An XBRL fraction item has element children. ReadElementContentAsString
+        // throws XmlException on those, and that exception reached Parse's catch,
+        // which returns [] - so ONE such item silently emptied the whole document.
+        // The old LINQ-to-XML code only misread that one fact.
+        var xml =
+            $"<xbrli:xbrl xmlns:xbrli=\"{XbrliNs}\" xmlns:a=\"{UsGaapNs}\">"
+            + "<xbrli:context id=\"c\"><xbrli:entity><xbrli:identifier scheme=\"s\">1</xbrli:identifier></xbrli:entity>"
+            + "<xbrli:period><xbrli:instant>2024-01-01</xbrli:instant></xbrli:period></xbrli:context>"
+            + "<xbrli:unit id=\"u\"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>"
+            + "<a:R contextRef=\"c\" unitRef=\"u\"><xbrli:numerator>1</xbrli:numerator>"
+            + "<xbrli:denominator>3</xbrli:denominator></a:R>"
+            + "<a:Y contextRef=\"c\" unitRef=\"u\">5</a:Y>"
+            + "</xbrli:xbrl>";
+
+        var facts = new StandaloneXbrlParser().Parse(xml);
+
+        facts.Should().NotBeEmpty();
+        facts.Should().Contain(f => f.Tag == "Y" && f.Value == 5m);
+    }
 }
