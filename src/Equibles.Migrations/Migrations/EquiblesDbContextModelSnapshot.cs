@@ -4955,6 +4955,13 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("SecurityKind", "TransactionDate");
 
+                    b.HasIndex("TransactionDate", "Id")
+                        .HasDatabaseName("IX_InsiderTransaction_MisrepairedPriceSweep")
+                        .HasFilter("\"IsPriceValid\" AND NOT \"PriceWasRepaired\"")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("TransactionDate", "Id"), new[] { "FilingDate", "Shares", "PricePerShare", "ReportedPricePerShare" });
+
                     b.ToTable("InsiderTransaction");
                 });
 

@@ -62,6 +62,33 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
             .HasIndex(t => new { t.ParserVersion, t.AccessionNumber })
             .IsCreatedConcurrently();
 
+        // The misrepaired-price sweep asks for rows whose price was replaced but whose
+        // implied value still does not match, ordered by TransactionDate then Id and cut
+        // to a batch. Measured 2026-10-21 on the 1.79M-row / 1.7 GB table: the planner
+        // chose IX_InsiderTransaction_IsPriceValid_TransactionDate, which carries none of
+        // the filter columns, so every candidate cost a heap fetch, and it still needed an
+        // Incremental Sort because that index presorts TransactionDate only. One call took
+        // 803 s and the runs that had to be cancelled had reached 5,463 s.
+        //
+        // This index gives the sweep what it asks for and nothing else: both sort keys, so
+        // the sort disappears; the partial filter, so rows the sweep never wants (already
+        // valid and already repaired) are not in the index at all; and the four columns the
+        // remaining predicates read, so the scan is index-only. The same query then ran in
+        // 585 ms - an Index Only Scan, 2,719 heap fetches, no sort.
+        builder
+            .Entity<InsiderTransaction>()
+            .HasIndex(t => new { t.TransactionDate, t.Id })
+            .HasDatabaseName("IX_InsiderTransaction_MisrepairedPriceSweep")
+            .IncludeProperties(t => new
+            {
+                t.FilingDate,
+                t.Shares,
+                t.PricePerShare,
+                t.ReportedPricePerShare,
+            })
+            .HasFilter("\"IsPriceValid\" AND NOT \"PriceWasRepaired\"")
+            .IsCreatedConcurrently();
+
         // Covering index for every ~90-day TransactionDate window scan. Two
         // consumers share it:
         //   - the insider-trading dashboard's "top by dollar volume" boards (run
