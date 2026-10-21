@@ -12,6 +12,12 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
     public virtual Task QueueRealtimeReplay(CancellationToken cancellationToken) =>
         QueueMarker(ProcessedDataSet.RealtimeReplayPendingFileName, cancellationToken);
 
+    // When the pending bulk replay first changed holdings; null while none is pending.
+    public Task<DateTime?> GetRealtimeReplayQueuedAt(CancellationToken cancellationToken) =>
+        GetByFileName(ProcessedDataSet.RealtimeReplayPendingFileName)
+            .Select(row => (DateTime?)row.CreationTime)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task QueueCoverageAudit(CancellationToken cancellationToken) =>
         QueueMarker(ProcessedDataSet.CoverageAuditPendingFileName, cancellationToken);
 
