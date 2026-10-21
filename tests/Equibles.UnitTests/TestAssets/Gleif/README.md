@@ -22,3 +22,6 @@
 - Captured unchanged on 2026-10-20 for `GleifIdentityClient.GetIsinsForLei`:
   - `toyota-lei-record.json` comes from `https://api.gleif.org/api/v1/lei-records/5493006W3QUS5LMH6R84`.
   - `toyota-isins.json` comes from `/api/v1/lei-records/5493006W3QUS5LMH6R84/isins?page[size]=200`. It relates 22 ISINs to Toyota Motor: its ordinary share `JP3633400001`, eleven other Japanese ISINs and ten US ones.
+- Captured unchanged on 2026-10-21 for an entity GLEIF relates no ISIN to:
+  - `kyokuyo-lei-record.json` comes from `https://api.gleif.org/api/v1/lei-records/353800PIEETYXIDK6K51`, Kyokuyo Co., Ltd. (株式会社極洋, `RA000412` 0104-01-033225). Its relationships state no `isins` link.
+  - `kyokuyo-isins.json` comes from `/api/v1/lei-records/353800PIEETYXIDK6K51/isins?page[size]=200` and states a total of 0 with no rows.
