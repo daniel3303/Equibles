@@ -167,16 +167,49 @@ public class BankTopLineFoldTests
     }
 
     [Fact]
-    public void Fold_HeadlineMissingInOnePeriod_FillsOnlyThatPeriod()
+    public void Fold_HeadlineYear_IsNeverFilledFromTheSum()
     {
+        // A year that reports its own headline keeps one measure, so a quarter it leaves untagged
+        // stays empty rather than reading the other measure.
         var picked = PickMillions(
             [Q2(Revenues, 1_100m)],
             [Q1(NetInterest, 662m), Q2(NetInterest, 677m)],
             [Q1(Noninterest, 187m), Q2(Noninterest, 460m)]
         );
 
-        picked[SecFiscalPeriod.Q1].Should().Be(849m);
+        picked.Should().NotContainKey(SecFiscalPeriod.Q1);
         picked[SecFiscalPeriod.Q2].Should().Be(1_100m);
+    }
+
+    [Fact]
+    public void Fold_YearWithoutRevenue_FillsFromTheSum()
+    {
+        var (facts, priority) = BankTopLine.Fold(
+            [Year(Revenues, 3_300m)],
+            [Year(NetInterest, 2_627m), Q1(NetInterest, 662m)],
+            [Year(Noninterest, 758m), Q1(Noninterest, 187m)],
+            RevenuePriority
+        );
+
+        facts
+            .Select(f => (f.FiscalYear, f.Value / 1_000_000m))
+            .Should()
+            .BeEquivalentTo(new[] { (2025, 3_300m), (2026, 849m) });
+    }
+
+    [Fact]
+    public void Fold_PartialRevenues_LeavesNoRevenueFactInAYearTheSumReaches()
+    {
+        // Zions' FY2025 10-K tags no fourth quarter for Revenues; a fourth quarter derived as the
+        // year less its first three quarters must read one measure throughout.
+        var (facts, _) = BankTopLine.Fold(
+            [Year(Revenues, 662m), Q1(Revenues, 172m)],
+            [Year(NetInterest, 2_627m), Q1(NetInterest, 662m)],
+            [Year(Noninterest, 758m), Q1(Noninterest, 187m)],
+            RevenuePriority
+        );
+
+        facts.Should().OnlyContain(f => f.FinancialConceptId == BankTopLine.ConceptId);
     }
 
     [Fact]

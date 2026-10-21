@@ -36,7 +36,9 @@ public static class BankTopLine
     /// The revenue alias's facts with the bank sum folded in, and the pick priority that goes with
     /// them. A sum pairs the two components one filing states for one exact period. When the sum
     /// exceeds the newest revenue period by more than a tenth, revenue is a partial line and the
-    /// sum outranks every revenue tag; otherwise it only fills periods revenue leaves empty.
+    /// sums replace it in every fiscal year they reach; otherwise they only fill fiscal years with
+    /// no revenue. Each fiscal year keeps one measure, so a derived fourth quarter (the year less
+    /// its first three quarters) never subtracts one measure from the other.
     /// </summary>
     public static (List<FinancialFact> Facts, Dictionary<Guid, int> Priority) Fold(
         IReadOnlyCollection<FinancialFact> revenue,
@@ -50,10 +52,17 @@ public static class BankTopLine
         if (sums.Count == 0)
             return ([.. revenue], priority);
 
-        priority[ConceptId] = IsPartialAtNewest(revenue, sums, revenuePriority)
-            ? int.MinValue
-            : int.MaxValue;
-        return ([.. revenue, .. sums], priority);
+        priority[ConceptId] = int.MaxValue;
+        if (IsPartialAtNewest(revenue, sums, revenuePriority))
+        {
+            var sumYears = sums.Select(f => f.FiscalYear).ToHashSet();
+            return ([.. revenue.Where(f => !sumYears.Contains(f.FiscalYear)), .. sums], priority);
+        }
+        var revenueYears = revenue
+            .Where(IsConsolidatedDuration)
+            .Select(f => f.FiscalYear)
+            .ToHashSet();
+        return ([.. revenue, .. sums.Where(f => !revenueYears.Contains(f.FiscalYear))], priority);
     }
 
     /// <summary>
