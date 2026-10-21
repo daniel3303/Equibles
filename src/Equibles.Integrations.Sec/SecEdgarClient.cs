@@ -930,16 +930,61 @@ public class SecEdgarClient : ISecEdgarClient
         return true;
     }
 
-    // Send a retrying GET, throw on a non-success status, and return the fully-buffered body.
+    // The largest response body this client will materialise as a string. A
+    // filing is normally a few hundred kilobytes; a merged document-set
+    // submission reaches tens of megabytes, and decoding one costs its full
+    // width in UTF-16 on top of the bytes buffered for it. Measured
+    // 2026-10-21: one 21,369,955-character document put a 1.25 GiB worker into a
+    // storm of OutOfMemoryExceptions (64 in thirty minutes) and it stopped
+    // making progress for hours. The limit sits well above anything observed in
+    // production, so it is not a behaviour change for real filings - it exists
+    // so an oversized response fails once, naming the URL, instead of
+    // exhausting the process and stalling every other worker with it.
+    private const long MaxStringResponseBytes = 64L * 1024 * 1024;
+
+    // Send a retrying GET, throw on a non-success status, and return the body as
+    // a string, refusing to buffer more than MaxStringResponseBytes.
     private async Task<string> FetchStringAsync(
         string url,
         CancellationToken cancellationToken = default
     )
     {
-        using var response = await SendWithRetryAsync(url, cancellationToken);
+        // ResponseHeadersRead, not the default ResponseContentRead: read the body
+        // through a stream so the size can be bounded while it arrives instead of
+        // after it has all been buffered.
+        using var response = await SendWithRetryAsync(
+            url,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync(cancellationToken);
+
+        // Refuse a body we already know is too large, without reading a byte of it.
+        var declared = response.Content.Headers.ContentLength;
+        if (declared > MaxStringResponseBytes)
+            throw Oversized(url, declared.Value, MaxStringResponseBytes);
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var capacity = declared is > 0 and < int.MaxValue ? (int)declared.Value : 0;
+        using var buffered = new MemoryStream(capacity);
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+        {
+            // A chunked response declares no length, so the bound is enforced here.
+            if (buffered.Length + read > MaxStringResponseBytes)
+                throw Oversized(url, buffered.Length + read, MaxStringResponseBytes);
+            buffered.Write(chunk, 0, read);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffered.ToArray());
     }
+
+    private static InvalidOperationException Oversized(string url, long size, long limit) =>
+        new(
+            $"Response from {url} is {size:N0} bytes, over the {limit:N0}-byte limit for a "
+                + "buffered response. Refusing to read it into memory."
+        );
 
     private Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
