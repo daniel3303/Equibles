@@ -5,6 +5,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Repositories;
+using Equibles.Integrations.Fred;
 using Equibles.Integrations.Fred.Contracts;
 using Equibles.Integrations.Fred.Models;
 using Equibles.Worker;
@@ -50,6 +51,18 @@ public class FredImportService : IImporter
             try
             {
                 await ImportSeries(curated, cancellationToken);
+            }
+            catch (FredUnavailableException ex)
+            {
+                // An outage page says nothing about this series: every remaining one would fail
+                // the same way and write its own Errors row. Rethrow so the worker's
+                // consecutive-failure streak owns reporting and backoff.
+                _logger.LogWarning(
+                    "FRED unavailable while importing {SeriesId} ({Reason}); aborting this cycle",
+                    curated.SeriesId,
+                    ex.Message
+                );
+                throw;
             }
             catch (HttpRequestException ex)
             {

@@ -14,6 +14,10 @@ public class FredScraperWorker : BaseScraperWorker
     protected override TimeSpan SleepInterval { get; }
     protected override ErrorSource ErrorSource => ErrorSource.FredScraper;
 
+    // An import aborts on a FRED outage page; a brief one backs off and recovers silently,
+    // and only an outage that outlasts three cycles writes its single Errors row.
+    protected override int ErrorReportThreshold => 3;
+
     public FredScraperWorker(
         ILogger<FredScraperWorker> logger,
         IServiceScopeFactory scopeFactory,

@@ -1,3 +1,4 @@
+using System.Net;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
@@ -5,6 +6,7 @@ using Equibles.Fred.Data;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.HostedService.Services;
 using Equibles.Fred.Repositories;
+using Equibles.Integrations.Fred;
 using Equibles.Integrations.Fred.Contracts;
 using Equibles.Integrations.Fred.Models;
 using Equibles.IntegrationTests.Helpers;
@@ -402,6 +404,33 @@ public class FredImportServiceTests : IDisposable
         // EFFR should be created despite the earlier failure
         var effr = await _seriesRepo.GetBySeriesId("EFFR").FirstOrDefaultAsync();
         effr.Should().NotBeNull();
+    }
+
+    // ── Import: a FRED outage page aborts the cycle ──────────────────
+
+    [Fact]
+    public async Task Import_FredOutagePage_AbortsCycleBeforeLaterSeries()
+    {
+        SetupApiForAllOtherSeriesEmpty();
+
+        // FEDFUNDS (first in CuratedSeriesRegistry) gets the outage page; every later series
+        // would get the same page, so none of them may be requested or reported.
+        _fredClient
+            .GetSeriesMetadata("FEDFUNDS")
+            .Returns<FredSeriesRecord>(_ =>
+                throw new FredUnavailableException("outage page", HttpStatusCode.OK)
+            );
+        SetupApiForSeries(
+            "EFFR",
+            CreateMetadataRecord("EFFR", "Effective Federal Funds Rate"),
+            CreateObservationRecords(("2024-01-01", "5.33"))
+        );
+
+        var act = () => _sut.Import(CancellationToken.None);
+
+        await act.Should().ThrowAsync<FredUnavailableException>();
+        await _fredClient.DidNotReceive().GetSeriesMetadata("EFFR");
+        (await _seriesRepo.GetBySeriesId("EFFR").FirstOrDefaultAsync()).Should().BeNull();
     }
 
     // ── Import: unparseable value stored as null ─────────────────────
