@@ -9,7 +9,8 @@ namespace Equibles.Migrations.Migrations
     /// larger than two thirds of (index size / target_segment_count), and the target defaults to
     /// the CPU count, so a large index stops merging above its 1GB layer: segments past that
     /// size never merge again, keep every deleted chunk, and each search pays a fixed read per
-    /// segment. Four segments keep the 10GB layer for any index over about 60GB. Searches scan
+    /// segment. Three segments keep the 10GB layer while live segments total over about 47GB,
+    /// which a large index stays above once its deleted chunks are merged away. Searches scan
     /// on the leader alone, so fewer segments costs no parallelism.
     ///
     /// Reloption only, so the background merger does the compaction on its own schedule; the
@@ -26,7 +27,7 @@ namespace Equibles.Migrations.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("SET LOCAL lock_timeout = '5s';");
-            migrationBuilder.Sql($"ALTER INDEX {IndexName} SET (target_segment_count = 4);");
+            migrationBuilder.Sql($"ALTER INDEX {IndexName} SET (target_segment_count = 3);");
         }
 
         /// <inheritdoc />

@@ -13,7 +13,7 @@ namespace Equibles.IntegrationTests.Migrations;
 public class ChunkBm25SegmentTargetMigrationTests(ParadeDbFixture fixture)
 {
     [Fact]
-    public async Task ChunkBm25Index_TargetsFourSegmentsAndKeepsItsFieldOptions()
+    public async Task ChunkBm25Index_TargetsThreeSegmentsAndKeepsItsFieldOptions()
     {
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
@@ -25,7 +25,7 @@ public class ChunkBm25SegmentTargetMigrationTests(ParadeDbFixture fixture)
 
         var options = (string[])await command.ExecuteScalarAsync();
 
-        Assert.Contains("target_segment_count=4", options);
+        Assert.Contains("target_segment_count=3", options);
         Assert.Contains("key_field=Id", options);
         Assert.Contains(
             options,
