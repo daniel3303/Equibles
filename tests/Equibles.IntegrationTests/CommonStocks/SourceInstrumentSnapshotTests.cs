@@ -329,7 +329,7 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
                 .ExecuteUpdateAsync(setters =>
                     setters.SetProperty(
                         row => row.YahooPriceSyncAttemptedAt,
-                        DateTime.UtcNow.AddHours(-2)
+                        DateTime.UtcNow.AddHours(-25)
                     )
                 );
             await service.ImportCatalogPrices(CancellationToken.None);
