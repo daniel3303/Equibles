@@ -16,7 +16,8 @@ namespace Equibles.CorporateActions.BusinessLogic;
 // the exact current listing before writing, so a company-sync reorder cannot attach one
 // security's action to another. Idempotent by (listing, EffectiveDate): a
 // re-run with the same events writes nothing. A changed ratio for the same exact
-// source series clears PriceAdjustmentAppliedTime for another reconciliation.
+// source series clears PriceAdjustmentAppliedTime for another reconciliation. A caller holding a
+// source's complete report also lets that source retire its own rows on dates it moved away from.
 [Service]
 public class StockSplitCaptureManager
 {
@@ -39,13 +40,19 @@ public class StockSplitCaptureManager
         CancellationToken cancellationToken = default
     ) => CaptureListing(commonStockId, null, listedTicker, splits, cancellationToken);
 
+    /// <param name="reportedFrom">
+    /// Set when <paramref name="splits"/> is the source's complete current report for this listing
+    /// for effective dates on or after it; the source's own rows on dates the report has moved away
+    /// from are then superseded before the report is captured.
+    /// </param>
     public Task<int> CaptureForListing(
         Guid equityIssuerId,
         Guid equityListingId,
         string sourceTicker,
         IReadOnlyCollection<CapturedSplit> splits,
         CancellationToken cancellationToken = default,
-        EquityListingSourceBinding expectedSourceBinding = null
+        EquityListingSourceBinding expectedSourceBinding = null,
+        DateOnly? reportedFrom = null
     ) =>
         CaptureListing(
             equityIssuerId,
@@ -53,7 +60,31 @@ public class StockSplitCaptureManager
             sourceTicker,
             splits,
             cancellationToken,
-            expectedSourceBinding: expectedSourceBinding
+            expectedSourceBinding: expectedSourceBinding,
+            reportedFrom: reportedFrom
+        );
+
+    /// <summary>
+    /// Supersedes the source's own rows on dates its complete current report for this listing
+    /// (effective dates on or after <paramref name="reportedFrom"/>) has moved away from, without
+    /// capturing any reported event the listing does not already hold.
+    /// </summary>
+    public Task<int> SupersedeMovedDates(
+        Guid equityIssuerId,
+        Guid equityListingId,
+        string sourceTicker,
+        DateOnly reportedFrom,
+        IReadOnlyCollection<CapturedSplit> report,
+        CancellationToken cancellationToken = default
+    ) =>
+        CaptureListing(
+            equityIssuerId,
+            equityListingId,
+            sourceTicker,
+            report,
+            cancellationToken,
+            reportedFrom: reportedFrom,
+            captureReported: false
         );
 
     public Task<int> CaptureForHistoricalListing(
@@ -80,7 +111,9 @@ public class StockSplitCaptureManager
         IReadOnlyCollection<CapturedSplit> splits,
         CancellationToken cancellationToken,
         DateOnly? expectedDelistedOn = null,
-        EquityListingSourceBinding expectedSourceBinding = null
+        EquityListingSourceBinding expectedSourceBinding = null,
+        DateOnly? reportedFrom = null,
+        bool captureReported = true
     )
     {
         if (splits == null || splits.Count == 0)
@@ -155,8 +188,10 @@ public class StockSplitCaptureManager
             && await _stockRepository.GetRecordedEquityListingId(stock.Id, listing.Ticker)
                 == listing.Id;
         var changes = 0;
+        if (reportedFrom.HasValue)
+            SupersedeMovedDates(existing, listing, splits, reportedFrom.Value, ref changes);
 
-        foreach (var split in splits)
+        foreach (var split in captureReported ? splits : Array.Empty<CapturedSplit>())
         {
             if (
                 split.Numerator <= 0
@@ -288,5 +323,73 @@ public class StockSplitCaptureManager
         }
 
         return true;
+    }
+
+    // A source that re-dates a split (a record date corrected to the ex-date, a postponed reverse
+    // split) re-reports it on the new date and stops listing the old one, which can sit further
+    // away than SameEventWindowDays. Its own row on a date its complete report no longer lists is
+    // that withdrawn date when the report carries the same ratio on a date that had not passed
+    // when the row was captured; an event already history by then was a different one. The row
+    // merges into one already holding the reported date, whose applied marker stands, or moves
+    // there and reopens reconciliation like any revised definition. A different ratio holding the
+    // reported date, or no same-ratio report at all, leaves the row alone.
+    private void SupersedeMovedDates(
+        List<StockSplit> existing,
+        EquityListing listing,
+        IReadOnlyCollection<CapturedSplit> report,
+        DateOnly reportedFrom,
+        ref int changes
+    )
+    {
+        var reported = report.Where(split => split.Numerator > 0 && split.Denominator > 0).ToList();
+        var sources = reported.Select(split => split.Source).Distinct().ToList();
+        if (sources.Count != 1)
+            return;
+        var reportedDates = reported.Select(split => split.EffectiveDate).ToHashSet();
+        var withdrawn = existing
+            .Where(action =>
+                action.EquityListingId == listing.Id
+                && action.Source == sources[0]
+                && action.PriceSeriesTicker == listing.Ticker
+                && action.EffectiveDate >= reportedFrom
+                && !reportedDates.Contains(action.EffectiveDate)
+            )
+            .OrderBy(action => action.EffectiveDate)
+            .ThenBy(action => action.Id)
+            .ToList();
+        foreach (var stale in withdrawn)
+        {
+            var capturedOn = DateOnly.FromDateTime(stale.CreationTime);
+            var replacement = reported
+                .Where(split =>
+                    split.Numerator == stale.Numerator
+                    && split.Denominator == stale.Denominator
+                    && split.EffectiveDate >= capturedOn
+                )
+                .OrderBy(split =>
+                    Math.Abs(split.EffectiveDate.DayNumber - stale.EffectiveDate.DayNumber)
+                )
+                .ThenByDescending(split => split.EffectiveDate)
+                .FirstOrDefault();
+            if (replacement == null)
+                continue;
+
+            var holder = existing.FirstOrDefault(action =>
+                action.EquityListingId == listing.Id
+                && action.EffectiveDate == replacement.EffectiveDate
+            );
+            if (holder == null)
+            {
+                stale.EffectiveDate = replacement.EffectiveDate;
+                stale.InvalidateRevisedDefinition();
+                changes++;
+            }
+            else if (holder.Numerator == stale.Numerator && holder.Denominator == stale.Denominator)
+            {
+                _splitRepository.Delete(stale);
+                existing.Remove(stale);
+                changes++;
+            }
+        }
     }
 }
