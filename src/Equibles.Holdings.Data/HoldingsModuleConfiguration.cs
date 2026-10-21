@@ -304,6 +304,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<Form13FNoticeReporter>();
         builder.Entity<Form13FNoticeDataSet>();
         builder.Entity<ProcessedDataSet>();
+        builder.Entity<ProcessedDataSetAccession>();
         builder.Entity<HoldingsCusipRescan>();
         builder.Entity<ProcessedFiling>();
         builder.Entity<HoldingsImportFailure>();

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Holdings.Data.Models;
@@ -34,11 +33,7 @@ public class HoldingsScraperWorkerMarkAsProcessedTests : ParadeDbMcpTestBase
     {
         var worker = CreateWorker();
 
-        var method = typeof(HoldingsScraperWorker).GetMethod(
-            "MarkAsProcessed",
-            BindingFlags.NonPublic | BindingFlags.Instance
-        );
-        await (Task)method.Invoke(worker, ["2024q4_form13f.zip", 7842]);
+        await worker.MarkAsProcessed("2024q4_form13f.zip", 7842, CancellationToken.None);
 
         // Re-read from a fresh context — exercises actual persistence, not tracker state.
         await using var verify = Fixture.CreateDbContext();
@@ -70,11 +65,7 @@ public class HoldingsScraperWorkerMarkAsProcessedTests : ParadeDbMcpTestBase
 
         var worker = CreateWorker();
 
-        var method = typeof(HoldingsScraperWorker).GetMethod(
-            "MarkAsProcessed",
-            BindingFlags.NonPublic | BindingFlags.Instance
-        );
-        await (Task)method.Invoke(worker, ["2023q2_form13f.zip", 6612]);
+        await worker.MarkAsProcessed("2023q2_form13f.zip", 6612, CancellationToken.None);
 
         await using var verify = Fixture.CreateDbContext();
         var row = await verify
@@ -84,6 +75,30 @@ public class HoldingsScraperWorkerMarkAsProcessedTests : ParadeDbMcpTestBase
         row.SubmissionCount.Should().Be(6612);
         row.ParserVersion.Should().Be(ProcessedDataSet.CurrentParserVersion);
     }
+
+    [Fact]
+    public async Task MarkAsProcessed_ClearsTheDataSetsResumeCheckpoint()
+    {
+        DbContext.AddRange(Committed("2024q4_form13f.zip"), Committed("2025q1_form13f.zip"));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await CreateWorker().MarkAsProcessed("2024q4_form13f.zip", 7842, CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        (await verify.Set<ProcessedDataSetAccession>().Select(row => row.FileName).ToListAsync())
+            .Should()
+            .Equal(["2025q1_form13f.zip"], "only the completed data set's checkpoint is spent");
+    }
+
+    private static ProcessedDataSetAccession Committed(string fileName) =>
+        new()
+        {
+            FileName = fileName,
+            AccessionNumber = "0000000000-24-000001",
+            ParserVersion = ProcessedDataSet.CurrentParserVersion,
+            ArchiveFingerprint = "F",
+        };
 
     private HoldingsScraperWorker CreateWorker()
     {
