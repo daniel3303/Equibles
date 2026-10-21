@@ -868,10 +868,7 @@ public class StockTabService
 
         return statementLines
             .Where(line =>
-                line.Concepts.Any(r =>
-                    conceptIdByKey.TryGetValue((r.Taxonomy, r.Tag), out var id)
-                    && everReportedConceptIds.Contains(id)
-                )
+                StatementLineFacts.IsEverReported(line, conceptIdByKey, everReportedConceptIds)
             )
             .Select(line =>
             {
