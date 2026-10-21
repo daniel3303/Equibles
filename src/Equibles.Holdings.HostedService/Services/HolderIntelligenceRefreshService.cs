@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
@@ -61,6 +62,22 @@ public class HolderIntelligenceRefreshService
     public static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
 
     internal const int HolderBatchSize = 250;
+
+    private static readonly Expression<
+        Func<InstitutionalHolding, HolderIntelligenceRow>
+    > ToIntelligenceRow = holding => new HolderIntelligenceRow
+    {
+        InstitutionalHolderId = holding.InstitutionalHolderId,
+        EquityIssuerId = holding.EquityIssuerId,
+        ListedTicker = holding.ListedTicker,
+        ReportDate = holding.ReportDate,
+        ShareType = holding.ShareType,
+        OptionType = holding.OptionType,
+        Shares = holding.Shares,
+        Value = holding.Value,
+        FiledValue = holding.FiledValue,
+        ValueMissing = holding.ValuePending || holding.ValueUnavailable,
+    };
 
     // Rows saved per round trip on publish, so the change tracker never holds a whole quarter.
     internal const int PublishBatchSize = 2_000;
@@ -347,35 +364,36 @@ public class HolderIntelligenceRefreshService
             .Where(pair => pair.Value is { } compared && compared != pair.Key)
             .Select(pair => pair.Value.Value)
             .ToList();
+        // Two plain reads rather than one OR of both lists: Postgres plans that OR as a bitmap heap
+        // scan, which fetches every position's heap page although the quarter index covers the read.
+        DateOnly[] dates = readPrevious ? [reportDate, previous] : [reportDate];
         var rows = await _dbContext
             .Set<InstitutionalHolding>()
             .AsNoTracking()
             .Where(holding =>
-                (
-                    holderIds.Contains(holding.InstitutionalHolderId)
-                        && (
-                            holding.ReportDate == reportDate
-                            || readPrevious && holding.ReportDate == previous
-                        )
-                    || predecessorIds.Contains(holding.InstitutionalHolderId)
-                        && holding.ReportDate == previous
-                )
+                holderIds.Contains(holding.InstitutionalHolderId)
+                && dates.Contains(holding.ReportDate)
                 && holding.FilingType == FilingType.Form13F
             )
-            .Select(holding => new HolderIntelligenceRow
-            {
-                InstitutionalHolderId = holding.InstitutionalHolderId,
-                EquityIssuerId = holding.EquityIssuerId,
-                ListedTicker = holding.ListedTicker,
-                ReportDate = holding.ReportDate,
-                ShareType = holding.ShareType,
-                OptionType = holding.OptionType,
-                Shares = holding.Shares,
-                Value = holding.Value,
-                FiledValue = holding.FiledValue,
-                ValueMissing = holding.ValuePending || holding.ValueUnavailable,
-            })
+            .Select(ToIntelligenceRow)
             .ToListAsync(cancellationToken);
+        // A predecessor in this batch already has its previous book from the read above.
+        var predecessorsOnly = readPrevious
+            ? predecessorIds.Except(holderIds).ToList()
+            : predecessorIds;
+        if (predecessorsOnly.Count > 0)
+            rows.AddRange(
+                await _dbContext
+                    .Set<InstitutionalHolding>()
+                    .AsNoTracking()
+                    .Where(holding =>
+                        predecessorsOnly.Contains(holding.InstitutionalHolderId)
+                        && holding.ReportDate == previous
+                        && holding.FilingType == FilingType.Form13F
+                    )
+                    .Select(ToIntelligenceRow)
+                    .ToListAsync(cancellationToken)
+            );
         var presence = await LoadPresence(holderIds, cancellationToken);
         var quarter = HolderTenureCalculator.QuarterIndex(reportDate).Value;
         // Each filer's own rows hold this quarter's slots; a compared predecessor's hold the

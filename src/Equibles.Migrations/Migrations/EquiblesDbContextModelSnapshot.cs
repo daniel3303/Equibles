@@ -4037,10 +4037,10 @@ namespace Equibles.Migrations.Migrations
                     NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("ReportDate", "EquityIssuerId", "InstitutionalHolderId"), new[] { "Shares", "Value" });
 
                     b.HasIndex("ReportDate", "InstitutionalHolderId", "EquityIssuerId")
-                        .HasDatabaseName("IX_InstitutionalHolding_QuarterRebuild")
+                        .HasDatabaseName("IX_InstitutionalHolding_QuarterSlice")
                         .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("ReportDate", "InstitutionalHolderId", "EquityIssuerId"), new[] { "Shares", "Value", "FilingType", "FilingDate", "AccessionNumber", "ListedTicker" });
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("ReportDate", "InstitutionalHolderId", "EquityIssuerId"), new[] { "Shares", "Value", "FilingType", "FilingDate", "AccessionNumber", "ListedTicker", "ShareType", "OptionType", "FiledValue", "ValuePending", "ValueUnavailable" });
 
                     b.HasIndex("EquityIssuerId", "InstitutionalHolderId", "ReportDate", "ShareType", "OptionType", "FilingType", "ListedTicker")
                         .IsUnique();

@@ -179,10 +179,11 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             })
             .IncludeProperties(h => new { h.Shares, h.Value });
 
-        // Serves the per-holder 13F ranking pages and every quarter-slice read of the snapshot
-        // rebuild (ReportDate = <quarter>[ OR <prior>] AND FilingType = 13F) as one contiguous
-        // index-only range, instead of skip-scanning a holder- or stock-leading index or fetching
-        // each heap tuple for AccessionNumber.
+        // Serves the per-holder 13F ranking pages, every quarter-slice read of the snapshot
+        // rebuild (ReportDate = <quarter>[ OR <prior>] AND FilingType = 13F) and the
+        // holder-intelligence rebuild's filer-batch loads and aggregate benchmark as one
+        // contiguous index-only range, instead of skip-scanning a holder- or stock-leading index or
+        // fetching each heap tuple for AccessionNumber or the share, option and value-state columns.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => new
@@ -191,7 +192,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.InstitutionalHolderId,
                 h.EquityIssuerId,
             })
-            .HasDatabaseName("IX_InstitutionalHolding_QuarterRebuild")
+            .HasDatabaseName("IX_InstitutionalHolding_QuarterSlice")
             .IncludeProperties(h => new
             {
                 h.Shares,
@@ -200,6 +201,11 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.FilingDate,
                 h.AccessionNumber,
                 h.ListedTicker,
+                h.ShareType,
+                h.OptionType,
+                h.FiledValue,
+                h.ValuePending,
+                h.ValueUnavailable,
             })
             .IsCreatedConcurrently();
 
