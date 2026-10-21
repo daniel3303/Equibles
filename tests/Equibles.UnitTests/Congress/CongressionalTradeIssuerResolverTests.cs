@@ -85,6 +85,109 @@ public class CongressionalTradeIssuerResolverTests
         result.Should().BeNull();
     }
 
+    // The cohort the directory exists for: a trade after the issuer's latest cover page and before
+    // the next one, with the directory listing the ticker under the same CIK afterwards.
+    [Fact]
+    public void ResolveAtDate_TradeAfterLatestCoverPage_LinksThroughALaterDirectorySpan()
+    {
+        var result = CongressionalTradeIssuerResolver.ResolveAtDate(
+            [Evidence(OriginalIssuer, new DateOnly(2026, 9, 10))],
+            [Span(OriginalIssuer, new DateOnly(2026, 10, 21), new DateOnly(2026, 10, 25))],
+            new DateOnly(2026, 9, 16)
+        );
+
+        result.Should().Be(OriginalIssuer);
+    }
+
+    [Fact]
+    public void ResolveAtDate_DirectoryNamesAnotherIssuerAfterTheCoverPage_RefusesTheHandover()
+    {
+        var result = CongressionalTradeIssuerResolver.ResolveAtDate(
+            [Evidence(OriginalIssuer, new DateOnly(2026, 9, 10))],
+            [Span(ReusedIssuer, new DateOnly(2026, 10, 21), new DateOnly(2026, 10, 21))],
+            new DateOnly(2026, 9, 16)
+        );
+
+        result.Should().BeNull();
+    }
+
+    // A directory CIK the store carries no issuer for still names someone else.
+    [Fact]
+    public void ResolveAtDate_DirectoryCikWithoutAnIssuer_RefusesTheLink()
+    {
+        var result = CongressionalTradeIssuerResolver.ResolveAtDate(
+            [Evidence(OriginalIssuer, new DateOnly(2026, 9, 10))],
+            [Span(null, new DateOnly(2026, 10, 21), new DateOnly(2026, 10, 21))],
+            new DateOnly(2026, 9, 16)
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolveAtDate_TradeInsideADirectorySpan_LinksWithoutACoverPage()
+    {
+        var result = CongressionalTradeIssuerResolver.ResolveAtDate(
+            [],
+            [Span(OriginalIssuer, new DateOnly(2026, 10, 21), new DateOnly(2026, 12, 1))],
+            new DateOnly(2026, 11, 5)
+        );
+
+        result.Should().Be(OriginalIssuer);
+    }
+
+    [Fact]
+    public void ResolveAtDate_TradeBetweenTwoOwnersDirectorySpans_RefusesTheLink()
+    {
+        var result = CongressionalTradeIssuerResolver.ResolveAtDate(
+            [],
+            [
+                Span(OriginalIssuer, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 10)),
+                Span(ReusedIssuer, new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 20)),
+            ],
+            new DateOnly(2026, 10, 11)
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolveAtDate_SpanAndCoverPageDisagreeOnTheTradeDate_RefusesTheLink()
+    {
+        var date = new DateOnly(2026, 11, 5);
+        var result = CongressionalTradeIssuerResolver.ResolveAtDate(
+            [Evidence(ReusedIssuer, date)],
+            [Span(OriginalIssuer, new DateOnly(2026, 10, 21), new DateOnly(2026, 12, 1))],
+            date
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ResolveAtDate_NoEvidenceAfterTheTrade_StaysUnlinked(bool directoryBefore)
+    {
+        CongressionalTradeIssuerResolver.DirectorySpan[] directory = directoryBefore
+            ? [Span(OriginalIssuer, new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31))]
+            : [];
+
+        var result = CongressionalTradeIssuerResolver.ResolveAtDate(
+            [Evidence(OriginalIssuer, new DateOnly(2026, 7, 1))],
+            directory,
+            new DateOnly(2026, 9, 16)
+        );
+
+        result.Should().BeNull();
+    }
+
+    private static CongressionalTradeIssuerResolver.DirectorySpan Span(
+        Guid? issuerId,
+        DateOnly first,
+        DateOnly last
+    ) => new("GOLD", issuerId, first, last);
+
     private static EquityIssuerTickerEvidence Evidence(Guid issuerId, DateOnly filedDate) =>
         new()
         {

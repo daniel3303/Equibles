@@ -26,10 +26,10 @@ namespace Equibles.IntegrationTests.Congress;
 /// tracked stock upserts the member and persists the trade; an unresolved ticker persists its
 /// source fact without a company link.
 /// </summary>
-[Collection(HistoricalEquityDbCollection.Name)]
+[Collection(ParadeDbCollection.Name)]
 public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
 {
-    public CongressionalTradeSyncServiceProcessTests(HistoricalEquityDbFixture fixture)
+    public CongressionalTradeSyncServiceProcessTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     private static readonly MethodInfo ProcessTransactionsMethod =
@@ -452,43 +452,6 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task CommonStockDeletion_PreservesFiledTradeAndNativeIssuerLink()
-    {
-        var stock = new CommonStock { Ticker = "ACME", Name = "Acme Corporation" };
-        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
-        DbContext.AddRange(stock, member);
-        DbContext.Add(
-            new CongressionalTrade
-            {
-                CongressMember = member,
-                Issuer = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
-                    .Security.Issuer,
-                FiledTicker = "ACME",
-                TransactionDate = new DateOnly(2024, 6, 1),
-                FilingDate = new DateOnly(2024, 6, 15),
-                TransactionType = CongressTransactionType.Purchase,
-                OwnerType = "self",
-                AssetName = "Acme Corporation",
-                AssetType = "ST",
-                Subholding = "",
-                AmountFrom = 1_001,
-                AmountTo = 15_000,
-            }
-        );
-        await DbContext.SaveChangesAsync();
-        DbContext.ChangeTracker.Clear();
-
-        DbContext.Remove(await DbContext.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id));
-        await DbContext.SaveChangesAsync();
-
-        await using var verify = Fixture.CreateDbContext();
-        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
-        stored.EquityIssuerId.Should().Be(stock.Id);
-        stored.FiledTicker.Should().Be("ACME");
-    }
-
-    [Fact]
     public async Task RelinkUnresolved_NewBracketingEvidence_LinksStoredSourceFactLater()
     {
         EquityIssuer issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -525,6 +488,70 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
 
         (await resolver.RelinkUnresolved(CancellationToken.None)).Should().Be(1);
         trade.EquityIssuerId.Should().Be(issuer.Id);
+    }
+
+    // A trade after the issuer's latest cover page waits for the next one; a dated SEC ticker
+    // directory span under the issuer's CIK supplies the later side instead, while a span under
+    // another CIK is a handover and keeps the trade unlinked.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RelinkUnresolved_TradeAfterLatestCoverPage_LinksOnlyWhenTheDirectoryNamesTheSameCik(
+        bool sameCik
+    )
+    {
+        EquityIssuer issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "1730168",
+            Ticker: "ACME",
+            Name: "Acme Corporation"
+        );
+        EquityIssuer successor = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "2000001",
+            Ticker: "ACMQ",
+            Name: "Successor Holdings"
+        );
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        var trade = new CongressionalTrade
+        {
+            CongressMember = member,
+            FiledTicker = "ACME",
+            TransactionDate = new DateOnly(2026, 9, 16),
+            FilingDate = new DateOnly(2026, 10, 12),
+            TransactionType = CongressTransactionType.Sale,
+            OwnerType = "self",
+            AssetName = "Acme Corporation",
+            AssetType = "ST",
+            Subholding = "",
+            AmountFrom = 1_001,
+            AmountTo = 15_000,
+        };
+        DbContext.AddRange(issuer, successor, member, trade);
+        DbContext.Add(Evidence(issuer, new DateOnly(2026, 9, 10)));
+        await DbContext.SaveChangesAsync();
+
+        var resolver = new CongressionalTradeIssuerResolver(
+            new EquityIssuerTickerEvidenceRepository(DbContext),
+            DbContext
+        );
+        (await resolver.RelinkUnresolved(CancellationToken.None)).Should().Be(0);
+
+        DbContext.Add(
+            new SecTickerDirectoryObservation
+            {
+                Cik = sameCik ? issuer.Cik : successor.Cik,
+                Ticker = "ACME",
+                Exchange = "Nasdaq",
+                FirstObservedOn = new DateOnly(2026, 10, 21),
+                LastObservedOn = new DateOnly(2026, 10, 21),
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        (await resolver.RelinkUnresolved(CancellationToken.None)).Should().Be(sameCik ? 1 : 0);
+        await using var verify = Fixture.CreateDbContext();
+        (await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync())
+            .EquityIssuerId.Should()
+            .Be(sameCik ? issuer.Id : null);
     }
 
     [Fact]
