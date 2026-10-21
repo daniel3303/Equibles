@@ -90,9 +90,14 @@ public static class CompanyNameCasing
         return string.Join(' ', words);
     }
 
-    // Suffixes stack ("/OH/ /ADV"), so each is dropped in turn; a name that is only a suffix is kept.
-    private static string WithoutFilingSuffixes(string name)
+    /// <summary>
+    /// The name without the filing suffixes SEC appends, keeping its casing. Suffixes stack
+    /// ("/OH/ /ADV"), so each is dropped in turn; a name that is only a suffix is kept.
+    /// </summary>
+    public static string WithoutFilingSuffixes(string name)
     {
+        if (string.IsNullOrWhiteSpace(name))
+            return name;
         while (true)
         {
             var trimmed = FilingSuffixPattern.Replace(name, string.Empty, 1);

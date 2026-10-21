@@ -83,6 +83,7 @@ public class CompanySyncService : ICompanySyncService
             using var listingSync = await CommonStockListingSyncLock.Acquire();
             using var scope = _serviceScopeFactory.CreateScope();
             var state = await BuildSyncState(secCompanies, scope);
+            await DropFilingSuffixesFromDepartedRegistrants(state);
 
             foreach (var secCompany in secCompanies)
             {
@@ -171,6 +172,28 @@ public class CompanySyncService : ICompanySyncService
         }
     }
 
+    // A registrant SEC no longer lists keeps the name the sync last gave it, so the filing-suffix rule
+    // reaches it here. Only the suffix goes: re-casing a name another source wrote is not this pass's call.
+    private async Task DropFilingSuffixesFromDepartedRegistrants(StockSyncState state)
+    {
+        var renamed = 0;
+        foreach (var stock in state.DepartedRegistrants)
+        {
+            var name = CompanyNameCasing.WithoutFilingSuffixes(stock.Name);
+            if (name == stock.Name)
+                continue;
+            stock.Name = name;
+            renamed++;
+        }
+        if (renamed == 0)
+            return;
+        await state.CommonStockRepository.SaveChanges();
+        _logger.LogInformation(
+            "Dropped SEC filing suffixes from {Count} registrants SEC no longer lists",
+            renamed
+        );
+    }
+
     private async Task<StockSyncState> BuildSyncState(
         List<CompanyInfo> secCompanies,
         IServiceScope scope
@@ -193,6 +216,11 @@ public class CompanySyncService : ICompanySyncService
         var allExistingStocks = await commonStockRepository.GetAll().ToListAsync();
         var existingStocks = allExistingStocks
             .Where(stock => secCiks.Contains(CikNormalizer.Canonicalize(stock.Cik)))
+            .ToList();
+        var departedRegistrants = allExistingStocks
+            .Where(stock =>
+                CikNormalizer.Canonicalize(stock.Cik) is { } cik && !secCiks.Contains(cik)
+            )
             .ToList();
         var existingCiks = existingStocks
             .Select(stock => CikNormalizer.Canonicalize(stock.Cik))
@@ -235,6 +263,7 @@ public class CompanySyncService : ICompanySyncService
         {
             SecCiks = secCiks,
             ExistingStocks = existingStocks,
+            DepartedRegistrants = departedRegistrants,
             ExistingCiks = existingCiks,
             ExistingPrimaryTickers = existingPrimaryTickers,
             PrimaryTickerToStock = primaryTickerToStock,
@@ -1121,6 +1150,7 @@ public class CompanySyncService : ICompanySyncService
     {
         public HashSet<string> SecCiks { get; init; }
         public List<EquityIssuer> ExistingStocks { get; init; }
+        public List<EquityIssuer> DepartedRegistrants { get; init; } = [];
         public HashSet<string> ExistingCiks { get; init; }
         public HashSet<string> ExistingPrimaryTickers { get; init; }
         public Dictionary<string, EquityIssuer> PrimaryTickerToStock { get; init; }
