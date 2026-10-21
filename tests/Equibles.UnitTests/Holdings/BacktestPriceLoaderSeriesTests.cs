@@ -63,6 +63,32 @@ public class BacktestPriceLoaderSeriesTests
     }
 
     [Fact]
+    public void TailIsCurrent_OnlyWithinTheRecheckIntervalAndThroughTheRequestedEnd()
+    {
+        var readAt = new DateTime(2026, 10, 21, 1, 0, 0, DateTimeKind.Utc);
+        var through = new DateOnly(2026, 10, 20);
+        var series = Series(2).WithTailRead(readAt, through);
+        var interval = BacktestPriceSeriesCache.TailRecheckInterval;
+
+        series
+            .TailIsCurrent(readAt + interval - TimeSpan.FromSeconds(1), through)
+            .Should()
+            .BeTrue();
+        series
+            .TailIsCurrent(readAt + interval, through)
+            .Should()
+            .BeFalse("the interval has passed");
+        series
+            .TailIsCurrent(readAt, through.AddDays(1))
+            .Should()
+            .BeFalse("a later end than the last read covered is never served from memory");
+        Series(2)
+            .TailIsCurrent(readAt, through)
+            .Should()
+            .BeFalse("a series never stamped is re-read");
+    }
+
+    [Fact]
     public void TailFrom_StartsTheUnsettledTailBeforeTheLastRowAndNeverBeforeTheWindow()
     {
         var windowFrom = new DateOnly(2023, 1, 1);

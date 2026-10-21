@@ -324,10 +324,10 @@ public class BacktestPriceLoader
 
     // Every listing is read through the process-wide series cache. A miss, or a listing whose
     // stock gained a split since its rows were read, is read for the whole window; a cached
-    // listing is re-read from the unsettled tail before its last cached date, so the newest
-    // closes land as soon as they are stored and a resettled bar is replaced on the next read.
-    // A corrected older close without a split waits for the window start to move or for the
-    // entry's lifetime, whichever comes first.
+    // listing whose tail no read covered within TailRecheckInterval is re-read from the unsettled
+    // tail before its last cached date, so a newly stored or resettled close lands within that
+    // interval. A corrected older close without a split waits for the window start to move or
+    // for the entry's lifetime, whichever comes first.
     private async Task<List<LoadedPriceRow>> LoadListingRows(
         IReadOnlyDictionary<Guid, Guid> stockByListing,
         DateOnly priceWindowFrom,
@@ -339,6 +339,7 @@ public class BacktestPriceLoader
         var rows = new List<LoadedPriceRow>();
         var misses = new List<Guid>();
         var hits = new List<(Guid ListingId, CachedListingSeries Series)>();
+        var now = _seriesCache.UtcNow;
         foreach (var (listingId, stockId) in stockByListing)
         {
             if (
@@ -346,7 +347,10 @@ public class BacktestPriceLoader
                 && !RestatedSince(splitsByIssuer.For(stockId), cached.LoadedAt)
             )
             {
-                hits.Add((listingId, cached));
+                if (cached.TailIsCurrent(now, to))
+                    AppendRows(rows, stockId, cached, to);
+                else
+                    hits.Add((listingId, cached));
             }
             else
             {
@@ -360,13 +364,13 @@ public class BacktestPriceLoader
 
         foreach (var batch in misses.Chunk(ListingQueryBatchSize))
         {
-            var loadedAt = DateTime.UtcNow;
+            var loadedAt = _seriesCache.UtcNow;
             var loaded = (await QueryRows(batch, priceWindowFrom, to, cancellationToken)).ToLookup(
                 row => row.EquityListingId
             );
             foreach (var listingId in batch)
             {
-                var series = ToSeries(loaded[listingId], loadedAt);
+                var series = ToSeries(loaded[listingId], loadedAt).WithTailRead(loadedAt, to);
                 _seriesCache.Set(listingId, priceWindowFrom, series);
                 AppendRows(rows, stockByListing[listingId], series, to);
             }
@@ -380,6 +384,7 @@ public class BacktestPriceLoader
         {
             foreach (var batch in bucket.Hits.Chunk(ListingQueryBatchSize))
             {
+                var readAt = _seriesCache.UtcNow;
                 var fresh = (
                     bucket.TailFrom <= to
                         ? await QueryRows(
@@ -392,16 +397,15 @@ public class BacktestPriceLoader
                 ).ToLookup(row => row.EquityListingId);
                 foreach (var (listingId, series) in batch)
                 {
+                    // Stamped even when no row changed, or the next read would query the tail again.
                     var current = Replace(
-                        series,
-                        TailFrom(series.MaxDate, priceWindowFrom),
-                        to,
-                        fresh[listingId]
-                    );
-                    if (!ReferenceEquals(current, series))
-                    {
-                        _seriesCache.Set(listingId, priceWindowFrom, current);
-                    }
+                            series,
+                            TailFrom(series.MaxDate, priceWindowFrom),
+                            to,
+                            fresh[listingId]
+                        )
+                        .WithTailRead(readAt, to);
+                    _seriesCache.Set(listingId, priceWindowFrom, current);
                     AppendRows(rows, stockByListing[listingId], current, to);
                 }
             }
@@ -512,7 +516,7 @@ public class BacktestPriceLoader
     // Replaces the cached rows inside the re-read range [tailFrom, to] with the fresh ones, so a
     // bar the lane resettled is replaced, one stored since is appended and one deleted is gone;
     // rows before the tail and after a shorter read's end stay as cached. Returns the same
-    // series when the range is unchanged, so an untouched tail costs no rebuild or re-set.
+    // series when the range is unchanged, so an untouched tail costs no rebuild.
     internal static CachedListingSeries Replace(
         CachedListingSeries series,
         DateOnly tailFrom,
