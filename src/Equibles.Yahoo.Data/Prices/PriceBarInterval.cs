@@ -11,7 +11,7 @@ public enum PriceBarInterval
 }
 
 // One aggregated bar: labelled by its last traded session, and Partial when the requested window
-// cuts its period, so a still-open week or month never reads as a settled one.
+// cuts its period or the period is still trading, so an open week or month never reads as settled.
 public sealed record PriceBar(
     DateOnly Date,
     DateOnly PeriodStart,
@@ -49,12 +49,15 @@ public static class PriceBarAggregation
     }
 
     // Bars oldest first. The window is the requested [start, end] after any release hold, so a
-    // bucket the window starts or ends inside is marked Partial.
+    // bucket the window starts or ends inside is marked Partial. So is one whose last weekday is
+    // today or later: a window reaching the period's end (a default end of today, or a future
+    // endDate) does not mean its sessions have traded.
     public static List<PriceBar> Aggregate(
         IEnumerable<EquityDailyStockPrice> dailyBars,
         PriceBarInterval interval,
         DateOnly start,
-        DateOnly end
+        DateOnly end,
+        DateOnly today
     ) =>
         dailyBars
             .OrderBy(bar => bar.Date)
@@ -75,6 +78,7 @@ public static class PriceBarAggregation
                     bars.Sum(bar => bar.Volume),
                     start > FirstWeekday(periodStart, periodEnd)
                         || end < LastWeekday(periodStart, periodEnd)
+                        || LastWeekday(periodStart, periodEnd) >= today
                 );
             })
             .ToList();
