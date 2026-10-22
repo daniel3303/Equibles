@@ -13,7 +13,8 @@ public class File
     [StringLength(16)]
     public string Extension { get; set; } // file extension without the period '.' eg. png
 
-    [StringLength(64)]
+    // RFC 6838 allows 127 characters each for type and subtype; Office types exceed 64 (xlsx is 65).
+    [StringLength(255)]
     public string ContentType { get; set; } // eg. text/html
     public long Size { get; set; } // Size in bytes
 
