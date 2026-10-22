@@ -104,10 +104,10 @@ public class FileSystemFileStorageProviderTests : IDisposable
         sync.Should().Throw<IOException>();
     }
 
-    // A failed flush deletes the files its batch wrote, so no later write keeps bytes that may
+    // A failed flush leaves nothing at the batch's paths, so no later write keeps bytes that may
     // exist only in the page cache, and keeps a file an earlier durable write stored.
     [Fact]
-    public async Task SyncStore_FailedFlush_DeletesOnlyTheBatchsFiles()
+    public async Task SyncStore_FailedFlush_LeavesNothingAtTheBatchsPaths()
     {
         var kept = Encoding.UTF8.GetBytes("already durable bytes");
         var written = Encoding.UTF8.GetBytes("unflushed batch bytes");
@@ -122,28 +122,29 @@ public class FileSystemFileStorageProviderTests : IDisposable
 
         sync.Should().Throw<IOException>();
         (await System.IO.File.ReadAllBytesAsync(PathOf(keptFile))).Should().Equal(kept);
-        System.IO.File.Exists(PathOf(writtenFile)).Should().BeFalse();
+        Directory.GetFiles(Path.GetDirectoryName(PathOf(writtenFile))).Should().BeEmpty();
         await _provider.Save(new File(), written, FileStorageTiers.Blob);
         (await System.IO.File.ReadAllBytesAsync(PathOf(writtenFile))).Should().Equal(written);
     }
 
-    // A batch abandoned before its barrier leaves none of its files behind.
+    // A batch's bytes reach their path only through its barrier, so a durable write of the same
+    // bytes stores its own file, which abandoning the batch never removes.
     [Fact]
-    public async Task Dispose_BeforeTheBarrier_DeletesTheBatchsFiles()
+    public async Task Dispose_BeforeTheBarrier_KeepsADurableWriteOfTheSameBytes()
     {
-        var file = new File();
-        var provider = new FileSystemFileStorageProvider(
+        var content = Encoding.UTF8.GetBytes("abandoned batch bytes");
+        var batch = new FileSystemFileStorageProvider(
             Options.Create(new FileStorageOptions { Enabled = true, RootPath = _root })
         );
-        await provider.SaveBuffered(
-            file,
-            Encoding.UTF8.GetBytes("abandoned"),
-            FileStorageTiers.Blob
-        );
+        var staged = new File();
+        await batch.SaveBuffered(staged, content, FileStorageTiers.Blob);
+        System.IO.File.Exists(PathOf(staged)).Should().BeFalse();
+        await _provider.Save(new File(), content, FileStorageTiers.Blob);
 
-        provider.Dispose();
+        batch.Dispose();
 
-        System.IO.File.Exists(PathOf(file)).Should().BeFalse();
+        (await System.IO.File.ReadAllBytesAsync(PathOf(staged))).Should().Equal(content);
+        Directory.GetFiles(Path.GetDirectoryName(PathOf(staged))).Should().HaveCount(1);
     }
 
     // Content addressing gives free dedup: identical bytes map to one path and the second

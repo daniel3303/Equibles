@@ -26,10 +26,9 @@ public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
     // from earlier in the batch.
     private FileSystemSyncHandle _barrier;
 
-    // The paths this batch's buffered writes created or replaced. A failed flush deletes them:
-    // their bytes may exist only in the page cache, where a later write would compare equal to
-    // them and keep them.
-    private readonly List<string> _unflushed = [];
+    // Content path → the temp holding this batch's unflushed bytes for it. Nothing else reads a
+    // temp, so a failed or abandoned batch deletes them without touching a file another row uses.
+    private readonly Dictionary<string, string> _unflushed = [];
 
     public FileSystemFileStorageProvider(IOptions<FileStorageOptions> options)
     {
@@ -48,8 +47,8 @@ public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
     /// <summary>
     /// Bulk-migration variant of <see cref="Save"/>: writes buffered (no per-file fsync).
     /// The caller MUST call <see cref="SyncStore"/> after the batch, before committing the
-    /// database rows, so bytes are durable before any row points at them. A file the batch
-    /// wrote is deleted when that flush fails or the provider is disposed before it.
+    /// database rows, so bytes are durable before any row points at them. The file appears at
+    /// its path only once that flush succeeds.
     /// </summary>
     public async Task SaveBuffered(File file, byte[] content, string tier)
     {
@@ -61,7 +60,7 @@ public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
     }
 
     /// <summary>
-    /// Entity-free buffered write for bulk migration: stores the bytes at their
+    /// Entity-free buffered write for bulk migration: stages the bytes for their
     /// content-addressed path (no fsync — pair with <see cref="SyncStore"/>) and returns the
     /// values to stamp on the row later. Lets parallel workers write blobs without sharing a
     /// DbContext; the caller applies the row changes after the durability barrier.
@@ -75,44 +74,82 @@ public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
         var relativePath = ContentAddressedPath.Build(tier, hashHex);
         var root = RequireRoot();
         var fullPath = Path.Combine(root, ContentAddressedPath.ToOsPath(relativePath));
+        var stamp = (relativePath, ContentAddressedPath.HashPrefix + hashHex);
         lock (_barrierLock)
         {
+            if (_unflushed.ContainsKey(fullPath))
+            {
+                return stamp;
+            }
+
             if (_barrier == null)
             {
                 Directory.CreateDirectory(root);
                 _barrier = FileSystemSyncHandle.Open(root);
             }
         }
-        if (await DurableFileWriter.WriteIfMissingBuffered(fullPath, content))
+
+        var tempPath = await DurableFileWriter.WriteTempIfMissing(fullPath, content);
+        if (tempPath != null)
         {
+            bool staged;
             lock (_barrierLock)
             {
-                _unflushed.Add(fullPath);
+                staged = _unflushed.TryAdd(fullPath, tempPath);
+            }
+
+            if (!staged)
+            {
+                DurableFileWriter.DeleteTemp(tempPath);
             }
         }
 
-        return (relativePath, ContentAddressedPath.HashPrefix + hashHex);
+        return stamp;
     }
 
     /// <summary>
-    /// Flushes the whole store's filesystem to stable storage (batch durability barrier) and
-    /// throws when that fails, so no row commits over bytes the disk did not take.
+    /// Flushes the whole store's filesystem to stable storage (batch durability barrier), moves
+    /// the batch's files into place and flushes their directory entries, and throws when any
+    /// step fails, so no row commits over bytes the disk did not take.
     /// </summary>
     public void SyncStore()
     {
         var (barrier, unflushed) = TakeBatch();
-        using var handle = barrier ?? FileSystemSyncHandle.Open(RequireRoot());
+        using (var data = barrier ?? FileSystemSyncHandle.Open(RequireRoot()))
+        {
+            try
+            {
+                Flush(data);
+            }
+            catch
+            {
+                Discard(unflushed);
+                throw;
+            }
+        }
+
+        if (unflushed.Count == 0)
+        {
+            return;
+        }
+
+        using var entries = FileSystemSyncHandle.Open(RequireRoot());
+        var published = 0;
         try
         {
-            Flush(handle);
+            foreach (var (fullPath, tempPath) in unflushed)
+            {
+                DurableFileWriter.Publish(tempPath, fullPath);
+                published++;
+            }
         }
         catch
         {
-            // A concurrent write of identical bytes that kept one of these files loses it too;
-            // its own flush went through the same failing disk.
-            Discard(unflushed);
+            Discard(unflushed.Skip(published).ToList());
             throw;
         }
+
+        Flush(entries);
     }
 
     /// <summary>Flushes the store's filesystem through the batch's barrier descriptor.</summary>
@@ -129,7 +166,7 @@ public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private (FileSystemSyncHandle Barrier, List<string> Unflushed) TakeBatch()
+    private (FileSystemSyncHandle Barrier, List<KeyValuePair<string, string>> Unflushed) TakeBatch()
     {
         lock (_barrierLock)
         {
@@ -140,18 +177,11 @@ public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
         }
     }
 
-    private static void Discard(List<string> paths)
+    private static void Discard(List<KeyValuePair<string, string>> unflushed)
     {
-        foreach (var path in paths)
+        foreach (var (_, tempPath) in unflushed)
         {
-            try
-            {
-                System.IO.File.Delete(path);
-            }
-            catch (IOException)
-            {
-                // Best effort; a durable write that later keeps this file flushes it first.
-            }
+            DurableFileWriter.DeleteTemp(tempPath);
         }
     }
 

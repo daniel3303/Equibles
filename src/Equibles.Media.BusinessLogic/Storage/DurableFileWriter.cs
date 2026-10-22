@@ -19,8 +19,9 @@ public static class DurableFileWriter
     {
         if (await HoldsContent(fullPath, content))
         {
-            // Another writer's buffered batch may not have flushed this file yet, so it and the
-            // directory entries leading to it are flushed before a caller commits a row here.
+            // The writer that stored this file may not have flushed its directory entries yet, and
+            // older or killed writers can leave bytes a failed writeback kept only in the page
+            // cache, so the match is flushed before a caller commits a row that points here.
             FlushExisting(fullPath);
             return;
         }
@@ -94,18 +95,18 @@ public static class DurableFileWriter
     }
 
     /// <summary>
-    /// Like <see cref="WriteIfMissing"/> but WITHOUT any fsync — temp file + atomic rename
-    /// only, leaving the data in the page cache. For bulk migration where the caller makes a
-    /// whole batch durable at once via <see cref="FileSystemSyncHandle"/> before committing the
-    /// matching database rows: per-file fsyncs on a spinning disk are seek-bound (a few
-    /// dozen per second), while buffered writes stream at full disk bandwidth. Returns false
-    /// when identical content was already stored and kept, true when this call wrote the file.
+    /// The buffered first half of a batch write: unless the path already holds the content,
+    /// writes it WITHOUT fsync to a temp file beside the path and returns the temp (null when
+    /// the stored file is kept). The caller flushes the filesystem, moves each temp into place
+    /// with <see cref="Publish"/> and flushes again before committing rows, so a content path
+    /// never holds bytes a flush did not confirm. Per-file fsyncs on a spinning disk are
+    /// seek-bound (a few dozen per second), while buffered writes stream at full bandwidth.
     /// </summary>
-    public static async Task<bool> WriteIfMissingBuffered(string fullPath, byte[] content)
+    public static async Task<string> WriteTempIfMissing(string fullPath, byte[] content)
     {
         if (await HoldsContent(fullPath, content))
         {
-            return false;
+            return null;
         }
 
         var directory = Path.GetDirectoryName(fullPath);
@@ -115,24 +116,34 @@ public static class DurableFileWriter
         try
         {
             await System.IO.File.WriteAllBytesAsync(tempPath, content);
-            System.IO.File.Move(tempPath, fullPath, overwrite: true);
+            return tempPath;
         }
-        finally
+        catch
         {
-            if (System.IO.File.Exists(tempPath))
-            {
-                try
-                {
-                    System.IO.File.Delete(tempPath);
-                }
-                catch (IOException)
-                {
-                    // Best-effort cleanup; the orphan sweep removes any straggler temp files.
-                }
-            }
+            DeleteTemp(tempPath);
+            throw;
         }
+    }
 
-        return true;
+    /// <summary>
+    /// Moves a flushed temp from <see cref="WriteTempIfMissing"/> to its content path. Overwriting
+    /// replaces a damaged target; a concurrent writer of the same path holds identical bytes.
+    /// </summary>
+    public static void Publish(string tempPath, string fullPath)
+    {
+        System.IO.File.Move(tempPath, fullPath, overwrite: true);
+    }
+
+    public static void DeleteTemp(string tempPath)
+    {
+        try
+        {
+            System.IO.File.Delete(tempPath);
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup; a temp name is never a content path, so nothing reads it.
+        }
     }
 
     // An fsync through a new descriptor reports the file's writeback errors that no one has
