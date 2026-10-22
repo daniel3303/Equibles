@@ -163,6 +163,25 @@ public class FinancialFactsTools
                         conceptPriority
                     );
                 }
+                // The operating-expenses and total-costs lines continue through a filer's
+                // operating costs where its history proves them one line (OperatingCostsContinuation).
+                var claimableAlias = OperatingCostsContinuation.ClaimableAlias(conceptRefs);
+                if (claimableAlias != null)
+                {
+                    var operatingCosts = await LoadOperatingCostsClaimedBy(
+                        claimableAlias,
+                        issuerFacts
+                    );
+                    (facts, conceptPriority) = OperatingCostsContinuation.Fold(
+                        claimableAlias,
+                        claimableAlias,
+                        facts,
+                        conceptPriority,
+                        operatingCosts.Facts
+                    );
+                    foreach (var (conceptId, conceptRef) in operatingCosts.ConceptsById)
+                        conceptsById.TryAdd(conceptId, conceptRef);
+                }
                 var companyLatestPeriodEnd = await _financialFactRepository
                     .GetConsolidatedByIssuerId(stock.Id)
                     .MaxAsync(f => (DateOnly?)f.PeriodEnd);
@@ -198,7 +217,7 @@ public class FinancialFactsTools
                         .ToListAsync()
                     : [];
 
-                return RenderFactHistoryTable(
+                var table = RenderFactHistoryTable(
                     concept,
                     stock,
                     asOriginallyReported,
@@ -208,6 +227,18 @@ public class FinancialFactsTools
                     splits,
                     conceptsById
                 );
+                // The rows keep the filer's tagged figure; a gross profit that is the period's
+                // operating income is named, and the statement shows the derived figure.
+                var tagWarning = GrossProfitMistag.IsGrossProfit(conceptRefs)
+                    ? GrossProfitMistag.Warning(
+                        await MistaggedGrossProfitRows(issuerFacts, shown, asOriginallyReported)
+                    )
+                    : null;
+                return tagWarning == null
+                    ? table
+                    : table
+                        + $"\n_{tagWarning} GetFinancialStatement shows Revenue − Cost of "
+                        + "Revenue for those periods._\n";
             },
             "GetFinancialFact",
             $"ticker: {FactMarkdown.Clean(ticker)}, concept: {FactMarkdown.Clean(concept)}, "
@@ -337,9 +368,21 @@ public class FinancialFactsTools
                         NetInterestIncome: new HashSet<Guid>(),
                         NoninterestIncome: new HashSet<Guid>()
                     );
+                // The cost lines continue through operating costs per issuer
+                // (OperatingCostsContinuation); gross profit loads what proves a mis-tag.
+                var claimableAlias = OperatingCostsContinuation.ClaimableAlias(conceptRefs);
+                var operatingCosts =
+                    claimableAlias == null
+                        ? (Ids: new HashSet<Guid>(), ClaimedStockIds: new HashSet<Guid>())
+                        : await ResolveOperatingCostsClaims(claimableAlias, stockIds, conceptsById);
+                var grossProfitComponents = GrossProfitMistag.IsGrossProfit(conceptRefs)
+                    ? await ResolveGrossProfitComponents()
+                    : [];
                 var loadedConceptIds = conceptPriority
                     .Keys.Concat(bankComponentIds.NetInterestIncome)
                     .Concat(bankComponentIds.NoninterestIncome)
+                    .Concat(operatingCosts.Ids)
+                    .Concat(grossProfitComponents.SelectMany(c => c.Ids))
                     .ToList();
                 // A Q4 request must also load the year's fp=FY rows: filers whose
                 // Company Facts carry Q4 frames report the discrete fourth quarter
@@ -401,6 +444,13 @@ public class FinancialFactsTools
                                 .ToList(),
                             conceptPriority
                         );
+                        (candidates, priority) = OperatingCostsContinuation.Fold(
+                            claimableAlias,
+                            operatingCosts.ClaimedStockIds.Contains(g.Key) ? claimableAlias : null,
+                            candidates,
+                            priority,
+                            g.Where(f => operatingCosts.Ids.Contains(f.FinancialConceptId)).ToList()
+                        );
                         return (
                             StockId: g.Key,
                             Fact: FinancialFactSeriesShaper.PickBestFact(candidates, priority)
@@ -408,6 +458,37 @@ public class FinancialFactsTools
                     })
                     .Where(item => item.Fact != null)
                     .ToDictionary(item => item.StockId, item => item.Fact);
+                var mistaggedStockIds =
+                    grossProfitComponents.Count == 0
+                        ? []
+                        : bestByStock
+                            .Where(entry =>
+                            {
+                                var stockFacts = facts
+                                    .Where(f => f.EquityIssuerId == entry.Key)
+                                    .ToList();
+                                var picks = grossProfitComponents
+                                    .Select(c =>
+                                        FinancialFactSeriesShaper.PickBestFact(
+                                            stockFacts.Where(f =>
+                                                c.Ids.Contains(f.FinancialConceptId)
+                                            ),
+                                            c.Priority
+                                        )
+                                    )
+                                    .ToList();
+                                return picks.All(pick => pick != null)
+                                    && GrossProfitMistag
+                                        .MistaggedRows(
+                                            [entry.Value],
+                                            [picks[0]],
+                                            [picks[1]],
+                                            [picks[2]]
+                                        )
+                                        .Count > 0;
+                            })
+                            .Select(entry => entry.Key)
+                            .ToHashSet();
 
                 var (rows, skipped) = BuildComparisonRows(requested, stockByTicker, bestByStock);
                 var splitAdjustedStockIds = rows.Where(row =>
@@ -430,7 +511,7 @@ public class FinancialFactsTools
                             .GroupBy(split => split.EquityIssuerId)
                             .ToDictionary(group => group.Key, group => group.ToList());
 
-                return RenderComparisonTable(
+                var table = RenderComparisonTable(
                     concept,
                     fiscalYear,
                     period,
@@ -443,6 +524,18 @@ public class FinancialFactsTools
                     ),
                     conceptsById
                 );
+                var mistaggedTickers = rows.Where(row =>
+                        mistaggedStockIds.Contains(row.Fact.EquityIssuerId)
+                    )
+                    .Select(row => row.Ticker)
+                    .ToList();
+                return mistaggedTickers.Count == 0
+                    ? table
+                    : table
+                        + $"\n_Tag warning: the figure {string.Join(", ", mistaggedTickers)} "
+                        + "tagged as gross profit for this period equals its operating income, "
+                        + "while Revenue − Cost of Revenue states a different figure; "
+                        + "GetFinancialStatement shows Revenue − Cost of Revenue._\n";
             },
             "CompareFinancialFact",
             $"tickers: {FactMarkdown.Clean(string.Join(",", tickers ?? []))}, concept: {FactMarkdown.Clean(concept)}, "
@@ -769,6 +862,158 @@ public class FinancialFactsTools
             result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
 
         return result.ToString();
+    }
+
+    // The operating-costs facts the alias claims (OperatingCostsContinuation), with their concept
+    // variants; empty when the issuer's history proves no continuation into this alias.
+    private async Task<(
+        List<FinancialFact> Facts,
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
+    )> LoadOperatingCostsClaimedBy(string alias, IQueryable<FinancialFact> issuerFacts)
+    {
+        var history = await LoadOperatingCostLines(issuerFacts);
+        return
+            OperatingCostsContinuation.Claimant(
+                history.OperatingCosts,
+                history.OperatingExpenses,
+                history.TotalCosts
+            ) == alias
+            ? (history.OperatingCosts, history.OperatingCostsConceptsById)
+            : ([], []);
+    }
+
+    private async Task<(
+        List<FinancialFact> OperatingCosts,
+        List<FinancialFact> OperatingExpenses,
+        List<FinancialFact> TotalCosts,
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> OperatingCostsConceptsById
+    )> LoadOperatingCostLines(IQueryable<FinancialFact> issuerFacts)
+    {
+        var (operatingCostIds, operatingCostsById) = await ResolveAliasConcepts(
+            OperatingCostsContinuation.OperatingCostsAlias
+        );
+        if (operatingCostIds.Count == 0)
+            return ([], [], [], []);
+        var (operatingExpenseIds, _) = await ResolveAliasConcepts(
+            OperatingCostsContinuation.OperatingExpensesAlias
+        );
+        var (totalCostIds, _) = await ResolveAliasConcepts(
+            OperatingCostsContinuation.TotalCostsAlias
+        );
+        var ids = operatingCostIds.Concat(operatingExpenseIds).Concat(totalCostIds).ToList();
+        var facts = await issuerFacts.Where(f => ids.Contains(f.FinancialConceptId)).ToListAsync();
+        return (
+            facts.Where(f => operatingCostIds.Contains(f.FinancialConceptId)).ToList(),
+            facts.Where(f => operatingExpenseIds.Contains(f.FinancialConceptId)).ToList(),
+            facts.Where(f => totalCostIds.Contains(f.FinancialConceptId)).ToList(),
+            operatingCostsById
+        );
+    }
+
+    // The shown gross-profit rows holding operating income, against the issuer's operating income,
+    // revenue and cost of revenue picked the same way per fiscal period (GrossProfitMistag).
+    private async Task<List<FinancialFact>> MistaggedGrossProfitRows(
+        IQueryable<FinancialFact> issuerFacts,
+        List<FinancialFact> shown,
+        bool asOriginallyReported
+    )
+    {
+        var components = await ResolveGrossProfitComponents();
+        if (components.Count == 0)
+            return [];
+
+        var ids = components.SelectMany(c => c.Ids).ToList();
+        var facts = await issuerFacts.Where(f => ids.Contains(f.FinancialConceptId)).ToListAsync();
+        var rows = components
+            .Select(c =>
+                PickFlowRows(
+                    facts.Where(f => c.Ids.Contains(f.FinancialConceptId)).ToList(),
+                    c.Priority,
+                    asOriginallyReported,
+                    formFilter: null
+                )
+            )
+            .ToList();
+        return GrossProfitMistag.MistaggedRows(shown, rows[0], rows[1], rows[2]);
+    }
+
+    // Per issuer, whether its operating costs continue the alias (OperatingCostsContinuation),
+    // from each issuer's whole consolidated history of the three cost lines; the operating-costs
+    // variants join conceptsById so a folded row reads its own variant.
+    private async Task<(
+        HashSet<Guid> Ids,
+        HashSet<Guid> ClaimedStockIds
+    )> ResolveOperatingCostsClaims(
+        string alias,
+        IReadOnlyCollection<Guid> stockIds,
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
+    )
+    {
+        var (operatingCostIds, operatingCostsById) = await ResolveAliasConcepts(
+            OperatingCostsContinuation.OperatingCostsAlias
+        );
+        if (operatingCostIds.Count == 0)
+            return ([], []);
+        var (operatingExpenseIds, _) = await ResolveAliasConcepts(
+            OperatingCostsContinuation.OperatingExpensesAlias
+        );
+        var (totalCostIds, _) = await ResolveAliasConcepts(
+            OperatingCostsContinuation.TotalCostsAlias
+        );
+        var ids = operatingCostIds.Concat(operatingExpenseIds).Concat(totalCostIds).ToList();
+        var history = await _financialFactRepository
+            .GetConsolidatedByIssuerIds(stockIds)
+            .Where(f => ids.Contains(f.FinancialConceptId))
+            .ToListAsync();
+        var claimed = history
+            .GroupBy(f => f.EquityIssuerId)
+            .Where(g =>
+                OperatingCostsContinuation.Claimant(
+                    g.Where(f => operatingCostIds.Contains(f.FinancialConceptId)).ToList(),
+                    g.Where(f => operatingExpenseIds.Contains(f.FinancialConceptId)).ToList(),
+                    g.Where(f => totalCostIds.Contains(f.FinancialConceptId)).ToList()
+                ) == alias
+            )
+            .Select(g => g.Key)
+            .ToHashSet();
+        foreach (var (conceptId, conceptRef) in operatingCostsById)
+            conceptsById.TryAdd(conceptId, conceptRef);
+        return (operatingCostIds, claimed);
+    }
+
+    // Operating income, revenue and cost of revenue, in that order: what proves a gross profit
+    // holds operating income (GrossProfitMistag). Empty when any is not ingested.
+    private async Task<
+        List<(HashSet<Guid> Ids, Dictionary<Guid, int> Priority)>
+    > ResolveGrossProfitComponents()
+    {
+        var components = new List<(HashSet<Guid> Ids, Dictionary<Guid, int> Priority)>();
+        foreach (
+            var alias in new[]
+            {
+                GrossProfitMistag.OperatingIncomeAlias,
+                GrossProfitMistag.RevenueAlias,
+                GrossProfitMistag.CostOfRevenueAlias,
+            }
+        )
+        {
+            FinancialConceptAliases.TryResolve(alias, out var refs);
+            var (priority, _) = await ResolveConcepts(refs);
+            if (priority.Count == 0)
+                return [];
+            components.Add(([.. priority.Keys], priority));
+        }
+        return components;
+    }
+
+    private async Task<(
+        HashSet<Guid> Ids,
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
+    )> ResolveAliasConcepts(string alias)
+    {
+        FinancialConceptAliases.TryResolve(alias, out var refs);
+        var (priority, conceptsById) = await ResolveConcepts(refs);
+        return ([.. priority.Keys], conceptsById);
     }
 
     // A bank's net interest and noninterest income facts, which the revenue alias folds in where

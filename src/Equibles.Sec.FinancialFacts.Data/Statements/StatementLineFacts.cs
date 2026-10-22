@@ -333,15 +333,38 @@ public static class StatementLineFacts
     /// <see cref="PickFact"/> with the concept variant the fact was reported under, which decides
     /// how the value is read (a cover-page count and a balance-sheet count share one line). The
     /// revenue line reads a bank's net interest plus noninterest income where revenue is missing
-    /// or partial (<see cref="BankTopLine.PickForPeriod"/>); that sum has no concept variant.
+    /// or partial (<see cref="BankTopLine.PickForPeriod"/>); that sum has no concept variant. A
+    /// gross profit holding the period's operating income reads Revenue − Cost of Revenue
+    /// (<see cref="MistaggedGrossProfitReplacement"/>). <paramref name="operatingCostsClaimant"/>
+    /// is the line the issuer's operating costs continue (<see cref="OperatingCostsContinuation"/>):
+    /// that line reads the operating costs where it has no fact, and their own line is omitted.
     /// </summary>
     public static (FinancialConceptAliases.ConceptRef Concept, FinancialFact Fact) PickConceptFact(
         StatementLine line,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
-        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId,
+        string operatingCostsClaimant = null
     )
     {
+        if (
+            operatingCostsClaimant != null
+            && line.Alias == OperatingCostsContinuation.OperatingCostsAlias
+        )
+            return (null, null);
+
         var picked = PickVariant(line.Concepts, conceptIdByKey, factByConceptId);
+        if (picked.Fact == null && line.Alias == operatingCostsClaimant)
+            return PickAliasVariant(
+                OperatingCostsContinuation.OperatingCostsAlias,
+                conceptIdByKey,
+                factByConceptId
+            );
+        if (line.Alias == GrossProfitMistag.GrossProfitAlias && picked.Fact != null)
+            return
+                MistaggedGrossProfitReplacement(picked.Fact, conceptIdByKey, factByConceptId)
+                    is { } replaced
+                ? (picked.Concept, replaced)
+                : picked;
         if (line.Alias != BankTopLine.RevenueAlias)
             return picked;
 
@@ -380,14 +403,91 @@ public static class StatementLineFacts
             );
     }
 
+    /// <summary>
+    /// What a statement shows instead of <paramref name="grossProfit"/> when that fact holds the
+    /// period's operating income (<see cref="GrossProfitMistag"/>): Revenue − Cost of Revenue over
+    /// the same exact span and unit, derived (no form or accession) and filed with its later
+    /// input. Null when the line keeps its fact. A statement reads one fiscal-year stamp, whose
+    /// year is that year's own filing, so its derived quarters inherit no later rounding.
+    /// </summary>
+    public static FinancialFact MistaggedGrossProfitReplacement(
+        FinancialFact grossProfit,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+    )
+    {
+        var income = PickAliasFact(
+            GrossProfitMistag.OperatingIncomeAlias,
+            conceptIdByKey,
+            factByConceptId
+        );
+        var revenue = PickAliasFact(
+            GrossProfitMistag.RevenueAlias,
+            conceptIdByKey,
+            factByConceptId
+        );
+        var cost = PickAliasFact(
+            GrossProfitMistag.CostOfRevenueAlias,
+            conceptIdByKey,
+            factByConceptId
+        );
+        if (
+            !SameSpan(grossProfit, income)
+            || !SameSpan(grossProfit, revenue)
+            || !SameSpan(grossProfit, cost)
+        )
+            return null;
+
+        var derived = revenue.Value - cost.Value;
+        if (!GrossProfitMistag.IsOperatingIncome(grossProfit.Value, income.Value, derived))
+            return null;
+
+        var replacement = grossProfit.Restamped(grossProfit.FiscalYear, grossProfit.FiscalPeriod);
+        replacement.Value = derived;
+        replacement.Form = null;
+        replacement.AccessionNumber = null;
+        replacement.DocumentId = null;
+        replacement.FiledDate =
+            revenue.FiledDate >= cost.FiledDate ? revenue.FiledDate : cost.FiledDate;
+        return replacement;
+    }
+
+    /// <summary>
+    /// True when the gross-profit line reads Revenue − Cost of Revenue for this period because its
+    /// tagged figure is the operating income (<see cref="MistaggedGrossProfitReplacement"/>).
+    /// </summary>
+    public static bool ReplacesMistaggedGrossProfit(
+        StatementLine line,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+    ) =>
+        line.Alias == GrossProfitMistag.GrossProfitAlias
+        && PickVariant(line.Concepts, conceptIdByKey, factByConceptId).Fact is { } grossProfit
+        && MistaggedGrossProfitReplacement(grossProfit, conceptIdByKey, factByConceptId) != null;
+
+    private static bool SameSpan(FinancialFact left, FinancialFact right) =>
+        right != null
+        && left.PeriodStart == right.PeriodStart
+        && left.PeriodEnd == right.PeriodEnd
+        && string.Equals(left.Unit, right.Unit, StringComparison.Ordinal);
+
     private static FinancialFact PickAliasFact(
+        string alias,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+    ) => PickAliasVariant(alias, conceptIdByKey, factByConceptId).Fact;
+
+    private static (
+        FinancialConceptAliases.ConceptRef Concept,
+        FinancialFact Fact
+    ) PickAliasVariant(
         string alias,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
         IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
     ) =>
         FinancialConceptAliases.TryResolve(alias, out var concepts)
-            ? PickVariant(concepts, conceptIdByKey, factByConceptId).Fact
-            : null;
+            ? PickVariant(concepts, conceptIdByKey, factByConceptId)
+            : (null, null);
 
     private static (FinancialConceptAliases.ConceptRef Concept, FinancialFact Fact) PickVariant(
         IReadOnlyList<FinancialConceptAliases.ConceptRef> concepts,
