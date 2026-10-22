@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261021155848_WidenHoldingQuarterSliceIndex")]
+    [Migration("20261022161732_WidenHoldingQuarterSliceIndex")]
     partial class WidenHoldingQuarterSliceIndex
     {
         /// <inheritdoc />
@@ -915,6 +915,45 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("SourceRecordId");
 
                     b.ToTable("IsinLegalEntityLookup");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.SecTickerDirectoryObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Cik")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Exchange")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("FirstObservedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("LastObservedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Ticker")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastObservedOn");
+
+                    b.HasIndex("Ticker", "LastObservedOn");
+
+                    b.HasIndex(new[] { "Cik", "Ticker", "Exchange", "FirstObservedOn" }, "IX_SecTickerDirectoryObservation_Span")
+                        .IsUnique();
+
+                    b.ToTable("SecTickerDirectoryObservation");
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
@@ -4101,6 +4140,32 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("ProcessedDataSet");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.ProcessedDataSetAccession", b =>
+                {
+                    b.Property<string>("FileName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AccessionNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ArchiveFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ParserVersion")
+                        .HasColumnType("integer");
+
+                    b.HasKey("FileName", "AccessionNumber");
+
+                    b.ToTable("ProcessedDataSetAccession");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.ProcessedFiling", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4972,8 +5037,8 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("character varying(80)");
 
                     b.Property<string>("ContentType")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
@@ -7050,6 +7115,46 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FinancialFactsSyncStatus");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.IssuerCoverStatement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccessionNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EquityIssuerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("FiledDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Form")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("IsShellCompany")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId")
+                        .IsUnique();
+
+                    b.HasIndex("EquityIssuerId", "FiledDate");
+
+                    b.ToTable("IssuerCoverStatement");
+                });
+
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.IssuerSecurityRegistration", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8336,6 +8441,25 @@ namespace Equibles.Migrations.Migrations
                         .HasForeignKey("EquityIssuerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Issuer");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.IssuerCoverStatement", b =>
+                {
+                    b.HasOne("Equibles.Sec.Data.Models.Document", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", "Issuer")
+                        .WithMany()
+                        .HasForeignKey("EquityIssuerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Document");
 
                     b.Navigation("Issuer");
                 });
