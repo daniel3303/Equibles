@@ -125,10 +125,7 @@ public class SplitShareCountEvidenceReconciler
                         dimension.Member,
                     }
             )
-            .Where(fact =>
-                SharesOutstandingProvider.ClassOfStockAxes.Contains(fact.Axis)
-                && !SharesOutstandingProvider.NonClassMembers.Contains(fact.Member)
-            )
+            .Where(fact => SharesOutstandingProvider.ClassOfStockAxes.Contains(fact.Axis))
             .ToListAsync(cancellationToken);
 
         var statedTotals = consolidated
@@ -147,8 +144,12 @@ public class SplitShareCountEvidenceReconciler
             var asOf = filing.Max(fact => fact.PeriodEnd);
             var current = filing.Where(fact => fact.PeriodEnd == asOf).ToList();
             var members = current.Select(fact => fact.Member).ToHashSet(StringComparer.Ordinal);
+            // A non-class member makes the sum ambiguous: filers tag their only common class as
+            // us-gaap:CommonStockMember beside preferred or note members, so dropping it as a roll-up
+            // leaves an unchanged preferred count that would contradict a real split.
             if (
                 filing.Any(fact => !members.Contains(fact.Member))
+                || members.Any(SharesOutstandingProvider.NonClassMembers.Contains)
                 || statedTotals.Contains(
                     (filing.Key.EquityIssuerId, filing.Key.AccessionNumber, asOf)
                 )
