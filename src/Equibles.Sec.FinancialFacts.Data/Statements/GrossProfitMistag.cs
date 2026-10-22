@@ -96,7 +96,7 @@ public static class GrossProfitMistag
     /// The warning a gross-profit series carries for its mis-tagged rows, or null when none is.
     /// </summary>
     public static string Warning(IReadOnlyCollection<FinancialFact> mistagged) =>
-        Warning(
+        WarningForPeriods(
             mistagged
                 .OrderByDescending(f => f.PeriodEnd)
                 .Select(f =>
@@ -110,7 +110,7 @@ public static class GrossProfitMistag
     /// <summary>
     /// The same warning over period labels ("FY2017 Q3"), newest first; null when there are none.
     /// </summary>
-    public static string Warning(IReadOnlyCollection<string> periodLabels) =>
+    public static string WarningForPeriods(IReadOnlyCollection<string> periodLabels) =>
         periodLabels.Count == 0
             ? null
             : $"Tag warning: for {string.Join(", ", periodLabels)} the figure tagged as gross "
