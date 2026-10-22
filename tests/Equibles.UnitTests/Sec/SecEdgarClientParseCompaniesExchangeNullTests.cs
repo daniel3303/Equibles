@@ -63,4 +63,28 @@ public class SecEdgarClientParseCompaniesExchangeNullTests
 
         companies.Single(c => c.Cik == "0000789019").Tickers.Should().Equal(["MSFT"]);
     }
+
+    // The directory's exchange is the dated statement the ticker ledger records, so every kept
+    // ticker carries it verbatim, an over-the-counter line included.
+    [Fact]
+    public void ParseCompaniesFromResponse_ListedRows_KeepTheirStatedExchange()
+    {
+        var companies = Parse([
+            new() { "0000312070", "BARCLAYS BANK PLC", "ATMP", "CBOE" },
+            new() { "0000312070", "BARCLAYS BANK PLC", "BWVTF", "OTC" },
+            new() { "0000312070", "BARCLAYS BANK PLC", "SPCX", null },
+            new() { "0001077428", "TEXAS CAPITAL BANCSHARES INC/TX", "TCBI-PB", " NYSE " },
+        ]);
+
+        companies
+            .Single(c => c.Cik == "0000312070")
+            .TickerExchanges.Should()
+            .BeEquivalentTo(
+                new Dictionary<string, string> { ["ATMP"] = "CBOE", ["BWVTF"] = "OTC" }
+            );
+        companies
+            .Single(c => c.Cik == "0001077428")
+            .TickerExchanges.Should()
+            .BeEquivalentTo(new Dictionary<string, string> { ["TCBI-PB"] = "NYSE" });
+    }
 }

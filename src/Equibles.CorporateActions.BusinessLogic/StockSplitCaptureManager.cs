@@ -17,7 +17,8 @@ namespace Equibles.CorporateActions.BusinessLogic;
 // security's action to another. Idempotent by (listing, EffectiveDate): a
 // re-run with the same events writes nothing. A changed ratio for the same exact
 // source series clears PriceAdjustmentAppliedTime for another reconciliation. A caller holding a
-// source's complete report also lets that source retire its own rows on dates it moved away from.
+// source's complete report also lets that source retire its own rows on dates it moved away from,
+// including a definition whose ratio it revised.
 [Service]
 public class StockSplitCaptureManager
 {
@@ -212,6 +213,8 @@ public class StockSplitCaptureManager
                 : null;
             if (legacy == null && CollapseSameEvent(existing, listing, split, ref changes))
                 continue;
+            if (legacy == null && IsRevisedByHigherSource(existing, listing, split))
+                continue;
 
             var match =
                 existing.SingleOrDefault(action =>
@@ -325,14 +328,40 @@ public class StockSplitCaptureManager
         return true;
     }
 
+    // A lower-precedence source can keep serving a definition the higher source has revised:
+    // Yahoo's chart still lists MGN's withdrawn 1:40 nine days before the feed's 1:30. Inside the
+    // same-event window a different ratio moving the share count the same way is that event's
+    // stale definition, so it is not captured as a second split. Rows already stored are left to
+    // their own source.
+    private static bool IsRevisedByHigherSource(
+        List<StockSplit> existing,
+        EquityListing listing,
+        CapturedSplit split
+    ) =>
+        existing.Any(action =>
+            action.EquityListingId == listing.Id
+            && action.Source > split.Source
+            && Math.Abs(action.EffectiveDate.DayNumber - split.EffectiveDate.DayNumber)
+                <= SplitEvents.SameEventWindowDays
+            && SplitEvents.IsRevisedRatio(
+                split.Numerator,
+                split.Denominator,
+                action.Numerator,
+                action.Denominator
+            )
+        );
+
     // A source that re-dates a split (a record date corrected to the ex-date, a postponed reverse
-    // split) re-reports it on the new date and stops listing the old one, which can sit further
-    // away than SameEventWindowDays. Its own row on a date its complete report no longer lists is
-    // that withdrawn date when the report's nearest same-ratio date had not passed when the row
-    // was captured; an event already history by then was a different one. The row merges into one
-    // already holding the reported date, whose applied marker stands, or moves there and reopens
-    // reconciliation like any revised definition. A different ratio holding the reported date, or
-    // no same-ratio report at all, leaves the row alone.
+    // split) or revises its ratio re-reports it and stops listing the old definition, whose date
+    // can sit further away than SameEventWindowDays. Its own row on a date its complete report no
+    // longer lists is that withdrawn definition when the report's nearest event had not passed
+    // when the row was captured; an event already history by then was a different one, and a
+    // genuinely separate split stays in the report. A same-ratio row merges into one already
+    // holding the reported date, whose applied marker stands, or moves there and reopens
+    // reconciliation like any revised definition. A revised ratio must still move the share count
+    // the same way; it moves the row onto the reported definition, or merges into a holder already
+    // carrying it and reopens that holder, since the stored closes were reconciled while the
+    // withdrawn ratio stood beside it. A holder with any other ratio leaves the row alone.
     private void SupersedeMovedDates(
         List<StockSplit> existing,
         EquityListing listing,
@@ -364,18 +393,28 @@ public class StockSplitCaptureManager
             var capturedOn = DateOnly.FromDateTime(stale.CreationTime);
             if (stale.EffectiveDate.AddDays(SplitEvents.SameEventWindowDays) < capturedOn)
                 continue;
-            // The nearest same-ratio report is the candidate; filtering before choosing would let
-            // an unrelated later event of that ratio stand in for a re-date the guard refused.
+            // The nearest reported event is the only candidate; filtering before choosing would
+            // let an unrelated later event stand in for a revision the guard refused.
             var replacement = reported
-                .Where(split =>
-                    split.Numerator == stale.Numerator && split.Denominator == stale.Denominator
-                )
                 .OrderBy(split =>
                     Math.Abs(split.EffectiveDate.DayNumber - stale.EffectiveDate.DayNumber)
                 )
                 .ThenByDescending(split => split.EffectiveDate)
                 .FirstOrDefault();
             if (replacement == null || replacement.EffectiveDate < capturedOn)
+                continue;
+            var sameRatio =
+                replacement.Numerator == stale.Numerator
+                && replacement.Denominator == stale.Denominator;
+            if (
+                !sameRatio
+                && !SplitEvents.IsRevisedRatio(
+                    stale.Numerator,
+                    stale.Denominator,
+                    replacement.Numerator,
+                    replacement.Denominator
+                )
+            )
                 continue;
 
             var holder = existing.FirstOrDefault(action =>
@@ -385,13 +424,22 @@ public class StockSplitCaptureManager
             if (holder == null)
             {
                 stale.EffectiveDate = replacement.EffectiveDate;
+                stale.Numerator = replacement.Numerator;
+                stale.Denominator = replacement.Denominator;
                 stale.InvalidateRevisedDefinition();
                 changes++;
             }
-            else if (holder.Numerator == stale.Numerator && holder.Denominator == stale.Denominator)
+            else if (
+                holder.Numerator == replacement.Numerator
+                && holder.Denominator == replacement.Denominator
+            )
             {
                 _splitRepository.Delete(stale);
                 existing.Remove(stale);
+                // Only the marker reopens: the holder's definition is unchanged, so the revision
+                // trigger and its share-count verdict stay as they are.
+                if (!sameRatio)
+                    holder.PriceAdjustmentAppliedTime = null;
                 changes++;
             }
         }

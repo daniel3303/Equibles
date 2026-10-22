@@ -914,6 +914,45 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("IsinLegalEntityLookup");
                 });
 
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.SecTickerDirectoryObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Cik")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Exchange")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("FirstObservedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("LastObservedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Ticker")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastObservedOn");
+
+                    b.HasIndex("Ticker", "LastObservedOn");
+
+                    b.HasIndex(new[] { "Cik", "Ticker", "Exchange", "FirstObservedOn" }, "IX_SecTickerDirectoryObservation_Span")
+                        .IsUnique();
+
+                    b.ToTable("SecTickerDirectoryObservation");
+                });
+
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
                 {
                     b.Property<Guid>("Id")

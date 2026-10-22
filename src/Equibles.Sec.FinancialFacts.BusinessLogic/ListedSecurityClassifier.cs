@@ -49,7 +49,8 @@ public static class ListedSecurityClassifier
         (Pattern("rights?"), ListedSecurityType.Rights),
         (Pattern("units?"), ListedSecurityType.Units),
         (Pattern("preferred|preference"), ListedSecurityType.PreferredShares),
-        (Pattern("notes?|debentures?|bonds?"), ListedSecurityType.DebtSecurities),
+        // "ETN" is the exchange-traded note's own abbreviation, which issuers file as the title's head noun.
+        (Pattern("notes?|debentures?|bonds?|etns?"), ListedSecurityType.DebtSecurities),
         (
             Pattern(
                 "common (stock|shares?)|ordinary shares?|american depositary (shares?|receipts?)|shares? of beneficial interest"

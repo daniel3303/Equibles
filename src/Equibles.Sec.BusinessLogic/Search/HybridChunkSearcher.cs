@@ -25,7 +25,9 @@ namespace Equibles.Sec.BusinessLogic.Search;
 /// trace. The pass after a timed-out pass runs on a tighter statement budget, so one search can
 /// never hold a connection for much more than a single full budget plus that reduced one. When
 /// every full-length pass timed out, an opted-in search tries one last short-budget pass on the
-/// query's few most specific terms (<see cref="Bm25QueryReducer"/>).
+/// query's few most specific terms (<see cref="Bm25QueryReducer"/>). A search still empty after a
+/// timeout reruns its widest keyword pass once on the degraded budget, over pages the earlier
+/// passes warmed, before the timeout reaches the caller.
 /// A search scoped to one ticker OR one document has a third leg the corpus-wide search cannot
 /// have: a bounded PostgreSQL full-text scan over that slice. When it answers, its proven matches
 /// are returned as they are — the arms that just failed under the same load are not re-tried.
@@ -343,12 +345,48 @@ public class HybridChunkSearcher
         }
 
         // An empty result after a timed-out BM25 pass is NOT a proven "no matches" —
-        // returning it would read as "the filings say nothing about this". Surface the
-        // timeout instead; a retry hits the index pages the failed passes just warmed.
-        // Declared below the fallback block on purpose: it reads bm25Timeout at call
-        // time, and every mutation of that variable happens above this line.
-        ChunkSearchOutcome ThrowIfEmptyAfterTimeout(List<Chunk> results)
+        // returning it would read as "the filings say nothing about this". Before surfacing
+        // the timeout, run the widest keyword pass the caller opted into once more on the
+        // degraded budget: every pass above warmed this query's index pages, and the misses
+        // left are bursts of parallel searches on a loaded host, where the caller's own retry
+        // moments later answers. A completed pass proves its answer, empty included; a second
+        // timeout surfaces the first. Declared below the fallback block on purpose: it reads
+        // bm25Timeout at call time, and every other mutation of it happens above this line.
+        async Task<ChunkSearchOutcome> ThrowIfEmptyAfterTimeout(List<Chunk> results)
         {
+            if (results.Count == 0 && bm25Timeout != null)
+            {
+                try
+                {
+                    var warm = await _chunkRepository.HybridSearch(
+                        query,
+                        bm25Limit,
+                        ticker,
+                        excludeTickers,
+                        documentId,
+                        documentTypes,
+                        startDate,
+                        endDate,
+                        conjunctive: !disjunctiveFallback,
+                        commandTimeoutSeconds: DegradedPassTimeoutSeconds,
+                        cancellationToken: cancellationToken
+                    );
+                    results = ApplyPoolControls(
+                            warm.DistinctBy(chunk => chunk.Id),
+                            excludeTickers,
+                            documentTypes,
+                            maxResultsPerCompany
+                        )
+                        .Take(maxResults)
+                        .ToList();
+                    bm25Timeout = null;
+                    _logger.LogWarning("BM25 passes timed out; answered from a warm retry");
+                }
+                catch (ChunkSearchTimeoutException exception)
+                {
+                    _logger.LogWarning(exception, "Warm BM25 retry timed out");
+                }
+            }
             if (results.Count == 0 && bm25Timeout != null)
                 ExceptionDispatchInfo.Capture(bm25Timeout).Throw();
             return new ChunkSearchOutcome(results, Incomplete: bm25Timeout != null);
@@ -371,7 +409,7 @@ public class HybridChunkSearcher
         // nothing to work on; with the corpus arm safe (Table mode, any document scope, or
         // Auto + ticker scope) the vector ranking can carry the result alone.
         if (!semanticActive || (bm25.Count == 0 && !corpusArmSafe))
-            return ThrowIfEmptyAfterTimeout(
+            return await ThrowIfEmptyAfterTimeout(
                 ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
                     .Take(maxResults)
                     .ToList()
@@ -397,7 +435,7 @@ public class HybridChunkSearcher
             semanticCts.Token
         );
         if (vectorIds.Count == 0)
-            return ThrowIfEmptyAfterTimeout(
+            return await ThrowIfEmptyAfterTimeout(
                 ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
                     .Take(maxResults)
                     .ToList()
@@ -409,7 +447,7 @@ public class HybridChunkSearcher
         var fusedIds = RrfFusion.Fuse([bm25Ids, vectorIds], _options.RrfK).ToList();
 
         var fused = await MaterializeInOrder(fusedIds, bm25, cancellationToken);
-        return ThrowIfEmptyAfterTimeout(
+        return await ThrowIfEmptyAfterTimeout(
             ApplyPoolControls(fused, excludeTickers, documentTypes, maxResultsPerCompany)
                 .Take(maxResults)
                 .ToList()
