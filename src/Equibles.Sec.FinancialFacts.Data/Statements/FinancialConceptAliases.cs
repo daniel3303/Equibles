@@ -129,6 +129,11 @@ public static class FinancialConceptAliases
         // figure instead; it INCLUDES cost of revenue, so it is a separate
         // line, never a fallback for operating-expenses.
         ["total-costs-and-expenses"] = [G("CostsAndExpenses")],
+        // Filers present this both with and without cost of revenue: for some it
+        // equals revenue less operating income, for others it sits below a cost
+        // of revenue larger than itself. It is therefore its own line and a
+        // fallback for neither operating-expenses nor total-costs-and-expenses.
+        ["operating-costs-and-expenses"] = [G("OperatingCostsAndExpenses")],
         ["operating-income"] = [G("OperatingIncomeLoss"), I("ProfitLossFromOperatingActivities")],
         // InterestExpense was deprecated from the 2024 taxonomy; banks continue the
         // series under the operating variant (nonfinancial filers moved to the
@@ -173,7 +178,14 @@ public static class FinancialConceptAliases
             G("ProfitLoss"),
             I("ProfitLoss"),
         ],
-        ["comprehensive-income"] = [G("ComprehensiveIncomeNetOfTax")],
+        // The figure including noncontrolling interests last, as ProfitLoss is
+        // for net-income: it only fills periods without the parent-attributable
+        // figure.
+        ["comprehensive-income"] =
+        [
+            G("ComprehensiveIncomeNetOfTax"),
+            G("ComprehensiveIncomeNetOfTaxIncludingPortionAttributableToNoncontrollingInterest"),
+        ],
         ["eps-basic"] = [G("EarningsPerShareBasic"), I("BasicEarningsLossPerShare")],
         ["eps-diluted"] = [G("EarningsPerShareDiluted"), I("DilutedEarningsLossPerShare")],
         ["weighted-average-shares-basic"] =
