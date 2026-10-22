@@ -56,5 +56,19 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
             .WithMany()
             .HasForeignKey(row => row.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<IssuerCoverStatement>(b =>
+        {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // Derived from the filing alone, so it goes with the filing.
+            b.HasOne(row => row.Document)
+                .WithMany()
+                .HasForeignKey(row => row.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.Property(e => e.Form).HasConversion(docTypeConversion);
+        });
     }
 }
