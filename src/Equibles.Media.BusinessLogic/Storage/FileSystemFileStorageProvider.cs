@@ -17,9 +17,14 @@ namespace Equibles.Media.BusinessLogic.Storage;
 /// and the File row is persisted by the caller afterwards (blob-before-row).
 /// </summary>
 [Service(ServiceLifetime.Scoped)]
-public class FileSystemFileStorageProvider : IFileStorageProvider
+public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
 {
     private readonly FileStorageOptions _options;
+    private readonly Lock _barrierLock = new();
+
+    // Opened at a batch's first buffered write, so the barrier also reports writeback errors
+    // from earlier in the batch.
+    private FileSystemSyncHandle _barrier;
 
     public FileSystemFileStorageProvider(IOptions<FileStorageOptions> options)
     {
@@ -62,15 +67,46 @@ public class FileSystemFileStorageProvider : IFileStorageProvider
     {
         var hashHex = ContentAddressedPath.ComputeSha256Hex(content);
         var relativePath = ContentAddressedPath.Build(tier, hashHex);
-        var fullPath = Path.Combine(RequireRoot(), ContentAddressedPath.ToOsPath(relativePath));
+        var root = RequireRoot();
+        var fullPath = Path.Combine(root, ContentAddressedPath.ToOsPath(relativePath));
+        lock (_barrierLock)
+        {
+            if (_barrier == null)
+            {
+                Directory.CreateDirectory(root);
+                _barrier = FileSystemSyncHandle.Open(root);
+            }
+        }
         await DurableFileWriter.WriteIfMissingBuffered(fullPath, content);
         return (relativePath, ContentAddressedPath.HashPrefix + hashHex);
     }
 
-    /// <summary>Flushes the whole store's filesystem to stable storage (batch durability barrier).</summary>
+    /// <summary>
+    /// Flushes the whole store's filesystem to stable storage (batch durability barrier) and
+    /// throws when that fails, so no row commits over bytes the disk did not take.
+    /// </summary>
     public void SyncStore()
     {
-        DurableFileWriter.SyncFileSystem(RequireRoot());
+        FileSystemSyncHandle barrier;
+        lock (_barrierLock)
+        {
+            barrier = _barrier;
+            _barrier = null;
+        }
+
+        using var handle = barrier ?? FileSystemSyncHandle.Open(RequireRoot());
+        handle.Sync();
+    }
+
+    public void Dispose()
+    {
+        lock (_barrierLock)
+        {
+            _barrier?.Dispose();
+            _barrier = null;
+        }
+
+        GC.SuppressFinalize(this);
     }
 
     private string StampAndResolve(File file, byte[] content, string tier)

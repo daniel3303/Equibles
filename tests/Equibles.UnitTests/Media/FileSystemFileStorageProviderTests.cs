@@ -49,6 +49,61 @@ public class FileSystemFileStorageProviderTests : IDisposable
         (await System.IO.File.ReadAllBytesAsync(onDisk)).Should().Equal(content);
     }
 
+    // A crash between a buffered write's rename and its barrier can leave a zero-length or
+    // zero-filled file at the content path; the next write of those bytes replaces it instead
+    // of adopting it as a dedup hit.
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task Save_DamagedFileAtTheContentPath_IsReplaced(bool buffered, bool zeroFilled)
+    {
+        var content = Encoding.UTF8.GetBytes("original announcement bytes");
+        var relativePath = ContentAddressedPath.Build(
+            FileStorageTiers.Blob,
+            ContentAddressedPath.ComputeSha256Hex(content)
+        );
+        var onDisk = Path.Combine(_root, ContentAddressedPath.ToOsPath(relativePath));
+        Directory.CreateDirectory(Path.GetDirectoryName(onDisk));
+        await System.IO.File.WriteAllBytesAsync(onDisk, zeroFilled ? new byte[content.Length] : []);
+        var file = new File();
+
+        if (buffered)
+        {
+            await _provider.SaveBuffered(file, content, FileStorageTiers.Blob);
+            _provider.SyncStore();
+        }
+        else
+        {
+            await _provider.Save(file, content, FileStorageTiers.Blob);
+        }
+
+        file.RelativePath.Should().Be(relativePath);
+        (await System.IO.File.ReadAllBytesAsync(onDisk)).Should().Equal(content);
+    }
+
+    // The barrier throws when the store cannot be flushed, so a caller never commits rows over
+    // bytes the disk did not take.
+    [Fact]
+    public void SyncStore_UnflushableRoot_Throws()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var provider = new FileSystemFileStorageProvider(
+            Options.Create(
+                new FileStorageOptions { Enabled = true, RootPath = Path.Combine(_root, "missing") }
+            )
+        );
+
+        var sync = () => provider.SyncStore();
+
+        sync.Should().Throw<IOException>();
+    }
+
     // Content addressing gives free dedup: identical bytes map to one path and the second
     // write is a no-op, never an error, even though the target already exists.
     [Fact]

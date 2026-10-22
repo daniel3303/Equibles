@@ -6,8 +6,8 @@ namespace Equibles.Media.BusinessLogic.Storage;
 /// Crash-safe, write-once file creation for the content-addressed store. Sequence:
 /// write a temp file on the same filesystem → fsync the file → atomic rename into
 /// place → fsync the containing directory (so the new directory entry survives a
-/// crash). Because the store is content-addressed, a target that already exists holds
-/// identical bytes, so the write is skipped (deduplication). Writing the file before
+/// crash). Because the store is content-addressed, a target that already holds identical
+/// bytes is kept (deduplication); one a crash damaged is replaced. Writing the file before
 /// the caller saves the File row means a crash leaves a harmless orphan file (reclaimed
 /// by the sweep), never a row pointing at nothing.
 /// </summary>
@@ -17,9 +17,12 @@ public static class DurableFileWriter
 
     public static async Task WriteIfMissing(string fullPath, byte[] content)
     {
-        if (System.IO.File.Exists(fullPath))
+        if (await HoldsContent(fullPath, content))
         {
-            return; // dedup: identical content already stored
+            // A buffered batch that failed before its barrier can leave these bytes only in the
+            // page cache, so they are flushed before a caller commits a row that points here.
+            SyncFileSystem(Path.GetDirectoryName(fullPath));
+            return;
         }
 
         var directory = Path.GetDirectoryName(fullPath);
@@ -58,15 +61,9 @@ public static class DurableFileWriter
                 stream.Flush(flushToDisk: true); // fsync the file's data + metadata
             }
 
-            try
-            {
-                System.IO.File.Move(tempPath, fullPath, overwrite: false);
-            }
-            catch (IOException) when (System.IO.File.Exists(fullPath))
-            {
-                // A concurrent writer won the race with identical (content-addressed) bytes.
-                return;
-            }
+            // Overwriting replaces a damaged target; a concurrent writer of the same path holds
+            // identical (content-addressed) bytes, so whichever rename lands last is correct.
+            System.IO.File.Move(tempPath, fullPath, overwrite: true);
 
             // Persist the file's dirent (leaf) and each freshly-created shard directory,
             // walking up to and including the first pre-existing ancestor (its entry set
@@ -105,7 +102,7 @@ public static class DurableFileWriter
     /// </summary>
     public static async Task WriteIfMissingBuffered(string fullPath, byte[] content)
     {
-        if (System.IO.File.Exists(fullPath))
+        if (await HoldsContent(fullPath, content))
         {
             return; // dedup: identical content already stored
         }
@@ -117,14 +114,7 @@ public static class DurableFileWriter
         try
         {
             await System.IO.File.WriteAllBytesAsync(tempPath, content);
-            try
-            {
-                System.IO.File.Move(tempPath, fullPath, overwrite: false);
-            }
-            catch (IOException) when (System.IO.File.Exists(fullPath))
-            {
-                // A concurrent writer won the race with identical (content-addressed) bytes.
-            }
+            System.IO.File.Move(tempPath, fullPath, overwrite: true);
         }
         finally
         {
@@ -144,36 +134,29 @@ public static class DurableFileWriter
 
     /// <summary>
     /// Flushes every dirty page of the filesystem containing <paramref name="directory"/> to
-    /// stable storage (Linux syncfs). The batch-durability counterpart of
+    /// stable storage and throws when that fails. The batch-durability counterpart of
     /// <see cref="WriteIfMissingBuffered"/>: call once after writing a batch, before
-    /// committing the database rows that point at it. Falls back to a global sync elsewhere.
+    /// committing the database rows that point at it.
     /// </summary>
     public static void SyncFileSystem(string directory)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        using var handle = FileSystemSyncHandle.Open(directory);
+        handle.Sync();
+    }
+
+    // A content-addressed path holds exactly its content unless a crash left a write there that
+    // never reached the disk (a zero-length or zero-filled file), so an existing file is trusted
+    // only once its bytes compare equal.
+    private static async Task<bool> HoldsContent(string fullPath, byte[] content)
+    {
+        var existing = new FileInfo(fullPath);
+        if (!existing.Exists || existing.Length != content.LongLength)
         {
-            var fd = open(directory, O_RDONLY);
-            if (fd >= 0)
-            {
-                try
-                {
-                    syncfs(fd);
-                }
-                finally
-                {
-                    close(fd);
-                }
-                return;
-            }
+            return false;
         }
 
-        if (
-            RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-        )
-        {
-            sync();
-        }
+        var stored = await System.IO.File.ReadAllBytesAsync(fullPath);
+        return stored.AsSpan().SequenceEqual(content);
     }
 
     /// <summary>
@@ -207,20 +190,20 @@ public static class DurableFileWriter
         }
     }
 
-    private const int O_RDONLY = 0;
+    internal const int O_RDONLY = 0;
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int open(string pathname, int flags);
+    internal static extern int open(string pathname, int flags);
 
     [DllImport("libc", SetLastError = true)]
     private static extern int fsync(int fd);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int syncfs(int fd);
+    internal static extern int syncfs(int fd);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern void sync();
+    internal static extern void sync();
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int close(int fd);
+    internal static extern int close(int fd);
 }
