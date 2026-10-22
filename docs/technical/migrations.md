@@ -60,7 +60,7 @@ The initial migration declares two extensions, both required:
 - `pg_search` — ParadeDB BM25; powers full-text search over SEC chunk content via a BM25 index.
 - Declared via the EF annotation `Npgsql:PostgresExtension:pg_search` plus the index method override (`NpgsqlIndexBuilderExtensions.HasMethod(..., "bm25")`).
 
-Both extensions ship out-of-the-box in the `paradedb/paradedb:latest` Docker image used by `db` in `docker-compose.yml`. On a non-ParadeDB Postgres install, `MigrateAsync` will fail at `CREATE EXTENSION pg_search` with a clear error.
+Both extensions ship out-of-the-box in the `paradedb/paradedb:0.26.2-pg18` Docker image used by `db` in `docker-compose.yml`. On a non-ParadeDB Postgres install, `MigrateAsync` will fail at `CREATE EXTENSION pg_search` with a clear error.
 
 The `Equibles.ParadeDB.EntityFrameworkCore` package provides the `UseParadeDb()` extension that wires the BM25 method into the Npgsql provider's index DSL.
 

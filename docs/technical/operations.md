@@ -123,7 +123,7 @@ Bumping to `Information` is useful for diagnosing slow scraper cycles; `Debug` i
 
 | Service | Image | Ports | Role |
 |---|---|---|---|
-| `db` | `paradedb/paradedb:latest` | `5432:5432` | Postgres + pgvector + pg_search. Required. |
+| `db` | `paradedb/paradedb:0.26.2-pg18` | `5432:5432` | Postgres + pgvector + pg_search. Required. |
 | `web` | built from `src/Equibles.Web/Dockerfile` | `8080:8080` | Web portal. Owns migration application. |
 | `mcp` | built from `src/Equibles.Mcp.Server/Dockerfile` | `8081:8080` | MCP transport at `/mcp`. Depends on `web` being healthy. |
 | `worker` | built from `src/Equibles.Worker.Host/Dockerfile` | — | Background scrapers. Depends on `web` being healthy. |
