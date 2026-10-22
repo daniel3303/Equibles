@@ -57,6 +57,7 @@ public static class FinancialStatementConcepts
         Line("restructuring", "Restructuring Charges"),
         Line("operating-expenses", "Total Operating Expenses"),
         Line("total-costs-and-expenses", "Total Costs & Expenses"),
+        Line("operating-costs-and-expenses", "Operating Costs & Expenses"),
         Line("operating-income", "Operating Income"),
         Line("interest-expense", "Interest Expense"),
         Line("interest-income", "Interest Income"),
