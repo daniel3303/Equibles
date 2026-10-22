@@ -14,6 +14,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.Data.Prices;
 using Equibles.Yahoo.Mcp.Contracts;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -58,10 +59,13 @@ public class StockPriceTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(Name = "GetStockPrices", Title = "Daily Price History", ReadOnly = true)]
+    [McpServerTool(Name = "GetStockPrices", Title = "Price History", ReadOnly = true)]
     [Description(
-        "Get daily OHLCV (Open, High, Low, Close, Volume) price history for a stock. Useful for "
-            + "technical analysis, charting, and price trend analysis. A US listing is quoted in "
+        "Get daily, weekly or monthly OHLCV (Open, High, Low, Close, Volume) price history for a "
+            + "stock. Useful for technical analysis, charting, and price trend analysis. Weekly "
+            + "(ISO week) and monthly bars roll up the daily rows: first open, highest high, lowest "
+            + "low, last close, summed volume, dated by their last session; a week or month the "
+            + "date range cuts is marked partial. A US listing is quoted in "
             + "USD; a listing on another exchange (MIC:TICKER) is quoted in its own trading "
             + "currency, which the output names. An Adj "
             + "Close column shows the provider's split- and cash-dividend-adjusted close when it "
@@ -86,12 +90,19 @@ public class StockPriceTools
         )]
         // 260 covers the default 1-year window: a year holds ~251 trading sessions, so the
         // old default of 250 silently dropped the oldest day(s) of its own default range.
-        int maxResults = 260
+        int maxResults = 260,
+        [Description(
+            "Bar interval: daily (default), weekly or monthly. Use weekly or monthly with a wider startDate for long histories in one call."
+        )]
+            string interval = "daily"
     )
     {
         return _runner.Execute(
             async () =>
             {
+                if (!PriceBarAggregation.TryParse(interval, out var barInterval))
+                    return $"Invalid interval '{interval}'. Use daily, weekly or monthly.";
+
                 var (listing, stockError) = await ResolveTicker(ticker);
                 if (stockError != null)
                     return stockError;
@@ -110,6 +121,18 @@ public class StockPriceTools
                 var holdNote = ClampToRelease(await GetHold(), ref end);
 
                 var rangeQuery = Traded(listing, start, end);
+                if (barInterval != PriceBarInterval.Daily)
+                    return WithHoldNote(
+                        await RenderAggregated(
+                            listing,
+                            rangeQuery,
+                            barInterval,
+                            start,
+                            end,
+                            maxResults
+                        ),
+                        holdNote
+                    );
                 var total = await rangeQuery.CountAsync();
 
                 var records = await rangeQuery
@@ -937,6 +960,67 @@ public class StockPriceTools
     // Appended after tables that keep the NEWEST rows but render oldest-to-newest, where
     // the shared "Showing first N" wording would point at the wrong end of the table. At the
     // cap "raise maxResults" is impossible advice, so the note names the cap instead.
+    // The window's daily rows are bounded by the date range, so they roll up in memory; the newest
+    // maxResults bars are kept, oldest first.
+    private static async Task<string> RenderAggregated(
+        PricedListing listing,
+        IQueryable<EquityDailyStockPrice> rangeQuery,
+        PriceBarInterval interval,
+        DateOnly start,
+        DateOnly end,
+        int maxResults
+    )
+    {
+        var daily = await rangeQuery.OrderBy(p => p.Date).ToListAsync();
+        var bars = PriceBarAggregation.Aggregate(daily, interval, start, end);
+        if (bars.Count == 0)
+            return $"No price data found for {listing.Symbol} in the specified date range.";
+
+        var shown = bars.Skip(Math.Max(0, bars.Count - maxResults)).ToList();
+        var hasAdjustment = shown.Any(bar => bar.AdjustedClose != bar.Close);
+        var label = interval == PriceBarInterval.Weekly ? "Weekly" : "Monthly";
+        var period = interval == PriceBarInterval.Weekly ? "Week of" : "Month";
+        var result = hasAdjustment
+            ? StartTable(
+                $"{label} prices for {ListingTitle(listing)}:",
+                $"| Date | {period} | Open | High | Low | Close | Adj Close | Volume |",
+                "|------|------|------|------|-----|-------|-----------|--------|"
+            )
+            : StartTable(
+                $"{label} prices for {ListingTitle(listing)}:",
+                $"| Date | {period} | Open | High | Low | Close | Volume |",
+                "|------|------|------|------|-----|-------|--------|"
+            );
+        result.AppendRows(
+            shown,
+            bar =>
+            {
+                var date = bar.Partial ? $"{bar.Date:yyyy-MM-dd}*" : $"{bar.Date:yyyy-MM-dd}";
+                var periodLabel =
+                    interval == PriceBarInterval.Weekly
+                        ? $"{bar.PeriodStart:yyyy-MM-dd}"
+                        : $"{bar.PeriodStart:yyyy-MM}";
+                var prices =
+                    $"{McpFormat.Price(bar.Open)} | {McpFormat.Price(bar.High)} | {McpFormat.Price(bar.Low)} | {McpFormat.Price(bar.Close)}";
+                return hasAdjustment
+                    ? $"| {date} | {periodLabel} | {prices} | {McpFormat.Price(bar.AdjustedClose)} | {McpFormat.WholeNumber(bar.Volume)} |"
+                    : $"| {date} | {periodLabel} | {prices} | {McpFormat.WholeNumber(bar.Volume)} |";
+            }
+        );
+
+        AppendNewestKeptTruncationNote(result, shown.Count, bars.Count);
+
+        result.AppendLine();
+        if (shown.Any(bar => bar.Partial))
+            result.AppendLine(
+                "_* The date range covers only part of this period, so the bar is not a complete week or month._"
+            );
+        result.AppendLine(
+            "_Each bar rolls up the stored daily rows (first open, highest high, lowest low, last close and Adj Close, summed volume) and is dated by its last session. Stored rows do not certify one split basis, so a bar spanning a captured split can mix bases._"
+        );
+        return result.ToString();
+    }
+
     private static void AppendNewestKeptTruncationNote(StringBuilder result, int shown, int total)
     {
         if (shown >= total)
