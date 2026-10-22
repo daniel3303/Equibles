@@ -1,4 +1,4 @@
-namespace Equibles.Mcp.Helpers;
+namespace Equibles.CommonStocks.Data.Helpers;
 
 /// <summary>
 /// Decodes SEC EDGAR state-or-country codes into human-readable names. EDGAR stores a filer's
@@ -272,6 +272,73 @@ public static class EdgarStateCodes
         ["Z5"] = "Montenegro",
     };
 
+    // EDGAR's codes for places under US jurisdiction: the states and DC, the territories EDGAR
+    // files as states (Puerto Rico, Guam, US Virgin Islands), the two territories it files
+    // under country codes (B5 American Samoa, 1V Northern Mariana Islands), and X1 "United
+    // States" itself.
+    private static readonly HashSet<string> UnitedStatesCodes = new(
+        StringComparer.OrdinalIgnoreCase
+    )
+    {
+        "AL",
+        "AK",
+        "AZ",
+        "AR",
+        "CA",
+        "CO",
+        "CT",
+        "DE",
+        "DC",
+        "FL",
+        "GA",
+        "HI",
+        "ID",
+        "IL",
+        "IN",
+        "IA",
+        "KS",
+        "KY",
+        "LA",
+        "ME",
+        "MD",
+        "MA",
+        "MI",
+        "MN",
+        "MS",
+        "MO",
+        "MT",
+        "NE",
+        "NV",
+        "NH",
+        "NJ",
+        "NM",
+        "NY",
+        "NC",
+        "ND",
+        "OH",
+        "OK",
+        "OR",
+        "PA",
+        "RI",
+        "SC",
+        "SD",
+        "TN",
+        "TX",
+        "UT",
+        "VT",
+        "VA",
+        "WA",
+        "WV",
+        "WI",
+        "WY",
+        "PR",
+        "GU",
+        "VI",
+        "B5",
+        "1V",
+        "X1",
+    };
+
     // Returns the decoded location name for an EDGAR code, or the input unchanged when it is
     // a US state abbreviation, an unknown code, null, or blank.
     public static string Decode(string code)
@@ -280,4 +347,11 @@ public static class EdgarStateCodes
             return code;
         return NonUsCodes.TryGetValue(code.Trim(), out var name) ? name : code;
     }
+
+    /// <summary>
+    /// True when the EDGAR code names a US state, DC or a US territory. False for every foreign
+    /// code and for a blank or unknown one, so a caller can never read a missing code as US.
+    /// </summary>
+    public static bool IsUnitedStates(string code) =>
+        !string.IsNullOrWhiteSpace(code) && UnitedStatesCodes.Contains(code.Trim());
 }

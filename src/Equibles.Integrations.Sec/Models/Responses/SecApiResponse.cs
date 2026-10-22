@@ -31,6 +31,9 @@ internal class SecApiResponse
     [JsonProperty("stateOfIncorporation")]
     public string StateOfIncorporation { get; set; }
 
+    [JsonProperty("addresses")]
+    public SecAddresses Addresses { get; set; }
+
     [JsonProperty("exchanges")]
     public List<string> Exchanges { get; set; } = [];
 

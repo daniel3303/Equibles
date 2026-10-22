@@ -26,4 +26,10 @@ internal class RecentFilings
     // 8-K / 8-K/A rows carry items; the array is empty (or short) for other forms.
     [JsonProperty("items")]
     public List<string> Items { get; set; } = [];
+
+    // The SEC file number EDGAR indexes the filing under, e.g. "001-35727"; a business
+    // development company's reports carry its "814-" Investment Company Act number here even
+    // when its cover page states an Exchange Act number.
+    [JsonProperty("fileNumber")]
+    public List<string> FileNumber { get; set; } = [];
 }

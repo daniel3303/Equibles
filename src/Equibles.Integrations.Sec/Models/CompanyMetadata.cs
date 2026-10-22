@@ -27,7 +27,23 @@ public class CompanyMetadata
     /// <summary>SEC's filer status, e.g. "Large accelerated filer"; blank for filers without one.</summary>
     public string Category { get; set; }
 
+    /// <summary>EDGAR's state-or-country code for the place of incorporation, e.g. "DE" or "A0"; blank when SEC records none.</summary>
     public string StateOfIncorporation { get; set; }
+
+    /// <summary>EDGAR's state-or-country code for the business address, e.g. "CA" or "L2"; null when SEC records none.</summary>
+    public string BusinessStateOrCountry { get; set; }
+
+    /// <summary>The file number EDGAR indexes the newest 10-K or 10-Q under, from the recent filings; null when none is listed.</summary>
+    public string PeriodicReportFileNumber { get; set; }
+
+    /// <summary>Filing date of the newest N-54A (election to be regulated as a business development company) among the recent filings.</summary>
+    public DateOnly? BdcElectionFiledOn { get; set; }
+
+    /// <summary>Filing date of the newest N-54C (withdrawal of that election) among the recent filings.</summary>
+    public DateOnly? BdcWithdrawalFiledOn { get; set; }
+
+    /// <summary>True when EDGAR pages older filings out of the recent list, so the recent list is not the whole history.</summary>
+    public bool HasArchivedFilings { get; set; }
 
     public List<string> Exchanges { get; set; } = [];
 

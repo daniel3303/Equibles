@@ -5,6 +5,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Integrations.Sec;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.BusinessLogic;
@@ -500,6 +501,14 @@ public class DocumentScraper : IDocumentScraper
                 metadata?.EntityType
             );
 
+            if (metadata != null)
+                await UpdateRegistrantProfile(
+                    company,
+                    metadata,
+                    secEdgarClient,
+                    commonStockManager
+                );
+
             if (metadata?.FiscalYearEndMonth is { } month)
             {
                 await commonStockManager.SetFiscalYearEnd(
@@ -580,6 +589,63 @@ public class DocumentScraper : IDocumentScraper
                 $"ticker: {(company.Presentation?.Listing?.Ticker ?? company.Cik)}, cik: {company.Cik}"
             );
         }
+    }
+
+    /// <summary>
+    /// Persists the registrant facts EDGAR's header and filing index state: incorporation and
+    /// business-address codes, the periodic-report file number, and any business development
+    /// company election or withdrawal. The recent list is read every cycle at no extra cost.
+    /// A filer EDGAR never classified by industry (no SIC), whose recent list shows no
+    /// election, has its archived pages read once for the election forms; SIC only chooses
+    /// where to look, the filing alone decides. A failed archive read keeps the recent
+    /// evidence and is retried next cycle.
+    /// </summary>
+    private async Task UpdateRegistrantProfile(
+        EquityIssuer company,
+        CompanyMetadata metadata,
+        ISecEdgarClient secEdgarClient,
+        EquityIdentityManager commonStockManager
+    )
+    {
+        var election = metadata.BdcElectionFiledOn;
+        var withdrawal = metadata.BdcWithdrawalFiledOn;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly? historyReadOn = metadata.HasArchivedFilings ? null : today;
+
+        if (
+            metadata.HasArchivedFilings
+            && election == null
+            && company.BdcHistoryReadOn == null
+            && string.IsNullOrWhiteSpace(metadata.Sic)
+        )
+        {
+            try
+            {
+                var history = await secEdgarClient.GetCompanyFilings(company.Cik);
+                election = SecRegistrantFilings.LatestBdcElection(history);
+                withdrawal = SecRegistrantFilings.LatestBdcWithdrawal(history);
+                historyReadOn = today;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not read the archived filing history of {Ticker} (CIK: {Cik}) for business development company elections",
+                    (company.Presentation?.Listing?.Ticker ?? company.Cik),
+                    company.Cik
+                );
+            }
+        }
+
+        await commonStockManager.SetSecRegistrantProfile(
+            company,
+            metadata.StateOfIncorporation,
+            metadata.BusinessStateOrCountry,
+            metadata.PeriodicReportFileNumber,
+            election,
+            withdrawal,
+            historyReadOn
+        );
     }
 
     private async Task ProcessDocumentTypeForCompany(

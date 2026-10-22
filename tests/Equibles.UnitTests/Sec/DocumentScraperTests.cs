@@ -767,6 +767,75 @@ public class DocumentScraperTests
     }
 
     [Fact]
+    public async Task ScrapeDocuments_UnclassifiedFilerWithArchives_ReadsTheArchivedElectionOnce()
+    {
+        // An N-54A filed long ago can sit on an archived page. A filer SEC never gave an
+        // industry code, whose recent list shows no election, has its whole history read
+        // once; the stored read date stops the walk on later cycles.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        EquityIssuer company = SeedCompany(dbContext, ticker: "BDCX", cik: "0000777001");
+        harness
+            .SecEdgarClient.GetCompanyMetadata("0000777001")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Sic = "",
+                    StateOfIncorporation = "MD",
+                    BusinessStateOrCountry = "NY",
+                    PeriodicReportFileNumber = "001-35000",
+                    HasArchivedFilings = true,
+                }
+            );
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000777001")
+            .Returns([
+                new FilingData { Form = "10-Q", FilingDate = new DateOnly(2026, 8, 1) },
+                new FilingData { Form = "N-54A", FilingDate = new DateOnly(2004, 2, 3) },
+            ]);
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
+        persisted.BdcElectionFiledOn.Should().Be(new DateOnly(2004, 2, 3));
+        persisted.BdcHistoryReadOn.Should().NotBeNull();
+        persisted.StateOfIncorporation.Should().Be("MD");
+        persisted.BusinessStateOrCountry.Should().Be("NY");
+        persisted.PeriodicReportFileNumber.Should().Be("001-35000");
+        await harness.SecEdgarClient.Received(1).GetCompanyFilings("0000777001");
+    }
+
+    [Fact]
+    public async Task ScrapeDocuments_ClassifiedFilerWithArchives_NeverWalksTheArchive()
+    {
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        EquityIssuer company = SeedCompany(dbContext, ticker: "GM", cik: "0001467858");
+        harness
+            .SecEdgarClient.GetCompanyMetadata("0001467858")
+            .Returns(
+                new CompanyMetadata
+                {
+                    Sic = "3711",
+                    BusinessStateOrCountry = "MI",
+                    HasArchivedFilings = true,
+                }
+            );
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
+        persisted.BusinessStateOrCountry.Should().Be("MI");
+        persisted.BdcHistoryReadOn.Should().BeNull();
+        await harness.SecEdgarClient.DidNotReceive().GetCompanyFilings("0001467858");
+    }
+
+    [Fact]
     public async Task ScrapeDocuments_SecReportsNoFiscalYearEnd_LeavesStockUnchanged()
     {
         // The substitute returns null metadata by default and no 10-K filings
