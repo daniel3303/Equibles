@@ -347,14 +347,7 @@ public class DocumentScraper : IDocumentScraper
                 .ToListAsync();
         }
 
-        return await commonStockRepository
-            .GetAll()
-            .Where(issuer =>
-                issuer.Cik != null
-                && (issuer.Presentation == null || issuer.Presentation.Listing.Active)
-            )
-            .AsNoTracking()
-            .ToListAsync();
+        return await commonStockRepository.GetFollowedSecFilers().AsNoTracking().ToListAsync();
     }
 
     private async Task<bool> ProcessCompanyDocumentsWithScope(
@@ -403,7 +396,8 @@ public class DocumentScraper : IDocumentScraper
                 company,
                 secEdgarClient,
                 commonStockManager,
-                documentRepository
+                documentRepository,
+                scope.ServiceProvider.GetRequiredService<SecRegistrantProfileReader>()
             );
 
             // Only collected while a feed-flagged filing awaits confirmation —
@@ -484,7 +478,8 @@ public class DocumentScraper : IDocumentScraper
         EquityIssuer company,
         ISecEdgarClient secEdgarClient,
         EquityIdentityManager commonStockManager,
-        DocumentRepository documentRepository
+        DocumentRepository documentRepository,
+        SecRegistrantProfileReader profileReader
     )
     {
         try
@@ -499,6 +494,9 @@ public class DocumentScraper : IDocumentScraper
                 metadata?.Sic,
                 metadata?.EntityType
             );
+
+            if (metadata != null)
+                await profileReader.Store(company, metadata, mayReadArchive: true);
 
             if (metadata?.FiscalYearEndMonth is { } month)
             {

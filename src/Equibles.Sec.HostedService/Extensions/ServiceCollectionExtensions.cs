@@ -68,6 +68,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<NportRealtimeWorker>();
         services.AddHostedService<NCenDataSetWorker>();
         services.AddHostedService<FundSeriesRefreshWorker>();
+        services.AddHostedService<IssuerRegistrantProfileRefreshWorker>();
         services.AddHostedService<EsefReportScraperWorker>();
 
         return services;

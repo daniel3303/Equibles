@@ -297,6 +297,19 @@ namespace Equibles.Migrations.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("BdcElectionFiledOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("BdcHistoryReadOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("BdcWithdrawalFiledOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("BusinessStateOrCountry")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
                     b.Property<string>("Cik")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
@@ -336,10 +349,21 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("text[]")
                         .HasDefaultValueSql("ARRAY[]::text[]");
 
+                    b.Property<string>("PeriodicReportFileNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly?>("SecRegistrantProfileReadOn")
+                        .HasColumnType("date");
+
                     b.PrimitiveCollection<List<string>>("SecondaryCiks")
                         .HasColumnType("text[]");
 
                     b.Property<string>("Sic")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("StateOfIncorporation")
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 

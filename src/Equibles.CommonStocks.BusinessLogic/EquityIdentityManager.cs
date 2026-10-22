@@ -1310,6 +1310,64 @@ public class EquityIdentityManager
         await _commonStockRepository.SaveChanges();
     }
 
+    /// <summary>
+    /// Sets what EDGAR's submissions header and filing index say about the registrant: the
+    /// incorporation and business-address codes and the periodic-report file number mirror
+    /// the current header (blank normalises to null), while the business development company
+    /// election and withdrawal dates only ever move forward, so an old election that drops
+    /// out of the recent-filings list is never forgotten. A null history-read or profile-read
+    /// date keeps the stored one. Saves directly, like <see cref="SetSecClassification"/>.
+    /// </summary>
+    public async Task SetSecRegistrantProfile(
+        EquityIssuer commonStock,
+        string stateOfIncorporation,
+        string businessStateOrCountry,
+        string periodicReportFileNumber,
+        DateOnly? bdcElectionFiledOn,
+        DateOnly? bdcWithdrawalFiledOn,
+        DateOnly? bdcHistoryReadOn,
+        DateOnly? profileReadOn
+    )
+    {
+        ArgumentNullException.ThrowIfNull(commonStock);
+
+        var incorporation = NullIfBlank(stateOfIncorporation);
+        var businessAddress = NullIfBlank(businessStateOrCountry);
+        var fileNumber = NullIfBlank(periodicReportFileNumber);
+        var election = Later(commonStock.BdcElectionFiledOn, bdcElectionFiledOn);
+        var withdrawal = Later(commonStock.BdcWithdrawalFiledOn, bdcWithdrawalFiledOn);
+        var historyReadOn = bdcHistoryReadOn ?? commonStock.BdcHistoryReadOn;
+        var readOn = profileReadOn ?? commonStock.SecRegistrantProfileReadOn;
+
+        if (
+            commonStock.StateOfIncorporation == incorporation
+            && commonStock.BusinessStateOrCountry == businessAddress
+            && commonStock.PeriodicReportFileNumber == fileNumber
+            && commonStock.BdcElectionFiledOn == election
+            && commonStock.BdcWithdrawalFiledOn == withdrawal
+            && commonStock.BdcHistoryReadOn == historyReadOn
+            && commonStock.SecRegistrantProfileReadOn == readOn
+        )
+        {
+            return;
+        }
+
+        commonStock.StateOfIncorporation = incorporation;
+        commonStock.BusinessStateOrCountry = businessAddress;
+        commonStock.PeriodicReportFileNumber = fileNumber;
+        commonStock.BdcElectionFiledOn = election;
+        commonStock.BdcWithdrawalFiledOn = withdrawal;
+        commonStock.BdcHistoryReadOn = historyReadOn;
+        commonStock.SecRegistrantProfileReadOn = readOn;
+        await _commonStockRepository.SaveChanges();
+
+        static string NullIfBlank(string value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        static DateOnly? Later(DateOnly? stored, DateOnly? observed) =>
+            stored is { } s && observed is { } o ? (s > o ? s : o) : stored ?? observed;
+    }
+
     public async Task<EquityIssuer> Create(EquityIssuer commonStock)
     {
         ValidateValues(commonStock);

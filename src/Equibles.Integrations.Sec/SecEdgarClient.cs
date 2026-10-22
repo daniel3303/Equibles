@@ -210,6 +210,8 @@ public class SecEdgarClient : ISecEdgarClient
             }
             _submissionsCache[url] = content;
 
+            var recentFilings = MapToFilingData(apiResponse.Filings?.Recent, cik);
+
             return new CompanyMetadata
             {
                 Cik = cik,
@@ -220,9 +222,16 @@ public class SecEdgarClient : ISecEdgarClient
                 SicDescription = apiResponse.SicDescription,
                 Category = apiResponse.Category,
                 StateOfIncorporation = apiResponse.StateOfIncorporation,
+                BusinessStateOrCountry = apiResponse.Addresses?.Business?.LocationCode,
                 Exchanges = apiResponse.Exchanges ?? [],
                 FiscalYearEnd = apiResponse.FiscalYearEnd,
                 Website = apiResponse.Website,
+                PeriodicReportFileNumber = SecRegistrantFilings.PeriodicReportFileNumber(
+                    recentFilings
+                ),
+                BdcElectionFiledOn = SecRegistrantFilings.LatestBdcElection(recentFilings),
+                BdcWithdrawalFiledOn = SecRegistrantFilings.LatestBdcWithdrawal(recentFilings),
+                HasArchivedFilings = apiResponse.Filings?.Files is { Count: > 0 },
             };
         }
         catch (HttpRequestException ex)
@@ -1345,6 +1354,10 @@ public class SecEdgarClient : ISecEdgarClient
             Items =
                 i < recent.Items.Count && !string.IsNullOrWhiteSpace(recent.Items[i])
                     ? recent.Items[i]
+                    : null,
+            FileNumber =
+                i < recent.FileNumber.Count && !string.IsNullOrWhiteSpace(recent.FileNumber[i])
+                    ? recent.FileNumber[i].Trim()
                     : null,
         };
         return true;

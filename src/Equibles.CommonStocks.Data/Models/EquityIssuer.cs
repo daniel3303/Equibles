@@ -45,6 +45,33 @@ public class EquityIssuer
     [MaxLength(32)]
     public string EntityType { get; set; }
 
+    // EDGAR state-or-country codes from the submissions header (decode with EdgarStateCodes);
+    // null when SEC records none. Neither proves a home country alone: a US-incorporated
+    // company can keep its principal offices abroad.
+    [MaxLength(8)]
+    public string StateOfIncorporation { get; set; }
+
+    [MaxLength(8)]
+    public string BusinessStateOrCountry { get; set; }
+
+    // The file number EDGAR indexes the newest periodic report under, which can differ from
+    // the number the report's cover states.
+    [MaxLength(32)]
+    public string PeriodicReportFileNumber { get; set; }
+
+    // Newest Form N-54A (election to be regulated as a business development company) and
+    // N-54C (withdrawal of that election) seen in the filing index. Never cleared when an
+    // old election leaves EDGAR's recent-filings list.
+    public DateOnly? BdcElectionFiledOn { get; set; }
+    public DateOnly? BdcWithdrawalFiledOn { get; set; }
+
+    // When the whole filing history, archived pages included, was first read for those forms;
+    // null while only the recent list has been read.
+    public DateOnly? BdcHistoryReadOn { get; set; }
+
+    // When EDGAR's submissions header was last read into the fields above; null until first read.
+    public DateOnly? SecRegistrantProfileReadOn { get; set; }
+
     public Guid? IndustryId { get; set; }
     public virtual Industry Industry { get; set; }
     public virtual List<EquitySecurity> Securities { get; set; } = [];

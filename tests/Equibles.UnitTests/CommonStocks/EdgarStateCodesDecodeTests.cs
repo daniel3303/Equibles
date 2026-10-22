@@ -1,6 +1,6 @@
-using Equibles.Mcp.Helpers;
+using Equibles.CommonStocks.Data.Helpers;
 
-namespace Equibles.UnitTests.Mcp;
+namespace Equibles.UnitTests.CommonStocks;
 
 /// <summary>
 /// Pins EdgarStateCodes.Decode against the SEC's official EDGAR state-and-country code table.
@@ -39,5 +39,29 @@ public class EdgarStateCodesDecodeTests
         EdgarStateCodes.Decode("Z9").Should().Be("Z9");
         EdgarStateCodes.Decode("").Should().Be("");
         EdgarStateCodes.Decode(null).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("DE")]
+    [InlineData("tx")]
+    [InlineData("DC")]
+    [InlineData("PR")] // Puerto Rico
+    [InlineData("1V")] // Northern Mariana Islands, filed under a country code
+    [InlineData("X1")]
+    public void IsUnitedStates_UsStateOrTerritory_IsTrue(string code)
+    {
+        EdgarStateCodes.IsUnitedStates(code).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("A0")] // Alberta, Canada
+    [InlineData("L2")] // Ireland
+    [InlineData("E9")] // Cayman Islands
+    [InlineData("Z9")] // unknown
+    [InlineData("")]
+    [InlineData(null)]
+    public void IsUnitedStates_ForeignBlankOrUnknown_IsFalse(string code)
+    {
+        EdgarStateCodes.IsUnitedStates(code).Should().BeFalse();
     }
 }

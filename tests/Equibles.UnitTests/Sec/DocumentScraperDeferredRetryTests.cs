@@ -105,6 +105,8 @@ public class DocumentScraperDeferredRetryTests
         // dep (SetCusip outbox event) the fiscal-year path never uses.
         services.AddSingleton(Substitute.For<IBus>());
         services.AddScoped<EquityIdentityManager>();
+        services.AddScoped<SecRegistrantProfileReader>();
+        services.AddLogging();
         services.AddSingleton(secEdgar);
         services.AddSingleton(persistence);
         services.AddSingleton(Substitute.For<ISecDocumentHtmlNormalizer>());

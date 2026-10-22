@@ -24,4 +24,10 @@ public class FilingData
     /// the submissions feed's parallel <c>items</c> array, so it costs no extra request.
     /// </summary>
     public string Items { get; set; }
+
+    /// <summary>
+    /// The SEC file number EDGAR indexes this filing under, e.g. <c>"001-35727"</c>; null when
+    /// the submissions feed omits it. Sourced from the feed's parallel <c>fileNumber</c> array.
+    /// </summary>
+    public string FileNumber { get; set; }
 }
