@@ -185,8 +185,7 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
     public async Task Reconcile_AMultiClassIssuer_IsJudgedOnItsPerClassCountSum()
     {
         // Dual-class filers state only per-class cover counts: Sphere's spin-off factor left both
-        // classes unchanged, Alphabet's 20:1 multiplied all three. The roll-up member on the axis
-        // must not be summed with the classes it totals.
+        // classes unchanged, Alphabet's 20:1 multiplied all three.
         var cover = await SeedCoverConcept();
         var sphere = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SPHX");
         var alphabet = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "GOOX");
@@ -214,14 +213,6 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
             ClassCount(alphabet, cover, alphabetBefore, alphabetFiledBefore, classA, 300_754_904m),
             ClassCount(alphabet, cover, alphabetBefore, alphabetFiledBefore, classB, 44_576_938m),
             ClassCount(alphabet, cover, alphabetBefore, alphabetFiledBefore, classC, 315_639_479m),
-            ClassCount(
-                alphabet,
-                cover,
-                alphabetBefore,
-                alphabetFiledBefore,
-                "us-gaap:CommonStockMember",
-                660_971_321m
-            ),
             ClassCount(alphabet, cover, alphabetAfter, alphabetFiledAfter, classA, 5_996_000_000m),
             ClassCount(alphabet, cover, alphabetAfter, alphabetFiledAfter, classB, 883_000_000m),
             ClassCount(alphabet, cover, alphabetAfter, alphabetFiledAfter, classC, 6_302_000_000m),
@@ -239,6 +230,40 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
         var confirmed = await Stored(twentyForOne);
         confirmed.ShareCountEvidence.Should().Be(StockSplitShareCountEvidence.Confirmed);
         confirmed.ShareCountEvidenceAsOf.Should().Be(alphabetAfter);
+    }
+
+    [Fact]
+    public async Task Reconcile_ACommonStockMemberBesideOtherMembers_IsNoWitness()
+    {
+        // Globalstar tags its common shares as us-gaap:CommonStockMember beside its preferred: read
+        // as a roll-up and dropped, only the unchanged preferred is left, which would contradict
+        // its real 1-for-15. Nobody can tell a roll-up from the only common class, so the filing
+        // states no count.
+        var cover = await SeedCoverConcept();
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "GSTX");
+        DbContext.Add(issuer);
+        await DbContext.SaveChangesAsync();
+
+        const string common = "us-gaap:CommonStockMember";
+        const string preferred = "us-gaap:PreferredStockMember";
+        var reverse = ListedSplit(issuer, "GSTX", new DateOnly(2025, 2, 11), 1m, 15m);
+        DateOnly before = new(2024, 11, 1),
+            after = new(2025, 2, 21);
+        DateOnly filedBefore = new(2024, 11, 7),
+            filedAfter = new(2025, 2, 28);
+        DbContext.AddRange(
+            ClassCount(issuer, cover, before, filedBefore, common, 1_892_373_380m),
+            ClassCount(issuer, cover, before, filedBefore, preferred, 149_425m),
+            ClassCount(issuer, cover, after, filedAfter, common, 126_442_716m),
+            ClassCount(issuer, cover, after, filedAfter, preferred, 149_425m),
+            reverse
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await Reconciler().Reconcile(CancellationToken.None);
+
+        (await Stored(reverse)).ShareCountEvidence.Should().BeNull();
     }
 
     [Fact]
