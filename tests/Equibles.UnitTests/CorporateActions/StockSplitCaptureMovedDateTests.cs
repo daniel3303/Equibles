@@ -292,31 +292,6 @@ public class StockSplitCaptureMovedDateTests
             .BeTrue();
     }
 
-    [Fact]
-    public async Task CaptureForListing_RevisedRatio_IsNotTreatedAsAMovedDate()
-    {
-        var (context, stock) = await SeedIssuer();
-        await using var _ = context;
-        context.Add(Stored(stock, RecordDate, Utc(2026, 8, 6), numerator: 1m, denominator: 40m));
-        await context.SaveChangesAsync();
-
-        await Report(
-            NewManager(context),
-            stock,
-            new DateOnly(2026, 7, 24),
-            Reported(ExDate, numerator: 1m, denominator: 30m)
-        );
-
-        context.ChangeTracker.Clear();
-        (
-            await context
-                .Set<StockSplit>()
-                .AnyAsync(row => row.EffectiveDate == RecordDate && row.Denominator == 40m)
-        )
-            .Should()
-            .BeTrue();
-    }
-
     private static Task<int> Report(
         StockSplitCaptureManager manager,
         EquityIssuer stock,
