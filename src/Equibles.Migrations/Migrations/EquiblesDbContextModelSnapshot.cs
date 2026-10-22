@@ -7030,7 +7030,11 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("FinancialConceptId", "PeriodEnd");
 
-                    b.HasIndex("EquityIssuerId", "FinancialConceptId", "PeriodEnd");
+                    b.HasIndex("EquityIssuerId", "FinancialConceptId", "PeriodEnd")
+                        .HasDatabaseName("IX_FinancialFact_IssuerConceptPeriod")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("EquityIssuerId", "FinancialConceptId", "PeriodEnd"), new[] { "PeriodStart", "PeriodType", "FiscalYear", "FiscalPeriod", "Value", "Unit", "FiledDate", "Form", "DimensionsKey", "Id" });
 
                     b.HasIndex("EquityIssuerId", "FiscalYear", "FiscalPeriod");
 
