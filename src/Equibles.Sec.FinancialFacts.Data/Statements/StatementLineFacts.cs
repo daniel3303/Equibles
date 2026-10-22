@@ -338,12 +338,15 @@ public static class StatementLineFacts
     /// (<see cref="MistaggedGrossProfitReplacement"/>). <paramref name="operatingCostsClaimant"/>
     /// is the line the issuer's operating costs continue (<see cref="OperatingCostsContinuation"/>):
     /// that line reads the operating costs where it has no fact, and their own line is omitted.
+    /// <paramref name="derivedOperatingIncomeRounding"/> is
+    /// <see cref="DerivedOperatingIncomeRounding"/> over the statement's fiscal year.
     /// </summary>
     public static (FinancialConceptAliases.ConceptRef Concept, FinancialFact Fact) PickConceptFact(
         StatementLine line,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
         IReadOnlyDictionary<Guid, FinancialFact> factByConceptId,
-        string operatingCostsClaimant = null
+        string operatingCostsClaimant = null,
+        decimal derivedOperatingIncomeRounding = 1m
     )
     {
         if (
@@ -361,7 +364,12 @@ public static class StatementLineFacts
             );
         if (line.Alias == GrossProfitMistag.GrossProfitAlias && picked.Fact != null)
             return
-                MistaggedGrossProfitReplacement(picked.Fact, conceptIdByKey, factByConceptId)
+                MistaggedGrossProfitReplacement(
+                    picked.Fact,
+                    conceptIdByKey,
+                    factByConceptId,
+                    derivedOperatingIncomeRounding
+                )
                     is { } replaced
                 ? (picked.Concept, replaced)
                 : picked;
@@ -407,13 +415,14 @@ public static class StatementLineFacts
     /// What a statement shows instead of <paramref name="grossProfit"/> when that fact holds the
     /// period's operating income (<see cref="GrossProfitMistag"/>): Revenue − Cost of Revenue over
     /// the same exact span and unit, derived (no form or accession) and filed with its later
-    /// input. Null when the line keeps its fact. A statement reads one fiscal-year stamp, whose
-    /// year is that year's own filing, so its derived quarters inherit no later rounding.
+    /// input. Null when the line keeps its fact. A derived operating income matches within
+    /// <paramref name="derivedOperatingIncomeRounding"/>, the rounding of what it subtracts.
     /// </summary>
     public static FinancialFact MistaggedGrossProfitReplacement(
         FinancialFact grossProfit,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
-        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId,
+        decimal derivedOperatingIncomeRounding = 1m
     )
     {
         var income = PickAliasFact(
@@ -439,7 +448,12 @@ public static class StatementLineFacts
             return null;
 
         var derived = revenue.Value - cost.Value;
-        if (!GrossProfitMistag.IsOperatingIncome(grossProfit.Value, income.Value, derived))
+        var rounding = StatementQuarterDerivation.IsDerived(income)
+            ? derivedOperatingIncomeRounding
+            : 1m;
+        if (
+            !GrossProfitMistag.IsOperatingIncome(grossProfit.Value, income.Value, derived, rounding)
+        )
             return null;
 
         var replacement = grossProfit.Restamped(grossProfit.FiscalYear, grossProfit.FiscalPeriod);
@@ -459,11 +473,64 @@ public static class StatementLineFacts
     public static bool ReplacesMistaggedGrossProfit(
         StatementLine line,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
-        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId,
+        decimal derivedOperatingIncomeRounding = 1m
     ) =>
         line.Alias == GrossProfitMistag.GrossProfitAlias
         && PickVariant(line.Concepts, conceptIdByKey, factByConceptId).Fact is { } grossProfit
-        && MistaggedGrossProfitReplacement(grossProfit, conceptIdByKey, factByConceptId) != null;
+        && MistaggedGrossProfitReplacement(
+            grossProfit,
+            conceptIdByKey,
+            factByConceptId,
+            derivedOperatingIncomeRounding
+        ) != null;
+
+    /// <summary>
+    /// The rounding a derived operating-income quarter inherits: the coarsest of the longer spans
+    /// (year to date or full year) it subtracts, each read at its latest canonical filing. A
+    /// filing's facts carry the fiscal year they measure, so a later 10-K's rounded restatement
+    /// lands in the year too (EBS FY2016: 105,522,000, then 105,500,000).
+    /// </summary>
+    public static decimal DerivedOperatingIncomeRounding(
+        IEnumerable<FinancialFact> yearFacts,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey
+    )
+    {
+        if (
+            !FinancialConceptAliases.TryResolve(
+                GrossProfitMistag.OperatingIncomeAlias,
+                out var concepts
+            )
+        )
+            return 1m;
+        var conceptIds = concepts
+            .Select(c =>
+                conceptIdByKey.TryGetValue((c.Taxonomy, c.Tag), out var id) ? id : (Guid?)null
+            )
+            .OfType<Guid>()
+            .ToHashSet();
+        return yearFacts
+            .Where(f =>
+                conceptIds.Contains(f.FinancialConceptId)
+                && f.PeriodType == FactPeriodType.Duration
+                && f.DimensionsKey == ""
+                && !StatementQuarterDerivation.IsDerived(f)
+                && f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber
+                    is > FiscalPeriodSpanDays.MaxQuarter
+                        and <= FiscalPeriodSpanDays.MaxAnnual
+            )
+            .GroupBy(f => (f.FinancialConceptId, f.PeriodStart, f.PeriodEnd, f.Unit))
+            .Select(g =>
+                g.OrderBy(f => FinancialFactSourcePriority.Rank(f.Form))
+                    .ThenByDescending(f => f.FiledDate)
+                    .ThenByDescending(f => f.AccessionNumber, StringComparer.Ordinal)
+                    .First()
+                    .Value
+            )
+            .Select(GrossProfitMistag.RoundingUnit)
+            .DefaultIfEmpty(1m)
+            .Max();
+    }
 
     private static bool SameSpan(FinancialFact left, FinancialFact right) =>
         right != null

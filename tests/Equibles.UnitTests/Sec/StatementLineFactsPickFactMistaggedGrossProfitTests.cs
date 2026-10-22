@@ -145,6 +145,92 @@ public class StatementLineFactsPickFactMistaggedGrossProfitTests
         fact.Value.Should().Be(47_800_000m);
     }
 
+    // EBS FY2016 Q4: a later 10-K restated the year as 105.5M, so the operating income derived
+    // for the quarter is 50,907,000 against the tagged 50,929,000.
+    private static FinancialFact Q4(decimal value, bool derived = false)
+    {
+        var fact = Quarter(value, new DateOnly(2016, 10, 1));
+        fact.PeriodEnd = new DateOnly(2016, 12, 31);
+        fact.FiscalYear = 2016;
+        fact.FiscalPeriod = SecFiscalPeriod.Q4;
+        if (derived)
+        {
+            fact.Form = null;
+            fact.AccessionNumber = null;
+        }
+        return fact;
+    }
+
+    private static (
+        Dictionary<(FactTaxonomy, string), Guid> ConceptIdByKey,
+        Dictionary<Guid, FinancialFact> Facts
+    ) EbsFourthQuarter() =>
+        Period(
+            ("SalesRevenueNet", Q4(151_663_000m)),
+            ("CostOfGoodsAndServicesSold", Q4(33_274_000m, derived: true)),
+            ("GrossProfit", Q4(50_929_000m)),
+            ("OperatingIncomeLoss", Q4(50_907_000m, derived: true))
+        );
+
+    [Fact]
+    public void PickConceptFact_DerivedOperatingIncome_MatchesWithinTheYearsRounding()
+    {
+        var (conceptIdByKey, facts) = EbsFourthQuarter();
+
+        var (_, exact) = StatementLineFacts.PickConceptFact(
+            Line("gross-profit"),
+            conceptIdByKey,
+            facts
+        );
+        var (_, rounded) = StatementLineFacts.PickConceptFact(
+            Line("gross-profit"),
+            conceptIdByKey,
+            facts,
+            derivedOperatingIncomeRounding: 100_000m
+        );
+
+        exact.Value.Should().Be(50_929_000m);
+        rounded.Value.Should().Be(118_389_000m);
+    }
+
+    [Fact]
+    public void DerivedOperatingIncomeRounding_IsTheLatestLongerSpansCoarsestRounding()
+    {
+        var conceptIdByKey = new Dictionary<(FactTaxonomy, string), Guid>
+        {
+            [(FactTaxonomy.UsGaap, "OperatingIncomeLoss")] = Guid.NewGuid(),
+        };
+        FinancialFact Span(DateOnly end, decimal value, DateOnly filed)
+        {
+            var fact = Quarter(value, new DateOnly(2016, 1, 1));
+            fact.FinancialConceptId = conceptIdByKey[(FactTaxonomy.UsGaap, "OperatingIncomeLoss")];
+            fact.PeriodEnd = end;
+            fact.FiledDate = filed;
+            return fact;
+        }
+
+        StatementLineFacts
+            .DerivedOperatingIncomeRounding(
+                [
+                    Span(new DateOnly(2016, 12, 31), 105_522_000m, new DateOnly(2017, 2, 28)),
+                    Span(new DateOnly(2016, 12, 31), 105_500_000m, new DateOnly(2019, 2, 22)),
+                    Span(new DateOnly(2016, 9, 30), 54_593_000m, new DateOnly(2016, 11, 9)),
+                    // A discrete quarter is what gets derived, never an input.
+                    Span(new DateOnly(2016, 3, 31), 21_000_000m, new DateOnly(2017, 5, 5)),
+                ],
+                conceptIdByKey
+            )
+            .Should()
+            .Be(100_000m);
+        StatementLineFacts
+            .DerivedOperatingIncomeRounding(
+                [Span(new DateOnly(2016, 12, 31), 105_522_000m, new DateOnly(2017, 2, 28))],
+                conceptIdByKey
+            )
+            .Should()
+            .Be(1_000m);
+    }
+
     // EBS FY2025: only OperatingCostsAndExpenses is tagged, and its history proves it the
     // operating-expenses line.
     [Fact]

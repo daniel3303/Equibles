@@ -262,6 +262,11 @@ public class FinancialStatementTools
                 .AppendDerived(facts, rejectNegativeConceptIds)
                 .ToList();
         }
+        // A derived operating-income quarter is only as precise as the spans it subtracts.
+        var derivedOperatingIncomeRounding = StatementLineFacts.DerivedOperatingIncomeRounding(
+            facts,
+            conceptIdByKey
+        );
         if (balanceSheetDate == null)
             facts = facts.Where(f => f.FiscalPeriod == selectedPeriod).ToList();
 
@@ -306,7 +311,8 @@ public class FinancialStatementTools
                 line,
                 conceptIdByKey,
                 latestByConcept,
-                operatingCostsClaimant
+                operatingCostsClaimant,
+                derivedOperatingIncomeRounding
             );
             return fact != null
                 && FactSplitBasis.Classify(reportedConcept, fact.Unit) != FactSplitKind.None;
@@ -326,7 +332,8 @@ public class FinancialStatementTools
             conceptIdByKey,
             latestByConcept,
             splits,
-            operatingCostsClaimant
+            operatingCostsClaimant,
+            derivedOperatingIncomeRounding
         );
         return (
             table,
@@ -388,7 +395,8 @@ public class FinancialStatementTools
         Dictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
         Dictionary<Guid, FinancialFact> latestByConcept,
         IReadOnlyList<StockSplit> splits,
-        string operatingCostsClaimant
+        string operatingCostsClaimant,
+        decimal derivedOperatingIncomeRounding
     )
     {
         var result = MarkdownTable.Start(
@@ -412,7 +420,8 @@ public class FinancialStatementTools
                 line,
                 conceptIdByKey,
                 latestByConcept,
-                operatingCostsClaimant
+                operatingCostsClaimant,
+                derivedOperatingIncomeRounding
             );
             if (fact == null)
             {
@@ -436,7 +445,8 @@ public class FinancialStatementTools
             var replaced = StatementLineFacts.ReplacesMistaggedGrossProfit(
                 line,
                 conceptIdByKey,
-                latestByConcept
+                latestByConcept,
+                derivedOperatingIncomeRounding
             );
             grossProfitReplaced |= replaced;
             var basis =
