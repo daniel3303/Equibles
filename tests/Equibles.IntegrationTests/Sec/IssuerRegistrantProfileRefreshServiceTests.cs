@@ -154,6 +154,31 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
             .BeNull();
     }
 
+    [Fact]
+    public async Task FailedArchiveRead_DatesTheReadSoTheIssuerDoesNotLeadTheQueue()
+    {
+        var issuer = await SeedIssuer("0000000701", readOn: null);
+        var header = Header("0000000701", sic: "");
+        header.HasArchivedFilings = true;
+        _edgar.GetCompanyMetadata("0000000701").Returns(header);
+        _edgar
+            .GetCompanyFilings("0000000701")
+            .ThrowsAsync(new InvalidOperationException("malformed archive page"));
+
+        await Sut().Run(10, 10, CancellationToken.None);
+
+        (await Stored(issuer.Id))
+            .Should()
+            .BeEquivalentTo(
+                new
+                {
+                    StateOfIncorporation = "DE",
+                    BdcHistoryReadOn = (DateOnly?)null,
+                    SecRegistrantProfileReadOn = (DateOnly?)Today,
+                }
+            );
+    }
+
     private IssuerRegistrantProfileRefreshService Sut()
     {
         var repository = new EquityIssuerRepository(DbContext);

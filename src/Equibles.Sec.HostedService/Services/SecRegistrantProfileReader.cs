@@ -13,8 +13,9 @@ namespace Equibles.Sec.HostedService.Services;
 /// company election or withdrawal. The recent list comes with the submissions header at no
 /// extra cost. A filer EDGAR never classified by industry (no SIC), whose recent list shows no
 /// election, has its archived pages read once for the election forms; SIC only chooses where
-/// to look, the filing alone decides. Until those pages are read the profile is stored without
-/// its read date, so it stays due.
+/// to look, the filing alone decides. Until those pages are requested the profile is stored
+/// without its read date, so it stays due; a failed request still dates the read, so a broken
+/// archive cannot lead the refresh queue every cycle, and the filing scraper retries it.
 /// </summary>
 [Service]
 public class SecRegistrantProfileReader(
@@ -34,7 +35,7 @@ public class SecRegistrantProfileReader(
         var election = metadata.BdcElectionFiledOn;
         var withdrawal = metadata.BdcWithdrawalFiledOn;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        // Recorded once: rewriting the date every read would save every filer every day.
+        // The history date is recorded once: rewriting it every read would save every filer daily.
         DateOnly? historyReadOn =
             metadata.HasArchivedFilings || company.BdcHistoryReadOn != null ? null : today;
         var archiveDue =
@@ -47,13 +48,13 @@ public class SecRegistrantProfileReader(
         if (archiveDue && mayReadArchive)
         {
             archiveRequested = true;
+            archiveDue = false;
             try
             {
                 var history = await secEdgarClient.GetCompanyFilings(company.Cik);
                 election = SecRegistrantFilings.LatestBdcElection(history);
                 withdrawal = SecRegistrantFilings.LatestBdcWithdrawal(history);
                 historyReadOn = today;
-                archiveDue = false;
             }
             catch (Exception ex)
             {

@@ -81,6 +81,8 @@ public class DocumentScraperProcessCompanyScopeTests
         // dep (SetCusip outbox event) the fiscal-year path never uses.
         services.AddSingleton(Substitute.For<IBus>());
         services.AddScoped<EquityIdentityManager>();
+        services.AddScoped<SecRegistrantProfileReader>();
+        services.AddLogging();
         services.AddSingleton(_secEdgarClient);
         services.AddSingleton(_persistence);
         var provider = services.BuildServiceProvider();

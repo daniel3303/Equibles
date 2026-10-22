@@ -71,6 +71,8 @@ public class DocumentScraperUpdateCompanyMetadataErrorIsolationTests
         services.AddScoped<DocumentRepository>();
         services.AddSingleton(Substitute.For<IBus>());
         services.AddScoped<EquityIdentityManager>();
+        services.AddScoped<SecRegistrantProfileReader>();
+        services.AddLogging();
         services.AddSingleton(secEdgarClient);
         services.AddSingleton(Substitute.For<IDocumentPersistenceService>());
         var provider = services.BuildServiceProvider();

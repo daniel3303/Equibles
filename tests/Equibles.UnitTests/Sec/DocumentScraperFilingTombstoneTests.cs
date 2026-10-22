@@ -119,6 +119,7 @@ public class DocumentScraperFilingTombstoneTests
         services.AddScoped<FailedFilingIngestRepository>();
         services.AddSingleton(Substitute.For<IBus>());
         services.AddScoped<EquityIdentityManager>();
+        services.AddScoped<SecRegistrantProfileReader>();
         services.AddSingleton(secEdgar);
         services.AddSingleton(persistence);
         services.AddSingleton(normalizer);
