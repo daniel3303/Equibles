@@ -17,7 +17,8 @@ namespace Equibles.IntegrationTests.Fred;
 /// <c>Import</c>'s per-series catch arms: with an empty DB every curated series
 /// resolves no stored metadata and calls the FRED client, so a throwing client
 /// drives the HttpRequestException (skip) and generic-Exception (report) arms —
-/// one bad series can never abort the whole curated sweep.
+/// one bad series can never abort the whole curated sweep. Only a FRED outage page
+/// (<c>FredUnavailableException</c>) aborts it, pinned in <see cref="FredImportServiceTests"/>.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FredImportServiceImportCatchTests : ParadeDbMcpTestBase

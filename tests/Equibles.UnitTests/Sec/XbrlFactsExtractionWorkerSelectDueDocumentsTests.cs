@@ -6,9 +6,10 @@ using Equibles.Sec.FinancialFacts.HostedService.Services;
 namespace Equibles.UnitTests.Sec;
 
 /// <summary>
-/// The version-9 replay re-reads only the documents a Company Facts gap can still affect: 10-Q/10-K
-/// filings filed since the replay window opened or newer than their issuer's Company Facts
-/// watermark. Everything else stamped at the floor stays put instead of re-draining the corpus.
+/// The targeted replay re-reads only the documents a Company Facts gap or a cover statement can
+/// still affect: 10-Q/10-K filings filed since the replay window opened or newer than their
+/// issuer's Company Facts watermark. Everything else stamped at the floor stays put instead of
+/// re-draining the corpus.
 /// </summary>
 public class XbrlFactsExtractionWorkerSelectDueDocumentsTests
 {
@@ -22,6 +23,9 @@ public class XbrlFactsExtractionWorkerSelectDueDocumentsTests
     [InlineData(XbrlFactExtractionService.TargetedReplayFloor, "TenK", "2025-12-01", true)]
     [InlineData(XbrlFactExtractionService.TargetedReplayFloor, "EightK", "2026-07-29", false)]
     [InlineData(XbrlFactExtractionService.TargetedReplayFloor, "SixK", "2026-07-29", false)]
+    // A recent quarterly read by the previous version rejoins, so its cover statement is recorded.
+    [InlineData(XbrlFactExtractionService.CurrentVersion - 1, "TenQ", "2026-07-29", true)]
+    [InlineData(XbrlFactExtractionService.CurrentVersion - 1, "EightK", "2026-07-29", false)]
     [InlineData(XbrlFactExtractionService.CurrentVersion, "TenQ", "2026-07-29", false)]
     public void SelectDueDocuments_PicksOnlyTheTargetedReplay(
         int version,

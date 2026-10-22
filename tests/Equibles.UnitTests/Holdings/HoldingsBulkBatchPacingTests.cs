@@ -87,6 +87,7 @@ public class HoldingsBulkBatchPacingTests
 
         result.Should().Be(!queueFails);
         importer.ReceivedPause.Should().Be(queueFails ? null : TimeSpan.FromMilliseconds(250));
+        importer.ReceivedFileName.Should().Be(queueFails ? null : "2026q1_form13f.zip");
         await replay.Received(1).QueueRealtimeReplay(Arg.Any<CancellationToken>());
     }
 
@@ -154,14 +155,18 @@ public class HoldingsBulkBatchPacingTests
 
         public TimeSpan? ReceivedPause { get; private set; }
 
+        public string ReceivedFileName { get; private set; }
+
         public override Task<ImportResult> ImportDataSet(
             ZipArchive archive,
             DateOnly minReportDate,
             TimeSpan batchPause,
+            string dataSetFileName,
             CancellationToken cancellationToken
         )
         {
             ReceivedPause = batchPause;
+            ReceivedFileName = dataSetFileName;
             return Task.FromResult(new ImportResult(0, IsComplete: false));
         }
     }

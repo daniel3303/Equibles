@@ -120,6 +120,66 @@ public class SplitShareCountEvidenceTests
     }
 
     [Fact]
+    public void Evaluate_PriceFactorsBetweenUnchangedCounts_ContradictsEach()
+    {
+        // Aimco's 2020 separation: a special-dividend factor and the spin-off factor two weeks apart,
+        // with the cover-page count unchanged across both.
+        var dividendFactor = Split(new DateOnly(2020, 12, 1), 1m, 1.23821m);
+        var spinOff = Split(new DateOnly(2020, 12, 15), 9295m, 1000m);
+        var counts = new[]
+        {
+            Count(new DateOnly(2020, 10, 28), new DateOnly(2020, 11, 2), 148_865_947m),
+            Count(new DateOnly(2021, 3, 10), new DateOnly(2021, 3, 12), 149_208_479m),
+        };
+
+        var verdicts = SplitShareCountEvidence.Evaluate([dividendFactor, spinOff], counts);
+
+        verdicts
+            .Should()
+            .OnlyContain(verdict =>
+                verdict.Evidence == StockSplitShareCountEvidence.Contradicted
+                && verdict.AsOf == new DateOnly(2021, 3, 10)
+            );
+    }
+
+    [Fact]
+    public void Evaluate_UnchangedCountsWhereSomeEventsCancel_DecideNothing()
+    {
+        // The 2:1 and 1:2 could be real and leave the count unchanged, so the factor is not proven.
+        var forward = Split(new DateOnly(2024, 3, 1), 2m, 1m);
+        var factor = Split(new DateOnly(2024, 3, 20), 1973m, 1000m);
+        var reverse = Split(new DateOnly(2024, 4, 10), 1m, 2m);
+        var counts = new[]
+        {
+            Count(new DateOnly(2024, 1, 31), new DateOnly(2024, 2, 5), 100m),
+            Count(new DateOnly(2024, 5, 1), new DateOnly(2024, 5, 6), 100m),
+        };
+
+        SplitShareCountEvidence
+            .Evaluate([forward, factor, reverse], counts)
+            .Should()
+            .OnlyContain(verdict => verdict.Evidence == null);
+    }
+
+    [Fact]
+    public void Evaluate_SeveralEventsBetweenCountsThatMoved_DecideNothing()
+    {
+        // Two 1:10 reverse splits and a count down a hundredfold: which rows moved it is not judged.
+        var first = Split(new DateOnly(2025, 3, 3), 1m, 10m);
+        var second = Split(new DateOnly(2025, 5, 5), 1m, 10m);
+        var counts = new[]
+        {
+            Count(new DateOnly(2025, 1, 31), new DateOnly(2025, 2, 5), 50_000_000m),
+            Count(new DateOnly(2025, 7, 31), new DateOnly(2025, 8, 5), 500_000m),
+        };
+
+        SplitShareCountEvidence
+            .Evaluate([first, second], counts)
+            .Should()
+            .OnlyContain(verdict => verdict.Evidence == null);
+    }
+
+    [Fact]
     public void Evaluate_ARatioOnTheBasisOfOne_CannotBeToldFromNoChange()
     {
         var stockDividend = Split(new DateOnly(2026, 5, 13), 101m, 100m);

@@ -144,6 +144,33 @@ public class StockPriceToolsDailyBarReleaseTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetStockPrices_WeeklyRangeReachingTheHeldSession_RollsUpOnlyReleasedSessions()
+    {
+        await Seed("WKL");
+
+        var result = await Sut(Hold)
+            .GetStockPrices("WKL", "2026-07-27", "2026-08-31", interval: "weekly");
+
+        // Week of 2026-07-27: the held Friday close of 120.00 never reaches the bar.
+        result.Should().StartWith("Weekly prices for WKL");
+        result
+            .Should()
+            .Contain(
+                "| 2026-07-30* | 2026-07-27 | 100.00 | 105.00 | 100.00 | 105.00 | 2,000,000 |"
+            );
+        result.Should().NotContain("120.00");
+        result.TrimEnd().Should().EndWith(HoldNote);
+    }
+
+    [Fact]
+    public async Task GetStockPrices_UnknownInterval_IsRefused()
+    {
+        var result = await Sut(null).GetStockPrices("ANY", interval: "hourly");
+
+        result.Should().Be("Invalid interval 'hourly'. Use daily, weekly or monthly.");
+    }
+
+    [Fact]
     public async Task TechnicalIndicators_RangeReachingTheHeldSession_EndBeforeItWithTheNote()
     {
         await Seed("TEC");

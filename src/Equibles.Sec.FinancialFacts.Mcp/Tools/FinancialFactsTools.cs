@@ -149,10 +149,20 @@ public class FinancialFactsTools
                 if (conceptPriority.Count == 0)
                     return $"No '{concept}' data has been ingested for {EquityListingSymbol.Display(stock)}.";
 
-                var facts = await _financialFactRepository
-                    .GetConsolidatedByIssuerId(stock.Id)
+                var issuerFacts = _financialFactRepository.GetConsolidatedByIssuerId(stock.Id);
+                var facts = await issuerFacts
                     .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
                     .ToListAsync();
+                if (BankTopLine.IsRevenue(conceptRefs))
+                {
+                    var bankComponents = await LoadBankTopLineComponents(issuerFacts);
+                    (facts, conceptPriority) = BankTopLine.Fold(
+                        facts,
+                        bankComponents.NetInterestIncome,
+                        bankComponents.NoninterestIncome,
+                        conceptPriority
+                    );
+                }
                 var companyLatestPeriodEnd = await _financialFactRepository
                     .GetConsolidatedByIssuerId(stock.Id)
                     .MaxAsync(f => (DateOnly?)f.PeriodEnd);
@@ -319,6 +329,18 @@ public class FinancialFactsTools
                 }
 
                 var stockIds = stocks.Select(s => s.Id).ToList();
+                // The revenue alias also loads a bank's net interest and noninterest income,
+                // which stand in for a missing or partial revenue line (BankTopLine).
+                var bankComponentIds = BankTopLine.IsRevenue(conceptRefs)
+                    ? await ResolveBankTopLineComponentIds()
+                    : (
+                        NetInterestIncome: new HashSet<Guid>(),
+                        NoninterestIncome: new HashSet<Guid>()
+                    );
+                var loadedConceptIds = conceptPriority
+                    .Keys.Concat(bankComponentIds.NetInterestIncome)
+                    .Concat(bankComponentIds.NoninterestIncome)
+                    .ToList();
                 // A Q4 request must also load the year's fp=FY rows: filers whose
                 // Company Facts carry Q4 frames report the discrete fourth quarter
                 // under the FullYear stamp (see ReportedQuarterPromotion).
@@ -331,7 +353,7 @@ public class FinancialFactsTools
                             f.FiscalPeriod == period
                             || (includeFullYearForQ4 && f.FiscalPeriod == SecFiscalPeriod.FullYear)
                         )
-                        && conceptPriority.Keys.Contains(f.FinancialConceptId)
+                        && loadedConceptIds.Contains(f.FinancialConceptId)
                     )
                     .ToListAsync();
 
@@ -361,11 +383,29 @@ public class FinancialFactsTools
                 var bestByStock = facts
                     .GroupBy(f => f.EquityIssuerId)
                     .Select(g =>
-                        (
+                    {
+                        var (candidates, priority) = BankTopLine.Fold(
+                            g.Where(f => conceptPriority.ContainsKey(f.FinancialConceptId))
+                                .ToList(),
+                            g.Where(f =>
+                                    bankComponentIds.NetInterestIncome.Contains(
+                                        f.FinancialConceptId
+                                    )
+                                )
+                                .ToList(),
+                            g.Where(f =>
+                                    bankComponentIds.NoninterestIncome.Contains(
+                                        f.FinancialConceptId
+                                    )
+                                )
+                                .ToList(),
+                            conceptPriority
+                        );
+                        return (
                             StockId: g.Key,
-                            Fact: FinancialFactSeriesShaper.PickBestFact(g, conceptPriority)
-                        )
-                    )
+                            Fact: FinancialFactSeriesShaper.PickBestFact(candidates, priority)
+                        );
+                    })
                     .Where(item => item.Fact != null)
                     .ToDictionary(item => item.StockId, item => item.Fact);
 
@@ -729,6 +769,39 @@ public class FinancialFactsTools
             result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
 
         return result.ToString();
+    }
+
+    // A bank's net interest and noninterest income facts, which the revenue alias folds in where
+    // its revenue line is missing or partial (BankTopLine).
+    private async Task<(
+        List<FinancialFact> NetInterestIncome,
+        List<FinancialFact> NoninterestIncome
+    )> LoadBankTopLineComponents(IQueryable<FinancialFact> issuerFacts)
+    {
+        var (netInterestIds, noninterestIds) = await ResolveBankTopLineComponentIds();
+        var componentIds = netInterestIds.Concat(noninterestIds).ToList();
+        var facts =
+            componentIds.Count == 0
+                ? []
+                : await issuerFacts
+                    .Where(f => componentIds.Contains(f.FinancialConceptId))
+                    .ToListAsync();
+        return (
+            facts.Where(f => netInterestIds.Contains(f.FinancialConceptId)).ToList(),
+            facts.Where(f => noninterestIds.Contains(f.FinancialConceptId)).ToList()
+        );
+    }
+
+    private async Task<(
+        HashSet<Guid> NetInterestIncome,
+        HashSet<Guid> NoninterestIncome
+    )> ResolveBankTopLineComponentIds()
+    {
+        FinancialConceptAliases.TryResolve(BankTopLine.NetInterestIncomeAlias, out var netInterest);
+        FinancialConceptAliases.TryResolve(BankTopLine.NoninterestIncomeAlias, out var noninterest);
+        var (netInterestPriority, _) = await ResolveConcepts(netInterest);
+        var (noninterestPriority, _) = await ResolveConcepts(noninterest);
+        return ([.. netInterestPriority.Keys], [.. noninterestPriority.Keys]);
     }
 
     // The alias's ingested concepts: their pick priority, and the variant each was reported

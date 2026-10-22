@@ -12,6 +12,12 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
     public virtual Task QueueRealtimeReplay(CancellationToken cancellationToken) =>
         QueueMarker(ProcessedDataSet.RealtimeReplayPendingFileName, cancellationToken);
 
+    // When the pending bulk replay first changed holdings; null while none is pending.
+    public Task<DateTime?> GetRealtimeReplayQueuedAt(CancellationToken cancellationToken) =>
+        GetByFileName(ProcessedDataSet.RealtimeReplayPendingFileName)
+            .Select(row => (DateTime?)row.CreationTime)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task QueueCoverageAudit(CancellationToken cancellationToken) =>
         QueueMarker(ProcessedDataSet.CoverageAuditPendingFileName, cancellationToken);
 
@@ -42,6 +48,38 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
             """,
             cancellationToken
         );
+
+    /// <summary>
+    /// The accessions an interrupted import of this archive committed. Rows written under another
+    /// archive or parser version are deleted, since they no longer describe what is stored.
+    /// </summary>
+    public async Task<HashSet<string>> GetCommittedAccessions(
+        string fileName,
+        int parserVersion,
+        string archiveFingerprint,
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = DbContext
+            .Set<ProcessedDataSetAccession>()
+            .Where(row => row.FileName == fileName);
+        await rows.Where(row =>
+                row.ParserVersion != parserVersion || row.ArchiveFingerprint != archiveFingerprint
+            )
+            .ExecuteDeleteAsync(cancellationToken);
+        return (
+            await rows.Select(row => row.AccessionNumber).ToListAsync(cancellationToken)
+        ).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public Task ClearCommittedAccessions(string fileName, CancellationToken cancellationToken) =>
+        DbContext
+            .Set<ProcessedDataSetAccession>()
+            .Where(row => row.FileName == fileName)
+            .ExecuteDeleteAsync(cancellationToken);
+
+    public Task ClearAllCommittedAccessions(CancellationToken cancellationToken) =>
+        DbContext.Set<ProcessedDataSetAccession>().ExecuteDeleteAsync(cancellationToken);
 
     public IQueryable<ProcessedDataSet> GetByFileName(string fileName)
     {

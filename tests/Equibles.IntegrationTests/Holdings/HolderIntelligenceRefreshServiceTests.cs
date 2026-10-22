@@ -67,6 +67,7 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
         services.AddScoped<FinancialFactRepository>();
         services.AddScoped<FinancialConceptRepository>();
         services.AddScoped<SharesOutstandingAsOfReader>();
+        services.AddScoped<ProcessedDataSetRepository>();
         services.AddHolderBenchmarks();
         services.AddScoped<HolderIntelligenceRefreshService>();
         _provider = services.BuildServiceProvider();
@@ -845,6 +846,47 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DrainOnce_WaitsWhileABulkReplayIsPending()
+    {
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                ReplayPending(DateTime.UtcNow.AddHours(-30))
+            )
+        );
+
+        await Drain().DrainOnce(Today, CancellationToken.None);
+
+        await using var read = _fixture.CreateDbContext();
+        var state = await read.Set<HolderIntelligenceQuarterState>()
+            .SingleAsync(s => s.ReportDate == Q1);
+        state.DirtyAt.Should().NotBeNull("the replay restamps the quarter until it finishes");
+        state.ComputedAt.Should().BeNull();
+        (await read.Set<HolderQuarterlyMetrics>().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DrainOnce_StopsWaitingForAReplayQueuedPastTheHold()
+    {
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                ReplayPending(DateTime.UtcNow.AddDays(-5))
+            )
+        );
+
+        await Drain().DrainOnce(Today, CancellationToken.None);
+
+        await using var read = _fixture.CreateDbContext();
+        var state = await read.Set<HolderIntelligenceQuarterState>()
+            .SingleAsync(s => s.ReportDate == Q1);
+        state.DirtyAt.Should().BeNull("a stalled replay no longer keeps the metrics stale");
+        state.ComputedAt.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task DrainOnce_AQuarterStampedDuringTheRebuildStaysDirty()
     {
         await Seed(seed =>
@@ -1475,6 +1517,13 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
             .ServiceProvider.GetRequiredService<HolderIntelligenceRefreshService>()
             .RebuildQuarter(reportDate, Today, CancellationToken.None);
     }
+
+    private static ProcessedDataSet ReplayPending(DateTime queuedAt) =>
+        new()
+        {
+            FileName = ProcessedDataSet.RealtimeReplayPendingFileName,
+            CreationTime = queuedAt,
+        };
 
     private TestDrainWorker Drain() =>
         new(_provider.GetRequiredService<IServiceScopeFactory>(), beforeRebuild: null);

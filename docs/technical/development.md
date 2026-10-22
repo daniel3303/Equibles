@@ -80,7 +80,7 @@ dotnet test tests/Equibles.SmokeTests/Equibles.SmokeTests.csproj --filter "Categ
 
 - xUnit + FluentAssertions + NSubstitute (the standard repo stack).
 - Naming: `MethodName_Condition_ExpectedResult`; class `{Subject}Tests`; SUT field `_sut`.
-- Integration tests use Testcontainers (`paradedb/paradedb:latest`) so they need Docker running.
+- Integration tests use Testcontainers (`paradedb/paradedb:0.26.2-pg18`) so they need Docker running.
 - Coverage config in [`coverage.runsettings`](../../coverage.runsettings) — Cobertura output, excludes `Equibles.Migrations`.
 
 ## Pre-commit hooks

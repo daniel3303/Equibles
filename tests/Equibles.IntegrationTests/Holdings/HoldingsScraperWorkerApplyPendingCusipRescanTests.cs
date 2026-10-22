@@ -145,6 +145,36 @@ public class HoldingsScraperWorkerApplyPendingCusipRescanTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Apply_SentinelQueued_ClearsEveryResumeCheckpoint()
+    {
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<ProcessedDataSet>()
+                .Add(new ProcessedDataSet { FileName = ProcessedDataSet.RescanPendingFileName });
+            seed.Set<ProcessedDataSetAccession>()
+                .Add(
+                    new ProcessedDataSetAccession
+                    {
+                        FileName = "2024q4_form13f.zip",
+                        AccessionNumber = "0000000000-24-000001",
+                        ParserVersion = ProcessedDataSet.CurrentParserVersion,
+                        ArchiveFingerprint = "F",
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        await BuildWorker().ApplyPendingCusipRescan(CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<ProcessedDataSetAccession>().AnyAsync())
+            .Should()
+            .BeFalse(
+                "a checkpoint would keep its accessions under the mapping the rescan replaces"
+            );
+    }
+
+    [Fact]
     public async Task Apply_NoSentinel_IsNoOp()
     {
         await using (var seed = _fixture.CreateDbContext())

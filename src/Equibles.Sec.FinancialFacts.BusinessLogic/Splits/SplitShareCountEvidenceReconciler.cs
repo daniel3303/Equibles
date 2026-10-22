@@ -52,24 +52,7 @@ public class SplitShareCountEvidenceReconciler
                 .AsNoTracking()
                 .Where(split => batch.Contains(split.EquityIssuerId))
                 .ToListAsync(cancellationToken);
-            var counts = (
-                await _factRepository
-                    .GetConsolidatedByIssuerIds(batch)
-                    .Where(fact =>
-                        conceptIds.Contains(fact.FinancialConceptId) && fact.Unit == SharesUnit
-                    )
-                    .Select(fact => new
-                    {
-                        fact.EquityIssuerId,
-                        fact.PeriodEnd,
-                        fact.FiledDate,
-                        fact.Value,
-                    })
-                    .ToListAsync(cancellationToken)
-            ).ToLookup(
-                fact => fact.EquityIssuerId,
-                fact => new ShareCountObservation(fact.PeriodEnd, fact.FiledDate, fact.Value)
-            );
+            var counts = await CoverPageCounts(batch, conceptIds, cancellationToken);
             var now = DateTime.UtcNow;
             foreach (
                 var issuerSplits in splits
@@ -96,6 +79,104 @@ public class SplitShareCountEvidenceReconciler
             }
         }
         return new SplitShareCountEvidencePass(changed, failures);
+    }
+
+    // Each filing's cover-page count: its consolidated fact, or, when it states none, the sum of
+    // its per-class counts on one class-of-stock axis, each class once. Multi-class issuers state
+    // only the per-class counts; without their sum a spin-off factor at such an issuer has no
+    // witness and restates its share counts as if it were a split.
+    private async Task<ILookup<Guid, ShareCountObservation>> CoverPageCounts(
+        Guid[] issuerIds,
+        List<Guid> conceptIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var consolidated = await _factRepository
+            .GetConsolidatedByIssuerIds(issuerIds)
+            .Where(fact => conceptIds.Contains(fact.FinancialConceptId) && fact.Unit == SharesUnit)
+            .Select(fact => new
+            {
+                fact.EquityIssuerId,
+                fact.PeriodEnd,
+                fact.FiledDate,
+                fact.AccessionNumber,
+                fact.Value,
+            })
+            .ToListAsync(cancellationToken);
+        var perClass = await _factRepository
+            .GetByIssuerIds(issuerIds)
+            .Where(fact =>
+                conceptIds.Contains(fact.FinancialConceptId)
+                && fact.Unit == SharesUnit
+                && fact.Value >= 0
+                && fact.Dimensions.Count == 1
+            )
+            .SelectMany(
+                fact => fact.Dimensions,
+                (fact, dimension) =>
+                    new
+                    {
+                        fact.EquityIssuerId,
+                        fact.PeriodEnd,
+                        fact.FiledDate,
+                        fact.AccessionNumber,
+                        fact.Value,
+                        dimension.Axis,
+                        dimension.Member,
+                    }
+            )
+            .Where(fact => SharesOutstandingProvider.ClassOfStockAxes.Contains(fact.Axis))
+            .ToListAsync(cancellationToken);
+
+        var statedTotals = consolidated
+            .Select(fact => (fact.EquityIssuerId, fact.AccessionNumber, fact.PeriodEnd))
+            .ToHashSet();
+        var classSums = new List<(Guid EquityIssuerId, ShareCountObservation Count)>();
+        foreach (
+            var filing in perClass.GroupBy(fact =>
+                (fact.EquityIssuerId, fact.AccessionNumber, fact.Axis)
+            )
+        )
+        {
+            // The filing's latest date, and only when it states every class the filing names: a
+            // class stated only at another date would silently drop out of the total, the rule
+            // SharesOutstandingProvider applies to the same cover-page facts.
+            var asOf = filing.Max(fact => fact.PeriodEnd);
+            var current = filing.Where(fact => fact.PeriodEnd == asOf).ToList();
+            var members = current.Select(fact => fact.Member).ToHashSet(StringComparer.Ordinal);
+            // A non-class member makes the sum ambiguous: filers tag their only common class as
+            // us-gaap:CommonStockMember beside preferred or note members, so dropping it as a roll-up
+            // leaves an unchanged preferred count that would contradict a real split.
+            if (
+                filing.Any(fact => !members.Contains(fact.Member))
+                || members.Any(SharesOutstandingProvider.NonClassMembers.Contains)
+                || statedTotals.Contains(
+                    (filing.Key.EquityIssuerId, filing.Key.AccessionNumber, asOf)
+                )
+            )
+                continue;
+            classSums.Add(
+                (
+                    filing.Key.EquityIssuerId,
+                    new ShareCountObservation(
+                        asOf,
+                        current.Max(fact => fact.FiledDate),
+                        current
+                            .GroupBy(fact => fact.Member, StringComparer.Ordinal)
+                            .Sum(member => member.First().Value)
+                    )
+                )
+            );
+        }
+        return consolidated
+            .Select(fact =>
+                (
+                    fact.EquityIssuerId,
+                    Count: new ShareCountObservation(fact.PeriodEnd, fact.FiledDate, fact.Value)
+                )
+            )
+            .Concat(classSums)
+            .ToLookup(entry => entry.EquityIssuerId, entry => entry.Count);
     }
 
     private async Task<int> Record(

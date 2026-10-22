@@ -3,6 +3,7 @@ using Equibles.Data;
 using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,7 @@ namespace Equibles.Holdings.HostedService;
 /// Rebuilds every computable holder-intelligence quarter whose stamp is past the cooldown, oldest
 /// first, including quarters computed by an older calculation version. A stamp is cleared only
 /// while it still holds the value read before the rebuild, so a stamp written meanwhile survives.
+/// Waits while a 13F bulk replay is pending, for at most <see cref="ReplayHold"/>.
 /// </summary>
 public class HolderIntelligenceDrainWorker : BackgroundService
 {
@@ -21,6 +23,14 @@ public class HolderIntelligenceDrainWorker : BackgroundService
     protected virtual TimeSpan StartupDelay => TimeSpan.FromMinutes(2);
     protected virtual TimeSpan TickInterval => TimeSpan.FromMinutes(5);
     protected virtual TimeSpan Cooldown => HolderIntelligenceRefreshService.Cooldown;
+
+    // A bulk replay rewrites one archive after another for hours or days, and each archive stamps
+    // its quarters and, through the cost slots, every later one. Waiting rebuilds each quarter once
+    // after the pass instead of once per archive; past the hold a stalled replay stops keeping the
+    // metrics stale.
+    protected virtual TimeSpan ReplayHold => TimeSpan.FromDays(4);
+
+    private DateTime? _heldForReplayQueuedAt;
 
     public HolderIntelligenceDrainWorker(
         IServiceScopeFactory scopeFactory,
@@ -86,8 +96,32 @@ public class HolderIntelligenceDrainWorker : BackgroundService
         foreach (var reportDate in due)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (await WaitsForReplay(cancellationToken))
+                return;
             await DrainQuarter(reportDate, today, cancellationToken);
         }
+    }
+
+    // Checked before every quarter, since a tick that drains a long cascade outlasts the moment a
+    // replay starts.
+    private async Task<bool> WaitsForReplay(CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var queuedAt = await scope
+            .ServiceProvider.GetRequiredService<ProcessedDataSetRepository>()
+            .GetRealtimeReplayQueuedAt(cancellationToken);
+        if (queuedAt is not { } since || DateTime.UtcNow - since >= ReplayHold)
+        {
+            _heldForReplayQueuedAt = null;
+            return false;
+        }
+        if (_heldForReplayQueuedAt != since)
+            _logger.LogInformation(
+                "Holder intelligence drain waits for the 13F bulk replay queued at {QueuedAt:u}",
+                since
+            );
+        _heldForReplayQueuedAt = since;
+        return true;
     }
 
     private async Task DrainQuarter(

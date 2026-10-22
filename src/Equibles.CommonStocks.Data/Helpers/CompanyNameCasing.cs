@@ -4,11 +4,20 @@ using System.Text.RegularExpressions;
 namespace Equibles.CommonStocks.Data.Helpers;
 
 /// <summary>
-/// Display casing for a company name SEC states in capitals: an all-caps name is title-cased
-/// while abbreviations and Roman numerals stay upper case; a name with any lowercase is kept.
+/// Display name for a company name SEC states. The filing suffixes SEC appends to tell same-named
+/// registrants apart ("/DE/", "/ADR", "/CAN/", a bare trailing slash) are dropped first. Then an
+/// all-caps name is title-cased while abbreviations and Roman numerals stay upper case; a name
+/// with any lowercase keeps its casing.
 /// </summary>
 public static class CompanyNameCasing
 {
+    // A trailing state, country or filer-kind segment of two or three letters, a spelled-out
+    // jurisdiction, or a bare slash. A one-letter segment is a legal form ("A/S", "S/A") and stays.
+    private static readonly Regex FilingSuffixPattern = new(
+        @"\s*/\s*(?:[A-Z]{2,3}|CAYMAN(?:\s+ISLANDS)?|CANADA)?\s*/?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled
+    );
+
     private static readonly HashSet<string> UpperCaseAbbreviations = new(
         StringComparer.OrdinalIgnoreCase
     )
@@ -58,6 +67,8 @@ public static class CompanyNameCasing
         if (string.IsNullOrWhiteSpace(name))
             return name;
 
+        name = WithoutFilingSuffixes(name);
+
         if (name.Any(char.IsLower))
             return name;
 
@@ -77,5 +88,22 @@ public static class CompanyNameCasing
         }
 
         return string.Join(' ', words);
+    }
+
+    /// <summary>
+    /// The name without the filing suffixes SEC appends, keeping its casing. Suffixes stack
+    /// ("/OH/ /ADV"), so each is dropped in turn; a name that is only a suffix is kept.
+    /// </summary>
+    public static string WithoutFilingSuffixes(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return name;
+        while (true)
+        {
+            var trimmed = FilingSuffixPattern.Replace(name, string.Empty, 1);
+            if (trimmed.Length == name.Length || string.IsNullOrWhiteSpace(trimmed))
+                return name;
+            name = trimmed;
+        }
     }
 }

@@ -446,8 +446,6 @@ public class ChunkRepositoryRankedScopeTests(ParadeDbFixture fixture) : ParadeDb
         await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SET max_parallel_workers_per_gather=0";
-        await command.ExecuteNonQueryAsync();
         command.CommandText = "EXPLAIN " + capture.Scans[0];
         foreach (var parameter in capture.Parameters)
             command.Parameters.Add(parameter);
