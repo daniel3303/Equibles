@@ -331,7 +331,9 @@ public static class StatementLineFacts
 
     /// <summary>
     /// <see cref="PickFact"/> with the concept variant the fact was reported under, which decides
-    /// how the value is read (a cover-page count and a balance-sheet count share one line).
+    /// how the value is read (a cover-page count and a balance-sheet count share one line). The
+    /// revenue line reads a bank's net interest plus noninterest income where revenue is missing
+    /// or partial (<see cref="BankTopLine.PickForPeriod"/>); that sum has no concept variant.
     /// </summary>
     public static (FinancialConceptAliases.ConceptRef Concept, FinancialFact Fact) PickConceptFact(
         StatementLine line,
@@ -339,8 +341,62 @@ public static class StatementLineFacts
         IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
     )
     {
+        var picked = PickVariant(line.Concepts, conceptIdByKey, factByConceptId);
+        if (line.Alias != BankTopLine.RevenueAlias)
+            return picked;
+
+        var topLine = BankTopLine.PickForPeriod(
+            picked.Fact,
+            PickAliasFact(BankTopLine.NetInterestIncomeAlias, conceptIdByKey, factByConceptId),
+            PickAliasFact(BankTopLine.NoninterestIncomeAlias, conceptIdByKey, factByConceptId)
+        );
+        return ReferenceEquals(topLine, picked.Fact) ? picked : (null, topLine);
+    }
+
+    /// <summary>
+    /// True when the company reported one of the line's concepts in some period. The revenue line
+    /// also counts a bank that reported both net interest and noninterest income, which stand in
+    /// for it (<see cref="BankTopLine"/>).
+    /// </summary>
+    public static bool IsEverReported(
+        StatementLine line,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        IReadOnlySet<Guid> reportedConceptIds
+    )
+    {
+        bool Reported(IEnumerable<FinancialConceptAliases.ConceptRef> concepts) =>
+            concepts.Any(r =>
+                conceptIdByKey.TryGetValue((r.Taxonomy, r.Tag), out var id)
+                && reportedConceptIds.Contains(id)
+            );
+        bool AliasReported(string alias) =>
+            FinancialConceptAliases.TryResolve(alias, out var concepts) && Reported(concepts);
+
+        return Reported(line.Concepts)
+            || (
+                line.Alias == BankTopLine.RevenueAlias
+                && AliasReported(BankTopLine.NetInterestIncomeAlias)
+                && AliasReported(BankTopLine.NoninterestIncomeAlias)
+            );
+    }
+
+    private static FinancialFact PickAliasFact(
+        string alias,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+    ) =>
+        FinancialConceptAliases.TryResolve(alias, out var concepts)
+            ? PickVariant(concepts, conceptIdByKey, factByConceptId).Fact
+            : null;
+
+    private static (FinancialConceptAliases.ConceptRef Concept, FinancialFact Fact) PickVariant(
+        IReadOnlyList<FinancialConceptAliases.ConceptRef> concepts,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
+    )
+    {
         (FinancialConceptAliases.ConceptRef, FinancialFact) derivedFallback = (null, null);
-        foreach (var reference in line.Concepts)
+        foreach (var reference in concepts)
         {
             if (
                 conceptIdByKey.TryGetValue((reference.Taxonomy, reference.Tag), out var conceptId)

@@ -241,4 +241,61 @@ public class YahooPriceImportServiceSplitRestatementTests
             AdjustedClose = close,
             Volume = 1_000,
         };
+
+    // MGN's recorded serve around Yahoo's withdrawn 1:40: the zero-volume 8 September bar repeats
+    // the previous close on the executed 1:30 basis, so the bars before sit forty times above it.
+    private static List<HistoricalPrice> ServeApplyingWithdrawnRatio() =>
+        [
+            Bar(new DateOnly(2026, 9, 4), 133.2m, 120m, 2_247),
+            Bar(new DateOnly(2026, 9, 8), 3m, 3m, 0),
+            Bar(new DateOnly(2026, 9, 9), 10.38m, 8.28m, 9_597_620),
+        ];
+
+    [Fact]
+    public void ReverseSupersededSplits_ServeAppliedTheStaleRatio_PutsTheEarlierBarsBack()
+    {
+        var prices = ServeApplyingWithdrawnRatio();
+
+        var reversed = YahooPriceImportService.ReverseSupersededSplits(
+            prices,
+            [new SplitBasisDefinition(new DateOnly(2026, 9, 8), 1m, 40m)],
+            new DateOnly(2026, 10, 22)
+        );
+
+        reversed.Should().Be(1);
+        (prices[0].Open, prices[0].Close, prices[0].Volume).Should().Be((3.33m, 3m, 89_880L));
+        prices[1].Close.Should().Be(3m);
+        prices[2].Close.Should().Be(8.28m);
+    }
+
+    [Fact]
+    public void ReverseSupersededSplits_ServeNeverAppliedTheStaleRatio_TouchesNothing()
+    {
+        var prices = ServeApplyingWithdrawnRatio();
+        prices[0].Open = 3.33m;
+        prices[0].Close = 3m;
+
+        YahooPriceImportService
+            .ReverseSupersededSplits(
+                prices,
+                [new SplitBasisDefinition(new DateOnly(2026, 9, 8), 1m, 40m)],
+                new DateOnly(2026, 10, 22)
+            )
+            .Should()
+            .Be(0);
+        prices[0].Close.Should().Be(3m);
+        prices[0].Volume.Should().Be(2_247);
+    }
+
+    private static HistoricalPrice Bar(DateOnly date, decimal open, decimal close, long volume) =>
+        new()
+        {
+            Date = date,
+            Open = open,
+            High = Math.Max(open, close),
+            Low = Math.Min(open, close),
+            Close = close,
+            AdjustedClose = close,
+            Volume = volume,
+        };
 }

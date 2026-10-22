@@ -117,6 +117,179 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
         (await Reconciler().Reconcile(CancellationToken.None)).Changed.Should().Be(0);
     }
 
+    private async Task<FinancialConcept> SeedCoverConcept()
+    {
+        var cover = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.Dei,
+            Tag = "EntityCommonStockSharesOutstanding",
+            Label = "Entity Common Stock, Shares Outstanding",
+        };
+        DbContext.Add(cover);
+        await DbContext.SaveChangesAsync();
+        return cover;
+    }
+
+    private static FinancialFact ClassCount(
+        EquityIssuer issuer,
+        FinancialConcept cover,
+        DateOnly asOf,
+        DateOnly filed,
+        string member,
+        decimal shares
+    ) =>
+        new()
+        {
+            EquityIssuerId = issuer.Id,
+            FinancialConceptId = cover.Id,
+            Unit = "shares",
+            Value = shares,
+            PeriodType = FactPeriodType.Instant,
+            PeriodStart = asOf,
+            PeriodEnd = asOf,
+            FiscalYear = asOf.Year,
+            FiscalPeriod = SecFiscalPeriod.Q1,
+            Form = DocumentType.TenQ,
+            FiledDate = filed,
+            AccessionNumber = $"0001795250-{filed:yyMMdd}",
+            DimensionsKey = $"{member}@{asOf:yyyyMMdd}",
+            Dimensions =
+            [
+                new FinancialFactDimension
+                {
+                    Axis = "us-gaap:StatementClassOfStockAxis",
+                    Member = member,
+                },
+            ],
+        };
+
+    private static StockSplit ListedSplit(
+        EquityIssuer issuer,
+        string ticker,
+        DateOnly effective,
+        decimal numerator,
+        decimal denominator
+    ) =>
+        new()
+        {
+            EquityIssuerId = issuer.Id,
+            EquityListingId = issuer.Presentation.EquityListingId,
+            PriceSeriesTicker = ticker,
+            EffectiveDate = effective,
+            Numerator = numerator,
+            Denominator = denominator,
+            Source = StockSplitSource.Yahoo,
+        };
+
+    [Fact]
+    public async Task Reconcile_AMultiClassIssuer_IsJudgedOnItsPerClassCountSum()
+    {
+        // Dual-class filers state only per-class cover counts: Sphere's spin-off factor left both
+        // classes unchanged, Alphabet's 20:1 multiplied all three. The roll-up member on the axis
+        // must not be summed with the classes it totals.
+        var cover = await SeedCoverConcept();
+        var sphere = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SPHX");
+        var alphabet = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "GOOX");
+        DbContext.AddRange(sphere, alphabet);
+        await DbContext.SaveChangesAsync();
+
+        const string classA = "us-gaap:CommonClassAMember";
+        const string classB = "us-gaap:CommonClassBMember";
+        const string classC = "goog:CapitalClassCMember";
+        var spinOff = ListedSplit(sphere, "SPHX", new DateOnly(2023, 4, 21), 2165m, 1000m);
+        var twentyForOne = ListedSplit(alphabet, "GOOX", new DateOnly(2022, 7, 18), 20m, 1m);
+        DateOnly sphereBefore = new(2023, 1, 31),
+            sphereAfter = new(2023, 4, 28),
+            alphabetBefore = new(2022, 4, 19),
+            alphabetAfter = new(2022, 7, 19);
+        DateOnly sphereFiledBefore = new(2023, 2, 9),
+            sphereFiledAfter = new(2023, 5, 10),
+            alphabetFiledBefore = new(2022, 4, 27),
+            alphabetFiledAfter = new(2022, 7, 27);
+        DbContext.AddRange(
+            ClassCount(sphere, cover, sphereBefore, sphereFiledBefore, classA, 27_687_166m),
+            ClassCount(sphere, cover, sphereBefore, sphereFiledBefore, classB, 6_866_754m),
+            ClassCount(sphere, cover, sphereAfter, sphereFiledAfter, classA, 27_692_030m),
+            ClassCount(sphere, cover, sphereAfter, sphereFiledAfter, classB, 6_866_754m),
+            ClassCount(alphabet, cover, alphabetBefore, alphabetFiledBefore, classA, 300_754_904m),
+            ClassCount(alphabet, cover, alphabetBefore, alphabetFiledBefore, classB, 44_576_938m),
+            ClassCount(alphabet, cover, alphabetBefore, alphabetFiledBefore, classC, 315_639_479m),
+            ClassCount(
+                alphabet,
+                cover,
+                alphabetBefore,
+                alphabetFiledBefore,
+                "us-gaap:CommonStockMember",
+                660_971_321m
+            ),
+            ClassCount(alphabet, cover, alphabetAfter, alphabetFiledAfter, classA, 5_996_000_000m),
+            ClassCount(alphabet, cover, alphabetAfter, alphabetFiledAfter, classB, 883_000_000m),
+            ClassCount(alphabet, cover, alphabetAfter, alphabetFiledAfter, classC, 6_302_000_000m),
+            spinOff,
+            twentyForOne
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await Reconciler().Reconcile(CancellationToken.None);
+
+        var contradicted = await Stored(spinOff);
+        contradicted.ShareCountEvidence.Should().Be(StockSplitShareCountEvidence.Contradicted);
+        contradicted.ShareCountEvidenceAsOf.Should().Be(sphereAfter);
+        var confirmed = await Stored(twentyForOne);
+        confirmed.ShareCountEvidence.Should().Be(StockSplitShareCountEvidence.Confirmed);
+        confirmed.ShareCountEvidenceAsOf.Should().Be(alphabetAfter);
+    }
+
+    [Fact]
+    public async Task Reconcile_AFilingThatDatesOneClassElsewhere_IsNoWitness()
+    {
+        // The first post-split 10-Q tags Class B a year early: Class A alone would read as an
+        // unchanged count and contradict a real 2:1, so that filing is skipped for the next one.
+        var cover = await SeedCoverConcept();
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "DUAL");
+        DbContext.Add(issuer);
+        await DbContext.SaveChangesAsync();
+
+        const string classA = "us-gaap:CommonClassAMember";
+        const string classB = "us-gaap:CommonClassBMember";
+        var split = ListedSplit(issuer, "DUAL", new DateOnly(2024, 3, 15), 2m, 1m);
+        DateOnly filedBefore = new(2024, 2, 5),
+            filedMisdated = new(2024, 5, 6),
+            filedNext = new(2024, 8, 5);
+        DbContext.AddRange(
+            ClassCount(issuer, cover, new DateOnly(2024, 1, 31), filedBefore, classA, 50_000_000m),
+            ClassCount(issuer, cover, new DateOnly(2024, 1, 31), filedBefore, classB, 50_000_000m),
+            ClassCount(
+                issuer,
+                cover,
+                new DateOnly(2024, 4, 30),
+                filedMisdated,
+                classA,
+                100_000_000m
+            ),
+            ClassCount(
+                issuer,
+                cover,
+                new DateOnly(2023, 4, 30),
+                filedMisdated,
+                classB,
+                100_000_000m
+            ),
+            ClassCount(issuer, cover, new DateOnly(2024, 7, 31), filedNext, classA, 100_000_000m),
+            ClassCount(issuer, cover, new DateOnly(2024, 7, 31), filedNext, classB, 100_000_000m),
+            split
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await Reconciler().Reconcile(CancellationToken.None);
+
+        var judged = await Stored(split);
+        judged.ShareCountEvidence.Should().Be(StockSplitShareCountEvidence.Confirmed);
+        judged.ShareCountEvidenceAsOf.Should().Be(new DateOnly(2024, 7, 31));
+    }
+
     [Theory]
     [InlineData("ratio")]
     [InlineData("date")]

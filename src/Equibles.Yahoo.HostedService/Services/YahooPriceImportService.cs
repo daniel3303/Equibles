@@ -1462,6 +1462,7 @@ public class YahooPriceImportService
         string ticker,
         List<HistoricalPrice> prices,
         IReadOnlyCollection<SplitBasisDefinition> splits,
+        IReadOnlyCollection<SplitBasisDefinition> superseded,
         DateOnly today
     )
     {
@@ -1482,6 +1483,16 @@ public class YahooPriceImportService
                 boundary.Denominator
             );
             return false;
+        }
+
+        var reversed = ReverseSupersededSplits(prices, superseded, today);
+        if (reversed > 0)
+        {
+            _logger.LogWarning(
+                "Reversed {Count} split(s) in {Ticker}'s fetched history that a higher-precedence source defines differently",
+                reversed,
+                ticker
+            );
         }
 
         var restated = RestateHistoryAcrossKnownSplits(prices, splits, today);
@@ -1542,6 +1553,55 @@ public class YahooPriceImportService
         }
 
         return restated;
+    }
+
+    // Yahoo serves its history adjusted for every event it lists, including a definition the
+    // higher source revised (MGN's withdrawn 1:40 nine days before the executed 1:30). Where it
+    // applied one that never traded, the bars before its date sit the ratio's reciprocal away from
+    // the bars after, the inverse of an unadjusted split's jump; the segment before is put back by
+    // the ratio. Only that observed jump reverses anything, as a restatement never fires on the
+    // ratio alone: a stale event the serve did not apply is left as served.
+    internal static int ReverseSupersededSplits(
+        List<HistoricalPrice> prices,
+        IEnumerable<SplitBasisDefinition> superseded,
+        DateOnly today
+    )
+    {
+        var reversed = 0;
+        foreach (var split in superseded.OrderByDescending(split => split.EffectiveDate))
+        {
+            if (split.EffectiveDate > today || split.Numerator <= 0m || split.Denominator <= 0m)
+                continue;
+            var (closeBefore, closeAfter) = StraddlingCloses(prices, split.EffectiveDate);
+            if (
+                !IsSplitBoundaryDiscontinuous(
+                    closeAfter,
+                    closeBefore,
+                    split.Numerator,
+                    split.Denominator
+                )
+            )
+                continue;
+
+            var priceFactor = split.Numerator / split.Denominator;
+            var volumeFactor = split.Denominator / split.Numerator;
+            foreach (var price in prices)
+            {
+                if (price.Date >= split.EffectiveDate)
+                    continue;
+
+                price.Open = Math.Round(price.Open * priceFactor, 4);
+                price.High = Math.Round(price.High * priceFactor, 4);
+                price.Low = Math.Round(price.Low * priceFactor, 4);
+                price.Close = Math.Round(price.Close * priceFactor, 4);
+                price.AdjustedClose = Math.Round(price.AdjustedClose * priceFactor, 4);
+                price.Volume = (long)Math.Round(price.Volume * volumeFactor);
+            }
+
+            reversed++;
+        }
+
+        return reversed;
     }
 
     // The splits a replacement history can actually certify: the serve must reach the effective
@@ -1645,19 +1705,26 @@ public class YahooPriceImportService
         decimal denominator
     )
     {
-        var closeBefore = prices
-            .Where(price => price.Date < effectiveDate)
-            .OrderByDescending(price => price.Date)
-            .Select(price => (decimal?)price.Close)
-            .FirstOrDefault();
-        var closeAfter = prices
-            .Where(price => price.Date >= effectiveDate)
-            .OrderBy(price => price.Date)
-            .Select(price => (decimal?)price.Close)
-            .FirstOrDefault();
-
+        var (closeBefore, closeAfter) = StraddlingCloses(prices, effectiveDate);
         return IsSplitBoundaryDiscontinuous(closeBefore, closeAfter, numerator, denominator);
     }
+
+    private static (decimal? Before, decimal? After) StraddlingCloses(
+        IReadOnlyCollection<HistoricalPrice> prices,
+        DateOnly effectiveDate
+    ) =>
+        (
+            prices
+                .Where(price => price.Date < effectiveDate)
+                .OrderByDescending(price => price.Date)
+                .Select(price => (decimal?)price.Close)
+                .FirstOrDefault(),
+            prices
+                .Where(price => price.Date >= effectiveDate)
+                .OrderBy(price => price.Date)
+                .Select(price => (decimal?)price.Close)
+                .FirstOrDefault()
+        );
 
     internal static bool IsSplitBoundaryDiscontinuous(
         decimal? closeBefore,
@@ -1833,14 +1900,23 @@ public class YahooPriceImportService
                     target.Ticker,
                     capturedBoundaries,
                     seriesBoundaries,
-                    out var boundaries
+                    out var boundaries,
+                    out var superseded
                 )
             )
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return false;
             }
-            if (!TryPutHistoryOnSingleSplitBasis(target.Ticker, prices, boundaries, settledBefore))
+            if (
+                !TryPutHistoryOnSingleSplitBasis(
+                    target.Ticker,
+                    prices,
+                    boundaries,
+                    superseded,
+                    settledBefore
+                )
+            )
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return false;
@@ -1906,8 +1982,9 @@ public class YahooPriceImportService
     private bool TryResolveSplitBoundaries(
         string ticker,
         IReadOnlyCollection<SplitBasisDefinition> capturedBoundaries,
-        IEnumerable<SplitBasisDefinition> responseBoundaries,
-        out IReadOnlyList<SplitBasisDefinition> resolved
+        IReadOnlyCollection<SplitBasisDefinition> responseBoundaries,
+        out IReadOnlyList<SplitBasisDefinition> resolved,
+        out IReadOnlyList<SplitBasisDefinition> superseded
     )
     {
         // A higher-priority captured source can correct Yahoo's event metadata. Its locked
@@ -1916,10 +1993,20 @@ public class YahooPriceImportService
             .Where(boundary => boundary.Source > StockSplitSource.Yahoo)
             .Select(boundary => boundary.EffectiveDate)
             .ToHashSet();
+        // Yahoo can also keep a definition that source revised on another date; the reversal
+        // takes it back out of the serve, so it never restates or conflicts.
+        superseded = responseBoundaries
+            .Where(boundary =>
+                !correctedDates.Contains(boundary.EffectiveDate)
+                && IsRevisedByCapturedSource(boundary, capturedBoundaries)
+            )
+            .Distinct()
+            .ToList();
+        var stale = superseded;
         var candidates = capturedBoundaries
             .Concat(
                 responseBoundaries.Where(boundary =>
-                    !correctedDates.Contains(boundary.EffectiveDate)
+                    !correctedDates.Contains(boundary.EffectiveDate) && !stale.Contains(boundary)
                 )
             )
             .ToList();
@@ -1947,6 +2034,35 @@ public class YahooPriceImportService
 
         resolved = candidates.Distinct().OrderBy(boundary => boundary.EffectiveDate).ToList();
         return true;
+    }
+
+    // A response event inside a higher-precedence captured definition's same-event window, whose
+    // different ratio moves the share count the same way and no captured row states, is that
+    // event's stale definition (capture refuses it for the same reason).
+    private static bool IsRevisedByCapturedSource(
+        SplitBasisDefinition response,
+        IReadOnlyCollection<SplitBasisDefinition> capturedBoundaries
+    )
+    {
+        var sameEvent = capturedBoundaries
+            .Where(captured =>
+                Math.Abs(captured.EffectiveDate.DayNumber - response.EffectiveDate.DayNumber)
+                <= SplitEvents.SameEventWindowDays
+            )
+            .ToList();
+        return sameEvent.Any(captured =>
+                captured.Source > response.Source
+                && SplitEvents.IsRevisedRatio(
+                    response.Numerator,
+                    response.Denominator,
+                    captured.Numerator,
+                    captured.Denominator
+                )
+            )
+            && !sameEvent.Any(captured =>
+                captured.Numerator * response.Denominator
+                == response.Numerator * captured.Denominator
+            );
     }
 
     private async Task PurgePricesAfterHistoricalCutoff(
