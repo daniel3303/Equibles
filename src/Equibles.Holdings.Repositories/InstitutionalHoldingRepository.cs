@@ -2475,16 +2475,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .StillSucceeded(DbContext);
 
     // Distinct holder ids among the given set that filed ANY 13F at reportDate — the "has this
-    // fund reported yet?" test behind the combined view's reported-so-far counts.
+    // fund reported yet?" test behind the combined view's reported-so-far counts. Each holder is
+    // probed for one 13F row of the quarter: reading the ids off every position scanned whole
+    // books, millions of rows for a large stock's holders (3 to 16 s per comparison).
     public IQueryable<Guid> GetFiledHolderIdsAmong(
         DateOnly reportDate,
         IReadOnlyCollection<Guid> holderIds
     )
     {
-        return GetAll()
-            .Where(Is13F)
-            .Where(h => h.ReportDate == reportDate && holderIds.Contains(h.InstitutionalHolderId))
-            .Select(h => h.InstitutionalHolderId)
+        var quarter13F = GetAll().Where(Is13F).Where(h => h.ReportDate == reportDate);
+        return DbContext
+            .Set<InstitutionalHolder>()
+            .Where(holder =>
+                holderIds.Contains(holder.Id)
+                && quarter13F.Any(h => h.InstitutionalHolderId == holder.Id)
+            )
+            .Select(holder => holder.Id)
             .Union(
                 Zero13FRestatements()
                     .Where(f =>
