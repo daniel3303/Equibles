@@ -50,13 +50,25 @@ namespace Equibles.Migrations.Migrations
         }
 
         // An interrupted CONCURRENTLY build leaves an invalid index that IF NOT EXISTS would keep.
-        private static void DropInvalidLeftover(MigrationBuilder migrationBuilder, string name) =>
+        // Renaming it aside takes only SHARE UPDATE EXCLUSIVE, where a plain DROP would queue every
+        // reader and writer of the table behind an ACCESS EXCLUSIVE lock. A build still running
+        // under that name is also invalid, so the migration refuses instead of discarding it.
+        private static void DropInvalidLeftover(MigrationBuilder migrationBuilder, string name)
+        {
             migrationBuilder.Sql(
                 "DO $$ BEGIN "
+                    + "IF EXISTS (SELECT 1 FROM pg_stat_progress_create_index p "
+                    + $"JOIN pg_class c ON c.oid = p.index_relid WHERE c.relname = '{name}') THEN "
+                    + $"RAISE EXCEPTION '{name} is still being built; migrate once the build finishes'; END IF; "
                     + "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid "
                     + $"WHERE c.relname = '{name}' AND NOT i.indisvalid) THEN "
-                    + $"EXECUTE 'DROP INDEX \"{name}\"'; END IF; END $$;",
+                    + $"EXECUTE 'ALTER INDEX \"{name}\" RENAME TO \"{name}_inv\"'; END IF; END $$;",
                 suppressTransaction: true
             );
+            migrationBuilder.Sql(
+                $"DROP INDEX CONCURRENTLY IF EXISTS \"{name}_inv\";",
+                suppressTransaction: true
+            );
+        }
     }
 }
