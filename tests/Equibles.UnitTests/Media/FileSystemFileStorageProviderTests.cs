@@ -104,6 +104,48 @@ public class FileSystemFileStorageProviderTests : IDisposable
         sync.Should().Throw<IOException>();
     }
 
+    // A failed flush deletes the files its batch wrote, so no later write keeps bytes that may
+    // exist only in the page cache, and keeps a file an earlier durable write stored.
+    [Fact]
+    public async Task SyncStore_FailedFlush_DeletesOnlyTheBatchsFiles()
+    {
+        var kept = Encoding.UTF8.GetBytes("already durable bytes");
+        var written = Encoding.UTF8.GetBytes("unflushed batch bytes");
+        var provider = new FailingFlushProvider(_root);
+        var keptFile = new File();
+        var writtenFile = new File();
+        await provider.Save(keptFile, kept, FileStorageTiers.Blob);
+        await provider.SaveBuffered(new File(), kept, FileStorageTiers.Blob);
+        await provider.SaveBuffered(writtenFile, written, FileStorageTiers.Blob);
+
+        var sync = () => provider.SyncStore();
+
+        sync.Should().Throw<IOException>();
+        (await System.IO.File.ReadAllBytesAsync(PathOf(keptFile))).Should().Equal(kept);
+        System.IO.File.Exists(PathOf(writtenFile)).Should().BeFalse();
+        await _provider.Save(new File(), written, FileStorageTiers.Blob);
+        (await System.IO.File.ReadAllBytesAsync(PathOf(writtenFile))).Should().Equal(written);
+    }
+
+    // A batch abandoned before its barrier leaves none of its files behind.
+    [Fact]
+    public async Task Dispose_BeforeTheBarrier_DeletesTheBatchsFiles()
+    {
+        var file = new File();
+        var provider = new FileSystemFileStorageProvider(
+            Options.Create(new FileStorageOptions { Enabled = true, RootPath = _root })
+        );
+        await provider.SaveBuffered(
+            file,
+            Encoding.UTF8.GetBytes("abandoned"),
+            FileStorageTiers.Blob
+        );
+
+        provider.Dispose();
+
+        System.IO.File.Exists(PathOf(file)).Should().BeFalse();
+    }
+
     // Content addressing gives free dedup: identical bytes map to one path and the second
     // write is a no-op, never an error, even though the target already exists.
     [Fact]
@@ -148,5 +190,19 @@ public class FileSystemFileStorageProviderTests : IDisposable
         var act = () => _provider.GetContent(file);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    private string PathOf(File file) =>
+        Path.Combine(_root, ContentAddressedPath.ToOsPath(file.RelativePath));
+
+    private sealed class FailingFlushProvider(string root)
+        : FileSystemFileStorageProvider(
+            Options.Create(new FileStorageOptions { Enabled = true, RootPath = root })
+        )
+    {
+        protected override void Flush(FileSystemSyncHandle barrier)
+        {
+            throw new IOException("Simulated writeback failure.");
+        }
     }
 }

@@ -19,9 +19,9 @@ public static class DurableFileWriter
     {
         if (await HoldsContent(fullPath, content))
         {
-            // A buffered batch that failed before its barrier can leave these bytes only in the
-            // page cache, so they are flushed before a caller commits a row that points here.
-            SyncFileSystem(Path.GetDirectoryName(fullPath));
+            // Another writer's buffered batch may not have flushed this file yet, so it and the
+            // directory entries leading to it are flushed before a caller commits a row here.
+            FlushExisting(fullPath);
             return;
         }
 
@@ -96,15 +96,16 @@ public static class DurableFileWriter
     /// <summary>
     /// Like <see cref="WriteIfMissing"/> but WITHOUT any fsync — temp file + atomic rename
     /// only, leaving the data in the page cache. For bulk migration where the caller makes a
-    /// whole batch durable at once via <see cref="SyncFileSystem"/> before committing the
+    /// whole batch durable at once via <see cref="FileSystemSyncHandle"/> before committing the
     /// matching database rows: per-file fsyncs on a spinning disk are seek-bound (a few
-    /// dozen per second), while buffered writes stream at full disk bandwidth.
+    /// dozen per second), while buffered writes stream at full disk bandwidth. Returns false
+    /// when identical content was already stored and kept, true when this call wrote the file.
     /// </summary>
-    public static async Task WriteIfMissingBuffered(string fullPath, byte[] content)
+    public static async Task<bool> WriteIfMissingBuffered(string fullPath, byte[] content)
     {
         if (await HoldsContent(fullPath, content))
         {
-            return; // dedup: identical content already stored
+            return false;
         }
 
         var directory = Path.GetDirectoryName(fullPath);
@@ -130,18 +131,52 @@ public static class DurableFileWriter
                 }
             }
         }
+
+        return true;
     }
 
-    /// <summary>
-    /// Flushes every dirty page of the filesystem containing <paramref name="directory"/> to
-    /// stable storage and throws when that fails. The batch-durability counterpart of
-    /// <see cref="WriteIfMissingBuffered"/>: call once after writing a batch, before
-    /// committing the database rows that point at it.
-    /// </summary>
-    public static void SyncFileSystem(string directory)
+    // An fsync through a new descriptor reports the file's writeback errors that no one has
+    // seen yet, so bytes a failed flush left only in the page cache are refused here.
+    private static void FlushExisting(string fullPath)
     {
-        using var handle = FileSystemSyncHandle.Open(directory);
-        handle.Sync();
+        if (
+            !RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            && !RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+        )
+        {
+            return;
+        }
+
+        var fd = open(fullPath, O_RDONLY);
+        if (fd < 0)
+        {
+            throw new IOException(
+                $"Cannot open {fullPath} to flush it (errno {Marshal.GetLastPInvokeError()})."
+            );
+        }
+
+        try
+        {
+            if (fsync(fd) != 0)
+            {
+                throw new IOException(
+                    $"Flushing {fullPath} failed (errno {Marshal.GetLastPInvokeError()})."
+                );
+            }
+        }
+        finally
+        {
+            close(fd);
+        }
+
+        for (
+            var directory = Path.GetDirectoryName(fullPath);
+            directory != null;
+            directory = Path.GetDirectoryName(directory)
+        )
+        {
+            FsyncDirectory(directory);
+        }
     }
 
     // A content-addressed path holds exactly its content unless a crash left a write there that
