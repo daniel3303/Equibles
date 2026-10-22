@@ -805,6 +805,7 @@ public class DocumentScraperTests
         persisted.StateOfIncorporation.Should().Be("MD");
         persisted.BusinessStateOrCountry.Should().Be("NY");
         persisted.PeriodicReportFileNumber.Should().Be("001-35000");
+        persisted.SecRegistrantProfileReadOn.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
         await harness.SecEdgarClient.Received(1).GetCompanyFilings("0000777001");
     }
 
@@ -1054,6 +1055,7 @@ public class DocumentScraperTests
             // substituted because fiscal-year detection never publishes.
             services.AddSingleton(Substitute.For<IBus>());
             services.AddScoped<EquityIdentityManager>();
+            services.AddScoped<SecRegistrantProfileReader>();
             services.AddSingleton(SecEdgarClient);
             services.AddSingleton(Normalizer);
             services.AddSingleton(Converter);

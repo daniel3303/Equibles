@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261022221518_AddIssuerSecRegistrantProfile")]
+    [Migration("20261022224629_AddIssuerSecRegistrantProfile")]
     partial class AddIssuerSecRegistrantProfile
     {
         /// <inheritdoc />
@@ -355,6 +355,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<string>("PeriodicReportFileNumber")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly?>("SecRegistrantProfileReadOn")
+                        .HasColumnType("date");
 
                     b.PrimitiveCollection<List<string>>("SecondaryCiks")
                         .HasColumnType("text[]");

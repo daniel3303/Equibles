@@ -1315,8 +1315,8 @@ public class EquityIdentityManager
     /// incorporation and business-address codes and the periodic-report file number mirror
     /// the current header (blank normalises to null), while the business development company
     /// election and withdrawal dates only ever move forward, so an old election that drops
-    /// out of the recent-filings list is never forgotten. A null history-read date keeps the
-    /// stored one. Saves directly, like <see cref="SetSecClassification"/>.
+    /// out of the recent-filings list is never forgotten. A null history-read or profile-read
+    /// date keeps the stored one. Saves directly, like <see cref="SetSecClassification"/>.
     /// </summary>
     public async Task SetSecRegistrantProfile(
         EquityIssuer commonStock,
@@ -1325,7 +1325,8 @@ public class EquityIdentityManager
         string periodicReportFileNumber,
         DateOnly? bdcElectionFiledOn,
         DateOnly? bdcWithdrawalFiledOn,
-        DateOnly? bdcHistoryReadOn
+        DateOnly? bdcHistoryReadOn,
+        DateOnly? profileReadOn
     )
     {
         ArgumentNullException.ThrowIfNull(commonStock);
@@ -1336,6 +1337,7 @@ public class EquityIdentityManager
         var election = Later(commonStock.BdcElectionFiledOn, bdcElectionFiledOn);
         var withdrawal = Later(commonStock.BdcWithdrawalFiledOn, bdcWithdrawalFiledOn);
         var historyReadOn = bdcHistoryReadOn ?? commonStock.BdcHistoryReadOn;
+        var readOn = profileReadOn ?? commonStock.SecRegistrantProfileReadOn;
 
         if (
             commonStock.StateOfIncorporation == incorporation
@@ -1344,6 +1346,7 @@ public class EquityIdentityManager
             && commonStock.BdcElectionFiledOn == election
             && commonStock.BdcWithdrawalFiledOn == withdrawal
             && commonStock.BdcHistoryReadOn == historyReadOn
+            && commonStock.SecRegistrantProfileReadOn == readOn
         )
         {
             return;
@@ -1355,6 +1358,7 @@ public class EquityIdentityManager
         commonStock.BdcElectionFiledOn = election;
         commonStock.BdcWithdrawalFiledOn = withdrawal;
         commonStock.BdcHistoryReadOn = historyReadOn;
+        commonStock.SecRegistrantProfileReadOn = readOn;
         await _commonStockRepository.SaveChanges();
 
         static string NullIfBlank(string value) =>

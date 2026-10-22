@@ -371,6 +371,14 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
     public IQueryable<EquityIssuer> GetByLegalEntityIdentifier(string lei) =>
         GetAll().Where(issuer => issuer.LegalEntityIdentifier == lei);
 
+    // The issuers the SEC scrapers follow: EDGAR filers whose primary listing, if any, still trades.
+    public IQueryable<EquityIssuer> GetFollowedSecFilers() =>
+        GetAll()
+            .Where(issuer =>
+                issuer.Cik != null
+                && (issuer.Presentation == null || issuer.Presentation.Listing.Active)
+            );
+
     public IQueryable<EquityIssuer> GetUsByTickers(IEnumerable<string> tickers) =>
         GetCurrentUsDirectory()
             .Where(issuer =>

@@ -46,6 +46,7 @@ public class CommonStockManagerSetSecRegistrantProfileTests
                 "001-34960",
                 null,
                 null,
+                new DateOnly(2026, 10, 22),
                 new DateOnly(2026, 10, 22)
             );
 
@@ -53,6 +54,7 @@ public class CommonStockManagerSetSecRegistrantProfileTests
         stock.BusinessStateOrCountry.Should().Be("MI");
         stock.PeriodicReportFileNumber.Should().Be("001-34960");
         stock.BdcHistoryReadOn.Should().Be(new DateOnly(2026, 10, 22));
+        stock.SecRegistrantProfileReadOn.Should().Be(new DateOnly(2026, 10, 22));
         await repository.Received(1).SaveChanges();
     }
 
@@ -65,7 +67,7 @@ public class CommonStockManagerSetSecRegistrantProfileTests
         stock.BdcHistoryReadOn = new DateOnly(2026, 10, 1);
 
         await NewManager(repository)
-            .SetSecRegistrantProfile(stock, "DE", "TX", "001-36364", null, null, null);
+            .SetSecRegistrantProfile(stock, "DE", "TX", "001-36364", null, null, null, null);
 
         stock.BdcElectionFiledOn.Should().Be(new DateOnly(2011, 4, 15));
         stock.BdcHistoryReadOn.Should().Be(new DateOnly(2026, 10, 1));
@@ -86,6 +88,7 @@ public class CommonStockManagerSetSecRegistrantProfileTests
                 "001-40000",
                 new DateOnly(2012, 1, 5),
                 new DateOnly(2025, 6, 30),
+                null,
                 null
             );
 
@@ -102,10 +105,45 @@ public class CommonStockManagerSetSecRegistrantProfileTests
         stock.BusinessStateOrCountry = "CA";
         stock.PeriodicReportFileNumber = "814-00755";
         stock.BdcHistoryReadOn = new DateOnly(2026, 10, 20);
+        stock.SecRegistrantProfileReadOn = new DateOnly(2026, 10, 22);
 
         await NewManager(repository)
-            .SetSecRegistrantProfile(stock, "DE", "CA", "814-00755", null, null, null);
+            .SetSecRegistrantProfile(
+                stock,
+                "DE",
+                "CA",
+                "814-00755",
+                null,
+                null,
+                null,
+                new DateOnly(2026, 10, 22)
+            );
 
         await repository.DidNotReceive().SaveChanges();
+    }
+
+    [Fact]
+    public async Task SetSecRegistrantProfile_UnchangedProfileReadOnALaterDay_RecordsTheReadDate()
+    {
+        // The read date is what the refresh lane orders by, so it moves even when nothing else does.
+        var repository = NewRepository();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create();
+        stock.StateOfIncorporation = "DE";
+        stock.SecRegistrantProfileReadOn = new DateOnly(2026, 9, 1);
+
+        await NewManager(repository)
+            .SetSecRegistrantProfile(
+                stock,
+                "DE",
+                null,
+                null,
+                null,
+                null,
+                null,
+                new DateOnly(2026, 10, 22)
+            );
+
+        stock.SecRegistrantProfileReadOn.Should().Be(new DateOnly(2026, 10, 22));
+        await repository.Received(1).SaveChanges();
     }
 }

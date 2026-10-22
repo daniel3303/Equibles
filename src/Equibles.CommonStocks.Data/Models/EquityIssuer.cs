@@ -69,6 +69,9 @@ public class EquityIssuer
     // null while only the recent list has been read.
     public DateOnly? BdcHistoryReadOn { get; set; }
 
+    // When EDGAR's submissions header was last read into the fields above; null until first read.
+    public DateOnly? SecRegistrantProfileReadOn { get; set; }
+
     public Guid? IndustryId { get; set; }
     public virtual Industry Industry { get; set; }
     public virtual List<EquitySecurity> Securities { get; set; } = [];

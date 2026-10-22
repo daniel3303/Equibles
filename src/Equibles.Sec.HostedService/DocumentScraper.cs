@@ -5,7 +5,6 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
-using Equibles.Integrations.Sec;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.BusinessLogic;
@@ -348,14 +347,7 @@ public class DocumentScraper : IDocumentScraper
                 .ToListAsync();
         }
 
-        return await commonStockRepository
-            .GetAll()
-            .Where(issuer =>
-                issuer.Cik != null
-                && (issuer.Presentation == null || issuer.Presentation.Listing.Active)
-            )
-            .AsNoTracking()
-            .ToListAsync();
+        return await commonStockRepository.GetFollowedSecFilers().AsNoTracking().ToListAsync();
     }
 
     private async Task<bool> ProcessCompanyDocumentsWithScope(
@@ -404,7 +396,8 @@ public class DocumentScraper : IDocumentScraper
                 company,
                 secEdgarClient,
                 commonStockManager,
-                documentRepository
+                documentRepository,
+                scope.ServiceProvider.GetRequiredService<SecRegistrantProfileReader>()
             );
 
             // Only collected while a feed-flagged filing awaits confirmation —
@@ -485,7 +478,8 @@ public class DocumentScraper : IDocumentScraper
         EquityIssuer company,
         ISecEdgarClient secEdgarClient,
         EquityIdentityManager commonStockManager,
-        DocumentRepository documentRepository
+        DocumentRepository documentRepository,
+        SecRegistrantProfileReader profileReader
     )
     {
         try
@@ -502,12 +496,7 @@ public class DocumentScraper : IDocumentScraper
             );
 
             if (metadata != null)
-                await UpdateRegistrantProfile(
-                    company,
-                    metadata,
-                    secEdgarClient,
-                    commonStockManager
-                );
+                await profileReader.Store(company, metadata, mayReadArchive: true);
 
             if (metadata?.FiscalYearEndMonth is { } month)
             {
@@ -589,65 +578,6 @@ public class DocumentScraper : IDocumentScraper
                 $"ticker: {(company.Presentation?.Listing?.Ticker ?? company.Cik)}, cik: {company.Cik}"
             );
         }
-    }
-
-    /// <summary>
-    /// Persists the registrant facts EDGAR's header and filing index state: incorporation and
-    /// business-address codes, the periodic-report file number, and any business development
-    /// company election or withdrawal. The recent list is read every cycle at no extra cost.
-    /// A filer EDGAR never classified by industry (no SIC), whose recent list shows no
-    /// election, has its archived pages read once for the election forms; SIC only chooses
-    /// where to look, the filing alone decides. A failed archive read keeps the recent
-    /// evidence and is retried next cycle.
-    /// </summary>
-    private async Task UpdateRegistrantProfile(
-        EquityIssuer company,
-        CompanyMetadata metadata,
-        ISecEdgarClient secEdgarClient,
-        EquityIdentityManager commonStockManager
-    )
-    {
-        var election = metadata.BdcElectionFiledOn;
-        var withdrawal = metadata.BdcWithdrawalFiledOn;
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        // Recorded once: rewriting the date every cycle would save every filer every day.
-        DateOnly? historyReadOn =
-            metadata.HasArchivedFilings || company.BdcHistoryReadOn != null ? null : today;
-
-        if (
-            metadata.HasArchivedFilings
-            && election == null
-            && company.BdcHistoryReadOn == null
-            && string.IsNullOrWhiteSpace(metadata.Sic)
-        )
-        {
-            try
-            {
-                var history = await secEdgarClient.GetCompanyFilings(company.Cik);
-                election = SecRegistrantFilings.LatestBdcElection(history);
-                withdrawal = SecRegistrantFilings.LatestBdcWithdrawal(history);
-                historyReadOn = today;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Could not read the archived filing history of {Ticker} (CIK: {Cik}) for business development company elections",
-                    (company.Presentation?.Listing?.Ticker ?? company.Cik),
-                    company.Cik
-                );
-            }
-        }
-
-        await commonStockManager.SetSecRegistrantProfile(
-            company,
-            metadata.StateOfIncorporation,
-            metadata.BusinessStateOrCountry,
-            metadata.PeriodicReportFileNumber,
-            election,
-            withdrawal,
-            historyReadOn
-        );
     }
 
     private async Task ProcessDocumentTypeForCompany(

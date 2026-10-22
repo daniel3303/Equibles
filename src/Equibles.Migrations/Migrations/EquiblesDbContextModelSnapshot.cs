@@ -353,6 +353,9 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<DateOnly?>("SecRegistrantProfileReadOn")
+                        .HasColumnType("date");
+
                     b.PrimitiveCollection<List<string>>("SecondaryCiks")
                         .HasColumnType("text[]");
 

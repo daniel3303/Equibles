@@ -43,6 +43,12 @@ namespace Equibles.Migrations.Migrations
                 maxLength: 32,
                 nullable: true);
 
+            migrationBuilder.AddColumn<DateOnly>(
+                name: "SecRegistrantProfileReadOn",
+                table: "EquityIssuer",
+                type: "date",
+                nullable: true);
+
             migrationBuilder.AddColumn<string>(
                 name: "StateOfIncorporation",
                 table: "EquityIssuer",
@@ -72,6 +78,10 @@ namespace Equibles.Migrations.Migrations
 
             migrationBuilder.DropColumn(
                 name: "PeriodicReportFileNumber",
+                table: "EquityIssuer");
+
+            migrationBuilder.DropColumn(
+                name: "SecRegistrantProfileReadOn",
                 table: "EquityIssuer");
 
             migrationBuilder.DropColumn(
