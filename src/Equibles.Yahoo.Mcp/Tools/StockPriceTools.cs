@@ -972,7 +972,13 @@ public class StockPriceTools
     )
     {
         var daily = await rangeQuery.OrderBy(p => p.Date).ToListAsync();
-        var bars = PriceBarAggregation.Aggregate(daily, interval, start, end);
+        var bars = PriceBarAggregation.Aggregate(
+            daily,
+            interval,
+            start,
+            end,
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
         if (bars.Count == 0)
             return $"No price data found for {listing.Symbol} in the specified date range.";
 

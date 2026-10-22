@@ -10,6 +10,9 @@ namespace Equibles.UnitTests.Yahoo;
 /// </summary>
 public class PriceBarAggregationTests
 {
+    // A today after every period in a test, so only the window decides Partial there.
+    private static readonly DateOnly Settled = new(2027, 6, 1);
+
     private static EquityDailyStockPrice Bar(
         DateOnly date,
         decimal open,
@@ -65,7 +68,8 @@ public class PriceBarAggregationTests
             daily,
             PriceBarInterval.Weekly,
             new DateOnly(2026, 10, 12),
-            new DateOnly(2026, 10, 19)
+            new DateOnly(2026, 10, 19),
+            Settled
         );
 
         bars.Should().HaveCount(2);
@@ -103,7 +107,8 @@ public class PriceBarAggregationTests
             daily,
             PriceBarInterval.Weekly,
             new DateOnly(2026, 12, 1),
-            new DateOnly(2027, 1, 31)
+            new DateOnly(2027, 1, 31),
+            Settled
         );
 
         bars.Should().ContainSingle().Which.PeriodStart.Should().Be(new DateOnly(2026, 12, 28));
@@ -124,7 +129,8 @@ public class PriceBarAggregationTests
             daily,
             PriceBarInterval.Monthly,
             new DateOnly(2026, 8, 15),
-            new DateOnly(2026, 10, 2)
+            new DateOnly(2026, 10, 2),
+            Settled
         );
 
         bars.Select(bar => bar.PeriodStart)
@@ -146,10 +152,64 @@ public class PriceBarAggregationTests
             daily,
             PriceBarInterval.Monthly,
             new DateOnly(2026, 10, 1),
-            new DateOnly(2026, 10, 30)
+            new DateOnly(2026, 10, 30),
+            Settled
         );
 
         bars.Should().ContainSingle().Which.Partial.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Weekly_CurrentWeekOnItsLastWeekday_IsPartialUntilItTrades()
+    {
+        // Friday 2026-10-23 before the close: Monday to Thursday are stored and the default end
+        // is today, which reaches the week's last weekday without its session.
+        var daily = new[]
+        {
+            Bar(new DateOnly(2026, 10, 19), 10m, 11m, 9m, 10m),
+            Bar(new DateOnly(2026, 10, 22), 10m, 12m, 10m, 11m),
+        };
+        var friday = new DateOnly(2026, 10, 23);
+
+        PriceBarAggregation
+            .Aggregate(daily, PriceBarInterval.Weekly, new DateOnly(2026, 10, 19), friday, friday)
+            .Should()
+            .ContainSingle()
+            .Which.Partial.Should()
+            .BeTrue("the week is still trading");
+
+        PriceBarAggregation
+            .Aggregate(
+                [.. daily, Bar(friday, 11m, 12m, 10m, 11.5m)],
+                PriceBarInterval.Weekly,
+                new DateOnly(2026, 10, 19),
+                friday,
+                friday.AddDays(1)
+            )
+            .Should()
+            .ContainSingle()
+            .Which.Partial.Should()
+            .BeFalse("the week closed on Friday");
+    }
+
+    [Fact]
+    public void Monthly_FutureEndDate_LeavesTheCurrentMonthPartial()
+    {
+        var daily = new[]
+        {
+            Bar(new DateOnly(2026, 9, 30), 5m, 6m, 4m, 5m),
+            Bar(new DateOnly(2026, 10, 21), 6m, 7m, 5m, 6m),
+        };
+
+        var bars = PriceBarAggregation.Aggregate(
+            daily,
+            PriceBarInterval.Monthly,
+            new DateOnly(2026, 9, 1),
+            new DateOnly(2026, 12, 31),
+            new DateOnly(2026, 10, 22)
+        );
+
+        bars.Select(bar => bar.Partial).Should().Equal(false, true);
     }
 
     [Fact]
@@ -160,7 +220,8 @@ public class PriceBarAggregationTests
                 [],
                 PriceBarInterval.Weekly,
                 new DateOnly(2026, 1, 1),
-                new DateOnly(2026, 2, 1)
+                new DateOnly(2026, 2, 1),
+                Settled
             )
             .Should()
             .BeEmpty();
