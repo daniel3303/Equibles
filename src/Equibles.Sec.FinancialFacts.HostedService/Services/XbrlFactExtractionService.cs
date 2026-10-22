@@ -74,7 +74,9 @@ public class XbrlFactExtractionService
     // Version 8: labels resolve through the historical fiscal calendar across year-end changes.
     // Version 9: fill consolidated facts of 10-Q/10-K filings Company Facts lacks. The replay is
     // targeted (XbrlFactsExtractionWorker.SelectDueDocuments), not the whole corpus.
-    public const int CurrentVersion = 9;
+    // Version 10: record each 10-Q/10-K cover's registrant file number and shell-company flag
+    // (IssuerCoverStatement), through the same targeted replay.
+    public const int CurrentVersion = 10;
 
     /// <summary>
     /// Documents stamped below this version always rerun. Those stamped between it and
@@ -84,7 +86,7 @@ public class XbrlFactExtractionService
     /// </summary>
     public const int TargetedReplayFloor = 8;
 
-    /// <summary>Filing date from which every captured 10-Q/10-K joins the version-9 replay.</summary>
+    /// <summary>Filing date from which every captured 10-Q/10-K joins the targeted replay.</summary>
     internal static readonly DateOnly TargetedReplayFiledSince = new(2026, 1, 1);
 
     /// <summary>
@@ -126,6 +128,9 @@ public class XbrlFactExtractionService
     private const int ListingTitleMaxLength = 500;
     private const int ListingExchangeMaxLength = 100;
     private const int ListingSymbolMaxLength = 32;
+
+    // IssuerCoverStatement.FileNumber.
+    private const int FileNumberMaxLength = 32;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly InlineXbrlParser _inlineParser;
@@ -234,6 +239,7 @@ public class XbrlFactExtractionService
                 // Before the numeric early-return: a filing whose numeric facts
                 // are all API-covered still states the 12(b) table.
                 await PersistCoverListings(document, result.CoverListings, cancellationToken);
+                await PersistRegistrantCover(document, result.RegistrantCovers, cancellationToken);
             }
         }
         else
@@ -478,18 +484,22 @@ public class XbrlFactExtractionService
                 && string.Equals(sourceLei, issuerLei, StringComparison.OrdinalIgnoreCase);
         }
 
-        // Every attached CIK files for the issuer (holdco reorganisations, co-registrants), the same
-        // set the Company Facts import reads.
-        var sourceCik = fact.ConsolidatedCik;
+        return FilesForIssuer(fact.ConsolidatedCik, document.Issuer);
+    }
+
+    // Every attached CIK files for the issuer (holdco reorganisations, co-registrants), the same
+    // set the Company Facts import reads.
+    private static bool FilesForIssuer(string sourceCik, EquityIssuer issuer)
+    {
         if (
             string.IsNullOrEmpty(sourceCik)
             || !sourceCik.All(char.IsAsciiDigit)
             || sourceCik.TrimStart('0').Length == 0
-            || document.Issuer == null
+            || issuer == null
         )
             return false;
-        return new[] { document.Issuer.Cik }
-            .Concat(document.Issuer.SecondaryCiks)
+        return new[] { issuer.Cik }
+            .Concat(issuer.SecondaryCiks ?? [])
             .Any(issuerCik =>
                 !string.IsNullOrEmpty(issuerCik)
                 && issuerCik.All(char.IsAsciiDigit)
@@ -845,6 +855,57 @@ public class XbrlFactExtractionService
         }
 
         await listedRepository.SaveChanges();
+    }
+
+    /// <summary>
+    /// Records what a 10-Q/10-K cover states about its own registrant: the SEC file number and the
+    /// shell-company flag, read only from the unqualified context of a CIK that files for the
+    /// issuer. Those are the reports whose cover carries the shell-company check box; a filing that
+    /// states neither value leaves no row. Each filing keeps its own row, so a newer report never
+    /// erases what an older one said and readers choose the newest statement as of their date.
+    /// </summary>
+    internal async Task PersistRegistrantCover(
+        Document document,
+        List<ParsedRegistrantCover> covers,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!DomesticPeriodicForms.Contains(document.DocumentType))
+            return;
+        var own = covers.Where(cover => FilesForIssuer(cover.Cik, document.Issuer)).ToList();
+        // Two of the issuer's own CIKs stating different values leave that value unknown.
+        var fileNumbers = own.Select(cover => cover.FileNumber)
+            .Where(number => number != null)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var shellFlags = own.Select(cover => cover.IsShellCompany)
+            .Where(flag => flag != null)
+            .Distinct()
+            .ToList();
+        // An identifier is never truncated: a cut file number could name another registration.
+        var fileNumber =
+            fileNumbers.Count == 1 && fileNumbers[0].Length <= FileNumberMaxLength
+                ? fileNumbers[0]
+                : null;
+        var isShellCompany = shellFlags.Count == 1 ? shellFlags[0] : null;
+        if (fileNumber == null && isShellCompany == null)
+            return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IssuerCoverStatementRepository>();
+        await repository.Upsert(
+            new IssuerCoverStatement
+            {
+                EquityIssuerId = document.EquityIssuerId,
+                DocumentId = document.Id,
+                AccessionNumber = document.AccessionNumber,
+                Form = document.DocumentType,
+                FiledDate = document.ReportingDate,
+                FileNumber = fileNumber,
+                IsShellCompany = isShellCompany,
+            },
+            cancellationToken
+        );
     }
 
     /// <summary>

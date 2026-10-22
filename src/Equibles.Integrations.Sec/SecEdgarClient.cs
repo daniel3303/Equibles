@@ -1242,28 +1242,21 @@ public class SecEdgarClient : ISecEdgarClient
             // by real instruments, so creating a company from such a row lets
             // price enrichment attach another instrument's data. Skip the row;
             // a registrant with no exchange-listed row is not a listed company.
-            if (
-                exchangeIndex != -1
-                && (
-                    row.Count <= exchangeIndex
-                    || string.IsNullOrWhiteSpace(row[exchangeIndex]?.ToString())
-                )
-            )
+            var exchange =
+                exchangeIndex != -1 && row.Count > exchangeIndex
+                    ? row[exchangeIndex]?.ToString()?.Trim()
+                    : null;
+            if (exchangeIndex != -1 && string.IsNullOrEmpty(exchange))
                 continue;
 
-            if (companiesByCik.TryGetValue(cik, out var existing))
+            if (!companiesByCik.TryGetValue(cik, out var company))
             {
-                existing.Tickers.Add(ticker);
+                company = new CompanyInfo { Cik = cik, Name = name ?? string.Empty };
+                companiesByCik[cik] = company;
             }
-            else
-            {
-                companiesByCik[cik] = new CompanyInfo
-                {
-                    Cik = cik,
-                    Name = name ?? string.Empty,
-                    Tickers = [ticker],
-                };
-            }
+            company.Tickers.Add(ticker);
+            if (exchange != null)
+                company.TickerExchanges.TryAdd(ticker, exchange);
         }
 
         return companiesByCik.Values.ToList();
