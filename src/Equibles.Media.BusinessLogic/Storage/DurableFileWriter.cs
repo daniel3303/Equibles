@@ -6,8 +6,8 @@ namespace Equibles.Media.BusinessLogic.Storage;
 /// Crash-safe, write-once file creation for the content-addressed store. Sequence:
 /// write a temp file on the same filesystem → fsync the file → atomic rename into
 /// place → fsync the containing directory (so the new directory entry survives a
-/// crash). Because the store is content-addressed, a target that already exists holds
-/// identical bytes, so the write is skipped (deduplication). Writing the file before
+/// crash). Because the store is content-addressed, a target that already holds identical
+/// bytes is kept (deduplication); one a crash damaged is replaced. Writing the file before
 /// the caller saves the File row means a crash leaves a harmless orphan file (reclaimed
 /// by the sweep), never a row pointing at nothing.
 /// </summary>
@@ -17,9 +17,13 @@ public static class DurableFileWriter
 
     public static async Task WriteIfMissing(string fullPath, byte[] content)
     {
-        if (System.IO.File.Exists(fullPath))
+        if (await HoldsContent(fullPath, content))
         {
-            return; // dedup: identical content already stored
+            // The writer that stored this file may not have flushed its directory entries yet, and
+            // older or killed writers can leave bytes a failed writeback kept only in the page
+            // cache, so the match is flushed before a caller commits a row that points here.
+            FlushExisting(fullPath);
+            return;
         }
 
         var directory = Path.GetDirectoryName(fullPath);
@@ -58,15 +62,9 @@ public static class DurableFileWriter
                 stream.Flush(flushToDisk: true); // fsync the file's data + metadata
             }
 
-            try
-            {
-                System.IO.File.Move(tempPath, fullPath, overwrite: false);
-            }
-            catch (IOException) when (System.IO.File.Exists(fullPath))
-            {
-                // A concurrent writer won the race with identical (content-addressed) bytes.
-                return;
-            }
+            // Overwriting replaces a damaged target; a concurrent writer of the same path holds
+            // identical (content-addressed) bytes, so whichever rename lands last is correct.
+            System.IO.File.Move(tempPath, fullPath, overwrite: true);
 
             // Persist the file's dirent (leaf) and each freshly-created shard directory,
             // walking up to and including the first pre-existing ancestor (its entry set
@@ -97,17 +95,18 @@ public static class DurableFileWriter
     }
 
     /// <summary>
-    /// Like <see cref="WriteIfMissing"/> but WITHOUT any fsync — temp file + atomic rename
-    /// only, leaving the data in the page cache. For bulk migration where the caller makes a
-    /// whole batch durable at once via <see cref="SyncFileSystem"/> before committing the
-    /// matching database rows: per-file fsyncs on a spinning disk are seek-bound (a few
-    /// dozen per second), while buffered writes stream at full disk bandwidth.
+    /// The buffered first half of a batch write: unless the path already holds the content,
+    /// writes it WITHOUT fsync to a temp file beside the path and returns the temp (null when
+    /// the stored file is kept). The caller flushes the filesystem, moves each temp into place
+    /// with <see cref="Publish"/> and flushes again before committing rows, so a content path
+    /// never holds bytes a flush did not confirm. Per-file fsyncs on a spinning disk are
+    /// seek-bound (a few dozen per second), while buffered writes stream at full bandwidth.
     /// </summary>
-    public static async Task WriteIfMissingBuffered(string fullPath, byte[] content)
+    public static async Task<string> WriteTempIfMissing(string fullPath, byte[] content)
     {
-        if (System.IO.File.Exists(fullPath))
+        if (await HoldsContent(fullPath, content))
         {
-            return; // dedup: identical content already stored
+            return null;
         }
 
         var directory = Path.GetDirectoryName(fullPath);
@@ -117,63 +116,93 @@ public static class DurableFileWriter
         try
         {
             await System.IO.File.WriteAllBytesAsync(tempPath, content);
-            try
-            {
-                System.IO.File.Move(tempPath, fullPath, overwrite: false);
-            }
-            catch (IOException) when (System.IO.File.Exists(fullPath))
-            {
-                // A concurrent writer won the race with identical (content-addressed) bytes.
-            }
+            return tempPath;
         }
-        finally
+        catch
         {
-            if (System.IO.File.Exists(tempPath))
-            {
-                try
-                {
-                    System.IO.File.Delete(tempPath);
-                }
-                catch (IOException)
-                {
-                    // Best-effort cleanup; the orphan sweep removes any straggler temp files.
-                }
-            }
+            DeleteTemp(tempPath);
+            throw;
         }
     }
 
     /// <summary>
-    /// Flushes every dirty page of the filesystem containing <paramref name="directory"/> to
-    /// stable storage (Linux syncfs). The batch-durability counterpart of
-    /// <see cref="WriteIfMissingBuffered"/>: call once after writing a batch, before
-    /// committing the database rows that point at it. Falls back to a global sync elsewhere.
+    /// Moves a flushed temp from <see cref="WriteTempIfMissing"/> to its content path. Overwriting
+    /// replaces a damaged target; a concurrent writer of the same path holds identical bytes.
     /// </summary>
-    public static void SyncFileSystem(string directory)
+    public static void Publish(string tempPath, string fullPath)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            var fd = open(directory, O_RDONLY);
-            if (fd >= 0)
-            {
-                try
-                {
-                    syncfs(fd);
-                }
-                finally
-                {
-                    close(fd);
-                }
-                return;
-            }
-        }
+        System.IO.File.Move(tempPath, fullPath, overwrite: true);
+    }
 
+    public static void DeleteTemp(string tempPath)
+    {
+        try
+        {
+            System.IO.File.Delete(tempPath);
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup; a temp name is never a content path, so nothing reads it.
+        }
+    }
+
+    // An fsync through a new descriptor reports the file's writeback errors that no one has
+    // seen yet, so bytes a failed flush left only in the page cache are refused here.
+    private static void FlushExisting(string fullPath)
+    {
         if (
-            RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            !RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            && !RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
         )
         {
-            sync();
+            return;
         }
+
+        var fd = open(fullPath, O_RDONLY);
+        if (fd < 0)
+        {
+            throw new IOException(
+                $"Cannot open {fullPath} to flush it (errno {Marshal.GetLastPInvokeError()})."
+            );
+        }
+
+        try
+        {
+            if (fsync(fd) != 0)
+            {
+                throw new IOException(
+                    $"Flushing {fullPath} failed (errno {Marshal.GetLastPInvokeError()})."
+                );
+            }
+        }
+        finally
+        {
+            close(fd);
+        }
+
+        for (
+            var directory = Path.GetDirectoryName(fullPath);
+            directory != null;
+            directory = Path.GetDirectoryName(directory)
+        )
+        {
+            FsyncDirectory(directory);
+        }
+    }
+
+    // A content-addressed path holds exactly its content unless a crash left a write there that
+    // never reached the disk (a zero-length or zero-filled file), so an existing file is trusted
+    // only once its bytes compare equal.
+    private static async Task<bool> HoldsContent(string fullPath, byte[] content)
+    {
+        var existing = new FileInfo(fullPath);
+        if (!existing.Exists || existing.Length != content.LongLength)
+        {
+            return false;
+        }
+
+        var stored = await System.IO.File.ReadAllBytesAsync(fullPath);
+        return stored.AsSpan().SequenceEqual(content);
     }
 
     /// <summary>
@@ -207,20 +236,20 @@ public static class DurableFileWriter
         }
     }
 
-    private const int O_RDONLY = 0;
+    internal const int O_RDONLY = 0;
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int open(string pathname, int flags);
+    internal static extern int open(string pathname, int flags);
 
     [DllImport("libc", SetLastError = true)]
     private static extern int fsync(int fd);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int syncfs(int fd);
+    internal static extern int syncfs(int fd);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern void sync();
+    internal static extern void sync();
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int close(int fd);
+    internal static extern int close(int fd);
 }
