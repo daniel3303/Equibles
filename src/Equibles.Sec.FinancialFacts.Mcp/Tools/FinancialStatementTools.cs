@@ -126,6 +126,12 @@ public class FinancialStatementTools
                     .ToListAsync();
                 var conceptIdByKey = concepts.ToDictionary(c => (c.Taxonomy, c.Tag), c => c.Id);
                 var conceptIds = concepts.Select(c => c.Id).ToHashSet();
+                // Whether the operating costs continue another cost line only the issuer's whole
+                // history proves, so it is decided once, not per period.
+                var operatingCostsClaimant =
+                    statementType == FinancialStatementType.IncomeStatement
+                        ? await OperatingCostsClaimant(stock, conceptIdByKey)
+                        : null;
 
                 // Period availability is scoped to the requested statement's
                 // concepts: a (year, Q4) that only exists via balance-sheet
@@ -163,7 +169,8 @@ public class FinancialStatementTools
                         conceptIdByKey,
                         conceptIds,
                         candidate.FiscalYear,
-                        candidate.FiscalPeriod
+                        candidate.FiscalPeriod,
+                        operatingCostsClaimant
                     );
                     if (table != null)
                         return skipped is { } newer
@@ -193,7 +200,8 @@ public class FinancialStatementTools
         Dictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
         HashSet<Guid> conceptIds,
         int selectedYear,
-        SecFiscalPeriod selectedPeriod
+        SecFiscalPeriod selectedPeriod,
+        string operatingCostsClaimant
     )
     {
         // A balance sheet is dated where its period's own flows end and loaded at
@@ -254,6 +262,11 @@ public class FinancialStatementTools
                 .AppendDerived(facts, rejectNegativeConceptIds)
                 .ToList();
         }
+        // A derived operating-income quarter is only as precise as the spans it subtracts.
+        var derivedOperatingIncomeRounding = StatementLineFacts.DerivedOperatingIncomeRounding(
+            facts,
+            conceptIdByKey
+        );
         if (balanceSheetDate == null)
             facts = facts.Where(f => f.FiscalPeriod == selectedPeriod).ToList();
 
@@ -297,7 +310,9 @@ public class FinancialStatementTools
             var (reportedConcept, fact) = StatementLineFacts.PickConceptFact(
                 line,
                 conceptIdByKey,
-                latestByConcept
+                latestByConcept,
+                operatingCostsClaimant,
+                derivedOperatingIncomeRounding
             );
             return fact != null
                 && FactSplitBasis.Classify(reportedConcept, fact.Unit) != FactSplitKind.None;
@@ -316,7 +331,9 @@ public class FinancialStatementTools
             statementLines,
             conceptIdByKey,
             latestByConcept,
-            splits
+            splits,
+            operatingCostsClaimant,
+            derivedOperatingIncomeRounding
         );
         return (
             table,
@@ -377,7 +394,9 @@ public class FinancialStatementTools
         IReadOnlyList<StatementLine> statementLines,
         Dictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
         Dictionary<Guid, FinancialFact> latestByConcept,
-        IReadOnlyList<StockSplit> splits
+        IReadOnlyList<StockSplit> splits,
+        string operatingCostsClaimant,
+        decimal derivedOperatingIncomeRounding
     )
     {
         var result = MarkdownTable.Start(
@@ -392,6 +411,7 @@ public class FinancialStatementTools
         var omitted = 0;
         var splitAdjusted = false;
         var unresolvedBasis = false;
+        var grossProfitReplaced = false;
         DateOnly? earliestFiled = null;
         DateOnly? latestFiled = null;
         foreach (var line in statementLines)
@@ -399,7 +419,9 @@ public class FinancialStatementTools
             var (reportedConcept, fact) = StatementLineFacts.PickConceptFact(
                 line,
                 conceptIdByKey,
-                latestByConcept
+                latestByConcept,
+                operatingCostsClaimant,
+                derivedOperatingIncomeRounding
             );
             if (fact == null)
             {
@@ -420,11 +442,22 @@ public class FinancialStatementTools
             var unresolved = restated.Unresolved;
             unresolvedBasis |= unresolved;
             splitAdjusted |= restated.Adjusted;
+            var replaced = StatementLineFacts.ReplacesMistaggedGrossProfit(
+                line,
+                conceptIdByKey,
+                latestByConcept,
+                derivedOperatingIncomeRounding
+            );
+            grossProfitReplaced |= replaced;
+            var basis =
+                replaced ? "Derived"
+                : StatementQuarterDerivation.IsDerived(fact) ? "Derived quarter"
+                : "Reported";
             result.AppendLine(
                 $"| {FactMarkdown.Cell(line.Label)} | "
                     + $"{FactMarkdown.Value(value, fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(fact.Unit)} | "
-                    + $"{(StatementQuarterDerivation.IsDerived(fact) ? "Derived quarter" : "Reported")} | "
+                    + $"{basis} | "
                     + $"{fact.PeriodStart:yyyy-MM-dd} | "
                     + $"{fact.PeriodEnd:yyyy-MM-dd} | "
                     + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
@@ -449,6 +482,8 @@ public class FinancialStatementTools
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
         if (unresolvedBasis)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
+        if (grossProfitReplaced)
+            result.AppendLine($"\n_{GrossProfitMistag.ReplacedNote}_");
 
         if (
             selectedPeriod != SecFiscalPeriod.FullYear
@@ -470,6 +505,35 @@ public class FinancialStatementTools
             );
 
         return result.ToString();
+    }
+
+    // The line the issuer's operating costs continue (OperatingCostsContinuation), read off its
+    // consolidated history of the three cost lines; null when it reports no operating costs.
+    private async Task<string> OperatingCostsClaimant(
+        EquityIssuer stock,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey
+    )
+    {
+        if (
+            OperatingCostsContinuation
+                .ConceptIds(OperatingCostsContinuation.OperatingCostsAlias, conceptIdByKey)
+                .Count == 0
+        )
+            return null;
+
+        var costConceptIds = new[]
+        {
+            OperatingCostsContinuation.OperatingCostsAlias,
+            OperatingCostsContinuation.OperatingExpensesAlias,
+            OperatingCostsContinuation.TotalCostsAlias,
+        }
+            .SelectMany(alias => OperatingCostsContinuation.ConceptIds(alias, conceptIdByKey))
+            .ToList();
+        var facts = await _financialFactRepository
+            .GetConsolidatedByIssuerId(stock.Id)
+            .Where(f => costConceptIds.Contains(f.FinancialConceptId))
+            .ToListAsync();
+        return OperatingCostsContinuation.Claimant(facts, conceptIdByKey);
     }
 
     // The concept ids of every statement line, so a balance-sheet period is offered wherever
