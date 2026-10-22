@@ -95,22 +95,27 @@ public static class GrossProfitMistag
     /// <summary>
     /// The warning a gross-profit series carries for its mis-tagged rows, or null when none is.
     /// </summary>
-    public static string Warning(IReadOnlyCollection<FinancialFact> mistagged)
-    {
-        if (mistagged.Count == 0)
-            return null;
+    public static string Warning(IReadOnlyCollection<FinancialFact> mistagged) =>
+        Warning(
+            mistagged
+                .OrderByDescending(f => f.PeriodEnd)
+                .Select(f =>
+                    f.FiscalPeriod == SecFiscalPeriod.FullYear
+                        ? $"FY{f.FiscalYear}"
+                        : $"FY{f.FiscalYear} {f.FiscalPeriod}"
+                )
+                .ToList()
+        );
 
-        var periods = mistagged
-            .OrderByDescending(f => f.PeriodEnd)
-            .Select(f =>
-                f.FiscalPeriod == SecFiscalPeriod.FullYear
-                    ? $"FY{f.FiscalYear}"
-                    : $"FY{f.FiscalYear} {f.FiscalPeriod}"
-            );
-        return $"Tag warning: for {string.Join(", ", periods)} the figure tagged as gross profit "
-            + "equals that period's operating income, while Revenue − Cost of Revenue states a "
-            + "different figure.";
-    }
+    /// <summary>
+    /// The same warning over period labels ("FY2017 Q3"), newest first; null when there are none.
+    /// </summary>
+    public static string Warning(IReadOnlyCollection<string> periodLabels) =>
+        periodLabels.Count == 0
+            ? null
+            : $"Tag warning: for {string.Join(", ", periodLabels)} the figure tagged as gross "
+                + "profit equals that period's operating income, while Revenue − Cost of Revenue "
+                + "states a different figure.";
 
     private static (DateOnly Start, DateOnly End, string Unit) Key(FinancialFact fact) =>
         (fact.PeriodStart, fact.PeriodEnd, fact.Unit);
