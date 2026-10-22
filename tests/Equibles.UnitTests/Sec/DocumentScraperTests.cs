@@ -809,6 +809,29 @@ public class DocumentScraperTests
     }
 
     [Fact]
+    public async Task ScrapeDocuments_CompleteRecentHistory_RecordsTheReadDateOnce()
+    {
+        // A filer without archived pages has its whole history in the recent list; the read
+        // date is recorded once so later cycles persist nothing for an unchanged header.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        EquityIssuer company = SeedCompany(dbContext, ticker: "SMAL", cik: "0000777002");
+        company.BdcHistoryReadOn = new DateOnly(2026, 1, 2);
+        company.BusinessStateOrCountry = "TX";
+        await dbContext.SaveChangesAsync();
+        harness
+            .SecEdgarClient.GetCompanyMetadata("0000777002")
+            .Returns(new CompanyMetadata { BusinessStateOrCountry = "TX" });
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
+        persisted.BdcHistoryReadOn.Should().Be(new DateOnly(2026, 1, 2));
+    }
+
+    [Fact]
     public async Task ScrapeDocuments_ClassifiedFilerWithArchives_NeverWalksTheArchive()
     {
         var harness = new Harness();

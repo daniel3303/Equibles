@@ -610,7 +610,9 @@ public class DocumentScraper : IDocumentScraper
         var election = metadata.BdcElectionFiledOn;
         var withdrawal = metadata.BdcWithdrawalFiledOn;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        DateOnly? historyReadOn = metadata.HasArchivedFilings ? null : today;
+        // Recorded once: rewriting the date every cycle would save every filer every day.
+        DateOnly? historyReadOn =
+            metadata.HasArchivedFilings || company.BdcHistoryReadOn != null ? null : today;
 
         if (
             metadata.HasArchivedFilings

@@ -65,7 +65,7 @@ public class EquityIssuer
     public DateOnly? BdcElectionFiledOn { get; set; }
     public DateOnly? BdcWithdrawalFiledOn { get; set; }
 
-    // When the whole filing history, archived pages included, was last read for those forms;
+    // When the whole filing history, archived pages included, was first read for those forms;
     // null while only the recent list has been read.
     public DateOnly? BdcHistoryReadOn { get; set; }
 
