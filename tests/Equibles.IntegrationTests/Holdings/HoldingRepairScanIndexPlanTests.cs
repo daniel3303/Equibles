@@ -1,15 +1,23 @@
 using System.Data.Common;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
+using Equibles.Core.Configuration;
 using Equibles.Data;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService.Extensions;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
+using Equibles.Sec.FinancialFacts.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using NSubstitute;
 using Xunit;
@@ -223,9 +231,70 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
                     || condition.Contains("\"EquityIssuerId\" =");
                 if (!seeksOneOwner)
                 {
-                    lines[j].Should().Contain("\"IX_InstitutionalHolding_QuarterRebuild\"", plan);
+                    lines[j].Should().Contain("\"IX_InstitutionalHolding_QuarterSlice\"", plan);
                 }
             }
+        }
+    }
+
+    // The holder-intelligence rebuild loads every filer's book for the quarter and the one before,
+    // and sums the quarter's valued common shares for the aggregate benchmark. Both read the
+    // share, option and value-state columns; without them in the quarter index every position of
+    // the quarter is a heap fetch.
+    [Fact]
+    public async Task HolderIntelligenceRebuildReads_AreServedIndexOnlyByTheQuarterIndex()
+    {
+        var reportDate = new DateOnly(2024, 6, 30);
+        await SeedFiledQuarters(reportDate, holders: 600, stocks: 300);
+        var capture = new CommandCapture();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped(_ =>
+            fixture.CreateDbContext(options => options.AddInterceptors(capture))
+        );
+        services.AddSingleton(
+            new HoldingsCorpusCoverage(
+                Options.Create(new WorkerOptions { MinSyncDate = new DateTime(2024, 1, 1) })
+            )
+        );
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddScoped<EquityIssuerRepository>();
+        services.AddScoped<FinancialFactRepository>();
+        services.AddScoped<FinancialConceptRepository>();
+        services.AddScoped<SharesOutstandingAsOfReader>();
+        services.AddHolderBenchmarks();
+        services.AddScoped<HolderIntelligenceRefreshService>();
+        await using var provider = services.BuildServiceProvider();
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var rebuilt = await scope
+                .ServiceProvider.GetRequiredService<HolderIntelligenceRefreshService>()
+                .RebuildQuarter(reportDate, new DateOnly(2024, 11, 30), CancellationToken.None);
+            rebuilt.Should().BeTrue();
+        }
+
+        var reads = capture
+            .Commands.Where(c =>
+                c.Text.Contains("FROM \"InstitutionalHolding\"")
+                && (c.Text.Contains("\"ValueMissing\"") || c.Text.Contains("AS \"IssuerId\""))
+            )
+            .ToList();
+        reads.Should().Contain(c => c.Text.Contains("\"ValueMissing\""), "the filer-batch load");
+        reads.Should().Contain(c => c.Text.Contains("AS \"IssuerId\""), "the aggregate benchmark");
+        foreach (var plan in await Explain(reads))
+        {
+            plan.Split('\n')
+                .Where(line => line.Contains("on \"InstitutionalHolding\""))
+                .Should()
+                .NotBeEmpty(plan)
+                .And.OnlyContain(
+                    line =>
+                        line.Contains(
+                            "Index Only Scan using \"IX_InstitutionalHolding_QuarterSlice\""
+                        ),
+                    plan
+                );
         }
     }
 
@@ -234,7 +303,7 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
     // lane's pending-pair scan. Each must be served index-only by its covering index; a missing
     // include turns every row of a heavily held stock or a mega-filer into a heap fetch.
     // The projection FundScoringManager.RunBacktest reads for every snapshot in a filer's window;
-    // every column must come from the holder index or each history row is a heap fetch.
+    // every column must come from a covering index or each history row is a heap fetch.
     [Fact]
     public async Task FundScoringHistoryRead_IsServedIndexOnlyByTheHolderIndex()
     {
@@ -276,12 +345,17 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
             .ContainSingle(c => c.Text.Contains("FROM \"InstitutionalHolding\""))
             .Subject;
         var plan = (await Explain([read])).Single();
-        plan.Should()
-            .Contain(
-                "Index Only Scan using \"IX_InstitutionalHolding_InstitutionalHolderId_ReportDate\"",
-                plan
-            );
+        plan.Should().Match(ServedIndexOnlyForOneHolder, plan);
     }
+
+    // A holder's seek on a few quarters is index-only through the holder index or the quarter
+    // index, whichever the planner costs lower; both carry every column these reads project.
+    private static readonly System.Linq.Expressions.Expression<
+        Func<string, bool>
+    > ServedIndexOnlyForOneHolder = plan =>
+        plan.Contains(
+            "Index Only Scan using \"IX_InstitutionalHolding_InstitutionalHolderId_ReportDate\""
+        ) || plan.Contains("Index Only Scan using \"IX_InstitutionalHolding_QuarterSlice\"");
 
     [Fact]
     public async Task RequestPathReads_AreServedIndexOnlyByTheirCoveringIndexes()
@@ -371,12 +445,7 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
                 "Index Only Scan using \"IX_InstitutionalHolding_StockQuarterExposure\"",
                 plans[0]
             );
-        plans[1]
-            .Should()
-            .Contain(
-                "Index Only Scan using \"IX_InstitutionalHolding_InstitutionalHolderId_ReportDate\"",
-                plans[1]
-            );
+        plans[1].Should().Match(ServedIndexOnlyForOneHolder, plans[1]);
         plans[2]
             .Should()
             .Contain(
@@ -567,6 +636,90 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
             connection
         );
         await analyze.ExecuteNonQueryAsync();
+    }
+
+    // Twenty quarters of three valued positions per filer, with the 13F rollups of the rebuilt
+    // quarter and the one before, so one filer batch is a small slice of the table as in production.
+    private async Task SeedFiledQuarters(DateOnly reportDate, int holders, int stocks)
+    {
+        await using var context = fixture.CreateDbContext();
+        var issuers = Enumerable
+            .Range(0, stocks)
+            .Select(i =>
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: $"S{i:D4}",
+                    Name: $"Stock {i:D4}",
+                    MarketCapitalization: 1_000_000_000,
+                    SharesOutStanding: 100_000_000
+                )
+            )
+            .ToList();
+        context.Set<EquityIssuer>().AddRange(issuers);
+        var quarters = Enumerable
+            .Range(-19, 20)
+            .Select(q => reportDate.AddDays(1).AddMonths(3 * q).AddDays(-1))
+            .ToList();
+        var filed = quarters.TakeLast(2).ToHashSet();
+        for (var h = 0; h < holders; h++)
+        {
+            var holder = new InstitutionalHolder
+            {
+                Id = Guid.NewGuid(),
+                Cik = $"{h + 1:D10}",
+                Name = $"Filer {h:D4}",
+            };
+            context.Set<InstitutionalHolder>().Add(holder);
+            for (var q = 0; q < quarters.Count; q++)
+            {
+                var accession = $"{h + 1:D10}-{q:D2}-000001";
+                if (filed.Contains(quarters[q]))
+                    context
+                        .Set<InstitutionalFiling>()
+                        .Add(
+                            new InstitutionalFiling
+                            {
+                                AccessionNumber = accession,
+                                InstitutionalHolderId = holder.Id,
+                                FilingDate = quarters[q].AddDays(45),
+                                ReportDate = quarters[q],
+                                FilingType = FilingType.Form13F,
+                                PositionCount = 3,
+                                TotalValue = 150_000,
+                            }
+                        );
+                for (var k = 0; k < 3; k++)
+                {
+                    context
+                        .Set<InstitutionalHolding>()
+                        .Add(
+                            new InstitutionalHolding
+                            {
+                                Id = Guid.NewGuid(),
+                                EquityIssuerId = issuers[(h * 3 + k + q) % stocks].Id,
+                                InstitutionalHolderId = holder.Id,
+                                ReportDate = quarters[q],
+                                FilingDate = quarters[q].AddDays(45),
+                                Shares = 1_000,
+                                Value = 50_000,
+                                ShareType = ShareType.Shares,
+                                InvestmentDiscretion = InvestmentDiscretion.Sole,
+                                AccessionNumber = accession,
+                            }
+                        );
+                }
+            }
+        }
+        await context.SaveChangesAsync();
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        // As in SeedQuarter: flush the seed's commit record so VACUUM can mark its pages visible.
+        await using (var checkpoint = new NpgsqlCommand("CHECKPOINT;", connection))
+            await checkpoint.ExecuteNonQueryAsync();
+        await using var vacuum = new NpgsqlCommand(
+            "VACUUM (ANALYZE) \"InstitutionalHolding\", \"InstitutionalFiling\";",
+            connection
+        );
+        await vacuum.ExecuteNonQueryAsync();
     }
 
     // The same statement and the same typed parameters the scan sent, planned the way Npgsql
