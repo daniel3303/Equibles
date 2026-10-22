@@ -129,4 +129,84 @@ public class StockSplitCaptureMovedDatePostgresTests(ParadeDbFixture fixture)
         stored.EffectiveDate.Should().Be(ExDate);
         stored.PriceAdjustmentAppliedTime.Should().BeNull();
     }
+
+    // MGN's stored rows: 1:40 reported for 21 August and 8 September, then 1:30 for 17 September,
+    // every one applied. The withdrawn rows go and the survivor's marker reopens under the trigger.
+    [Fact]
+    public async Task SupersedeMovedDates_RevisedRatio_DeletesTheWithdrawnRowsAndReopensTheSurvivor()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "MVDT");
+        var listingId = issuer.Presentation.EquityListingId;
+        var survivor = Revised(
+            issuer.Id,
+            listingId,
+            new DateOnly(2026, 9, 17),
+            30m,
+            new DateTime(2026, 9, 10, 16, 24, 39, DateTimeKind.Utc),
+            new DateTime(2026, 9, 18, 0, 51, 9, DateTimeKind.Utc)
+        );
+        survivor.ShareCountEvidence = StockSplitShareCountEvidence.Confirmed;
+        DbContext.AddRange(
+            issuer,
+            Revised(
+                issuer.Id,
+                listingId,
+                new DateOnly(2026, 8, 21),
+                40m,
+                new DateTime(2026, 8, 12, 16, 54, 29, DateTimeKind.Utc),
+                new DateTime(2026, 8, 22, 0, 52, 47, DateTimeKind.Utc)
+            ),
+            Revised(
+                issuer.Id,
+                listingId,
+                new DateOnly(2026, 9, 8),
+                40m,
+                new DateTime(2026, 8, 27, 20, 22, 52, DateTimeKind.Utc),
+                new DateTime(2026, 9, 9, 13, 53, 38, DateTimeKind.Utc)
+            ),
+            survivor
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        (
+            await Manager()
+                .SupersedeMovedDates(
+                    issuer.Id,
+                    listingId,
+                    "MVDT",
+                    ReportedFrom,
+                    [
+                        new CapturedSplit
+                        {
+                            EffectiveDate = new DateOnly(2026, 9, 17),
+                            Numerator = 1m,
+                            Denominator = 30m,
+                            Source = StockSplitSource.External,
+                        },
+                    ]
+                )
+        ).Should().Be(2);
+
+        DbContext.ChangeTracker.Clear();
+        var stored = await DbContext.Set<StockSplit>().AsNoTracking().SingleAsync();
+        stored.Id.Should().Be(survivor.Id);
+        stored.PriceAdjustmentAppliedTime.Should().BeNull();
+        stored.ShareCountEvidence.Should().Be(StockSplitShareCountEvidence.Confirmed);
+    }
+
+    private static StockSplit Revised(
+        Guid issuerId,
+        Guid listingId,
+        DateOnly date,
+        decimal denominator,
+        DateTime capturedAt,
+        DateTime applied
+    )
+    {
+        var split = Stored(issuerId, listingId, date, capturedAt, applied);
+        split.Numerator = 1m;
+        split.Denominator = denominator;
+        return split;
+    }
 }

@@ -67,6 +67,8 @@ public class CompanySyncService : ICompanySyncService
                 secCompanies.Count
             );
 
+            await MaintainFiledEvidence(secCompanies);
+
             if (_workerOptions.TickersToSync?.Count > 0)
             {
                 secCompanies = secCompanies
@@ -169,6 +171,48 @@ public class CompanySyncService : ICompanySyncService
         {
             _logger.LogError(ex, "Error while syncing companies from SEC API");
             throw;
+        }
+    }
+
+    // Runs on the whole directory, before a configured ticker filter narrows it. Each step fails on
+    // its own: neither the dated directory spans nor the re-stamped filed types may stop the sync.
+    private async Task MaintainFiledEvidence(List<CompanyInfo> secCompanies)
+    {
+        using var scope = _serviceScopeFactory.CreateScope();
+        try
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            var recorded = await SecTickerDirectoryLedger.Record(
+                dbContext,
+                secCompanies,
+                DateOnly.FromDateTime(DateTime.UtcNow)
+            );
+            _logger.LogInformation("Recorded {Count} SEC ticker directory observations", recorded);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording the SEC ticker directory");
+            await ReportError(
+                "CompanySync.RecordTickerDirectory",
+                ex,
+                $"companies: {secCompanies.Count}"
+            );
+        }
+
+        try
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            var restamped = await RegistrationTypeRestamp.Apply(dbContext);
+            if (restamped > 0)
+                _logger.LogInformation(
+                    "Re-stamped the filed registration type of {Count} securities",
+                    restamped
+                );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error re-stamping filed registration types");
+            await ReportError("CompanySync.RestampRegistrationTypes", ex, "");
         }
     }
 

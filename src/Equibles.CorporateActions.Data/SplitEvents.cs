@@ -43,6 +43,25 @@ public static class SplitEvents
         return events;
     }
 
+    /// <summary>
+    /// Whether a ratio can be a revised definition of another: a different ratio that moves the
+    /// share count the same way. A postponed reverse split revised from 1:40 to 1:30 is still a
+    /// reverse split; a forward split beside a reverse consolidation is two events.
+    /// </summary>
+    public static bool IsRevisedRatio(
+        decimal numerator,
+        decimal denominator,
+        decimal revisedNumerator,
+        decimal revisedDenominator
+    ) =>
+        numerator > 0m
+        && denominator > 0m
+        && revisedNumerator > 0m
+        && revisedDenominator > 0m
+        && numerator * revisedDenominator != revisedNumerator * denominator
+        && Math.Sign(numerator - denominator) != 0
+        && Math.Sign(numerator - denominator) == Math.Sign(revisedNumerator - revisedDenominator);
+
     /// <summary>The row's ratio, or null when an arm is not positive and it cannot describe a split.</summary>
     public static decimal? Ratio(StockSplit split) =>
         split.Numerator > 0m && split.Denominator > 0m ? split.Numerator / split.Denominator : null;
