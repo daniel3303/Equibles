@@ -45,7 +45,7 @@ namespace Equibles.IntegrationTests.Helpers;
 public class ParadeDbFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder(
-        "paradedb/paradedb:latest"
+        "paradedb/paradedb:0.26.2-pg18"
     )
         .WithDatabase("equibles_integration")
         .WithUsername("postgres")
