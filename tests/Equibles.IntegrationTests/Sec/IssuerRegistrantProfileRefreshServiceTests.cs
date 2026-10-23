@@ -20,8 +20,9 @@ namespace Equibles.IntegrationTests.Sec;
 /// <summary>
 /// The registrant profile refresh reads every followed issuer's EDGAR header: never-read issuers
 /// first, then profiles older than the refresh age. A 404, an unreadable reply or another CIK's
-/// reply is dated so it cannot lead the queue forever, an outage is never dated, and only a full
-/// batch read without an outage asks for the next batch at once.
+/// reply is dated so it cannot lead the queue forever (three unreadable replies in a row still end
+/// the run), an HTTP outage is never dated, and only a full batch read without either asks for the
+/// next batch at once.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
