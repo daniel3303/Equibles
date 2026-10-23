@@ -5,6 +5,7 @@ using Equibles.Media.BusinessLogic.Storage;
 using Equibles.Media.Data.Models;
 using Equibles.Media.HostedService;
 using Equibles.Media.HostedService.Configuration;
+using Equibles.Media.HostedService.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -18,7 +19,8 @@ namespace Equibles.IntegrationTests.Media;
 /// tree: queued blobs are trashed only when unreferenced, still-referenced queue entries
 /// are dropped without touching the blob, aged trash is purged unless a row reappeared
 /// (then restored), and the rolling reconciliation trashes on-disk blobs that no row
-/// references even though they were never queued (the cascade-delete case).
+/// references even though they were never queued (the cascade-delete case). A run saves its
+/// progress in the store root, so an interrupted run resumes after its last finished folder.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class BlobDeletionSweepWorkerTests : ParadeDbMcpTestBase
@@ -39,7 +41,104 @@ public class BlobDeletionSweepWorkerTests : ParadeDbMcpTestBase
                 sweepOptions,
                 NullLogger<BlobDeletionSweepWorker>()
             ) { }
+
+        // Save every finished folder, so an interruption's saved position is exact.
+        protected override TimeSpan CheckpointInterval => TimeSpan.Zero;
     }
+
+    /// <summary>Answers "unreferenced" and cancels the sweep on its <c>cancelOnCall</c>-th check.</summary>
+    private sealed class CountingReferenceChecker : IBlobReferenceChecker
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly int _cancelOnCall;
+
+        public CountingReferenceChecker(
+            CancellationTokenSource cancellation = null,
+            int cancelOnCall = 0
+        )
+        {
+            _cancellation = cancellation;
+            _cancelOnCall = cancelOnCall;
+        }
+
+        public int Calls { get; private set; }
+
+        public Task<bool> IsReferenced(string contentHash, CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (Calls == _cancelOnCall)
+            {
+                _cancellation.Cancel();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(false);
+        }
+
+        public Task<IReadOnlySet<string>> GetReferenced(
+            IReadOnlyCollection<string> contentHashes,
+            CancellationToken cancellationToken
+        )
+        {
+            return Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+        }
+    }
+
+    private ServiceProvider CreateServices(IBlobReferenceChecker checker = null)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<EquiblesFinancialDbContext>(_ => Fixture.CreateDbContext());
+        if (checker == null)
+        {
+            services.AddScoped<IBlobReferenceChecker, FinancialBlobReferenceChecker>();
+        }
+        else
+        {
+            services.AddScoped<IBlobReferenceChecker>(_ => checker);
+        }
+
+        return services.BuildServiceProvider();
+    }
+
+    private static TestSweepWorker CreateWorker(ServiceProvider provider, string root)
+    {
+        return new TestSweepWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new FileStorageOptions { Enabled = true, RootPath = root }),
+            Options.Create(
+                new BlobSweepOptions
+                {
+                    Enabled = true,
+                    GraceHours = 0,
+                    TrashRetentionHours = 1,
+                }
+            )
+        );
+    }
+
+    private BlobSweepStateStore StateStore(string root) =>
+        new(root, NullLogger<BlobDeletionSweepWorker>());
+
+    private static string NewRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "eq-sweep-it-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    private static string WriteAgedTrash(string root, string shard)
+    {
+        var trashPath = WriteBlob(
+            root,
+            $".trash/blob/sha256/{shard}/00/{HexHash(shard)}",
+            "trashed"u8.ToArray()
+        );
+        System.IO.File.SetLastWriteTimeUtc(trashPath, DateTime.UtcNow.AddHours(-2));
+        return trashPath;
+    }
+
+    private static string TrashFolder(string root, string relative) =>
+        Path.Combine(root, ".trash", relative.Replace('/', Path.DirectorySeparatorChar));
 
     private static string WriteBlob(string root, string relativePath, byte[] bytes)
     {
@@ -200,6 +299,143 @@ public class BlobDeletionSweepWorkerTests : ParadeDbMcpTestBase
             {
                 Directory.Delete(root, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public async Task SweepOnce_SavedRunInThePurge_ResumesAfterItsPositionAndRemovesEmptiedFolders()
+    {
+        var root = NewRoot();
+        try
+        {
+            var before = WriteAgedTrash(root, "b0");
+            var atPosition = WriteAgedTrash(root, "b1");
+            var after = WriteAgedTrash(root, "b2");
+            var young = WriteBlob(
+                root,
+                $".trash/blob/sha256/b3/00/{HexHash("b3")}",
+                "young"u8.ToArray()
+            );
+            Directory.CreateDirectory(TrashFolder(root, "blob/sha256/b4/00"));
+            StateStore(root)
+                .Save(
+                    new BlobSweepState
+                    {
+                        LastSlot = 2,
+                        Run = new BlobSweepRun
+                        {
+                            StartedAt = DateTime.UtcNow.AddHours(-5),
+                            Slot = 3,
+                            Phase = BlobSweepPhase.Purge,
+                            Position = "blob/sha256/b1",
+                        },
+                    }
+                );
+            await using var provider = CreateServices();
+
+            await CreateWorker(provider, root).SweepOnce(CancellationToken.None);
+
+            // Folders up to the saved position were finished before the restart.
+            System.IO.File.Exists(before).Should().BeTrue();
+            System.IO.File.Exists(atPosition).Should().BeTrue();
+            System.IO.File.Exists(after).Should().BeFalse();
+            System.IO.File.Exists(young).Should().BeTrue();
+            Directory.Exists(TrashFolder(root, "blob/sha256/b2")).Should().BeFalse();
+            Directory.Exists(TrashFolder(root, "blob/sha256/b4")).Should().BeFalse();
+
+            var state = StateStore(root).Load();
+            state.Run.Should().BeNull();
+            state.LastCompletedAt.Should().NotBeNull();
+            state.LastSlot.Should().Be(3);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SweepOnce_InterruptedMidPurge_NextRunResumesAfterTheLastFinishedFolder()
+    {
+        var root = NewRoot();
+        try
+        {
+            var first = WriteAgedTrash(root, "c1");
+            var second = WriteAgedTrash(root, "c2");
+            var third = WriteAgedTrash(root, "c3");
+
+            using var shutdown = new CancellationTokenSource();
+            var interrupted = new CountingReferenceChecker(shutdown, cancelOnCall: 2);
+            await using (var provider = CreateServices(interrupted))
+            {
+                var sweep = () => CreateWorker(provider, root).SweepOnce(shutdown.Token);
+                await sweep.Should().ThrowAsync<OperationCanceledException>();
+            }
+
+            System.IO.File.Exists(first).Should().BeFalse();
+            System.IO.File.Exists(second).Should().BeTrue();
+            var saved = StateStore(root).Load().Run;
+            saved.Phase.Should().Be(BlobSweepPhase.Purge);
+            saved.Position.Should().Be("blob/sha256/c1");
+
+            // Trash that lands in a finished folder waits for the next run.
+            var behindPosition = WriteAgedTrash(root, "c1");
+            var resumed = new CountingReferenceChecker();
+            await using (var provider = CreateServices(resumed))
+            {
+                await CreateWorker(provider, root).SweepOnce(CancellationToken.None);
+            }
+
+            resumed.Calls.Should().Be(2);
+            System.IO.File.Exists(behindPosition).Should().BeTrue();
+            System.IO.File.Exists(second).Should().BeFalse();
+            System.IO.File.Exists(third).Should().BeFalse();
+            StateStore(root).Load().Run.Should().BeNull();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SweepOnce_AfterACompletedRun_ReconcilesTheNextSlot()
+    {
+        var root = NewRoot();
+        try
+        {
+            // Shard 0x00 is slot 0, the one after slot 6; shard 0x01 is slot 1.
+            var inSlot = WriteBlob(
+                root,
+                $"blob/sha256/00/00/{HexHash("00")}",
+                "orphan-0"u8.ToArray()
+            );
+            var otherSlot = WriteBlob(
+                root,
+                $"blob/sha256/01/00/{HexHash("01")}",
+                "orphan-1"u8.ToArray()
+            );
+            System.IO.File.SetLastWriteTimeUtc(inSlot, DateTime.UtcNow.AddDays(-3));
+            System.IO.File.SetLastWriteTimeUtc(otherSlot, DateTime.UtcNow.AddDays(-3));
+            StateStore(root)
+                .Save(
+                    new BlobSweepState
+                    {
+                        LastCompletedAt = DateTime.UtcNow.AddDays(-2),
+                        LastSlot = 6,
+                    }
+                );
+            await using var provider = CreateServices();
+
+            await CreateWorker(provider, root).SweepOnce(CancellationToken.None);
+
+            System.IO.File.Exists(inSlot).Should().BeFalse();
+            System.IO.File.Exists(otherSlot).Should().BeTrue();
+            StateStore(root).Load().LastSlot.Should().Be(0);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 }
