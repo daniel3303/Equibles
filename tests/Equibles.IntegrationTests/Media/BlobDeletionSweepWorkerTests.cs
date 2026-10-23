@@ -46,7 +46,7 @@ public class BlobDeletionSweepWorkerTests : ParadeDbMcpTestBase
         protected override TimeSpan CheckpointInterval => TimeSpan.Zero;
     }
 
-    /// <summary>Answers "unreferenced" and cancels the sweep on its <c>cancelOnCall</c>-th check.</summary>
+    /// <summary>Answers "unreferenced" and cancels the sweep on its <c>cancelOnCall</c>-th check of either kind.</summary>
     private sealed class CountingReferenceChecker : IBlobReferenceChecker
     {
         private readonly CancellationTokenSource _cancellation;
@@ -65,13 +65,7 @@ public class BlobDeletionSweepWorkerTests : ParadeDbMcpTestBase
 
         public Task<bool> IsReferenced(string contentHash, CancellationToken cancellationToken)
         {
-            Calls++;
-            if (Calls == _cancelOnCall)
-            {
-                _cancellation.Cancel();
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
+            Count(cancellationToken);
             return Task.FromResult(false);
         }
 
@@ -80,7 +74,19 @@ public class BlobDeletionSweepWorkerTests : ParadeDbMcpTestBase
             CancellationToken cancellationToken
         )
         {
+            Count(cancellationToken);
             return Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+        }
+
+        private void Count(CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (Calls == _cancelOnCall)
+            {
+                _cancellation.Cancel();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 
@@ -432,6 +438,107 @@ public class BlobDeletionSweepWorkerTests : ParadeDbMcpTestBase
             System.IO.File.Exists(inSlot).Should().BeFalse();
             System.IO.File.Exists(otherSlot).Should().BeTrue();
             StateStore(root).Load().LastSlot.Should().Be(0);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SweepOnce_ResumedRun_StillDrainsTheQueue()
+    {
+        var root = NewRoot();
+        try
+        {
+            var hash = HexHash("d1");
+            var path = $"blob/sha256/d1/00/{hash}";
+            var full = WriteBlob(root, path, "queued"u8.ToArray());
+            DbContext.Add(
+                new PendingBlobDeletion
+                {
+                    ContentHash = "sha256:" + hash,
+                    RelativePath = path,
+                    QueuedAt = DateTime.UtcNow.AddDays(-3),
+                }
+            );
+            await DbContext.SaveChangesAsync();
+            StateStore(root)
+                .Save(
+                    new BlobSweepState
+                    {
+                        Run = new BlobSweepRun
+                        {
+                            StartedAt = DateTime.UtcNow.AddHours(-30),
+                            Slot = 1,
+                            Phase = BlobSweepPhase.Reconcile,
+                            Position = "blob/sha256/f1",
+                        },
+                    }
+                );
+            await using var provider = CreateServices();
+
+            await CreateWorker(provider, root).SweepOnce(CancellationToken.None);
+
+            System.IO.File.Exists(full).Should().BeFalse();
+            System.IO.File.Exists(TrashFolder(root, path)).Should().BeTrue();
+            await using var verify = Fixture.CreateDbContext();
+            (await verify.Set<PendingBlobDeletion>().CountAsync()).Should().Be(0);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    // Folders share one reference query, so none becomes the position before its batch is done.
+    [Fact]
+    public async Task SweepOnce_InterruptedMidReconciliation_RedoesTheUnsettledBatch()
+    {
+        var root = NewRoot();
+        try
+        {
+            // Shards 0x00 and 0x07 are both slot 0, the one after slot 6.
+            var orphans = new[] { "00", "07" }
+                .Select(shard =>
+                {
+                    var orphan = WriteBlob(
+                        root,
+                        $"blob/sha256/{shard}/00/{HexHash(shard)}",
+                        "orphan"u8.ToArray()
+                    );
+                    System.IO.File.SetLastWriteTimeUtc(orphan, DateTime.UtcNow.AddDays(-3));
+                    return orphan;
+                })
+                .ToList();
+            StateStore(root)
+                .Save(
+                    new BlobSweepState
+                    {
+                        LastCompletedAt = DateTime.UtcNow.AddDays(-2),
+                        LastSlot = 6,
+                    }
+                );
+
+            using var shutdown = new CancellationTokenSource();
+            await using (var provider = CreateServices(new CountingReferenceChecker(shutdown, 1)))
+            {
+                var sweep = () => CreateWorker(provider, root).SweepOnce(shutdown.Token);
+                await sweep.Should().ThrowAsync<OperationCanceledException>();
+            }
+
+            orphans.Should().OnlyContain(orphan => System.IO.File.Exists(orphan));
+            var saved = StateStore(root).Load().Run;
+            saved.Phase.Should().Be(BlobSweepPhase.Reconcile);
+            saved.Position.Should().BeNull();
+
+            await using (var provider = CreateServices(new CountingReferenceChecker()))
+            {
+                await CreateWorker(provider, root).SweepOnce(CancellationToken.None);
+            }
+
+            orphans.Should().OnlyContain(orphan => !System.IO.File.Exists(orphan));
+            StateStore(root).Load().Run.Should().BeNull();
         }
         finally
         {
