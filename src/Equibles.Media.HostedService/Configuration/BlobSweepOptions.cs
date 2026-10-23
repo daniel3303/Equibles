@@ -24,8 +24,8 @@ public class BlobSweepOptions
 
     /// <summary>
     /// Enables the rolling disk-vs-database reconciliation that catches deletions the
-    /// queue cannot see (database-level cascades, direct repository deletes). Each daily
-    /// run covers one seventh of the shard space, so the whole store is reconciled weekly.
+    /// queue cannot see (database-level cascades, direct repository deletes). Each run
+    /// covers one seventh of the shard space, so seven completed runs reconcile the whole store.
     /// </summary>
     public bool ReconciliationEnabled { get; set; } = true;
 
