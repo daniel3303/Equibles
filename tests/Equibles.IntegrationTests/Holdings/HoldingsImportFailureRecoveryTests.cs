@@ -593,4 +593,48 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         await failures.Resolve("original", CancellationToken.None);
         (await coverage.GetIncompleteReason(Quarter)).Should().BeNull();
     }
+
+    [Fact]
+    public async Task Coverage_CountsAnUndatedFailureOnlyForQuartersEndingBeforeItsFiling()
+    {
+        await using var db = fixture.CreateDbContext();
+        db.Add(
+            new RealtimeSweepState
+            {
+                WorkerName = "Holdings13FRealtime",
+                SweptThrough = DateOnly.FromDateTime(DateTime.UtcNow),
+            }
+        );
+        await db.SaveChangesAsync();
+        var failures = new HoldingsImportFailureRepository(db);
+        await failures.Record(
+            "undated",
+            "123",
+            Quarter.AddDays(30),
+            null,
+            HoldingsImportFailureReason.UnreadableSource,
+            CancellationToken.None
+        );
+        var coverage = new HoldingsImportCoverage(
+            failures,
+            new ProcessedDataSetRepository(db),
+            new RealtimeSweepStateRepository(db),
+            new HoldingsCusipRescanRepository(db)
+        );
+
+        (await coverage.GetIncompleteReason(Quarter)).Should().Contain("not finished importing");
+        (await coverage.GetIncompleteReason(new DateOnly(2026, 9, 30))).Should().BeNull();
+        (await coverage.GetIncompleteReason(default)).Should().Contain("not finished importing");
+        await failures.Record(
+            "undated-unfiled",
+            "456",
+            default,
+            null,
+            HoldingsImportFailureReason.UnreadableSource,
+            CancellationToken.None
+        );
+        (await coverage.GetIncompleteReason(new DateOnly(2026, 9, 30)))
+            .Should()
+            .Contain("not finished importing");
+    }
 }
