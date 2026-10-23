@@ -44,6 +44,8 @@ public class HoldingsImportCoverage(
             || sweptThrough < DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-2)
         )
             return "Recent SEC filings are still being reconciled. Holder totals and changes may be incomplete until processing catches up.";
+        // A filing whose period never parsed can only report a quarter that ended before it was
+        // filed, so it leaves later quarters complete; one with no parsed filing date counts for all.
         var unresolved = await failures
             .GetAll()
             .CountAsync(
@@ -51,7 +53,10 @@ public class HoldingsImportCoverage(
                     row.ResolvedAt == null
                     && (
                         reportDate == default
-                        || row.ReportDate == null
+                        || (
+                            row.ReportDate == null
+                            && (row.FilingDate >= reportDate || row.FilingDate == default)
+                        )
                         || row.ReportDate == reportDate
                     ),
                 cancellationToken
