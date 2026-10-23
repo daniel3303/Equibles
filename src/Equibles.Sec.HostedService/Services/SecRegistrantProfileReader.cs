@@ -13,9 +13,8 @@ namespace Equibles.Sec.HostedService.Services;
 /// company election or withdrawal. The recent list comes with the submissions header at no
 /// extra cost. A filer EDGAR never classified by industry (no SIC), whose recent list shows no
 /// election, has its archived pages read once for the election forms; SIC only chooses where
-/// to look, the filing alone decides. Until those pages are requested the profile is stored
-/// without its read date, so it stays due; a failed request still dates the read, so a broken
-/// archive cannot lead the refresh queue every cycle, and the filing scraper retries it.
+/// to look, the filing alone decides. A failed archive read still dates the profile, so it
+/// cannot lead the refresh queue every cycle; the next read of the header retries it.
 /// </summary>
 [Service]
 public class SecRegistrantProfileReader(
@@ -24,13 +23,7 @@ public class SecRegistrantProfileReader(
     ILogger<SecRegistrantProfileReader> logger
 )
 {
-    /// <summary>Stores the profile from <paramref name="metadata"/>.</summary>
-    /// <returns>Whether the archived filing pages were requested.</returns>
-    public async Task<bool> Store(
-        EquityIssuer company,
-        CompanyMetadata metadata,
-        bool mayReadArchive
-    )
+    public async Task Store(EquityIssuer company, CompanyMetadata metadata)
     {
         var election = metadata.BdcElectionFiledOn;
         var withdrawal = metadata.BdcWithdrawalFiledOn;
@@ -38,17 +31,14 @@ public class SecRegistrantProfileReader(
         // The history date is recorded once: rewriting it every read would save every filer daily.
         DateOnly? historyReadOn =
             metadata.HasArchivedFilings || company.BdcHistoryReadOn != null ? null : today;
-        var archiveDue =
+
+        if (
             metadata.HasArchivedFilings
             && election == null
             && company.BdcHistoryReadOn == null
-            && string.IsNullOrWhiteSpace(metadata.Sic);
-        var archiveRequested = false;
-
-        if (archiveDue && mayReadArchive)
+            && string.IsNullOrWhiteSpace(metadata.Sic)
+        )
         {
-            archiveRequested = true;
-            archiveDue = false;
             try
             {
                 var history = await secEdgarClient.GetCompanyFilings(company.Cik);
@@ -75,8 +65,7 @@ public class SecRegistrantProfileReader(
             election,
             withdrawal,
             historyReadOn,
-            archiveDue ? null : today
+            today
         );
-        return archiveRequested;
     }
 }

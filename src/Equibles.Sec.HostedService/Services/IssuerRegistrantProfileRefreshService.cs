@@ -14,9 +14,10 @@ namespace Equibles.Sec.HostedService.Services;
 /// <summary>
 /// Recurring reconciliation: keeps the EDGAR registrant profile (incorporation, business
 /// address, periodic-report file number, business development company election) of every
-/// followed issuer read, never-read issuers first and each again after <see cref="RefreshAge"/>.
+/// followed issuer read, never-read issuers first and each again after <see cref="RefreshAgeDays"/>.
 /// The filing scraper stores it too, but only for the few hundred companies it enumerates a
-/// day; this reads the header alone, one request per issuer.
+/// day; this reads the header alone, one request per issuer. Every outcome but an outage dates
+/// the issuer, so the queue lives in the database: a restart resumes it and never repeats a read.
 /// </summary>
 [Service]
 public class IssuerRegistrantProfileRefreshService(
@@ -30,19 +31,16 @@ public class IssuerRegistrantProfileRefreshService(
     // Header fields rarely change, and a company that files is re-read by the filing scraper.
     internal const int RefreshAgeDays = 30;
 
-    // The client returns null for any non-HTTP failure; a run of them is an outage.
+    // The client returns null for any non-HTTP failure, a timeout included; a run of them is an
+    // outage. A lone unreadable reply is dated like a 404, or a few permanently unreadable issuers
+    // would lead the queue and end every run.
     private const int MaxConsecutiveUnreadable = 3;
 
     /// <summary>
-    /// Reads up to <paramref name="maxIssuers"/> due profiles, requesting the archived filing
-    /// pages (several requests each) for at most <paramref name="maxArchiveReads"/> of them; an
-    /// issuer left waiting for its archive stays due. Returns how many profiles were stored.
+    /// Reads up to <paramref name="maxIssuers"/> due profiles. <see cref="RefreshRun.MoreDue"/>
+    /// says a full batch was due and read without an outage, so the next batch can follow at once.
     /// </summary>
-    public async Task<int> Run(
-        int maxIssuers,
-        int maxArchiveReads,
-        CancellationToken cancellationToken
-    )
+    public async Task<RefreshRun> Run(int maxIssuers, CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var cutoff = today.AddDays(-RefreshAgeDays);
@@ -65,8 +63,8 @@ public class IssuerRegistrantProfileRefreshService(
             .ToListAsync(cancellationToken);
 
         var stored = 0;
-        var archiveReads = 0;
         var unreadable = 0;
+        var interrupted = false;
         foreach (var id in due)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -98,17 +96,20 @@ public class IssuerRegistrantProfileRefreshService(
                     exception,
                     "SEC unavailable during the issuer registrant profile refresh; resuming next cycle"
                 );
+                interrupted = true;
                 break;
             }
 
             if (metadata == null)
             {
+                await StampRead(issuer, today);
                 if (++unreadable >= MaxConsecutiveUnreadable)
                 {
                     logger.LogInformation(
                         "EDGAR submissions unreadable for {Count} issuers in a row; resuming next cycle",
                         unreadable
                     );
+                    interrupted = true;
                     break;
                 }
                 continue;
@@ -130,19 +131,17 @@ public class IssuerRegistrantProfileRefreshService(
                 continue;
             }
 
-            if (await profileReader.Store(issuer, metadata, archiveReads < maxArchiveReads))
-                archiveReads++;
+            await profileReader.Store(issuer, metadata);
             stored++;
         }
 
         if (due.Count > 0)
             logger.LogInformation(
-                "Issuer registrant profile refresh stored {Stored} of {Due} due profiles, {ArchiveReads} with archived filing pages",
+                "Issuer registrant profile refresh stored {Stored} of {Due} due profiles",
                 stored,
-                due.Count,
-                archiveReads
+                due.Count
             );
-        return stored;
+        return new RefreshRun(stored, !interrupted && due.Count == maxIssuers);
     }
 
     private async Task StampRead(EquityIssuer issuer, DateOnly today)
@@ -150,4 +149,8 @@ public class IssuerRegistrantProfileRefreshService(
         issuer.SecRegistrantProfileReadOn = today;
         await issuerRepository.SaveChanges();
     }
+
+    /// <param name="Stored">Profiles stored this run.</param>
+    /// <param name="MoreDue">A full batch was due and read without an outage.</param>
+    public readonly record struct RefreshRun(int Stored, bool MoreDue);
 }

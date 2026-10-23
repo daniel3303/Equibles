@@ -69,7 +69,8 @@ public class EquityIssuer
     // null while only the recent list has been read.
     public DateOnly? BdcHistoryReadOn { get; set; }
 
-    // When EDGAR's submissions header was last read into the fields above; null until first read.
+    // When EDGAR's submissions header was last checked for the fields above, including a check
+    // that found the filer missing or its reply unreadable; null until first checked.
     public DateOnly? SecRegistrantProfileReadOn { get; set; }
 
     public Guid? IndustryId { get; set; }
