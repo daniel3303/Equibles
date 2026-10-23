@@ -7,18 +7,15 @@ using Microsoft.Extensions.Configuration;
 namespace Equibles.Sec.HostedService;
 
 /// <summary>
-/// Runs <see cref="IssuerRegistrantProfileRefreshService"/> hourly in the worker process, so it
-/// shares the single SEC rate limiter with the other EDGAR scrapers. A cold start reads every
-/// followed issuer within a few cycles; afterwards each cycle finds only the profiles that aged out.
+/// Runs <see cref="IssuerRegistrantProfileRefreshService"/> in the worker process, so it shares the
+/// single SEC rate limiter with the other EDGAR scrapers. While full batches are due (a cold start)
+/// the next batch follows after the continuation pause; afterwards each hourly cycle finds only the
+/// profiles that aged out, and a restart picks the queue up where it stopped.
 /// </summary>
 public class IssuerRegistrantProfileRefreshWorker : BaseScraperWorker
 {
-    // One submissions request each; sized so a cold start of about ten thousand issuers drains
-    // within a working day without crowding the filing scraper out of the request budget.
+    // One submissions request each; the pause between batches yields the shared request budget.
     internal const int IssuersPerCycle = 2000;
-
-    // Each archive read walks every archived filing page of the issuer.
-    internal const int ArchiveReadsPerCycle = 100;
 
     private readonly IConfiguration _configuration;
 
@@ -46,8 +43,10 @@ public class IssuerRegistrantProfileRefreshWorker : BaseScraperWorker
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
         await using var scope = ScopeFactory.CreateAsyncScope();
-        await scope
+        var run = await scope
             .ServiceProvider.GetRequiredService<IssuerRegistrantProfileRefreshService>()
-            .Run(IssuersPerCycle, ArchiveReadsPerCycle, stoppingToken);
+            .Run(IssuersPerCycle, stoppingToken);
+        if (run.MoreDue)
+            RequestImmediateContinuation();
     }
 }

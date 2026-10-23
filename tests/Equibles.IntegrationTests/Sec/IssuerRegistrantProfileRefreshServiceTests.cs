@@ -13,14 +13,15 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
+using static Equibles.Sec.HostedService.Services.IssuerRegistrantProfileRefreshService;
 
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
 /// The registrant profile refresh reads every followed issuer's EDGAR header: never-read issuers
-/// first, then profiles older than the refresh age, a 404 or another CIK's reply stamped so it
-/// cannot lead the queue forever, an outage never stamped, and an issuer whose archived pages
-/// were not read this run left due.
+/// first, then profiles older than the refresh age. A 404, an unreadable reply or another CIK's
+/// reply is dated so it cannot lead the queue forever, an outage is never dated, and only a full
+/// batch read without an outage asks for the next batch at once.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
@@ -40,7 +41,7 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
         foreach (var cik in new[] { "0000000101", "0000000102", "0000000103" })
             _edgar.GetCompanyMetadata(cik).Returns(Header(cik, sic: "3711"));
 
-        (await Sut().Run(1, 10, CancellationToken.None)).Should().Be(1);
+        (await Sut().Run(1, CancellationToken.None)).Should().Be(new RefreshRun(1, true));
         await _edgar.Received(1).GetCompanyMetadata("0000000102");
         (await Stored(neverRead.Id))
             .Should()
@@ -54,7 +55,7 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
                 }
             );
 
-        await Sut().Run(10, 10, CancellationToken.None);
+        (await Sut().Run(10, CancellationToken.None)).MoreDue.Should().BeFalse();
         await _edgar.Received(1).GetCompanyMetadata("0000000101");
         await _edgar.DidNotReceive().GetCompanyMetadata("0000000103");
         (await Stored(stale.Id)).SecRegistrantProfileReadOn.Should().Be(Today);
@@ -66,7 +67,7 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
     {
         await SeedIssuer("0000000201", readOn: null, active: false);
 
-        (await Sut().Run(10, 10, CancellationToken.None)).Should().Be(0);
+        (await Sut().Run(10, CancellationToken.None)).Stored.Should().Be(0);
 
         await _edgar.DidNotReceive().GetCompanyMetadata(Arg.Any<string>());
     }
@@ -79,7 +80,7 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
             .GetCompanyMetadata("0000000301")
             .ThrowsAsync(new HttpRequestException("gone", null, HttpStatusCode.NotFound));
 
-        await Sut().Run(10, 10, CancellationToken.None);
+        await Sut().Run(10, CancellationToken.None);
 
         (await Stored(issuer.Id))
             .Should()
@@ -97,7 +98,10 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
             .GetCompanyMetadata(Arg.Any<string>())
             .ThrowsAsync(new HttpRequestException("down", null, HttpStatusCode.ServiceUnavailable));
 
-        (await Sut().Run(10, 10, CancellationToken.None)).Should().Be(0);
+        // A full batch, but cut short by the outage: the worker waits instead of pressing on.
+        (await Sut().Run(2, CancellationToken.None))
+            .Should()
+            .Be(new RefreshRun(0, false));
 
         await _edgar.Received(1).GetCompanyMetadata(Arg.Any<string>());
         (await Stored(first.Id)).SecRegistrantProfileReadOn.Should().BeNull();
@@ -110,7 +114,7 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
         var issuer = await SeedIssuer("0000000501", readOn: null);
         _edgar.GetCompanyMetadata("0000000501").Returns(Header("0000000999", sic: "3711"));
 
-        (await Sut().Run(10, 10, CancellationToken.None)).Should().Be(0);
+        (await Sut().Run(10, CancellationToken.None)).Stored.Should().Be(0);
 
         (await Stored(issuer.Id))
             .Should()
@@ -124,34 +128,63 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ArchiveReadsBeyondTheCap_StoreTheHeaderAndStayDue()
+    public async Task UnclassifiedFilerWithArchives_ReadsTheArchivedElectionOnce()
     {
-        var first = await SeedIssuer("0000000601", readOn: null);
-        var second = await SeedIssuer("0000000602", readOn: null);
-        foreach (var cik in new[] { "0000000601", "0000000602" })
-        {
-            var header = Header(cik, sic: "");
-            header.HasArchivedFilings = true;
-            _edgar.GetCompanyMetadata(cik).Returns(header);
-            _edgar
-                .GetCompanyFilings(cik)
-                .Returns([
-                    new FilingData { Form = "N-54A", FilingDate = new DateOnly(2004, 2, 3) },
-                ]);
-        }
+        var issuer = await SeedIssuer("0000000601", readOn: null);
+        var header = Header("0000000601", sic: "");
+        header.HasArchivedFilings = true;
+        _edgar.GetCompanyMetadata("0000000601").Returns(header);
+        _edgar
+            .GetCompanyFilings("0000000601")
+            .Returns([new FilingData { Form = "N-54A", FilingDate = new DateOnly(2004, 2, 3) }]);
 
-        (await Sut().Run(10, 1, CancellationToken.None)).Should().Be(2);
+        await Sut().Run(10, CancellationToken.None);
 
-        await _edgar.Received(1).GetCompanyFilings(Arg.Any<string>());
-        var profiles = new[] { await Stored(first.Id), await Stored(second.Id) };
-        profiles.Should().OnlyContain(profile => profile.StateOfIncorporation == "DE");
-        var walked = profiles.Single(profile => profile.BdcHistoryReadOn != null);
-        walked.BdcElectionFiledOn.Should().Be(new DateOnly(2004, 2, 3));
-        walked.SecRegistrantProfileReadOn.Should().Be(Today);
-        profiles
-            .Single(profile => profile.BdcHistoryReadOn == null)
-            .SecRegistrantProfileReadOn.Should()
-            .BeNull();
+        (await Stored(issuer.Id))
+            .Should()
+            .BeEquivalentTo(
+                new
+                {
+                    BdcElectionFiledOn = (DateOnly?)new DateOnly(2004, 2, 3),
+                    BdcHistoryReadOn = (DateOnly?)Today,
+                    SecRegistrantProfileReadOn = (DateOnly?)Today,
+                }
+            );
+        await _edgar.Received(1).GetCompanyFilings("0000000601");
+    }
+
+    [Fact]
+    public async Task UnreadableReply_IsDatedSoItCannotStallTheQueue()
+    {
+        var unreadable = await SeedIssuer("0000000801", readOn: null);
+        var readable = await SeedIssuer("0000000802", readOn: null);
+        _edgar.GetCompanyMetadata("0000000801").Returns((CompanyMetadata)null);
+        _edgar.GetCompanyMetadata("0000000802").Returns(Header("0000000802", sic: "3711"));
+
+        (await Sut().Run(10, CancellationToken.None)).Stored.Should().Be(1);
+
+        (await Stored(unreadable.Id))
+            .Should()
+            .BeEquivalentTo(
+                new
+                {
+                    StateOfIncorporation = (string)null,
+                    SecRegistrantProfileReadOn = (DateOnly?)Today,
+                }
+            );
+        (await Stored(readable.Id)).StateOfIncorporation.Should().Be("DE");
+    }
+
+    [Fact]
+    public async Task UnreadableRepliesInARow_EndTheRunWithoutAskingForMore()
+    {
+        foreach (var cik in new[] { "0000000901", "0000000902", "0000000903", "0000000904" })
+            await SeedIssuer(cik, readOn: null);
+        _edgar.GetCompanyMetadata(Arg.Any<string>()).Returns((CompanyMetadata)null);
+
+        (await Sut().Run(4, CancellationToken.None)).Should().Be(new RefreshRun(0, false));
+
+        await _edgar.Received(3).GetCompanyMetadata(Arg.Any<string>());
     }
 
     [Fact]
@@ -165,7 +198,7 @@ public class IssuerRegistrantProfileRefreshServiceTests : ParadeDbMcpTestBase
             .GetCompanyFilings("0000000701")
             .ThrowsAsync(new InvalidOperationException("malformed archive page"));
 
-        await Sut().Run(10, 10, CancellationToken.None);
+        await Sut().Run(10, CancellationToken.None);
 
         (await Stored(issuer.Id))
             .Should()

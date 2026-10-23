@@ -496,7 +496,7 @@ public class DocumentScraper : IDocumentScraper
             );
 
             if (metadata != null)
-                await profileReader.Store(company, metadata, mayReadArchive: true);
+                await profileReader.Store(company, metadata);
 
             if (metadata?.FiscalYearEndMonth is { } month)
             {
