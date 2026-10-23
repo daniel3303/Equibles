@@ -78,6 +78,14 @@ public class SortedDirectoryWalkTests : IDisposable
         (await Visited(null, folder => folder[0] != "b")).Should().Equal("a/x", "a", "c", "");
     }
 
+    [Fact]
+    public async Task Walk_LinkedFolder_IsNotEntered()
+    {
+        Directory.CreateSymbolicLink(Path.Combine(_root, "c", "loop"), _root);
+
+        (await Visited(null)).Should().Equal("a/x", "a", "b/1", "b/2", "b", "c", "");
+    }
+
     [Theory]
     [InlineData("b/1", "b", -1)]
     [InlineData("b", "b/1", 1)]

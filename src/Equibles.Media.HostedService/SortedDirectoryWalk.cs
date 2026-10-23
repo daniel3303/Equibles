@@ -34,9 +34,11 @@ internal static class SortedDirectoryWalk
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var children = Directory
-            .EnumerateDirectories(fullPath)
-            .Select(Path.GetFileName)
+        // Linked folders are not entered, as with a recursive Directory.EnumerateFiles.
+        var children = new DirectoryInfo(fullPath)
+            .EnumerateDirectories()
+            .Where(d => d.LinkTarget == null)
+            .Select(d => d.Name)
             .Order(StringComparer.Ordinal)
             .ToList();
         foreach (var child in children)
