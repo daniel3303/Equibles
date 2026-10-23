@@ -24,6 +24,21 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
                 .HasDatabaseName("IX_Document_PendingChunking")
                 .HasFilter("\"ChunkedAt\" IS NULL")
                 .IsCreatedConcurrently();
+
+            // The document-set recapture sweep selects its batch as "captured inline, pre-cutoff,
+            // attempt budget left, newest first". Without this partial index the planner has to
+            // find every captured candidate and probe each one against the fact table before it
+            // can sort, so a batch never finished and the worker failed with a read timeout. The
+            // index supplies the ordering, letting the LIMIT stop the probe after one batch. The
+            // filter is spelled exactly as EF renders the query so the planner can match it.
+            b.HasIndex(e => new { e.ReportingDate, e.Id })
+                .HasDatabaseName("IX_Document_XbrlRecapture")
+                .IsDescending(true, false)
+                .HasFilter(
+                    "\"XbrlStatus\" = 1 AND \"XbrlType\" = 0 AND \"XbrlContentId\" IS NOT NULL "
+                        + "AND \"XbrlCaptureAttempts\" < 5"
+                )
+                .IsCreatedConcurrently();
         });
 
         builder.Entity<Models.Chunks.Chunk>(b =>

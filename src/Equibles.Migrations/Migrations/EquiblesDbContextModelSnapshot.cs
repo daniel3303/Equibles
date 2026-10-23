@@ -5418,6 +5418,12 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("ReportedStatementsStatus", "ReportedStatementsParseVersion");
 
+                    b.HasIndex("ReportingDate", "Id")
+                        .IsDescending(true, false)
+                        .HasDatabaseName("IX_Document_XbrlRecapture")
+                        .HasFilter("\"XbrlStatus\" = 1 AND \"XbrlType\" = 0 AND \"XbrlContentId\" IS NOT NULL AND \"XbrlCaptureAttempts\" < 5")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.HasIndex("XbrlStatus", "XbrlFactsVersion");
 
                     b.HasIndex(new[] { "DocumentType", "NormalizedContentVersion", "NormalizedContentAttempts", "ReportingDate", "Id" }, "IX_Document_NormalizationBackfill")
