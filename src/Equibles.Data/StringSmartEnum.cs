@@ -63,12 +63,8 @@ public abstract class StringSmartEnum<T>
 
     // FromValue and GetAll are inherited statics: calling T.FromValue runs only this base's initializer,
     // not T's, so T's Register(...) field initializer may not have run yet. Running T's type initializer
-    // first populates the lookup (a no-op after the first call).
-    private static void EnsureRegistered()
-    {
-        if (ByValue.IsEmpty)
-        {
-            RuntimeHelpers.RunClassConstructor(typeof(T).TypeHandle);
-        }
-    }
+    // every time is a no-op once it finished, waits while another thread is still running it, and
+    // rethrows a failed registration instead of serving the values it added before failing.
+    private static void EnsureRegistered() =>
+        RuntimeHelpers.RunClassConstructor(typeof(T).TypeHandle);
 }

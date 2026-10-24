@@ -63,4 +63,15 @@ public class StringSmartEnumTests
             .WithInnerException<ArgumentException>()
             .WithMessage("*Duplicate Clash value 'OPEN'*");
     }
+
+    [Fact]
+    public void FromValue_AfterAFailedRegistration_KeepsFailingInsteadOfServingThePartialSet()
+    {
+        var first = () => Clash.GetAll();
+        first.Should().Throw<TypeInitializationException>();
+
+        var lookup = () => Clash.FromValue("open");
+
+        lookup.Should().Throw<TypeInitializationException>();
+    }
 }
