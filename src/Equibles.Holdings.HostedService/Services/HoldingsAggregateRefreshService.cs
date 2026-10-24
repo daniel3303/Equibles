@@ -791,6 +791,7 @@ public class HoldingsAggregateRefreshService
 
         var activity = await dbContext
             .Set<InstitutionalHolding>()
+            .TagWithCallSite()
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
@@ -839,6 +840,7 @@ public class HoldingsAggregateRefreshService
 
         var listingActivity = await dbContext
             .Set<InstitutionalHolding>()
+            .TagWithCallSite()
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
@@ -1154,6 +1156,7 @@ public class HoldingsAggregateRefreshService
         var filedPrevious = dbContext.Filed13FHolderIds(previousReportDate);
         return dbContext
             .Set<InstitutionalHolding>()
+            .TagWithCallSite()
             // Each row needs its filer in the other quarter's set. Written as one OR per side so
             // Postgres keeps the ReportDate index scan and probes each set as a hashed subplan;
             // a bare IN is pulled up into a join whose estimates explode.
