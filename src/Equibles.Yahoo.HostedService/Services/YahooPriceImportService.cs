@@ -1036,9 +1036,9 @@ public class YahooPriceImportService
         var prices = scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var rows = await prices
             .GetLastBars([.. targets.Select(target => target.EquityListingId).Distinct()])
-            .Where(row => row.Date != null)
             .ToListAsync(cancellationToken);
-        var lastDates = rows.ToDictionary(row => row.EquityListingId, row => row.Date.Value);
+        var lastDates = rows.Where(row => row.Date != null)
+            .ToDictionary(row => row.EquityListingId, row => row.Date.GetValueOrDefault());
 
         return BuildCrawlOrder(targets, lastDates, DateOnly.FromDateTime(DateTime.UtcNow));
     }
