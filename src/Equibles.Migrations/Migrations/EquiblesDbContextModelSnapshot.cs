@@ -3526,6 +3526,8 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("EquityIssuerId");
+
                     b.HasIndex("InstitutionalHolderId", "EquityIssuerId", "ListedTicker")
                         .IsUnique();
 
@@ -4062,8 +4064,6 @@ namespace Equibles.Migrations.Migrations
                         .HasDatabaseName("IX_InstitutionalHolding_StuckZeroRepair")
                         .HasFilter("\"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0")
                         .HasAnnotation("Npgsql:CreatedConcurrently", true);
-
-                    b.HasIndex("ReportDate");
 
                     b.HasIndex("EquityIssuerId", "FilingDate")
                         .HasAnnotation("Npgsql:CreatedConcurrently", true);

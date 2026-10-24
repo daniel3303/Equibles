@@ -14,8 +14,8 @@ namespace Equibles.Holdings.Data.Models;
 // `INCLUDE` clauses aren't expressible via the [Index] attribute, so the Fluent
 // API call carries it. The covering index lets the ownership-trend GROUP BY on
 // /Stocks/{ticker}/Holdings run as an index-only scan.
+// A quarter's slice reads through IX_InstitutionalHolding_QuarterSlice, which leads with ReportDate.
 [Index(nameof(FilingDate))]
-[Index(nameof(ReportDate))]
 [Index(nameof(FilingType))]
 public class InstitutionalHolding
 {
