@@ -1160,6 +1160,6 @@ public class StatusControllerTests : IDisposable
 
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be(nameof(StatusController.Index));
-        _flashMessage.Received(1).Error("Error not found.", Arg.Any<string>(), Arg.Any<bool>());
+        _flashMessage.Received(1).Error("Error not found.", Arg.Any<string>());
     }
 }

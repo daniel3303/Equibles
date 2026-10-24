@@ -81,6 +81,6 @@ public class InstitutionalHoldingRepositoryGet13FByHoldersWithStockTests
         rows.Select(r => r.InstitutionalHolderId).Should().BeEquivalentTo([first.Id, second.Id]);
         rows.Should()
             .OnlyContain(r => r.FilingType == FilingType.Form13F && r.ReportDate == Quarter);
-        rows.Should().OnlyContain(r => r.Issuer != null && r.Issuer.Ticker == "MSFT");
+        rows.Should().OnlyContain(r => r.Issuer != null && r.Issuer.Id == stock.Id);
     }
 }
