@@ -33,7 +33,7 @@ public class ErrorManager
             Context = context.TruncateToFit(128),
             Message = message.TruncateToFit(512),
             StackTrace = stackTrace,
-            RequestSummary = requestSummary.TruncateToFit(512),
+            RequestSummary = requestSummary?.TruncateToFit(512),
         };
 
         _errorRepository.Add(error);
