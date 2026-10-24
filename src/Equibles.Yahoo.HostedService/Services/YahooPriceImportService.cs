@@ -1013,7 +1013,7 @@ public class YahooPriceImportService
 
     // Orders the crawl: current listings before historical recovery targets; inside each
     // partition, actively-traded stocks lead stalest-first and long-dormant or never-synced stocks
-    // follow stalest-first. One grouped MAX(Date) query over the price table per cycle.
+    // follow stalest-first.
     //
     // Plain stalest-first is the obvious order and it was actively harmful. Sorting the whole
     // universe by last stored date puts the stocks that will never return data — delisted tickers,
@@ -1033,14 +1033,12 @@ public class YahooPriceImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        EquityDailyStockPriceRepository priceRepo =
-            scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-        var rows = await priceRepo
-            .GetAllSeries()
-            .GroupBy(p => p.EquityListingId)
-            .Select(group => new { EquityListingId = group.Key, LastDate = group.Max(p => p.Date) })
+        var prices = scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
+        var rows = await prices
+            .GetLastBars([.. targets.Select(target => target.EquityListingId).Distinct()])
             .ToListAsync(cancellationToken);
-        var lastDates = rows.ToDictionary(row => row.EquityListingId, row => row.LastDate);
+        var lastDates = rows.Where(row => row.Date != null)
+            .ToDictionary(row => row.EquityListingId, row => row.Date.GetValueOrDefault());
 
         return BuildCrawlOrder(targets, lastDates, DateOnly.FromDateTime(DateTime.UtcNow));
     }
