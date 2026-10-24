@@ -95,12 +95,20 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
 
             _page = response.Frame.Page;
 
-            // Accept the prohibition agreement disclaimer
+            // Accept the prohibition agreement disclaimer. Ticking the box submits
+            // the agreement form by script (the page has no submit button), and a
+            // refused agreement leaves every later search refused too.
             var checkbox = _page.Locator("#agree_statement");
             if (await checkbox.IsVisibleAsync())
             {
-                await checkbox.CheckAsync();
-                await _page.Locator("button[type='submit'], input[type='submit']").ClickAsync();
+                var agreement = await _page.RunAndWaitForResponseAsync(
+                    () => checkbox.CheckAsync(),
+                    r => r.Request.IsNavigationRequest && r.Request.Method == "POST"
+                );
+                if (agreement.Status >= 400)
+                    throw new HttpRequestException(
+                        $"Senate eFD refused the prohibition agreement with HTTP {agreement.Status}"
+                    );
                 await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
             }
 
