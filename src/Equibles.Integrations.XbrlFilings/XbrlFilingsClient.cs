@@ -1,5 +1,7 @@
+using System.Net;
 using Equibles.Integrations.Common.Http;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Equibles.Integrations.XbrlFilings.Models;
 
 namespace Equibles.Integrations.XbrlFilings;
@@ -28,6 +30,12 @@ public class XbrlFilingsClient(HttpClient httpClient)
 
     // Every request the client makes waits its turn here; a caller may hold it to a pace of its own.
     internal IRateLimiter Pace { get; init; } = HostPace;
+
+    // The host throttles without stating a quota, and a corpus read runs to hundreds of pages, so a 429 backs
+    // the whole pace off and retries rather than abandoning the read.
+    internal const int MaxThrottleRetries = 5;
+
+    internal Func<int, TimeSpan> ThrottleBackoff { get; init; } = RetryBackoff.Exponential;
 
     public static Uri IndexUrl(string countryCode, int pageNumber, int pageSize) =>
         new(
@@ -90,12 +98,15 @@ public class XbrlFilingsClient(HttpClient httpClient)
     {
         ArgumentNullException.ThrowIfNull(reportUrl);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
-        await Pace.WaitAsync(cancellationToken);
-        return await SameOriginBinaryReader.Read(
-            httpClient,
-            Origin,
-            reportUrl,
-            Math.Min(maxBytes, MaxReportBytes),
+        return await Paced(
+            () =>
+                SameOriginBinaryReader.Read(
+                    httpClient,
+                    Origin,
+                    reportUrl,
+                    Math.Min(maxBytes, MaxReportBytes),
+                    cancellationToken
+                ),
             cancellationToken
         );
     }
@@ -107,14 +118,36 @@ public class XbrlFilingsClient(HttpClient httpClient)
         CancellationToken cancellationToken
     )
     {
-        await Pace.WaitAsync(cancellationToken);
-        return await SameOriginTextReader.Read(
-            httpClient,
-            Origin,
-            uri,
-            maxBytes,
-            cancellationToken,
-            accept
+        return await Paced(
+            () =>
+                SameOriginTextReader.Read(
+                    httpClient,
+                    Origin,
+                    uri,
+                    maxBytes,
+                    cancellationToken,
+                    accept
+                ),
+            cancellationToken
         );
+    }
+
+    private async Task<T> Paced<T>(Func<Task<T>> read, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            await Pace.WaitAsync(cancellationToken);
+            try
+            {
+                return await read();
+            }
+            catch (HttpRequestException ex)
+                when (ex.StatusCode == HttpStatusCode.TooManyRequests
+                    && attempt < MaxThrottleRetries
+                )
+            {
+                Pace.PauseFor(ThrottleBackoff(attempt));
+            }
+        }
     }
 }
