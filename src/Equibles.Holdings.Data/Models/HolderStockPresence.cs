@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
 
@@ -8,6 +9,8 @@ namespace Equibles.Holdings.Data.Models;
 /// since 2020-03-31. Tenure reads the run of set bits; the issuer id carries no foreign key, so an
 /// issuer merge moves rows by rule and keeps the survivor's row on a collision.
 /// </summary>
+// Per-security holder reads filter by issuer alone, which the holder-leading unique index cannot serve.
+[Index(nameof(EquityIssuerId))]
 public class HolderStockPresence
 {
     // Client-generated, so FlexLabs UpsertRange sends it; a store-generated key inserts null.
