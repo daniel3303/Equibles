@@ -19,10 +19,12 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
 
     private readonly ILogger<PlaywrightSenateBrowserSession> _logger;
     private readonly SenateAccessGate _accessGate;
+    private readonly ISenateBrowserContextOpener _contextOpener;
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     private IPlaywright _playwright;
     private IBrowser _browser;
+    private SenateBrowserContext _context;
     private IPage _page;
     private bool _authenticated;
 
@@ -59,11 +61,13 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
 
     public PlaywrightSenateBrowserSession(
         ILogger<PlaywrightSenateBrowserSession> logger,
-        SenateAccessGate accessGate
+        SenateAccessGate accessGate,
+        ISenateBrowserContextOpener contextOpener
     )
     {
         _logger = logger;
         _accessGate = accessGate;
+        _contextOpener = contextOpener;
     }
 
     public async Task EnsureAuthenticated(CancellationToken ct)
@@ -84,16 +88,10 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
                 new BrowserTypeLaunchOptions { Headless = true }
             );
 
-            var context = await _browser.NewContextAsync();
-            context.SetDefaultTimeout(BrowserFetchTimeoutMs);
-            _page = await context.NewPageAsync();
-
             _logger.LogDebug("Navigating to Senate eFD via Playwright Firefox");
 
-            var response = await _page.GotoAsync(
-                HomeUrl,
-                new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 30_000 }
-            );
+            _context = await _contextOpener.Open(_browser, HomeUrl, LoadHome);
+            var response = _context.Home;
 
             // Akamai's geo and bot block answers the home page with 403 Access Denied.
             if (response?.Status == 403)
@@ -105,6 +103,8 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
                 throw new HttpRequestException(
                     $"Senate eFD home page returned HTTP {response?.Status}"
                 );
+
+            _page = response.Frame.Page;
 
             // Accept the prohibition agreement disclaimer
             var checkbox = _page.Locator("#agree_statement");
@@ -122,6 +122,16 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
         {
             _initLock.Release();
         }
+    }
+
+    private static async Task<IResponse> LoadHome(IBrowserContext context)
+    {
+        context.SetDefaultTimeout(BrowserFetchTimeoutMs);
+        var page = await context.NewPageAsync();
+        return await page.GotoAsync(
+            HomeUrl,
+            new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 30_000 }
+        );
     }
 
     public async Task<SenateFetchResult> Fetch(
@@ -158,17 +168,11 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
     {
         GC.SuppressFinalize(this);
 
-        try
+        _page = null;
+        if (_context != null)
         {
-            if (_page != null)
-            {
-                await _page.Context.CloseAsync();
-                _page = null;
-            }
-        }
-        catch (PlaywrightException)
-        {
-            _page = null;
+            await _context.DisposeAsync();
+            _context = null;
         }
 
         try
