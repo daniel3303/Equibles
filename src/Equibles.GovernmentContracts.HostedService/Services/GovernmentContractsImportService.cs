@@ -1,6 +1,7 @@
 using System.Net;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
+using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.GovernmentContracts.Data.Models;
@@ -472,7 +473,7 @@ public class GovernmentContractsImportService : IImporter
                     row = new GovernmentContractRecipientParent
                     {
                         RecipientId = recipientId,
-                        RecipientName = Truncate(recipientName, 512),
+                        RecipientName = recipientName.TruncateToFit(512),
                         ParentRecipientId = parent?.ParentId,
                         ParentNames = JoinParentNames(parent?.Names),
                         ResolvedAt = now,
@@ -644,9 +645,6 @@ public class GovernmentContractsImportService : IImporter
 
     internal static string[] SplitParentNames(string parentNames) =>
         parentNames == null ? [] : parentNames.Split('\n');
-
-    private static string Truncate(string value, int maxLength) =>
-        value != null && value.Length > maxLength ? value[..maxLength] : value;
 
     /// <summary>
     /// Pull the scan cursor back to the epoch ONCE when the recipient-matching code is

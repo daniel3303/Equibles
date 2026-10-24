@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Extensions;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
@@ -207,9 +208,7 @@ public partial class BeneficialOwnershipDetailWriter
     }
 
     private static string Truncate(string value, int length) =>
-        string.IsNullOrEmpty(value) ? null
-        : value.Length <= length ? value
-        : value[..length];
+        string.IsNullOrEmpty(value) ? null : value.TruncateToFit(length);
 
     [GeneratedRegex(@"13d-1\s*\(\s*([bcd])\s*\)", RegexOptions.IgnoreCase)]
     private static partial Regex RulePattern();

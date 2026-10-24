@@ -21,17 +21,16 @@ public class JsonFlashMessageSerializerRoundTripTests
     // styling, the wrong title, or no message at all.
     //
     // Pin: a fully-populated message survives a Serialize -> Deserialize
-    // cycle byte-for-byte across all four interface properties (IsHtml,
-    // Title, Message, Type). Pick non-default values for every property —
-    // IsHtml=true, Type=Error — so a regression that silently defaults a
-    // property on the round-trip path surfaces here.
+    // cycle byte-for-byte across all three interface properties (Title,
+    // Message, Type). Pick non-default values for every property —
+    // Type=Error — so a regression that silently defaults a property on the
+    // round-trip path surfaces here.
     [Fact]
     public void SerializeThenDeserialize_FullyPopulatedMessage_PreservesEveryInterfaceProperty()
     {
         var sut = new JsonFlashMessageSerializer();
         var original = new FlashMessageModel
         {
-            IsHtml = true,
             Title = "Backup complete",
             Message = "Restored 3 records",
             Type = FlashMessageType.Error,
@@ -42,7 +41,6 @@ public class JsonFlashMessageSerializerRoundTripTests
 
         roundTripped.Should().ContainSingle();
         var copy = roundTripped[0];
-        copy.IsHtml.Should().Be(original.IsHtml);
         copy.Title.Should().Be(original.Title);
         copy.Message.Should().Be(original.Message);
         copy.Type.Should().Be(original.Type);

@@ -11,7 +11,7 @@ public class FlashMessageTitlePlumbingTests
     // The four FlashMessage convenience helpers (Success / Error / Info /
     // Warning) all accept an optional `title` parameter and forward it
     // through the shared private QueueOfType helper:
-    //   QueueOfType(type, message, title, isHtml) =>
+    //   QueueOfType(type, message, title) =>
     //       Queue(new FlashMessageModel { Message=msg, Title=title, ... });
     //
     // Every existing sibling pin in this file passes a single positional

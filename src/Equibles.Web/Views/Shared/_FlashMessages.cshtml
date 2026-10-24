@@ -26,11 +26,7 @@
                         @if (!string.IsNullOrEmpty(message.Title)) {
                             <h3 class="font-bold">@message.Title</h3>
                         }
-                        @if (message.IsHtml) {
-                            @Html.Raw(message.Message)
-                        } else {
-                            <span>@message.Message</span>
-                        }
+                        <span>@message.Message</span>
                     </div>
                     <button type="button" class="btn btn-ghost btn-sm btn-square" onclick="this.closest('.flash-message').remove()">
                         <icon name="x-mark" size="4" />
