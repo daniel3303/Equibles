@@ -291,6 +291,50 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
     }
 
     [Fact]
+    public async Task CrawlFreshness_RanksEachListingByItsNewestBar()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var behind = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "BEHIND");
+        var current = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "CURRENT");
+        DbContext.AddRange(behind, current);
+        // The current listing's history starts earlier, so ranking by any bar but the newest
+        // would put it first.
+        DbContext.AddRange(
+            Bar(behind.Presentation.Listing, today.AddDays(-30)),
+            Bar(behind.Presentation.Listing, today.AddDays(-3)),
+            Bar(current.Presentation.Listing, today.AddDays(-60)),
+            Bar(current.Presentation.Listing, today.AddDays(-1))
+        );
+        await DbContext.SaveChangesAsync();
+        var service = Service();
+        var targets = await InvokeTargets(
+            service,
+            "BuildPriceSeriesTargets",
+            new[] { current.Id, behind.Id },
+            CancellationToken.None
+        );
+
+        var ordered = await InvokeTargets(
+            service,
+            "OrderByCrawlPriority",
+            targets,
+            CancellationToken.None
+        );
+
+        ordered.Select(target => target.Ticker).Should().Equal("BEHIND", "CURRENT");
+    }
+
+    [Fact]
+    public void GetLastBars_ReadsOneNewestRowPerListingWithoutGroupingThePriceTable()
+    {
+        var sql = new EquityDailyStockPriceRepository(DbContext)
+            .GetLastBars([Guid.NewGuid()])
+            .ToQueryString();
+
+        sql.Should().Contain("LIMIT 1").And.NotContain("GROUP BY").And.NotContain("ROW_NUMBER");
+    }
+
+    [Fact]
     public async Task Import_QueuedTickerReassignedBeforeFetch_DoesNotRetargetTheRequest()
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(

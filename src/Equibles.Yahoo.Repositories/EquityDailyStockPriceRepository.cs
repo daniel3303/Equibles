@@ -200,4 +200,25 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     {
         return GetPrimarySeries().LatestValue(p => p.Date);
     }
+
+    /// <summary>
+    /// Each listing's newest bar date as one indexed newest-row lookup per listing, never a
+    /// grouping of the whole price table.
+    /// </summary>
+    public IQueryable<ListingLastBar> GetLastBars(IReadOnlyCollection<Guid> listingIds)
+    {
+        var series = GetAllSeries();
+        return DbContext
+            .Set<EquityListing>()
+            .Where(listing => listingIds.Contains(listing.Id))
+            .Select(listing => new ListingLastBar
+            {
+                EquityListingId = listing.Id,
+                Date = series
+                    .Where(price => price.EquityListingId == listing.Id)
+                    .OrderByDescending(price => price.Date)
+                    .Select(price => (DateOnly?)price.Date)
+                    .FirstOrDefault(),
+            });
+    }
 }
