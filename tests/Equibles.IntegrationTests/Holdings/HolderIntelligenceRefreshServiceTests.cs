@@ -917,6 +917,28 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DrainOnce_TheQuarterTheLatestJustReplacedDoesNotRest()
+    {
+        // When Q2 was the latest closed quarter its rebuilds were hourly, not part of a pass.
+        var asLatest = new DateTime(2024, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 100, 11_000),
+                ComputedState(Q1, DateTime.UtcNow.AddHours(-13), dirty: true),
+                ComputedState(Q2, asLatest, dirty: true),
+                ComputedState(Q3, DateTime.UtcNow.AddHours(-1), dirty: false)
+            )
+        );
+
+        await Drain().DrainOnce(Today, CancellationToken.None);
+
+        var states = await States();
+        states[Q1].DirtyAt.Should().NotBeNull("the last pass began past its window");
+        states[Q2].DirtyAt.Should().BeNull("no pass has rebuilt it since it stopped being latest");
+    }
+
+    [Fact]
     public async Task DrainOnce_APassRebuildsAnOldQuarterOnceAndMovesOn()
     {
         var passStarted = DateTime.UtcNow.AddHours(-1);

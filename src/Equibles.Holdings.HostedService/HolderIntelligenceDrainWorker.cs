@@ -105,16 +105,21 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                 })
                 .ToListAsync(cancellationToken);
             var historical = states.Where(state => state.ReportDate < latest).ToList();
-            var passStart = HistoricalPassStart(historical.Select(state => state.ComputedAt), now);
+            var passRebuilds = historical
+                .Where(state => IsPassRebuild(state.ReportDate, state.ComputedAt))
+                .Select(state => state.ComputedAt.Value)
+                .ToList();
+            var passStart = HistoricalPassStart(passRebuilds, now);
             // An uncomputed or outdated quarter never waits for a pass, so a version bump still
-            // recomputes the whole history at once.
+            // recomputes the whole history at once; nor does the quarter the latest closed one
+            // just replaced, until a pass has rebuilt it.
             due = states
                 .Where(state =>
                     state.DirtyAt != null
                     && state.DirtyAt < cutoff
                     && (
                         state.ReportDate == latest
-                        || state.ComputedAt == null
+                        || !IsPassRebuild(state.ReportDate, state.ComputedAt)
                         || state.CalculationVersion
                             < HolderIntelligenceRefreshService.CalculationVersion
                         || state.ComputedAt < passStart
@@ -126,7 +131,7 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                 state.DirtyAt != null && state.DirtyAt < cutoff && !due.Contains(state.ReportDate)
             );
             if (resting > 0 && passStart == null)
-                LogRest(resting, historical.Max(state => state.ComputedAt).Value);
+                LogRest(resting, passRebuilds.Max());
         }
 
         foreach (var reportDate in due)
@@ -165,14 +170,21 @@ public class HolderIntelligenceDrainWorker : BackgroundService
     /// already rebuilt waits for the next pass, or null while they rest. Read from the stored
     /// rebuild times, so a worker restart resumes the pass or the rest.
     /// </summary>
-    internal DateTime? HistoricalPassStart(IEnumerable<DateTime?> computedAt, DateTime now)
+    internal DateTime? HistoricalPassStart(IEnumerable<DateTime> passRebuilds, DateTime now)
     {
-        var recent = computedAt.Where(at => at > now - HistoricalPassInterval).ToList();
+        var recent = passRebuilds.Where(at => at > now - HistoricalPassInterval).ToList();
         if (recent.Count == 0)
             return now;
-        var start = recent.Min().Value;
+        var start = recent.Min();
         return now - start < HistoricalPassWindow ? start : null;
     }
+
+    // Only a rebuild made while the quarter was already before the latest closed one belongs to
+    // a pass; its hourly rebuilds as the latest never do.
+    private static bool IsPassRebuild(DateOnly reportDate, DateTime? computedAt) =>
+        computedAt is { } at
+        && reportDate
+            < HolderIntelligenceRefreshService.LatestClosedQuarter(DateOnly.FromDateTime(at));
 
     private void LogRest(int resting, DateTime lastRebuild)
     {
