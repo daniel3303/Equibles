@@ -62,25 +62,24 @@ public class FlashMessage : IFlashMessage
         TempData.Clear();
     }
 
-    public void Success(string message, string title = null, bool isHtml = false) =>
-        QueueOfType(FlashMessageType.Success, message, title, isHtml);
+    public void Success(string message, string title = null) =>
+        QueueOfType(FlashMessageType.Success, message, title);
 
-    public void Error(string message, string title = null, bool isHtml = false) =>
-        QueueOfType(FlashMessageType.Error, message, title, isHtml);
+    public void Error(string message, string title = null) =>
+        QueueOfType(FlashMessageType.Error, message, title);
 
-    public void Info(string message, string title = null, bool isHtml = false) =>
-        QueueOfType(FlashMessageType.Info, message, title, isHtml);
+    public void Info(string message, string title = null) =>
+        QueueOfType(FlashMessageType.Info, message, title);
 
-    public void Warning(string message, string title = null, bool isHtml = false) =>
-        QueueOfType(FlashMessageType.Warning, message, title, isHtml);
+    public void Warning(string message, string title = null) =>
+        QueueOfType(FlashMessageType.Warning, message, title);
 
-    private void QueueOfType(FlashMessageType type, string message, string title, bool isHtml) =>
+    private void QueueOfType(FlashMessageType type, string message, string title) =>
         Queue(
             new FlashMessageModel
             {
                 Message = message,
                 Title = title,
-                IsHtml = isHtml,
                 Type = type,
             }
         );

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Extensions;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
@@ -242,7 +243,7 @@ public class NportRealtimeIngestionService
             return FilingOutcome.SkippedRecorded;
         }
 
-        filing.RegistrantCik = Truncate(entry.Cik, 16);
+        filing.RegistrantCik = entry.Cik.TruncateToFit(16);
 
         // An opted-in series keeps its whole schedule and is stored unconditionally: its consumer
         // reads the fund's complete portfolio, so narrowing it to our universe would not merely
@@ -427,7 +428,4 @@ public class NportRealtimeIngestionService
             ? n.ToString(CultureInfo.InvariantCulture)
             : cik.TrimStart('0');
     }
-
-    private static string Truncate(string value, int maxLength) =>
-        value != null && value.Length > maxLength ? value[..maxLength] : value;
 }

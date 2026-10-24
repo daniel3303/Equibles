@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Extensions;
 using Equibles.Data;
 using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
@@ -837,8 +838,8 @@ public class XbrlFactExtractionService
                 existingBySymbol[symbol] = row;
             }
 
-            row.Title = Truncate(listing.Title, ListingTitleMaxLength);
-            row.ExchangeName = Truncate(listing.ExchangeName, ListingExchangeMaxLength);
+            row.Title = listing.Title.TruncateToFit(ListingTitleMaxLength);
+            row.ExchangeName = listing.ExchangeName.TruncateToFit(ListingExchangeMaxLength);
             row.AccessionNumber = document.AccessionNumber;
             row.FiledDate = document.ReportingDate;
         }
@@ -930,13 +931,6 @@ public class XbrlFactExtractionService
             return null;
 
         return TickerNormalizer.NormalizeIdentity(trimmed);
-    }
-
-    private static string Truncate(string value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value))
-            return value;
-        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 
     private async Task FlushFacts(

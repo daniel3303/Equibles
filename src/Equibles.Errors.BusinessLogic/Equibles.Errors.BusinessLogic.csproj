@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
     <ProjectReference Include="..\Equibles.Errors.Repositories\Equibles.Errors.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>

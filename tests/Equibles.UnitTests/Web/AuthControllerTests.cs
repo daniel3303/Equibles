@@ -266,9 +266,7 @@ public class AuthControllerTests
 
         controller.Login("wrong", "wrong", returnUrl: null!);
 
-        _flashMessage
-            .Received(1)
-            .Error("Invalid username or password.", Arg.Any<string>(), Arg.Any<bool>());
+        _flashMessage.Received(1).Error("Invalid username or password.", Arg.Any<string>());
     }
 
     [Fact]
@@ -323,7 +321,7 @@ public class AuthControllerTests
 
         controller.Login("any", "any", returnUrl: null!);
 
-        _flashMessage.DidNotReceive().Error(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+        _flashMessage.DidNotReceive().Error(Arg.Any<string>(), Arg.Any<string>());
     }
 
     // ── Logout ─────────────────────────────────────────────────────────

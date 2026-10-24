@@ -17,14 +17,6 @@ public class FlashMessageModelTests
     }
 
     [Fact]
-    public void Constructor_DefaultIsHtml_IsFalse()
-    {
-        var model = new FlashMessageModel();
-
-        model.IsHtml.Should().BeFalse();
-    }
-
-    [Fact]
     public void Constructor_DefaultTitle_IsNull()
     {
         var model = new FlashMessageModel();
@@ -65,14 +57,6 @@ public class FlashMessageModelTests
     }
 
     [Fact]
-    public void Properties_CanSetIsHtml()
-    {
-        var model = new FlashMessageModel { IsHtml = true };
-
-        model.IsHtml.Should().BeTrue();
-    }
-
-    [Fact]
     public void Properties_CanSetAllAtOnce()
     {
         var model = new FlashMessageModel
@@ -80,13 +64,11 @@ public class FlashMessageModelTests
             Title = "Alert",
             Message = "<b>Bold</b>",
             Type = FlashMessageType.Warning,
-            IsHtml = true,
         };
 
         model.Title.Should().Be("Alert");
         model.Message.Should().Be("<b>Bold</b>");
         model.Type.Should().Be(FlashMessageType.Warning);
-        model.IsHtml.Should().BeTrue();
     }
 }
 
@@ -134,7 +116,6 @@ public class JsonFlashMessageSerializerTests
                 Title = "Done",
                 Message = "Saved successfully",
                 Type = FlashMessageType.Success,
-                IsHtml = false,
             },
         };
 
@@ -154,7 +135,6 @@ public class JsonFlashMessageSerializerTests
                 Title = "Done",
                 Message = "Saved successfully",
                 Type = FlashMessageType.Success,
-                IsHtml = false,
             },
         };
 
@@ -182,7 +162,6 @@ public class JsonFlashMessageSerializerTests
             Title = "Alert",
             Message = "Something went wrong",
             Type = FlashMessageType.Error,
-            IsHtml = true,
         };
         var messages = new List<IFlashMessageModel> { original };
 
@@ -193,7 +172,6 @@ public class JsonFlashMessageSerializerTests
         result[0].Title.Should().Be("Alert");
         result[0].Message.Should().Be("Something went wrong");
         result[0].Type.Should().Be(FlashMessageType.Error);
-        result[0].IsHtml.Should().BeTrue();
     }
 
     [Fact]
@@ -216,20 +194,6 @@ public class JsonFlashMessageSerializerTests
         result[1].Type.Should().Be(FlashMessageType.Warning);
         result[2].Message.Should().Be("Third");
         result[2].Type.Should().Be(FlashMessageType.Error);
-    }
-
-    [Fact]
-    public void Deserialize_RoundTrip_PreservesIsHtmlFalse()
-    {
-        var messages = new List<IFlashMessageModel>
-        {
-            new FlashMessageModel { Message = "Plain text", IsHtml = false },
-        };
-
-        var json = _serializer.Serialize(messages);
-        var result = _serializer.Deserialize(json);
-
-        result[0].IsHtml.Should().BeFalse();
     }
 
     [Fact]
@@ -301,7 +265,6 @@ public class JsonFlashMessageSerializerTests
             new FlashMessageModel
             {
                 Message = "<strong>Important</strong> <a href=\"/link\">click here</a>",
-                IsHtml = true,
             },
         };
 

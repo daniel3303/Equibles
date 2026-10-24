@@ -223,6 +223,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return Get13FByHolder(holder, reportDate).Include(h => h.Issuer);
     }
 
+    // Get13FByHolderWithStock for several holders in one query, for callers that compare funds'
+    // portfolios at the same quarter end; group the rows by InstitutionalHolderId.
+    public IQueryable<InstitutionalHolding> Get13FByHoldersWithStock(
+        IReadOnlyCollection<InstitutionalHolder> holders,
+        DateOnly reportDate
+    )
+    {
+        var holderIds = holders.Select(h => h.Id).ToList();
+        return GetAll()
+            .Where(h => holderIds.Contains(h.InstitutionalHolderId) && h.ReportDate == reportDate)
+            .Where(Is13F)
+            .Include(h => h.Issuer);
+    }
+
     // Minimal per-security projection for portfolio-summary maths. Loading thousands of full
     // tracked holding entities for two quarters made a cold summary proportional to the raw
     // filing row count even though concentration and turnover only use these fields.

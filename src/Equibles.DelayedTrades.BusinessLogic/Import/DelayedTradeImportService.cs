@@ -1,4 +1,5 @@
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Extensions;
 using Equibles.DelayedTrades.BusinessLogic.Bars;
 using Equibles.DelayedTrades.BusinessLogic.Configuration;
 using Equibles.DelayedTrades.BusinessLogic.Listings;
@@ -535,7 +536,7 @@ public class DelayedTradeImportService(
             row.LastQuantity = Math.Round(last.Quantity, 4, MidpointRounding.AwayFromZero);
             row.LastTradedAtUtc = last.TradedAtUtc;
             row.LastPublishedAtUtc = last.PublishedAtUtc;
-            row.LastTradeId = Truncate(last.TradeId, 64);
+            row.LastTradeId = last.TradeId.TruncateToFit(64);
             row.SessionOpen = bar.Open.Value;
             row.SessionHigh = bar.High.Value;
             row.SessionLow = bar.Low.Value;
@@ -543,8 +544,8 @@ public class DelayedTradeImportService(
             row.LitVolume = bar.LitVolume;
             row.PrintCount = bar.PrintCount;
             row.IsSessionComplete = complete;
-            row.SourceUrl = Truncate(file.SourceUrl, 500);
-            row.TermsUrl = Truncate(file.TermsUrl, 500);
+            row.SourceUrl = file.SourceUrl.TruncateToFit(500);
+            row.TermsUrl = file.TermsUrl.TruncateToFit(500);
             row.FileSha256 = file.Sha256;
             row.CapturedAtUtc = file.FetchedAtUtc;
             row.UpdatedAt = DateTime.UtcNow;
@@ -633,8 +634,8 @@ public class DelayedTradeImportService(
                 MarketCode = market.Code,
                 Window = file.Window,
                 Outcome = file.Outcome,
-                SourceUrl = Truncate(file.SourceUrl, 500),
-                TermsUrl = Truncate(file.TermsUrl, 500),
+                SourceUrl = file.SourceUrl.TruncateToFit(500),
+                TermsUrl = file.TermsUrl.TruncateToFit(500),
                 Sha256 = file.Sha256,
                 Bytes = file.Bytes,
                 Rows = rows,
@@ -644,7 +645,4 @@ public class DelayedTradeImportService(
         );
         await captures.SaveChanges();
     }
-
-    private static string Truncate(string value, int length) =>
-        value is { Length: > 0 } && value.Length > length ? value[..length] : value;
 }

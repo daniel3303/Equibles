@@ -1039,7 +1039,7 @@ public class HoldingsImportService
         {
             if (existingByKey.TryGetValue((cusip, reportDate), out var existing))
             {
-                existing.IssuerName = Truncate(tally.IssuerName, MaxIssuerNameLength);
+                existing.IssuerName = tally.IssuerName.TruncateToFit(MaxIssuerNameLength);
                 existing.Positions = tally.Positions;
                 existing.FiledValue = tally.FiledValue;
                 existing.CreationTime = DateTime.UtcNow;
@@ -1053,7 +1053,7 @@ public class HoldingsImportService
                     {
                         Cusip = cusip,
                         ReportDate = reportDate,
-                        IssuerName = Truncate(tally.IssuerName, MaxIssuerNameLength),
+                        IssuerName = tally.IssuerName.TruncateToFit(MaxIssuerNameLength),
                         Positions = tally.Positions,
                         FiledValue = tally.FiledValue,
                     }
@@ -1078,9 +1078,6 @@ public class HoldingsImportService
             )
         );
     }
-
-    private static string Truncate(string value, int maxLength) =>
-        value != null && value.Length > maxLength ? value[..maxLength] : value;
 
     private async Task UpsertInstitutionalHolders(
         ImportContext context,
