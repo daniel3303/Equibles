@@ -111,6 +111,59 @@ public class XbrlFilingsIndexTests
         url.Query.Should().Contain("include=entity");
     }
 
+    // One throttled page used to abandon a corpus read hundreds of pages long.
+    [Fact]
+    public async Task GetFilings_WhenTheHostThrottles_BacksOffAndReadsThePage()
+    {
+        var handler = new EsefIndexTestHandler(
+            new Dictionary<string, string>
+            {
+                [XbrlFilingsClient.IndexUrl(1, 100).PathAndQuery] = Fixture("filings-fr-page.json"),
+            }
+        )
+        {
+            ThrottledRequests = 2,
+        };
+        var client = ThrottleTestClient(handler);
+
+        var page = await client.GetFilings(1, 100);
+
+        page.Filings.Should().HaveCount(3);
+        handler.Requests.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task GetFilings_WhenTheHostKeepsThrottling_GivesUpAfterTheRetries()
+    {
+        var handler = new EsefIndexTestHandler(
+            new Dictionary<string, string>
+            {
+                [XbrlFilingsClient.IndexUrl(1, 100).PathAndQuery] = Fixture("filings-fr-page.json"),
+            }
+        )
+        {
+            ThrottledRequests = int.MaxValue,
+        };
+        var client = ThrottleTestClient(handler);
+
+        var read = () => client.GetFilings(1, 100);
+
+        (await read.Should().ThrowAsync<HttpRequestException>())
+            .Which.StatusCode.Should()
+            .Be(System.Net.HttpStatusCode.TooManyRequests);
+        handler.Requests.Should().HaveCount(XbrlFilingsClient.MaxThrottleRetries + 1);
+    }
+
+    private static XbrlFilingsClient ThrottleTestClient(EsefIndexTestHandler handler) =>
+        new(new HttpClient(handler))
+        {
+            Pace = new Equibles.Integrations.Common.RateLimiter.RateLimiter(
+                1000,
+                TimeSpan.FromSeconds(1)
+            ),
+            ThrottleBackoff = _ => TimeSpan.Zero,
+        };
+
     // The caller's own ceiling reaches the fetch, so a report it could not use is abandoned rather than
     // downloaded whole: the tail of this corpus runs to 125 MB.
     [Fact]

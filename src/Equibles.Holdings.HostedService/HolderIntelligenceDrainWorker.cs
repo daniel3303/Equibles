@@ -13,7 +13,10 @@ namespace Equibles.Holdings.HostedService;
 /// Rebuilds every computable holder-intelligence quarter whose stamp is past the cooldown, oldest
 /// first, including quarters computed by an older calculation version. A stamp is cleared only
 /// while it still holds the value read before the rebuild, so a stamp written meanwhile survives.
-/// Waits while a 13F bulk replay is pending, for at most <see cref="ReplayHold"/>.
+/// Waits while a 13F bulk replay is pending, for at most <see cref="ReplayHold"/>. Quarters before
+/// the latest closed one drain in forward passes (<see cref="CurrentPass"/>), so a trickle of late
+/// filings for old quarters cannot keep the whole history rebuilding; the latest closed quarter
+/// reads their carried state as of the last pass.
 /// </summary>
 public class HolderIntelligenceDrainWorker : BackgroundService
 {
@@ -30,7 +33,15 @@ public class HolderIntelligenceDrainWorker : BackgroundService
     // metrics stale.
     protected virtual TimeSpan ReplayHold => TimeSpan.FromDays(4);
 
+    // A changed old quarter re-dirties every later one, so each late filing for it costs a rebuild
+    // of the whole history. Old quarters therefore rest between passes: a pass rebuilds each of
+    // them at most once within the window, and the next begins the interval after it began. The
+    // window outlasts a full pass, so it only bounds one that stalls.
+    protected virtual TimeSpan HistoricalPassWindow => TimeSpan.FromHours(12);
+    protected virtual TimeSpan HistoricalPassInterval => TimeSpan.FromHours(24);
+
     private DateTime? _heldForReplayQueuedAt;
+    private DateTime? _restLoggedUntil;
 
     public HolderIntelligenceDrainWorker(
         IServiceScopeFactory scopeFactory,
@@ -67,7 +78,7 @@ public class HolderIntelligenceDrainWorker : BackgroundService
 
     internal async Task DrainOnce(DateOnly today, CancellationToken cancellationToken)
     {
-        List<DateOnly> due;
+        List<(DateOnly ReportDate, DateTime? Pass)> due;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -77,28 +88,57 @@ public class HolderIntelligenceDrainWorker : BackgroundService
             if (quarters.Count == 0)
                 return;
             await EnsureQuarters(dbContext, quarters, cancellationToken);
-            var cutoff = DateTime.UtcNow - Cooldown;
+            var now = DateTime.UtcNow;
+            var cutoff = now - Cooldown;
             var first = quarters[0];
             var latest = quarters[^1];
-            due = await dbContext
+            var states = await dbContext
                 .Set<HolderIntelligenceQuarterState>()
+                .Where(state => state.ReportDate >= first && state.ReportDate <= latest)
+                .OrderBy(state => state.ReportDate)
+                .Select(state => new
+                {
+                    state.ReportDate,
+                    state.DirtyAt,
+                    state.ComputedAt,
+                    state.CalculationVersion,
+                    state.PassStartedAt,
+                })
+                .ToListAsync(cancellationToken);
+            var historical = states.Where(state => state.ReportDate < latest).ToList();
+            var lastPass = historical.Max(state => state.PassStartedAt);
+            var pass = CurrentPass(lastPass, now);
+            // An uncomputed or outdated quarter never waits for a pass, so a version bump still
+            // recomputes the whole history at once.
+            due = states
                 .Where(state =>
                     state.DirtyAt != null
                     && state.DirtyAt < cutoff
-                    && state.ReportDate >= first
-                    && state.ReportDate <= latest
+                    && (
+                        state.ReportDate == latest
+                        || state.ComputedAt == null
+                        || state.CalculationVersion
+                            < HolderIntelligenceRefreshService.CalculationVersion
+                        || (pass != null && state.PassStartedAt != pass)
+                    )
                 )
-                .OrderBy(state => state.ReportDate)
-                .Select(state => state.ReportDate)
-                .ToListAsync(cancellationToken);
+                .Select(state => (state.ReportDate, state.ReportDate < latest ? pass : null))
+                .ToList();
+            var resting = historical.Count(state =>
+                state.DirtyAt != null
+                && state.DirtyAt < cutoff
+                && due.All(quarter => quarter.ReportDate != state.ReportDate)
+            );
+            if (resting > 0 && pass == null)
+                LogRest(resting, lastPass.Value);
         }
 
-        foreach (var reportDate in due)
+        foreach (var (reportDate, pass) in due)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (await WaitsForReplay(cancellationToken))
                 return;
-            await DrainQuarter(reportDate, today, cancellationToken);
+            await DrainQuarter(reportDate, pass, today, cancellationToken);
         }
     }
 
@@ -124,8 +164,32 @@ public class HolderIntelligenceDrainWorker : BackgroundService
         return true;
     }
 
+    /// <summary>
+    /// The pass that may rebuild the quarters before the latest closed one now: the last pass while
+    /// inside its window, a new one once the interval since it began has passed, or null while they
+    /// rest. Read from the stored pass marks, so a worker restart resumes the pass or the rest.
+    /// </summary>
+    internal DateTime? CurrentPass(DateTime? lastPass, DateTime now) =>
+        lastPass is not { } start || now - start >= HistoricalPassInterval ? now
+        : now - start < HistoricalPassWindow ? start
+        : null;
+
+    private void LogRest(int resting, DateTime lastPass)
+    {
+        var resumesAt = lastPass + HistoricalPassInterval;
+        if (_restLoggedUntil == resumesAt)
+            return;
+        _restLoggedUntil = resumesAt;
+        _logger.LogInformation(
+            "Holder intelligence drain rests {Count} dirty historical quarters until {ResumesAt:u}",
+            resting,
+            resumesAt
+        );
+    }
+
     private async Task DrainQuarter(
         DateOnly reportDate,
+        DateTime? pass,
         DateOnly today,
         CancellationToken cancellationToken
     )
@@ -165,6 +229,15 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                             .SetProperty(state => state.LastError, (string)null),
                     cancellationToken
                 );
+            // Marked even when a newer stamp survived the clear: the pass has rebuilt the quarter,
+            // so that stamp waits for the next pass.
+            if (pass != null)
+                await states
+                    .Where(state => state.ReportDate == reportDate)
+                    .ExecuteUpdateAsync(
+                        setters => setters.SetProperty(state => state.PassStartedAt, pass),
+                        cancellationToken
+                    );
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {

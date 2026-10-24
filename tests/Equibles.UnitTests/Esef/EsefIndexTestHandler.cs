@@ -21,6 +21,9 @@ internal sealed class EsefIndexTestHandler(IReadOnlyDictionary<string, string> b
     // chunked, so a ceiling can only be reached by reading the body.
     public bool OmitContentLength { get; set; }
 
+    // Answers this many requests with a 429 before serving any body, the way the host throttles.
+    public int ThrottledRequests { get; set; }
+
     // How many bytes of the last body the caller actually pulled, so a refusal that still paid for the
     // whole download is visible.
     public long BodyBytesRead => _body?.BytesRead ?? 0;
@@ -33,6 +36,10 @@ internal sealed class EsefIndexTestHandler(IReadOnlyDictionary<string, string> b
     )
     {
         Requests.Add(request.RequestUri);
+        if (Requests.Count <= ThrottledRequests)
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.TooManyRequests) { RequestMessage = request }
+            );
         var key = request.RequestUri.PathAndQuery;
         if (!bodies.TryGetValue(key, out var body))
             return Task.FromResult(

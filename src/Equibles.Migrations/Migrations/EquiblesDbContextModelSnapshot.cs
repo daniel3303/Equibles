@@ -3051,6 +3051,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<string>("LastError")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PassStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateOnly>("ReportDate")
                         .HasColumnType("date");
 
