@@ -19,7 +19,8 @@ public class PlaywrightSenateBrowserSessionDisposeTests
     public async Task DisposeAsync_NeverAuthenticated_CompletesTeardownWithoutThrowing()
     {
         var session = new PlaywrightSenateBrowserSession(
-            Substitute.For<ILogger<PlaywrightSenateBrowserSession>>()
+            Substitute.For<ILogger<PlaywrightSenateBrowserSession>>(),
+            new DirectSenateBrowserContextOpener()
         );
 
         var dispose = async () => await session.DisposeAsync();
