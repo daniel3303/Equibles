@@ -13,7 +13,10 @@ namespace Equibles.Holdings.HostedService;
 /// Rebuilds every computable holder-intelligence quarter whose stamp is past the cooldown, oldest
 /// first, including quarters computed by an older calculation version. A stamp is cleared only
 /// while it still holds the value read before the rebuild, so a stamp written meanwhile survives.
-/// Waits while a 13F bulk replay is pending, for at most <see cref="ReplayHold"/>.
+/// Waits while a 13F bulk replay is pending, for at most <see cref="ReplayHold"/>. Quarters before
+/// the latest closed one drain in forward passes (<see cref="HistoricalPassStart"/>), so a trickle
+/// of late filings for old quarters cannot keep the whole history rebuilding; the latest closed
+/// quarter reads their carried state as of the last pass.
 /// </summary>
 public class HolderIntelligenceDrainWorker : BackgroundService
 {
@@ -30,7 +33,15 @@ public class HolderIntelligenceDrainWorker : BackgroundService
     // metrics stale.
     protected virtual TimeSpan ReplayHold => TimeSpan.FromDays(4);
 
+    // A changed old quarter re-dirties every later one, so each late filing for it costs a rebuild
+    // of the whole history. Old quarters therefore rest between passes: a pass may run for the
+    // window, and the next starts once its rebuilds are older than the interval. The window
+    // outlasts a full pass, so it only bounds one that stalls.
+    protected virtual TimeSpan HistoricalPassWindow => TimeSpan.FromHours(12);
+    protected virtual TimeSpan HistoricalPassInterval => TimeSpan.FromHours(24);
+
     private DateTime? _heldForReplayQueuedAt;
+    private DateTime? _restLoggedUntil;
 
     public HolderIntelligenceDrainWorker(
         IServiceScopeFactory scopeFactory,
@@ -77,20 +88,45 @@ public class HolderIntelligenceDrainWorker : BackgroundService
             if (quarters.Count == 0)
                 return;
             await EnsureQuarters(dbContext, quarters, cancellationToken);
-            var cutoff = DateTime.UtcNow - Cooldown;
+            var now = DateTime.UtcNow;
+            var cutoff = now - Cooldown;
             var first = quarters[0];
             var latest = quarters[^1];
-            due = await dbContext
+            var states = await dbContext
                 .Set<HolderIntelligenceQuarterState>()
+                .Where(state => state.ReportDate >= first && state.ReportDate <= latest)
+                .OrderBy(state => state.ReportDate)
+                .Select(state => new
+                {
+                    state.ReportDate,
+                    state.DirtyAt,
+                    state.ComputedAt,
+                    state.CalculationVersion,
+                })
+                .ToListAsync(cancellationToken);
+            var historical = states.Where(state => state.ReportDate < latest).ToList();
+            var passStart = HistoricalPassStart(historical.Select(state => state.ComputedAt), now);
+            // An uncomputed or outdated quarter never waits for a pass, so a version bump still
+            // recomputes the whole history at once.
+            due = states
                 .Where(state =>
                     state.DirtyAt != null
                     && state.DirtyAt < cutoff
-                    && state.ReportDate >= first
-                    && state.ReportDate <= latest
+                    && (
+                        state.ReportDate == latest
+                        || state.ComputedAt == null
+                        || state.CalculationVersion
+                            < HolderIntelligenceRefreshService.CalculationVersion
+                        || state.ComputedAt < passStart
+                    )
                 )
-                .OrderBy(state => state.ReportDate)
                 .Select(state => state.ReportDate)
-                .ToListAsync(cancellationToken);
+                .ToList();
+            var resting = historical.Count(state =>
+                state.DirtyAt != null && state.DirtyAt < cutoff && !due.Contains(state.ReportDate)
+            );
+            if (resting > 0 && passStart == null)
+                LogRest(resting, historical.Max(state => state.ComputedAt).Value);
         }
 
         foreach (var reportDate in due)
@@ -122,6 +158,33 @@ public class HolderIntelligenceDrainWorker : BackgroundService
             );
         _heldForReplayQueuedAt = since;
         return true;
+    }
+
+    /// <summary>
+    /// When the running pass over the quarters before the latest closed one began, so a quarter it
+    /// already rebuilt waits for the next pass, or null while they rest. Read from the stored
+    /// rebuild times, so a worker restart resumes the pass or the rest.
+    /// </summary>
+    internal DateTime? HistoricalPassStart(IEnumerable<DateTime?> computedAt, DateTime now)
+    {
+        var recent = computedAt.Where(at => at > now - HistoricalPassInterval).ToList();
+        if (recent.Count == 0)
+            return now;
+        var start = recent.Min().Value;
+        return now - start < HistoricalPassWindow ? start : null;
+    }
+
+    private void LogRest(int resting, DateTime lastRebuild)
+    {
+        var resumesAt = lastRebuild + HistoricalPassInterval;
+        if (_restLoggedUntil == resumesAt)
+            return;
+        _restLoggedUntil = resumesAt;
+        _logger.LogInformation(
+            "Holder intelligence drain rests {Count} dirty historical quarters until {ResumesAt:u}",
+            resting,
+            resumesAt
+        );
     }
 
     private async Task DrainQuarter(
