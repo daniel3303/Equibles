@@ -146,12 +146,7 @@ public class InsiderFilingReprocessManager
                 if (oldestParserVersion == null)
                     break;
 
-                var accessions = await pending
-                    .Where(t => t.ParserVersion == oldestParserVersion.Value)
-                    .Select(t => t.AccessionNumber)
-                    .Distinct()
-                    .OrderBy(accession => accession)
-                    .Take(BatchSize)
+                var accessions = await NextAccessionBatch(pending, oldestParserVersion.Value)
                     .ToListAsync(cancellationToken);
 
                 if (accessions.Count == 0)
@@ -271,6 +266,20 @@ public class InsiderFilingReprocessManager
                 cleared
             );
     }
+
+    // The next accessions of one parser version, grouped at the LIMIT's own level: PostgreSQL
+    // plans a DISTINCT subquery for full retrieval and hashes every stale row of the version per
+    // batch, while a top-level GROUP BY streams the (ParserVersion, AccessionNumber) index.
+    internal static IQueryable<string> NextAccessionBatch(
+        IQueryable<InsiderTransaction> pending,
+        int parserVersion
+    ) =>
+        pending
+            .Where(t => t.ParserVersion == parserVersion)
+            .GroupBy(t => t.AccessionNumber)
+            .Select(group => group.Key)
+            .OrderBy(accession => accession)
+            .Take(BatchSize);
 
     // Supersession deliberately deletes an original filing's transaction rows but
     // retains its cached XML. Those rowless filings are absent from the parser-version
