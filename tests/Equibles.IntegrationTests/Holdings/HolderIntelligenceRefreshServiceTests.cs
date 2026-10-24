@@ -887,6 +887,89 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DrainOnce_RestsAnOldQuarterAfterAPassButNotTheLatestOrAnOutdatedOne()
+    {
+        var lastPass = DateTime.UtcNow.AddHours(-13);
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                Filing(_holder, Q3),
+                Holding(_apple, _holder, Q3, 100, 12_000),
+                PassState(Q1, lastPass, dirty: true),
+                PassState(
+                    Q2,
+                    lastPass,
+                    dirty: true,
+                    HolderIntelligenceRefreshService.CalculationVersion - 1
+                ),
+                PassState(Q3, pass: null, dirty: true)
+            )
+        );
+
+        await Drain().DrainOnce(Today, CancellationToken.None);
+
+        var states = await States();
+        states[Q1].DirtyAt.Should().NotBeNull("the last pass began past its window");
+        states[Q1].PassStartedAt.Should().BeCloseTo(lastPass, TimeSpan.FromMilliseconds(1));
+        states[Q2].DirtyAt.Should().BeNull("an outdated calculation never waits for a pass");
+        states[Q2]
+            .PassStartedAt.Should()
+            .BeCloseTo(
+                lastPass,
+                TimeSpan.FromMilliseconds(1),
+                "a rebuild while resting is no pass"
+            );
+        states[Q3].DirtyAt.Should().BeNull("the latest closed quarter never rests");
+    }
+
+    [Fact]
+    public async Task DrainOnce_APassRebuildsEachOldQuarterOnceIncludingOneItNeverRebuilt()
+    {
+        var running = DateTime.UtcNow.AddHours(-1);
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                Filing(_holder, Q2),
+                Holding(_apple, _holder, Q2, 100, 11_000),
+                PassState(Q1, running, dirty: true),
+                // The quarter the latest closed one replaced was rebuilt hourly, never in a pass.
+                PassState(Q2, pass: null, dirty: true),
+                PassState(Q3, pass: null, dirty: false)
+            )
+        );
+
+        await Drain().DrainOnce(Today, CancellationToken.None);
+
+        var states = await States();
+        states[Q1].DirtyAt.Should().NotBeNull("the running pass already rebuilt it");
+        states[Q2].DirtyAt.Should().BeNull("the running pass had not rebuilt it");
+        states[Q2].PassStartedAt.Should().BeCloseTo(running, TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
+    public async Task DrainOnce_StartsAPassOnceTheIntervalSinceTheLastHasPassed()
+    {
+        var before = DateTime.UtcNow;
+        await Seed(seed =>
+            seed.AddRange(
+                Filing(_holder, Q1),
+                Holding(_apple, _holder, Q1, 100, 10_000),
+                PassState(Q1, DateTime.UtcNow.AddHours(-25), dirty: true),
+                PassState(Q2, DateTime.UtcNow.AddHours(-25), dirty: false),
+                PassState(Q3, pass: null, dirty: false)
+            )
+        );
+
+        await Drain().DrainOnce(Today, CancellationToken.None);
+
+        var states = await States();
+        states[Q1].DirtyAt.Should().BeNull();
+        states[Q1].PassStartedAt.Should().BeOnOrAfter(before);
+    }
+
+    [Fact]
     public async Task DrainOnce_AQuarterStampedDuringTheRebuildStaysDirty()
     {
         await Seed(seed =>
@@ -1527,6 +1610,28 @@ public class HolderIntelligenceRefreshServiceTests : IAsyncLifetime
 
     private TestDrainWorker Drain() =>
         new(_provider.GetRequiredService<IServiceScopeFactory>(), beforeRebuild: null);
+
+    private static HolderIntelligenceQuarterState PassState(
+        DateOnly reportDate,
+        DateTime? pass,
+        bool dirty,
+        int calculationVersion = HolderIntelligenceRefreshService.CalculationVersion
+    ) =>
+        new()
+        {
+            ReportDate = reportDate,
+            ComputedAt = DateTime.UtcNow.AddDays(-3),
+            PassStartedAt = pass,
+            CalculationVersion = calculationVersion,
+            DirtyAt = dirty ? DateTime.UtcNow.AddMinutes(-1) : null,
+        };
+
+    private async Task<Dictionary<DateOnly, HolderIntelligenceQuarterState>> States()
+    {
+        await using var read = _fixture.CreateDbContext();
+        return await read.Set<HolderIntelligenceQuarterState>()
+            .ToDictionaryAsync(state => state.ReportDate);
+    }
 
     private Task<HolderQuarterlyMetrics> Metrics(DateOnly reportDate) =>
         Metrics(reportDate, _holder);
