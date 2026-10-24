@@ -20,6 +20,13 @@ public class HolderIntelligenceQuarterState
     public DateTime? DirtyAt { get; set; }
 
     public DateTime? ComputedAt { get; set; }
+
+    /// <summary>
+    /// When the drain's last pass over the quarters before the latest closed one that rebuilt
+    /// this quarter began; null when none has.
+    /// </summary>
+    public DateTime? PassStartedAt { get; set; }
+
     public int CalculationVersion { get; set; }
     public int FailureCount { get; set; }
     public string LastError { get; set; }

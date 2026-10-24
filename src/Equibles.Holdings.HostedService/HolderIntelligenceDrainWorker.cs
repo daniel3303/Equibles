@@ -14,9 +14,9 @@ namespace Equibles.Holdings.HostedService;
 /// first, including quarters computed by an older calculation version. A stamp is cleared only
 /// while it still holds the value read before the rebuild, so a stamp written meanwhile survives.
 /// Waits while a 13F bulk replay is pending, for at most <see cref="ReplayHold"/>. Quarters before
-/// the latest closed one drain in forward passes (<see cref="HistoricalPassStart"/>), so a trickle
-/// of late filings for old quarters cannot keep the whole history rebuilding; the latest closed
-/// quarter reads their carried state as of the last pass.
+/// the latest closed one drain in forward passes (<see cref="CurrentPass"/>), so a trickle of late
+/// filings for old quarters cannot keep the whole history rebuilding; the latest closed quarter
+/// reads their carried state as of the last pass.
 /// </summary>
 public class HolderIntelligenceDrainWorker : BackgroundService
 {
@@ -34,9 +34,9 @@ public class HolderIntelligenceDrainWorker : BackgroundService
     protected virtual TimeSpan ReplayHold => TimeSpan.FromDays(4);
 
     // A changed old quarter re-dirties every later one, so each late filing for it costs a rebuild
-    // of the whole history. Old quarters therefore rest between passes: a pass may run for the
-    // window, and the next starts once its rebuilds are older than the interval. The window
-    // outlasts a full pass, so it only bounds one that stalls.
+    // of the whole history. Old quarters therefore rest between passes: a pass rebuilds each of
+    // them at most once within the window, and the next begins the interval after it began. The
+    // window outlasts a full pass, so it only bounds one that stalls.
     protected virtual TimeSpan HistoricalPassWindow => TimeSpan.FromHours(12);
     protected virtual TimeSpan HistoricalPassInterval => TimeSpan.FromHours(24);
 
@@ -78,7 +78,7 @@ public class HolderIntelligenceDrainWorker : BackgroundService
 
     internal async Task DrainOnce(DateOnly today, CancellationToken cancellationToken)
     {
-        List<DateOnly> due;
+        List<(DateOnly ReportDate, DateTime? Pass)> due;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -102,44 +102,43 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                     state.DirtyAt,
                     state.ComputedAt,
                     state.CalculationVersion,
+                    state.PassStartedAt,
                 })
                 .ToListAsync(cancellationToken);
             var historical = states.Where(state => state.ReportDate < latest).ToList();
-            var passRebuilds = historical
-                .Where(state => IsPassRebuild(state.ReportDate, state.ComputedAt))
-                .Select(state => state.ComputedAt.Value)
-                .ToList();
-            var passStart = HistoricalPassStart(passRebuilds, now);
+            var lastPass = historical.Max(state => state.PassStartedAt);
+            var pass = CurrentPass(lastPass, now);
             // An uncomputed or outdated quarter never waits for a pass, so a version bump still
-            // recomputes the whole history at once; nor does the quarter the latest closed one
-            // just replaced, until a pass has rebuilt it.
+            // recomputes the whole history at once.
             due = states
                 .Where(state =>
                     state.DirtyAt != null
                     && state.DirtyAt < cutoff
                     && (
                         state.ReportDate == latest
-                        || !IsPassRebuild(state.ReportDate, state.ComputedAt)
+                        || state.ComputedAt == null
                         || state.CalculationVersion
                             < HolderIntelligenceRefreshService.CalculationVersion
-                        || state.ComputedAt < passStart
+                        || (pass != null && state.PassStartedAt != pass)
                     )
                 )
-                .Select(state => state.ReportDate)
+                .Select(state => (state.ReportDate, state.ReportDate < latest ? pass : null))
                 .ToList();
             var resting = historical.Count(state =>
-                state.DirtyAt != null && state.DirtyAt < cutoff && !due.Contains(state.ReportDate)
+                state.DirtyAt != null
+                && state.DirtyAt < cutoff
+                && due.All(quarter => quarter.ReportDate != state.ReportDate)
             );
-            if (resting > 0 && passStart == null)
-                LogRest(resting, passRebuilds.Max());
+            if (resting > 0 && pass == null)
+                LogRest(resting, lastPass.Value);
         }
 
-        foreach (var reportDate in due)
+        foreach (var (reportDate, pass) in due)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (await WaitsForReplay(cancellationToken))
                 return;
-            await DrainQuarter(reportDate, today, cancellationToken);
+            await DrainQuarter(reportDate, pass, today, cancellationToken);
         }
     }
 
@@ -166,29 +165,18 @@ public class HolderIntelligenceDrainWorker : BackgroundService
     }
 
     /// <summary>
-    /// When the running pass over the quarters before the latest closed one began, so a quarter it
-    /// already rebuilt waits for the next pass, or null while they rest. Read from the stored
-    /// rebuild times, so a worker restart resumes the pass or the rest.
+    /// The pass that may rebuild the quarters before the latest closed one now: the last pass while
+    /// inside its window, a new one once the interval since it began has passed, or null while they
+    /// rest. Read from the stored pass marks, so a worker restart resumes the pass or the rest.
     /// </summary>
-    internal DateTime? HistoricalPassStart(IEnumerable<DateTime> passRebuilds, DateTime now)
-    {
-        var recent = passRebuilds.Where(at => at > now - HistoricalPassInterval).ToList();
-        if (recent.Count == 0)
-            return now;
-        var start = recent.Min();
-        return now - start < HistoricalPassWindow ? start : null;
-    }
+    internal DateTime? CurrentPass(DateTime? lastPass, DateTime now) =>
+        lastPass is not { } start || now - start >= HistoricalPassInterval ? now
+        : now - start < HistoricalPassWindow ? start
+        : null;
 
-    // Only a rebuild made while the quarter was already before the latest closed one belongs to
-    // a pass; its hourly rebuilds as the latest never do.
-    private static bool IsPassRebuild(DateOnly reportDate, DateTime? computedAt) =>
-        computedAt is { } at
-        && reportDate
-            < HolderIntelligenceRefreshService.LatestClosedQuarter(DateOnly.FromDateTime(at));
-
-    private void LogRest(int resting, DateTime lastRebuild)
+    private void LogRest(int resting, DateTime lastPass)
     {
-        var resumesAt = lastRebuild + HistoricalPassInterval;
+        var resumesAt = lastPass + HistoricalPassInterval;
         if (_restLoggedUntil == resumesAt)
             return;
         _restLoggedUntil = resumesAt;
@@ -201,6 +189,7 @@ public class HolderIntelligenceDrainWorker : BackgroundService
 
     private async Task DrainQuarter(
         DateOnly reportDate,
+        DateTime? pass,
         DateOnly today,
         CancellationToken cancellationToken
     )
@@ -240,6 +229,15 @@ public class HolderIntelligenceDrainWorker : BackgroundService
                             .SetProperty(state => state.LastError, (string)null),
                     cancellationToken
                 );
+            // Marked even when a newer stamp survived the clear: the pass has rebuilt the quarter,
+            // so that stamp waits for the next pass.
+            if (pass != null)
+                await states
+                    .Where(state => state.ReportDate == reportDate)
+                    .ExecuteUpdateAsync(
+                        setters => setters.SetProperty(state => state.PassStartedAt, pass),
+                        cancellationToken
+                    );
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
