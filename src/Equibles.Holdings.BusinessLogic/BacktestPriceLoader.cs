@@ -466,6 +466,7 @@ public class BacktestPriceLoader
     ) =>
         await _priceRepository
             .GetAllSeries()
+            .TagWithCallSite()
             .Where(ListingPredicate(listingIds))
             .Where(price =>
                 price.Date >= from && price.Date <= to && price.Close > 0 && price.Volume > 0
