@@ -20,8 +20,8 @@ namespace Equibles.Holdings.HostedService.Services;
 /// The live multi-distinct GROUP BY on InstitutionalHoldings cannot finish
 /// inside the 30s Npgsql command timeout at production scale (~5-15M rows per
 /// quarter * ~100 quarters). This service filters by a single ReportDate
-/// first, so the existing <c>[Index(ReportDate)]</c> btree narrows the scan
-/// to one quarter's slice and the multi-distinct only ever sees that slice.
+/// first, so the ReportDate-leading quarter-slice index narrows the scan to
+/// one quarter's slice and the multi-distinct only ever sees that slice.
 ///
 /// Entry points:
 /// <list type="bullet">
@@ -563,8 +563,8 @@ public class HoldingsAggregateRefreshService
         CancellationToken cancellationToken
     )
     {
-        // Filtering by ReportDate first narrows the scan via the existing
-        // [Index(ReportDate)] btree, so the multi-distinct aggregate only
+        // Filtering by ReportDate first narrows the scan via the ReportDate-leading
+        // quarter-slice index, so the multi-distinct aggregate only
         // touches one quarter's slice. GroupBy on the same column then folds
         // to a single output row. Form 13F only: a 13G/A whose event date lands
         // exactly on a 13F quarter end (the common annual-amendment case)
