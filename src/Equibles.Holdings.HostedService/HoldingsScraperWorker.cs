@@ -233,8 +233,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // terminating once the back catalogue is clean, so it costs one query per cycle after that.
         await RepairImpossiblePositions(stoppingToken);
 
-        // Restamp FilingType on filing rollup rows written before the column existed. Self-
-        // terminating like the pass above.
+        // Remove off-quarter 13F rollups left with no holdings. Self-terminating like the pass
+        // above.
         await BackfillFilingRollupTypes(stoppingToken);
     }
 
