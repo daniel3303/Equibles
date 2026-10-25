@@ -64,7 +64,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `SearchDocuments` — hybrid BM25 and semantic search across indexed SEC documents, optionally scoped by `ticker` (a bare ticker is the US listing; `MIC:TICKER`, such as `XPAR:AIR`, reads that listing's issuer); without embeddings it retains ranked BM25 results. `match: phrase` returns only excerpts containing the exact phrase.
 - `SearchDocument` — semantic or exact literal search inside a specific document.
-- `ListFilings` — list stored filings newest first, market-wide or for one company (a bare ticker or `MIC:TICKER`, whose list includes its ESEF reports), with date, document-type, and exact 8-K item-number filters.
+- `ListFilings` — list stored filings newest first, market-wide or for one company (a bare ticker or `MIC:TICKER`, whose list includes its ESEF reports), with date, document-type, and exact 8-K item-number filters. When the host registers an `IDocumentExcerptLinkBuilder`, rows add a Link column with each filing's public page.
 
 `FailToDeliverTools`:
 
