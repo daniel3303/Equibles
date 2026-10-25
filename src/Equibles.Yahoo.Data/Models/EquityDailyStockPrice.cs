@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Yahoo.Data.Models;
 
-// A settled daily bar belonging to one stable exchange listing.
-[Index(nameof(EquityListingId), nameof(Date), IsUnique = true)]
+// A settled daily bar belonging to one stable exchange listing. The unique (listing, date) index is
+// configured in YahooModuleConfiguration, since its INCLUDE list has no attribute form.
 [Index(nameof(Date))]
 public class EquityDailyStockPrice
 {

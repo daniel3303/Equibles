@@ -7348,7 +7348,10 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("Date");
 
                     b.HasIndex("EquityListingId", "Date")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_EquityDailyStockPrice_ListingSeries");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("EquityListingId", "Date"), new[] { "Close", "Volume", "SourceTicker" });
 
                     b.ToTable("EquityDailyStockPrice");
                 });
