@@ -6,20 +6,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
-/// Restamps <see cref="InstitutionalFiling.FilingType"/> on rollup rows written before the
-/// column existed, from the holdings rows the rollup summarises.
+/// Removes 13F-typed filing rollups dated off a calendar quarter end with no holdings left: 13D/G
+/// rollups the <see cref="InstitutionalFiling.FilingType"/> migration mislabelled, whose holdings
+/// are gone. Every writer stamps the type itself, so this only drains that pre-column backlog.
 /// </summary>
-/// <remarks>
-/// The column's migration defaults every existing row to <see cref="FilingType.Form13F"/>, which
-/// mislabels the Schedule 13D/G rollup rows — and those are exactly the rows whose event dates
-/// would otherwise pass for a filer's freshest "13F quarter" in recency-ranked resolution. The
-/// sync stamps new rows correctly, so this sweep only ever touches the pre-column backlog:
-/// bounded per cycle, self-terminating (a restamped row no longer matches), and a no-op scan
-/// once drained. Values are copied from the holdings' own <c>FilingType</c> — never inferred
-/// from date shape, because 13D/G rows dated on quarter ends exist. A row typed 13F on a date that
-/// is not a calendar quarter end and with no holdings left is a 13D/G rollup whose holdings are
-/// gone, so it is removed instead.
-/// </remarks>
 [Service]
 public class FilingRollupTypeBackfillService
 {
@@ -46,68 +36,7 @@ public class FilingRollupTypeBackfillService
             dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
         }
 
-        return await Restamp(dbContext, cancellationToken)
-            + await RemoveOffQuarterOrphans(dbContext, cancellationToken);
-    }
-
-    private async Task<int> Restamp(
-        EquiblesFinancialDbContext dbContext,
-        CancellationToken cancellationToken
-    )
-    {
-        var rows = await dbContext
-            .Set<InstitutionalFiling>()
-            .Where(f =>
-                f.FilingType == FilingType.Form13F
-                && dbContext
-                    .Set<InstitutionalHolding>()
-                    .Any(h =>
-                        h.AccessionNumber == f.AccessionNumber && h.FilingType != FilingType.Form13F
-                    )
-            )
-            .OrderBy(f => f.Id)
-            .Take(MaxRowsPerCycle)
-            .ToListAsync(cancellationToken);
-
-        if (rows.Count == 0)
-        {
-            return 0;
-        }
-
-        var accessions = rows.Select(r => r.AccessionNumber).ToList();
-        var typeByAccession = (
-            await dbContext
-                .Set<InstitutionalHolding>()
-                .Where(h =>
-                    accessions.Contains(h.AccessionNumber) && h.FilingType != FilingType.Form13F
-                )
-                .Select(h => new { h.AccessionNumber, h.FilingType })
-                .Distinct()
-                .ToListAsync(cancellationToken)
-        )
-            .GroupBy(t => t.AccessionNumber, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First().FilingType, StringComparer.Ordinal);
-
-        var restamped = 0;
-        foreach (var filing in rows)
-        {
-            if (typeByAccession.TryGetValue(filing.AccessionNumber, out var filingType))
-            {
-                filing.FilingType = filingType;
-                restamped++;
-            }
-        }
-
-        if (restamped > 0)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation(
-                "Restamped FilingType on {Count} pre-column filing rollup row(s)",
-                restamped
-            );
-        }
-
-        return restamped;
+        return await RemoveOffQuarterOrphans(dbContext, cancellationToken);
     }
 
     // Form 13F reports as of a calendar quarter end and the importers refuse any other period
