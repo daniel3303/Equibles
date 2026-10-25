@@ -34,7 +34,10 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     public RagSearchToolsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private RagSearchTools Sut(IDocumentSummaryReader summaryReader = null)
+    private RagSearchTools Sut(
+        IDocumentSummaryReader summaryReader = null,
+        IDocumentExcerptLinkBuilder linkBuilder = null
+    )
     {
         var ragManager = new RagManager(
             HybridChunkSearcherFactory.Bm25Only(DbContext),
@@ -57,7 +60,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             new DocumentRepository(DbContext),
             fileManager,
             ErrorManager,
-            NullLogger<RagSearchTools>()
+            NullLogger<RagSearchTools>(),
+            linkBuilder
         );
     }
 
@@ -727,6 +731,59 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         var result = await Sut(reader).ListFilings("AAPL");
 
         result.Should().NotContain("| Summary");
+    }
+
+    [Fact]
+    public async Task ListFilings_LinkOnThePage_AddsALinkColumnWithADashForRowsWithoutOne()
+    {
+        var (_, linked, _) = await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.EightK,
+            reportingDate: new DateOnly(2026, 4, 30),
+            chunkContents: new[] { "Current report content." }
+        );
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual report content." }
+        );
+        var linkBuilder = Substitute.For<IDocumentExcerptLinkBuilder>();
+        linkBuilder
+            .BuildDocumentUrl(linked.Id, "AAPL")
+            .Returns($"https://example.com/stocks/aapl/documents/{linked.Id}");
+
+        var result = await Sut(linkBuilder: linkBuilder).ListFilings("AAPL");
+
+        result
+            .Should()
+            .Contain(
+                "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines | Accession | Accepted (UTC) | Link"
+            );
+        result
+            .Split('\n')
+            .Single(line => line.Contains("8-K"))
+            .Should()
+            .EndWith($"| https://example.com/stocks/aapl/documents/{linked.Id}");
+        // A row with no public page keeps the column with a dash, so the table stays aligned.
+        result.Split('\n').Single(line => line.Contains("10-K")).Should().EndWith("| —");
+    }
+
+    [Fact]
+    public async Task ListFilings_NoLinkOnThePage_KeepsTheOriginalColumns()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.TenK,
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Annual report content." }
+        );
+        var linkBuilder = Substitute.For<IDocumentExcerptLinkBuilder>();
+        linkBuilder.BuildDocumentUrl(Arg.Any<Guid>(), Arg.Any<string>()).Returns((string)null);
+
+        var result = await Sut(linkBuilder: linkBuilder).ListFilings("AAPL");
+
+        result.Should().NotContain("| Link");
     }
 
     // EDGAR states no period for a registration statement; the row must not print the stored sentinel.

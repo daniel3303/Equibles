@@ -33,6 +33,9 @@ public class RagManagerBuildContextExcerptLinkTests
             ExcerptText = excerptText;
             return Url;
         }
+
+        public string BuildDocumentUrl(Guid documentId, string symbol) =>
+            throw new NotSupportedException();
     }
 
     private static RagManager Sut(IDocumentExcerptLinkBuilder linkBuilder = null) =>

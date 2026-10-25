@@ -28,6 +28,9 @@ public class DocumentKeywordScanBlockLinkTests
             Calls.Add((fromLine, toLine, excerptText));
             return $"https://example.com/{fromLine}-{toLine}";
         }
+
+        public string BuildDocumentUrl(Guid documentId, string symbol) =>
+            throw new NotSupportedException();
     }
 
     private static string Render(
