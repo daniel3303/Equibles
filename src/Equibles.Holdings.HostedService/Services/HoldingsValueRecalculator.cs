@@ -155,9 +155,16 @@ public class HoldingsValueRecalculator
             .Where(key => !resolvedPairKeys.Contains(key) || deferredPairKeys.Contains(key))
             .ToList();
 
+        // A pair with no row due at `now` loads nothing in the retry loop, so one scan for the due
+        // pairs replaces a per-pair query for every pending pair.
+        var now = DateTime.UtcNow;
+        var duePairs =
+            unresolvedPairs.Count == 0
+                ? []
+                : await LoadDuePairs(lookupContext, now, cancellationToken);
         var totalGivenUp = await IncrementRetryForUnresolved(
-            unresolvedPairs,
-            DateTime.UtcNow,
+            unresolvedPairs.Where(duePairs.Contains).ToList(),
+            now,
             cancellationToken
         );
 
@@ -166,6 +173,29 @@ public class HoldingsValueRecalculator
             totalUpdated,
             totalGivenUp
         );
+    }
+
+    private static async Task<
+        HashSet<(Guid CommonStockId, string ListedTicker, DateOnly ReportDate)>
+    > LoadDuePairs(
+        EquiblesFinancialDbContext dbContext,
+        DateTime now,
+        CancellationToken cancellationToken
+    )
+    {
+        var pairs = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.ValuePending && h.ShareType == ShareType.Shares)
+            .Where(RetryDue(now))
+            .Select(h => new
+            {
+                h.EquityIssuerId,
+                h.ListedTicker,
+                h.ReportDate,
+            })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return pairs.Select(p => (p.EquityIssuerId, p.ListedTicker, p.ReportDate)).ToHashSet();
     }
 
     private async Task<int> IncrementRetryForUnresolved(
