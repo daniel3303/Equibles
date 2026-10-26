@@ -24,4 +24,12 @@ public enum StealthFetchStatus
 
     /// <summary>No stealth engine is configured, so nothing was fetched.</summary>
     Disabled,
+
+    /// <summary>
+    /// The host answered but refused this address: its certificate names another host or no trusted
+    /// authority, its TLS handshake failed, or nothing listened on the port. A fact about the address
+    /// rather than the engine, yet one the host can fix, so only a guessed address may treat it as a
+    /// conclusive miss; anything else stays transient.
+    /// </summary>
+    HostRefused,
 }

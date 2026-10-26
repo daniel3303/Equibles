@@ -19,5 +19,10 @@ public sealed record StealthFetchResult(StealthFetchStatus Status, string Html)
         null
     );
 
+    public static readonly StealthFetchResult HostRefused = new(
+        StealthFetchStatus.HostRefused,
+        null
+    );
+
     public static readonly StealthFetchResult Disabled = new(StealthFetchStatus.Disabled, null);
 }
