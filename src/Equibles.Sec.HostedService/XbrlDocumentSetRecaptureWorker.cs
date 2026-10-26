@@ -1,8 +1,10 @@
+using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Worker;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -33,6 +35,12 @@ public class XbrlDocumentSetRecaptureWorker : BaseScraperWorker
     // Yield to the live SEC scrapers at deploy time before spending the shared EDGAR budget.
     protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(10);
 
+    // The selecting query probes every captured candidate against the fact table, so it needs
+    // minutes, not this host's 30s default: under the default it failed with "Timeout during
+    // reading attempt" and the repair could never make progress. Sibling services in this host
+    // raise their own limit the same way (HolderIntelligenceRefreshService uses 30 minutes).
+    private static readonly TimeSpan PendingCommandTimeout = TimeSpan.FromMinutes(5);
+
     public XbrlDocumentSetRecaptureWorker(
         ILogger<XbrlDocumentSetRecaptureWorker> logger,
         IServiceScopeFactory scopeFactory,
@@ -60,6 +68,8 @@ public class XbrlDocumentSetRecaptureWorker : BaseScraperWorker
 
         var batchSize = _options.RecaptureBatchSize;
         await using var scope = ScopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        dbContext.Database.SetCommandTimeout(PendingCommandTimeout);
         var service = scope.ServiceProvider.GetRequiredService<XbrlDocumentSetRecaptureService>();
         var result = await service.Recapture(batchSize, stoppingToken);
 
