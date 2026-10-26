@@ -124,6 +124,28 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                 {
                     throw;
                 }
+                // Out-of-memory is deterministic, not transient. Retrying it spends the
+                // document's whole attempt budget and ends as repeated OOM rows in
+                // Errors, which reads like a data gap instead of a signal (#4812).
+                // Measured on a 1.25 GiB cgroup: large filings fail this way every time.
+                // We deliberately do not try to reclaim memory here - the heap may be in
+                // an unpredictable state - we simply stop re-attempting the document.
+                catch (OutOfMemoryException ex)
+                {
+                    document.XbrlFactsAttempts = Document.MaxXbrlFactsAttempts;
+                    Logger.LogError(
+                        ex,
+                        "Out of memory extracting dimensional facts for document {DocumentId} ({Accession}); not retrying.",
+                        document.Id,
+                        document.AccessionNumber
+                    );
+                    await ErrorReporter.Report(
+                        ErrorSource,
+                        "XbrlFactsExtraction.Extract",
+                        ex,
+                        $"documentId: {document.Id}, accession: {document.AccessionNumber}, attempts exhausted (out of memory)"
+                    );
+                }
                 // Per-document fault isolation: count the attempt and keep the
                 // cycle going for the rest of the batch.
                 catch (Exception ex)
