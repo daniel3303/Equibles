@@ -12,7 +12,8 @@ namespace Equibles.Holdings.Data.Models;
 // DirtyAt is the coalescing signal between Filings13FImportedConsumer (stamps
 // it only when currently null, preserving the wave's first-event timestamp)
 // and AumSnapshotDrainWorker (claims — clears — the flag once the cooldown has
-// elapsed, then rebuilds). The claim happens BEFORE the rebuild: an import
+// elapsed, then rebuilds; quarters older than the newest two closed ones wait
+// its longer historical cooldown). The claim happens BEFORE the rebuild: an import
 // landing mid-rebuild finds the flag null and re-dirties the row, so its
 // signal triggers another rebuild instead of being lost. Holding a timestamp
 // instead of a bool lets the claim use optimistic concurrency (clear only if
