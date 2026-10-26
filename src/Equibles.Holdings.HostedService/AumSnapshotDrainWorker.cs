@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,11 @@ namespace Equibles.Holdings.HostedService;
 /// <see cref="Consumers.Filings13FImportedConsumer"/>, which just marks
 /// <c>DirtyAt = UtcNow</c> on each import — many events for the same quarter
 /// in the same cooldown window coalesce into a single rebuild here.
+///
+/// A quarter older than the newest two closed ones waits the longer
+/// <see cref="HistoricalCooldown"/> instead: late and amended filings dirty
+/// quarters years back, one at a time all day, and each rebuild aggregates a
+/// whole quarter of holdings, so those coalesce into one rebuild a day.
 ///
 /// The dirty flag is claimed with a short future-dated lease before rebuilding.
 /// It stays non-null so request paths never mistake the old snapshot for clean.
@@ -31,8 +37,11 @@ public class AumSnapshotDrainWorker : BackgroundService
     protected virtual TimeSpan StartupDelay => TimeSpan.FromMinutes(1);
     protected virtual TimeSpan TickInterval => TimeSpan.FromMinutes(5);
     protected virtual TimeSpan Cooldown => TimeSpan.FromHours(1);
+    protected virtual TimeSpan HistoricalCooldown => TimeSpan.FromHours(24);
+    protected virtual DateOnly Today => DateOnly.FromDateTime(DateTime.UtcNow);
     protected virtual TimeSpan ClaimLease => TimeSpan.FromMinutes(5);
     protected virtual TimeSpan ClaimRenewInterval => TimeSpan.FromMinutes(1);
+    private int _restingLogged = -1;
 
     public AumSnapshotDrainWorker(
         IServiceScopeFactory scopeFactory,
@@ -87,13 +96,16 @@ public class AumSnapshotDrainWorker : BackgroundService
 
     internal async Task DrainOnce(CancellationToken cancellationToken)
     {
-        var cutoff = DateTime.UtcNow - Cooldown;
+        var now = DateTime.UtcNow;
+        var cutoff = now - Cooldown;
+        var historicalCutoff = now - HistoricalCooldown;
+        var recentFloor = RecentQuarterFloor(Today);
 
         List<DueRebuild> due;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-            due = await dbContext
+            var dirty = await dbContext
                 .Set<AumQuarterlySnapshot>()
                 .Where(s => s.DirtyAt != null && s.DirtyAt < cutoff)
                 // A newly introduced snapshot family is empty until its first rebuild.
@@ -112,6 +124,10 @@ public class AumSnapshotDrainWorker : BackgroundService
                     DirtyAt = s.DirtyAt!.Value,
                 })
                 .ToListAsync(cancellationToken);
+            due = dirty
+                .Where(s => s.ReportDate >= recentFloor || s.DirtyAt < historicalCutoff)
+                .ToList();
+            LogResting(dirty.Count - due.Count);
         }
 
         if (due.Count == 0)
@@ -169,6 +185,30 @@ public class AumSnapshotDrainWorker : BackgroundService
                 );
                 await RearmDirtyFlag(entry, cancellationToken);
             }
+        }
+    }
+
+    /// <summary>
+    /// The oldest quarter still on the ordinary cooldown: the newest closed quarter and the one
+    /// before it, which late filers and amendments keep changing while the window is fresh.
+    /// </summary>
+    internal static DateOnly RecentQuarterFloor(DateOnly today) =>
+        HoldingsCorpusCoverage.PreviousQuarterEnd(
+            HolderIntelligenceRefreshService.LatestClosedQuarter(today)
+        );
+
+    private void LogResting(int resting)
+    {
+        if (resting == _restingLogged)
+            return;
+        _restingLogged = resting;
+        if (resting > 0)
+        {
+            _logger.LogInformation(
+                "{Count} dirty historical AUM snapshot(s) rest until their {Cooldown} cooldown elapses",
+                resting,
+                HistoricalCooldown
+            );
         }
     }
 
