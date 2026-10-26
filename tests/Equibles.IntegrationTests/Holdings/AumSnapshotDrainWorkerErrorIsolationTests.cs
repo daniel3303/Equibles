@@ -129,6 +129,9 @@ public class AumSnapshotDrainWorkerErrorIsolationTests : IAsyncLifetime
         protected override TimeSpan StartupDelay => TimeSpan.Zero;
         protected override TimeSpan TickInterval => TimeSpan.FromMilliseconds(1);
         protected override TimeSpan Cooldown => TimeSpan.Zero;
+
+        // The seeded 2024 quarters are historical by the real calendar; both tiers drain at once here.
+        protected override TimeSpan HistoricalCooldown => TimeSpan.Zero;
     }
 
     private sealed class SelectiveThrowRefreshService : HoldingsAggregateRefreshService
