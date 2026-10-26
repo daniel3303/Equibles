@@ -140,4 +140,81 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
                 .BeCloseTo(waiting.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
         }
     }
+
+    // One pass over a pair that mixes every rung: the climbing row gains a step and a stamp, the row
+    // on the last rung publishes its filed value across its legs, and the resting row is untouched.
+    [Fact]
+    public async Task Recalculate_UnpricedPair_ClimbsSettlesAndRestsItsRowsInOnePass()
+    {
+        var now = DateTime.UtcNow;
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "MIX", Name: "Mixed");
+        InstitutionalHolder Holder(string cik) =>
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Cik = cik,
+                Name = "Filer " + cik,
+            };
+        var climbingHolder = Holder("2000001");
+        var exhaustedHolder = Holder("2000002");
+        var restingHolder = Holder("2000003");
+        var climbing = Pending(issuer, climbingHolder, now.AddDays(-8));
+        var exhausted = Pending(issuer, exhaustedHolder, now.AddDays(-31));
+        exhausted.ValueRetryCount = 3;
+        exhausted.FiledValue = 5_000L;
+        exhausted.ManagerEntries =
+        [
+            new HoldingManagerEntry
+            {
+                ManagerNumber = 1,
+                ManagerName = "Leg A",
+                Shares = 250,
+                Value = 0L,
+            },
+            new HoldingManagerEntry
+            {
+                ManagerNumber = 2,
+                ManagerName = "Leg B",
+                Shares = 750,
+                Value = 0L,
+            },
+        ];
+        var resting = Pending(issuer, restingHolder, now.AddDays(-2));
+        var seed = CreateSharedContext();
+        seed.Set<EquityIssuer>().Add(issuer);
+        seed.Set<InstitutionalHolder>().AddRange(climbingHolder, exhaustedHolder, restingHolder);
+        seed.Set<InstitutionalHolding>().AddRange(climbing, exhausted, resting);
+        await seed.SaveChangesAsync();
+        _priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
+
+        await CreateRecalculator().Recalculate(CancellationToken.None);
+
+        var rows = await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .Include(h => h.ManagerEntries)
+            .ToDictionaryAsync(h => h.Id);
+        rows[climbing.Id].ValueRetryCount.Should().Be(2);
+        rows[climbing.Id].ValueLastRetryAt.Should().BeAfter(now.AddMinutes(-1));
+        rows[climbing.Id].ValuePending.Should().BeTrue();
+        rows[exhausted.Id].ValuePending.Should().BeFalse();
+        rows[exhausted.Id].ValueSource.Should().Be(ValueSource.Filed);
+        rows[exhausted.Id].Value.Should().Be(5_000L);
+        rows[exhausted.Id].ValueRetryCount.Should().Be(4);
+        rows[exhausted.Id]
+            .ManagerEntries.OrderBy(e => e.ManagerNumber)
+            .Select(e => e.Value)
+            .Should()
+            .Equal(1_250L, 3_750L);
+        rows[resting.Id].ValueRetryCount.Should().Be(1);
+        rows[resting.Id].ValuePending.Should().BeTrue();
+        rows[resting.Id]
+            .ValueLastRetryAt.Should()
+            .BeCloseTo(resting.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+    }
 }
