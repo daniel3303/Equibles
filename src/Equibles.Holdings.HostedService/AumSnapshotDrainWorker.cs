@@ -24,7 +24,7 @@ namespace Equibles.Holdings.HostedService;
 /// The consumer replaces a future lease with its new event timestamp, which
 /// preserves an import that lands mid-rebuild; the successful rebuild clears
 /// the lease only when no newer event replaced it. A crashed worker's lease
-/// becomes eligible again after the lease and ordinary cooldown expire.
+/// becomes eligible again after the lease and the quarter's cooldown expire.
 /// </summary>
 public class AumSnapshotDrainWorker : BackgroundService
 {
