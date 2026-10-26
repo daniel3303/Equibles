@@ -211,6 +211,8 @@ public class HoldingsValueRecalculator
         var totalGivenUp = 0;
         var settledAccessions = new HashSet<string>();
         var settledReportDates = new HashSet<DateOnly>();
+        var exhaustedPairs =
+            unresolvedPairs.Count == 0 ? [] : await LoadExhaustedPairs(now, cancellationToken);
         foreach (var pair in unresolvedPairs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -218,12 +220,10 @@ public class HoldingsValueRecalculator
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
             ExtendCommandTimeout(dbContext);
-
-            // Only rows whose ladder step is due are loaded; the rest of the pair, and their
+            // Only rows whose ladder step is due are touched; the rest of the pair, and their
             // manager legs, stay on disk until their day comes.
-            var holdings = await dbContext
+            var dueRows = dbContext
                 .Set<InstitutionalHolding>()
-                .Include(h => h.ManagerEntries)
                 .Where(h =>
                     h.ValuePending
                     && h.ShareType == ShareType.Shares
@@ -231,32 +231,28 @@ public class HoldingsValueRecalculator
                     && h.ListedTicker == pair.ListedTicker
                     && h.ReportDate == pair.ReportDate
                 )
-                .Where(RetryDue(now))
-                .ToListAsync(cancellationToken);
+                .Where(RetryDue(now));
 
-            var changed = false;
-            var settledRows = new List<InstitutionalHolding>();
-
-            foreach (var holding in holdings)
+            // Only a row on the last rung changes shape and needs its manager legs loaded. It is
+            // settled before the climb below so a row stepped onto that rung now is not re-read.
+            if (exhaustedPairs.Contains(pair))
             {
-                var delay = RetryDelays[Math.Min(holding.ValueRetryCount, MaxRetries - 1)];
-                var anchor = holding.ValueLastRetryAt ?? holding.CreationTime;
-
-                if (anchor.Add(delay) > now)
-                    continue;
-
-                holding.ValueRetryCount++;
-                holding.ValueLastRetryAt = now;
-
-                if (holding.ValueRetryCount > MaxRetries)
+                var exhausted = await dueRows
+                    .Where(h => h.ValueRetryCount >= MaxRetries)
+                    .Include(h => h.ManagerEntries)
+                    .ToListAsync(cancellationToken);
+                foreach (var holding in exhausted)
                 {
+                    holding.ValueRetryCount++;
+                    holding.ValueLastRetryAt = now;
                     // The ladder is exhausted — derivation is not going to happen. Publish the
                     // filer's own figure rather than a silent zero; only a row the filing itself
                     // left unvalued is honestly unknowable.
                     if (holding.FiledValue is > 0)
                     {
                         ApplyFiledValue(holding);
-                        settledRows.Add(holding);
+                        settledAccessions.Add(holding.AccessionNumber);
+                        settledReportDates.Add(holding.ReportDate);
                     }
                     else
                     {
@@ -265,27 +261,74 @@ public class HoldingsValueRecalculator
                     }
                     totalGivenUp++;
                 }
-
-                changed = true;
+                if (exhausted.Count > 0)
+                {
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
             }
 
-            if (changed)
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
-
-            foreach (var settled in settledRows)
-            {
-                settledAccessions.Add(settled.AccessionNumber);
-                settledReportDates.Add(settled.ReportDate);
-            }
+            await ClimbOneRung(dbContext, dueRows, now, cancellationToken);
         }
-
         // One rollup pass for everything that settled this cycle — the per-accession re-sum
         // scans every position of every touched filing, so running it once per pair repeated
         // that scan for every pair in the pass.
         await RefreshRollups(settledAccessions, settledReportDates, cancellationToken);
         return totalGivenUp;
+    }
+
+    // Every due row below the last rung only gains a step and a stamp: one UPDATE per pair,
+    // not a load, a tracked change and a statement per row (millions of rows in a retry wave).
+    private static async Task ClimbOneRung(
+        EquiblesFinancialDbContext dbContext,
+        IQueryable<InstitutionalHolding> dueRows,
+        DateTime now,
+        CancellationToken cancellationToken
+    )
+    {
+        var climbing = dueRows.Where(h => h.ValueRetryCount < MaxRetries);
+        if (dbContext.Database.IsRelational())
+        {
+            await climbing.ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(h => h.ValueRetryCount, h => h.ValueRetryCount + 1)
+                        .SetProperty(h => h.ValueLastRetryAt, now),
+                cancellationToken
+            );
+            return;
+        }
+        // The in-memory provider has no bulk update.
+        foreach (var holding in await climbing.ToListAsync(cancellationToken))
+        {
+            holding.ValueRetryCount++;
+            holding.ValueLastRetryAt = now;
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    // The pairs holding a due row on the ladder's last rung; every other pair needs no entity load.
+    private async Task<
+        HashSet<(Guid CommonStockId, string ListedTicker, DateOnly ReportDate)>
+    > LoadExhaustedPairs(DateTime now, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        ExtendCommandTimeout(dbContext);
+        var pairs = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                h.ValuePending && h.ShareType == ShareType.Shares && h.ValueRetryCount >= MaxRetries
+            )
+            .Where(RetryDue(now))
+            .Select(h => new
+            {
+                h.EquityIssuerId,
+                h.ListedTicker,
+                h.ReportDate,
+            })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return pairs.Select(p => (p.EquityIssuerId, p.ListedTicker, p.ReportDate)).ToHashSet();
     }
 
     private async Task<(

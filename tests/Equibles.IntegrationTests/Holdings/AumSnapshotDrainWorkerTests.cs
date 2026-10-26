@@ -476,6 +476,110 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
         aum.TotalValue.Should().Be(300_000L);
     }
 
+    // 2025-02-20 is past Q4 2024's filing deadline: the newest closed quarter is Q4 2024, so
+    // Q3 2024 is the oldest quarter still on the ordinary cooldown and Q2 2024 is historical.
+    private static readonly DateOnly PinnedToday = new(2025, 2, 20);
+    private static readonly DateOnly Historical = new(2024, 6, 30);
+
+    [Theory]
+    [InlineData(2025, 2, 20, 2024, 9, 30)]
+    [InlineData(2025, 2, 10, 2024, 6, 30)]
+    public void RecentQuarterFloor_IsTheQuarterBeforeTheNewestClosedOne(
+        int year,
+        int month,
+        int day,
+        int floorYear,
+        int floorMonth,
+        int floorDay
+    )
+    {
+        AumSnapshotDrainWorker
+            .RecentQuarterFloor(new DateOnly(year, month, day))
+            .Should()
+            .Be(new DateOnly(floorYear, floorMonth, floorDay));
+    }
+
+    [Fact]
+    public async Task DrainOnce_HistoricalQuarterInsideHistoricalCooldown_RestsWhileRecentQuarterDrains()
+    {
+        var dirtyAt = DateTime.UtcNow.AddHours(-2);
+        await using (var seed = FreshContext())
+        {
+            seed.AddRange(
+                new AumQuarterlySnapshot { ReportDate = Q4, DirtyAt = dirtyAt },
+                new AumQuarterlySnapshot { ReportDate = Historical, DirtyAt = dirtyAt }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var rebuilt = new List<DateOnly>();
+        var scopeFactory = BuildScopeFactory();
+        var worker = new TestableDrainWorker(
+            scopeFactory,
+            new RecordingRefreshService(
+                scopeFactory,
+                NullLogger<HoldingsAggregateRefreshService>.Instance,
+                rebuilt
+            ),
+            NullLogger<AumSnapshotDrainWorker>.Instance,
+            cooldown: TimeSpan.FromHours(1),
+            historicalCooldown: TimeSpan.FromHours(24),
+            today: PinnedToday
+        );
+
+        await worker.DrainOnce(CancellationToken.None);
+
+        rebuilt.Should().Equal(Q4);
+        await using var read = FreshContext();
+        var resting = await read.Set<AumQuarterlySnapshot>()
+            .SingleAsync(s => s.ReportDate == Historical);
+        resting
+            .DirtyAt.Should()
+            .NotBeNull("a historical quarter waits the longer cooldown")
+            .And.Subject.As<DateTime?>()
+            .Value.Should()
+            .BeCloseTo(dirtyAt, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task DrainOnce_HistoricalQuarterPastHistoricalCooldown_Rebuilds()
+    {
+        await using (var seed = FreshContext())
+        {
+            seed.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = Historical,
+                    DirtyAt = DateTime.UtcNow.AddHours(-25),
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var rebuilt = new List<DateOnly>();
+        var scopeFactory = BuildScopeFactory();
+        var worker = new TestableDrainWorker(
+            scopeFactory,
+            new RecordingRefreshService(
+                scopeFactory,
+                NullLogger<HoldingsAggregateRefreshService>.Instance,
+                rebuilt
+            ),
+            NullLogger<AumSnapshotDrainWorker>.Instance,
+            cooldown: TimeSpan.FromHours(1),
+            historicalCooldown: TimeSpan.FromHours(24),
+            today: PinnedToday
+        );
+
+        await worker.DrainOnce(CancellationToken.None);
+
+        rebuilt.Should().Equal(Historical);
+        await using var read = FreshContext();
+        var snapshot = await read.Set<AumQuarterlySnapshot>()
+            .SingleAsync(s => s.ReportDate == Historical);
+        snapshot.DirtyAt.Should().BeNull("the historical cooldown had elapsed");
+    }
+
     /// <summary>
     /// Drain worker that lets tests override the cooldown so a "two-hour-old"
     /// dirty flag can be drained in a sub-second test.
@@ -485,6 +589,8 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
         private readonly TimeSpan _cooldown;
         private readonly TimeSpan? _claimLease;
         private readonly TimeSpan? _claimRenewInterval;
+        private readonly TimeSpan? _historicalCooldown;
+        private readonly DateOnly? _today;
 
         public TestableDrainWorker(
             IServiceScopeFactory scopeFactory,
@@ -492,18 +598,27 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
             ILogger<AumSnapshotDrainWorker> logger,
             TimeSpan cooldown,
             TimeSpan? claimLease = null,
-            TimeSpan? claimRenewInterval = null
+            TimeSpan? claimRenewInterval = null,
+            TimeSpan? historicalCooldown = null,
+            DateOnly? today = null
         )
             : base(scopeFactory, refreshService, logger)
         {
             _cooldown = cooldown;
             _claimLease = claimLease;
             _claimRenewInterval = claimRenewInterval;
+            _historicalCooldown = historicalCooldown;
+            _today = today;
         }
 
         protected override TimeSpan StartupDelay => TimeSpan.Zero;
         protected override TimeSpan TickInterval => TimeSpan.FromMilliseconds(1);
         protected override TimeSpan Cooldown => _cooldown;
+
+        // Tests seed Q4 2024, a historical quarter by the real calendar; unless a test pins the
+        // clock, the historical tier collapses onto the ordinary cooldown so they drain at once.
+        protected override TimeSpan HistoricalCooldown => _historicalCooldown ?? _cooldown;
+        protected override DateOnly Today => _today ?? base.Today;
         protected override TimeSpan ClaimLease => _claimLease ?? base.ClaimLease;
         protected override TimeSpan ClaimRenewInterval =>
             _claimRenewInterval ?? base.ClaimRenewInterval;
