@@ -629,7 +629,7 @@ public class CongressionalTradeSyncService
         return trades;
     }
 
-    private static string CleanStoredText(string value) =>
+    internal static string CleanStoredText(string value) =>
         value?.Replace("\0", "", StringComparison.Ordinal).Trim() ?? "";
 
     private async Task RepairLegacyInlineSubholdingNames(
