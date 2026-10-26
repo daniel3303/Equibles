@@ -1,7 +1,9 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Worker;
+using Microsoft.Extensions.Options;
 
 namespace Equibles.Sec.HostedService;
 
@@ -35,6 +37,29 @@ public class DocumentProcessorWorker : BaseScraperWorker
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
+        // Chunks exist only to carry embeddings - DocumentPersistenceService drops them with the
+        // note "their embeddings cascade at the DB level". With Embedding:Enabled=false nothing
+        // will ever embed them, so building them is pure work: on a single 4-core host this
+        // pipeline dominated the CPU, starved the fact-extraction sweep, and contributed to the
+        // Npgsql connection-open failures that parked documents.
+        //
+        // Skipping is lossless and reversible: the chunking queue is exactly
+        // "ChunkedAt IS NULL" (index IX_Document_PendingChunking), so turning embeddings back on
+        // picks up the same backlog in the same order.
+        await using (var probe = ScopeFactory.CreateAsyncScope())
+        {
+            var embeddingConfig = probe
+                .ServiceProvider.GetRequiredService<IOptions<EmbeddingConfig>>()
+                .Value;
+            if (!embeddingConfig.Enabled)
+            {
+                Logger.LogInformation(
+                    "Document processing skipped: Embedding:Enabled is false, so chunks would never be embedded."
+                );
+                return;
+            }
+        }
+
         Logger.LogInformation("Phase 1: Chunking all pending documents");
         while (!stoppingToken.IsCancellationRequested)
         {
