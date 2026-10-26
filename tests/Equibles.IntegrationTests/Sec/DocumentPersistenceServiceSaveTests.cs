@@ -102,7 +102,7 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
             new DocumentImageService(
                 new DocumentImageRepository(DbContext),
                 new Equibles.Media.Repositories.FileRepository(DbContext),
-                fileManager
+                Substitute.For<IBufferedFileWriter>()
             ),
             bus
         );

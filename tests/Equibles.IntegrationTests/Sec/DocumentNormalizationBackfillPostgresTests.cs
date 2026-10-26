@@ -481,7 +481,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
             new DocumentImageService(
                 new DocumentImageRepository(DbContext),
                 new FileRepository(DbContext),
-                fileManager
+                Substitute.For<IBufferedFileWriter>()
             ),
             Substitute.For<IBus>()
         );

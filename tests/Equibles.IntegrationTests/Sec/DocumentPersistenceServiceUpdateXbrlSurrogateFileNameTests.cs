@@ -52,7 +52,7 @@ public class DocumentPersistenceServiceUpdateXbrlSurrogateFileNameTests : Parade
             new DocumentImageService(
                 new DocumentImageRepository(ctx),
                 new Equibles.Media.Repositories.FileRepository(ctx),
-                fileManager
+                Substitute.For<IBufferedFileWriter>()
             ),
             Substitute.For<IBus>()
         );

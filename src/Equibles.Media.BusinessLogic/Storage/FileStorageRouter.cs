@@ -45,6 +45,24 @@ public class FileStorageRouter
     public Task Save(File file, byte[] content, string tier = null) =>
         WriteProvider.Save(file, content, tier ?? FileStorageTiers.Blob);
 
+    /// <summary>
+    /// Writes without the per-file fsync; the caller MUST call <see cref="SyncStore"/> before
+    /// committing the rows that reference the batch. The database provider writes as usual.
+    /// </summary>
+    public Task SaveBuffered(File file, byte[] content, string tier = null) =>
+        WriteProvider is FileSystemFileStorageProvider fileSystem
+            ? fileSystem.SaveBuffered(file, content, tier ?? FileStorageTiers.Blob)
+            : WriteProvider.Save(file, content, tier ?? FileStorageTiers.Blob);
+
+    /// <summary>Makes every buffered write durable and publishes it; nothing to do for the database.</summary>
+    public void SyncStore()
+    {
+        if (WriteProvider is FileSystemFileStorageProvider fileSystem)
+        {
+            fileSystem.SyncStore();
+        }
+    }
+
     /// <summary>Resolves the provider for reading a file by the value recorded when it was written.</summary>
     public IFileStorageProvider ReadProvider(StorageProvider stored) =>
         stored == StorageProvider.FileSystem || stored == StorageProvider.FileSystemGzip
