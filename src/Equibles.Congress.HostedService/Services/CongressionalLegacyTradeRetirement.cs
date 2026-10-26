@@ -114,29 +114,23 @@ public class CongressionalLegacyTradeRetirement
     }
 
     // Most specific legacy rows claim first, so a bare row cannot take the only replay row a
-    // detailed one matches; each replay row stands in for at most one legacy row.
+    // detailed one matches; each replay row stands in for at most one legacy row. The sequence is
+    // lazy, so each pick sees the claims made before it.
     private static bool PairsEveryRow(List<Candidate> candidates)
     {
         var claimed = new HashSet<Guid>();
-        foreach (
-            var candidate in candidates
-                .OrderByDescending(candidate => candidate.Facts.Specificity)
-                .ThenBy(candidate => candidate.Legacy.Id)
-        )
-        {
-            var replacement = candidate
-                .Sources.Where(source => !claimed.Contains(source.Id))
-                .OrderByDescending(source => candidate.Facts.Matches(source))
-                .ThenBy(source => source.SourceId, StringComparer.Ordinal)
-                .ThenBy(source => source.SourceRowIndex)
-                .FirstOrDefault();
-            if (replacement == null)
-                return false;
-
-            claimed.Add(replacement.Id);
-        }
-
-        return true;
+        return candidates
+            .OrderByDescending(candidate => candidate.Facts.Specificity)
+            .ThenBy(candidate => candidate.Legacy.Id)
+            .Select(candidate =>
+                candidate
+                    .Sources.Where(source => !claimed.Contains(source.Id))
+                    .OrderByDescending(source => candidate.Facts.Matches(source))
+                    .ThenBy(source => source.SourceId, StringComparer.Ordinal)
+                    .ThenBy(source => source.SourceRowIndex)
+                    .FirstOrDefault()
+            )
+            .All(replacement => replacement != null && claimed.Add(replacement.Id));
     }
 
     private sealed record Candidate(
