@@ -110,7 +110,7 @@ public class DocumentPersistenceServiceTests : IDisposable
             new DocumentImageService(
                 new DocumentImageRepository(_dbContext),
                 new Equibles.Media.Repositories.FileRepository(_dbContext),
-                fileManager
+                Substitute.For<IBufferedFileWriter>()
             ),
             Substitute.For<IBus>()
         );
@@ -176,7 +176,7 @@ public class DocumentPersistenceServiceTests : IDisposable
             new DocumentImageService(
                 new DocumentImageRepository(_dbContext),
                 new Equibles.Media.Repositories.FileRepository(_dbContext),
-                fileManager
+                Substitute.For<IBufferedFileWriter>()
             ),
             Substitute.For<IBus>()
         );

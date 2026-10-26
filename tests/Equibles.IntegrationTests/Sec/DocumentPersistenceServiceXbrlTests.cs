@@ -57,7 +57,7 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
             new DocumentImageService(
                 new DocumentImageRepository(DbContext),
                 new FileRepository(DbContext),
-                FileManagerTestFactory.Create(new FileRepository(DbContext))
+                Substitute.For<IBufferedFileWriter>()
             ),
             Substitute.For<IBus>()
         );

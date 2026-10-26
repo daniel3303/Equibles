@@ -24,17 +24,17 @@ public class DocumentImageService
 
     private readonly DocumentImageRepository _documentImageRepository;
     private readonly FileRepository _fileRepository;
-    private readonly IFileManager _fileManager;
+    private readonly IBufferedFileWriter _files;
 
     public DocumentImageService(
         DocumentImageRepository documentImageRepository,
         FileRepository fileRepository,
-        IFileManager fileManager
+        IBufferedFileWriter files
     )
     {
         _documentImageRepository = documentImageRepository;
         _fileRepository = fileRepository;
-        _fileManager = fileManager;
+        _files = files;
     }
 
     /// <summary>
@@ -42,6 +42,9 @@ public class DocumentImageService
     /// images (and their blobs) then stores the new ones. Does NOT call SaveChanges — the caller
     /// commits the tracked inserts in the same unit of work. The prior-image clear is an immediate
     /// SQL delete so a re-stitch can reuse the same filenames without colliding on the unique index.
+    /// The blobs are written buffered and flushed once at the end, so a filing's image set costs
+    /// the media disk one sync instead of an fsync per file and directory; the flush precedes the
+    /// caller's commit, so no row ever points at bytes the disk did not take.
     /// </summary>
     public async Task SyncImages(
         Document document,
@@ -53,7 +56,7 @@ public class DocumentImageService
 
         foreach (var image in images)
         {
-            var file = await _fileManager.SaveInternalFile(
+            var file = await _files.SaveInternalFileBuffered(
                 image.Bytes,
                 FileNameWithoutExtension(image.FileName).TruncateToFit(MaxFileNameLength),
                 Extension(image.FileName).TruncateToFit(MaxExtensionLength),
@@ -70,6 +73,11 @@ public class DocumentImageService
                     File = file,
                 }
             );
+        }
+
+        if (images.Count > 0)
+        {
+            _files.SyncStore();
         }
     }
 
