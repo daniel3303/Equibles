@@ -611,6 +611,63 @@ public class VenueDirectorySourceTests
         await withoutLei.Should().ThrowAsync<InvalidDataException>();
     }
 
+    private static EquiblesFinancialDbContext LondonDatabase() =>
+        new(
+            new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options,
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
+        );
+
+    [Theory]
+    [InlineData("2026-08-31", false)]
+    [InlineData("2026-07-31", true)]
+    [InlineData(null, true)]
+    public async Task Lse_RefusesAWorkbookOlderThanTheCommittedDirectory(
+        string committedAsAt,
+        bool captures
+    )
+    {
+        using var http = new HttpClient(LseHandler(await Lse("instrument-list.trimmed.xlsx")));
+        using var db = LondonDatabase();
+        if (committedAsAt != null)
+        {
+            var previous = new EquityDirectorySourceRecord
+            {
+                Source = "lse-instrument-list-v1",
+                SourceRecordKey = LseInstrumentListClient.PublisherPage.AbsoluteUri,
+                PayloadHash = "test",
+                PayloadJson = $"{{\"Edition\":119,\"AsAt\":\"{committedAsAt}\"}}",
+            };
+            db.Add(
+                new EquityDirectorySnapshotState
+                {
+                    Source = "lse",
+                    SourceRecordKey = previous.SourceRecordKey,
+                    SourceRecordId = previous.Id,
+                    SourceRecord = previous,
+                    ObservedAt = DateTime.UtcNow,
+                }
+            );
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+        }
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http), new(db));
+
+        var capture = () =>
+            source.Capture(EquityMarketCatalog.TryGet("lse"), CancellationToken.None);
+
+        if (captures)
+            (await capture())
+                .Rows.Should()
+                .HaveCount(12, "a republished or first workbook is read");
+        else
+            await capture
+                .Should()
+                .ThrowAsync<InvalidDataException>()
+                .WithMessage("*older than the committed 2026-08-31*");
+    }
+
     private static LseInstrumentListTestHandler LseHandler(byte[] workbook) =>
         new(
             new Dictionary<string, (HttpStatusCode, string, byte[])>
@@ -638,7 +695,8 @@ public class VenueDirectorySourceTests
     public async Task Lse_KeepsOneLinePerSecurityQuotedInTheVenuesOwnCurrency()
     {
         using var http = new HttpClient(LseHandler(await Lse("instrument-list.trimmed.xlsx")));
-        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+        using var db = LondonDatabase();
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http), new(db));
         var market = EquityMarketCatalog.TryGet("lse");
         source.SourceKey.Should().Be(market.DirectorySource);
         source.Supports(market).Should().BeTrue();
@@ -728,7 +786,8 @@ public class VenueDirectorySourceTests
         using var http = new HttpClient(
             LseHandler(await Lse("instrument-list.two-sterling-lines.derived.xlsx"))
         );
-        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+        using var db = LondonDatabase();
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http), new(db));
 
         var snapshot = await source.Capture(
             EquityMarketCatalog.TryGet("lse"),
@@ -753,7 +812,8 @@ public class VenueDirectorySourceTests
         using var http = new HttpClient(
             LseHandler(await Lse("instrument-list.symbol-collision.derived.xlsx"))
         );
-        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+        using var db = LondonDatabase();
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http), new(db));
 
         var capture = () =>
             source.Capture(EquityMarketCatalog.TryGet("lse"), CancellationToken.None);
@@ -782,7 +842,8 @@ public class VenueDirectorySourceTests
                 new Dictionary<string, (HttpStatusCode, string, byte[])>()
             )
         );
-        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+        using var db = LondonDatabase();
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http), new(db));
 
         var product = await source.Resolve(
             market,

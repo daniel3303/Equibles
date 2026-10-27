@@ -1,15 +1,20 @@
+using System.Globalization;
 using System.Text.Json;
+using Equibles.CommonStocks.Repositories;
 using Equibles.EquityMarkets.BusinessLogic.Directory;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 using Equibles.Integrations.Lse;
 using Equibles.Integrations.Lse.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.EquityMarkets.HostedService.Services;
 
 // London publishes one workbook that is both the directory and the product; the issuer identity comes from FIRDS.
-public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
-    : IEquityMarketDirectorySource
+public class LseEquityMarketDirectorySource(
+    LseInstrumentListClient client,
+    EquityDirectorySourceRecordRepository records
+) : IEquityMarketDirectorySource
 {
     public const string Key = "lse";
 
@@ -23,7 +28,22 @@ public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
         CancellationToken cancellationToken
     )
     {
+        var previous = await records
+            .GetSnapshotStates()
+            .AsNoTracking()
+            .Where(row =>
+                row.Source == Key
+                && row.SourceRecordKey == LseInstrumentListClient.PublisherPage.AbsoluteUri
+            )
+            .Select(row => row.SourceRecord.PayloadJson)
+            .SingleOrDefaultAsync(cancellationToken);
         var list = await client.GetInstruments(cancellationToken);
+        // The file's address no longer changes per publication, so a stale copy would otherwise reconcile an older
+        // market and withdraw every share admitted since.
+        if (PreviousAsAt(previous) is { } committed && list.AsAt < committed)
+            throw new InvalidDataException(
+                $"London instrument list as at {list.AsAt:yyyy-MM-dd} is older than the committed {committed:yyyy-MM-dd}."
+            );
         var shares = list
             .Instruments.Where(row =>
                 row.MifirIdentifier == "SHRS"
@@ -90,6 +110,28 @@ public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
             Rows = rows,
             Excluded = excluded,
         };
+    }
+
+    internal static DateOnly? PreviousAsAt(string payload)
+    {
+        if (payload == null)
+            return null;
+        using var document = JsonDocument.Parse(payload);
+        return
+            document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("AsAt", out var value)
+            && value.ValueKind == JsonValueKind.String
+            && DateOnly.TryParseExact(
+                value.GetString(),
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var asAt
+            )
+            ? asAt
+            : throw new InvalidDataException(
+                "Stored London directory does not state the as-at date it was published for."
+            );
     }
 
     public Task<EquityMarketDirectoryProduct> Resolve(
