@@ -20,6 +20,9 @@ public static partial class FilingWebsiteExtractor
     // self-reference from leaking onto a later third-party URL in the sentence.
     private const int ContextWindow = 90;
 
+    // How far back from an "its" the sentence naming its subject is searched for.
+    private const int SentenceLookBack = 400;
+
     /// <summary>
     /// Returns the disclosed website host (e.g. <c>www.apple.com</c>, no scheme or
     /// path) or null when the text carries no self-referenced website. When the
@@ -47,10 +50,13 @@ public static partial class FilingWebsiteExtractor
             var selfReferences = SelfReferenceRegex().Matches(context);
             if (selfReferences.Count == 0)
                 continue;
+            var nearest = selfReferences[^1];
+            if (!NamesThisUrl(filingText, contextStart, nearest, context))
+                continue;
 
             // Prefer the corporate host over an investor-relations one, regardless of
             // which the filing discloses first.
-            if (!IsInvestorRelationsCandidate(host, selfReferences[^1].Value))
+            if (!IsInvestorRelationsCandidate(host, nearest.Value))
                 return host;
 
             firstInvestorRelationsHost ??= host;
@@ -82,6 +88,36 @@ public static partial class FilingWebsiteExtractor
     private static bool IsExcludedHost(string host) =>
         host == "sec.gov" || host.EndsWith(".sec.gov", StringComparison.Ordinal);
 
+    // Whether the self-reference names this URL rather than sitting near another site's
+    // ("our website and Amazon.com", "our proxy agent's website", a transfer agent's "Its
+    // website is"): only connector words may separate them, no other party's possessive may
+    // sit inside the phrase, and "its" counts only in a sentence naming the registrant.
+    private static bool NamesThisUrl(
+        string filingText,
+        int contextStart,
+        Match selfReference,
+        string context
+    )
+    {
+        var gap = context[(selfReference.Index + selfReference.Length)..];
+        if (!ConnectorRegex().IsMatch(gap))
+            return false;
+        if (OtherPartyPossessiveRegex().IsMatch(selfReference.Groups["middle"].Value))
+            return false;
+        if (!selfReference.Groups["anchor"].Value.Equals("its", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var anchorAt = contextStart + selfReference.Index;
+        var lookBack = Math.Max(0, anchorAt - SentenceLookBack);
+        var preceding = filingText[lookBack..anchorAt];
+        var boundaries = SentenceBoundaryRegex().Matches(preceding);
+        var sentence =
+            boundaries.Count == 0
+                ? preceding
+                : preceding[(boundaries[^1].Index + boundaries[^1].Length)..];
+        return CompanyNounRegex().IsMatch(sentence);
+    }
+
     // An IR-flavoured candidate: the disclosure phrase called it an
     // investor-relations website, or the host itself is an investor/ir subdomain.
     private static bool IsInvestorRelationsCandidate(string host, string selfReference) =>
@@ -101,8 +137,36 @@ public static partial class FilingWebsiteExtractor
     // address is", "on its corporate website,", "the Company's investor relations
     // website at", "the Registrant maintains a website at", …
     [GeneratedRegex(
-        @"(?:\bour\b|\bits\b|company(?:['’]s)?|registrant(?:['’]s)?|corporation(?:['’]s)?)[a-z\s,'’-]{0,40}?(?:website|web\s+site|internet\s+(?:web\s+)?(?:site|address))",
+        @"(?<anchor>\bour\b|\bits\b|company(?:['’]s)?|registrant(?:['’]s)?|corporation(?:['’]s)?)(?<middle>[a-z\s,'’-]{0,40}?)(?:websites?|web\s+sites?|internet\s+(?:web\s+)?(?:site|address))",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex SelfReferenceRegex();
+
+    // What may stand between a self-reference and the URL it names: "address is",
+    // ", which can be found at", " (", "is located on the Internet at", "under the
+    // investor relations link at", … Normalised filing text keeps Markdown emphasis
+    // ("is *www.acme.com", "http://*www.acme.com"), so "*", "_" and a bare scheme pass too.
+    [GeneratedRegex(
+        @"^[\s,:;(\[""“'’*_/-]*(?:(?:address(?:es)?|is|are|at|located|currently|which|can|be|found|accessed|accessible|available|free|of|charge|following|on|in|under|for|the|company|corporation|registrant|investors?|relations|section|link|tab|page|url|internet|world|wide|web|https?)\b[\s,:;(\[""“'’*_/-]*)*$",
+        RegexOptions.IgnoreCase
+    )]
+    private static partial Regex ConnectorRegex();
+
+    // Another party's possessive inside the phrase: "our proxy agent’s website".
+    [GeneratedRegex(
+        @"\b(?!(?:company|registrant|corporation)['’]s\b)[a-z]+['’]s\b",
+        RegexOptions.IgnoreCase
+    )]
+    private static partial Regex OtherPartyPossessiveRegex();
+
+    // A sentence end: terminal punctuation, then whitespace and a capital, so "Inc., 480"
+    // or "Inc. makes" stay inside their sentence.
+    [GeneratedRegex(@"[.!?][""”’)]?\s+(?=[A-Z])")]
+    private static partial Regex SentenceBoundaryRegex();
+
+    [GeneratedRegex(
+        @"\b(?:company|registrant|corporation|fund|trust|partnership|bank)\b",
+        RegexOptions.IgnoreCase
+    )]
+    private static partial Regex CompanyNounRegex();
 }

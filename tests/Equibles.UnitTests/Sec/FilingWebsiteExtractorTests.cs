@@ -146,4 +146,56 @@ public class FilingWebsiteExtractorTests
 
         FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
     }
+
+    [Theory]
+    [InlineData(
+        "Our products are sold online, including through our website and e-commerce platforms such as Amazon.com."
+    )]
+    [InlineData(
+        "From time to time, we may use our website, our Facebook page at https://www.facebook.com/acme and our X account to disclose information."
+    )]
+    [InlineData(
+        "You may vote over the Internet on our proxy agent’s website at www.cstproxyvote.com, by following the instructions."
+    )]
+    [InlineData(
+        "Transfer Agent Computershare Inc., 480 Washington Blvd., Jersey City, New Jersey 07310, is the transfer agent and registrar for our stock. Its website is www.computershare.com and its telephone number is listed below."
+    )]
+    [InlineData(
+        "The Trustee will make the Monthly Report available via its website. The Trustee’s website shall initially be located at https://pivot.usbank.com."
+    )]
+    public void ThirdPartySiteNearASelfReference_IsNotTheCompanyWebsite(string text)
+    {
+        FilingWebsiteExtractor.Extract(text).Should().BeNull();
+    }
+
+    [Fact]
+    public void ThirdPartySiteBeforeTheDisclosure_DoesNotWin()
+    {
+        var text =
+            "Our satellite radios are sold directly to consumers through our website, and indirectly "
+            + "through online retailers, such as Amazon.com. Available Information. Our website "
+            + "address is www.acme.com.";
+
+        FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
+    }
+
+    [Theory]
+    [InlineData("Our website address is *www.acme.com*, where reports are posted.")]
+    [InlineData(
+        "Our telephone number is (702) 944-5599, and our website is http://*www.acme.com*."
+    )]
+    [InlineData(
+        "Filings are available at our web site under the investor relations link at https://www.acme.com."
+    )]
+    [InlineData(
+        "The Company makes its filings available free of charge on its website at www.acme.com."
+    )]
+    [InlineData(
+        "All material information is disclosed by the Fund on its website at www.acme.com."
+    )]
+    [InlineData("We sell our product lines on our websites at www.acme.com and other channels.")]
+    public void DisclosureWordings_ReturnHost(string text)
+    {
+        FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
+    }
 }
