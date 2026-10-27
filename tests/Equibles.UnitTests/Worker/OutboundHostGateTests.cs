@@ -51,6 +51,47 @@ public class OutboundHostGateTests
         gate.IsCoolingDown("https://other.com/x").Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(
+        "http://www.amada.co.jp/english/index.html",
+        "https://ir.amada.co.jp/ir/",
+        "https://www.toei-anim.co.jp/"
+    )]
+    [InlineData(
+        "https://www.example.com.cn/",
+        "https://ir.example.com.cn/",
+        "https://www.another.com.cn/"
+    )]
+    [InlineData("https://home.kepco.co.kr/", "https://kepco.co.kr/", "https://www.kt.co.kr/")]
+    [InlineData(
+        "https://www.acme.com.au/investors",
+        "https://acme.com.au/",
+        "https://www.other.com.au/"
+    )]
+    public void Cooldown_UnderACountryCodeSecondLevel_ParksOnlyThatCompany(
+        string blocked,
+        string sameCompany,
+        string neighbour
+    )
+    {
+        // Keyed on the shared public suffix, one walled Japanese site parked every .co.jp issuer.
+        var gate = Gate();
+        gate.RecordRateLimited(blocked);
+
+        gate.IsCoolingDown(sameCompany).Should().BeTrue();
+        gate.IsCoolingDown(neighbour).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Cooldown_OnATwoLetterTopLevelDomain_StillCoversTheSiteAndItsSubdomains()
+    {
+        var gate = Gate();
+        gate.RecordRateLimited("https://www.investis.co/ir");
+
+        gate.IsCoolingDown("https://ir.investis.co/x").Should().BeTrue();
+        gate.IsCoolingDown("https://www.other.co/x").Should().BeFalse();
+    }
+
     [Fact]
     public void RecordRateLimited_ZeroOrUnparseableUrl_DoesNotThrow()
     {
