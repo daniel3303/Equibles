@@ -89,6 +89,101 @@ public class EquityMarketDirectoryGateTests
         gate.Should().Throw<ArgumentNullException>();
     }
 
+    [Fact]
+    public void IsHomeShare_TakesTheIssuerRequestedLineWhenFirdsHomesTheShareOnAVenueTheIssuerNeverSought()
+    {
+        // A new Madrid ISIN that a German venue traded first: FIRDS homes it there, the issuer sought only Madrid.
+        var market = EquityMarketCatalog.TryGet("bme");
+        var row = Row("XMAD", null);
+        var firds = Line("XMAD", "EQTB", true, "DE");
+        List<FirdsInstrumentRecord> lines =
+        [
+            firds,
+            Line("DMAD", "EQTB", true, "DE"),
+            Line("EQTB", "EQTB", false, "DE"),
+            Line("DUSB", "EQTB", false, "DE"),
+        ];
+
+        EquityMarketDirectoryGate.IsHomeShare(market, row, firds).Should().BeFalse();
+        EquityMarketDirectoryGate.IsHomeShare(market, row, firds, lines).Should().BeTrue();
+        EquityMarketDirectoryGate
+            .IsHomeShare(market, Row("XMAD", "XMAD"), firds, lines)
+            .Should()
+            .BeTrue();
+        EquityMarketDirectoryGate
+            .IsHomeShare(EquityMarketCatalog.TryGet("xetra"), Row("XETR", null), firds, lines)
+            .Should()
+            .BeFalse("the share has no line on Xetra's own venues");
+    }
+
+    [Fact]
+    public void IsHomeShare_AdmitsAGrowthTransferWhoseRelevantVenueIsAnUnsoughtMtf()
+    {
+        var market = EquityMarketCatalog.TryGet("euronext-paris");
+        var firds = Line("ALXP", "SGMU", true, "FR");
+        List<FirdsInstrumentRecord> lines = [firds, Line("SGMU", "SGMU", false, "FR")];
+
+        EquityMarketDirectoryGate.IsHomeShare(market, Row("ALXP", null), firds).Should().BeFalse();
+        EquityMarketDirectoryGate
+            .IsHomeShare(market, Row("ALXP", null), firds, lines)
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public void IsHomeShare_LeavesTheRequestRuleWhenAnotherHomeIsPossible()
+    {
+        var market = EquityMarketCatalog.TryGet("euronext-paris");
+        var row = Row("ALXP", null);
+        var firds = Line("ALXP", "SGMU", true, "FR");
+        var unsought = Line("SGMU", "SGMU", false, "FR");
+        bool Gate(params FirdsInstrumentRecord[] others) =>
+            EquityMarketDirectoryGate.IsHomeShare(market, row, firds, [firds, .. others]);
+
+        Gate(unsought).Should().BeTrue();
+        Gate(unsought, Line("XMAD", "SGMU", true, "FR"))
+            .Should()
+            .BeFalse("the issuer also sought Madrid, so Paris is not its only home");
+        Gate(unsought, Line("XMAD", "SGMU", null, "FR"))
+            .Should()
+            .BeFalse("an unknown flag elsewhere counts as sought");
+        Gate(Line("SGMU", "SGMU", null, "FR"))
+            .Should()
+            .BeFalse("the relevant line's flag is unknown");
+        Gate(Line("SGMU", "SGMU", true, "FR"))
+            .Should()
+            .BeFalse("the issuer sought the relevant venue");
+        Gate().Should().BeFalse("FIRDS states no line on the relevant venue");
+
+        var firstNorth = Line("ALXP", "FNSE", true, "SE");
+        EquityMarketDirectoryGate
+            .IsHomeShare(market, row, firstNorth, [firstNorth, Line("FNSE", "FNSE", false, "SE")])
+            .Should()
+            .BeFalse("Stockholm homes the share through its own First North line");
+
+        var london = Line("XLON", "XLON", true, "GB");
+        london.Authority = "FCA";
+        Gate(unsought, london).Should().BeFalse("the FCA register homes the share in London");
+
+        var unknownHere = Line("ALXP", "SGMU", null, "FR");
+        EquityMarketDirectoryGate
+            .IsHomeShare(market, row, unknownHere, [unknownHere, unsought])
+            .Should()
+            .BeFalse("only an explicit request grants a home");
+    }
+
+    private static FirdsInstrumentRecord Line(
+        string mic,
+        string relevantVenue,
+        bool? issuerRequested,
+        string authority
+    )
+    {
+        var line = Firds(mic, relevantVenue, authority);
+        line.IssuerRequested = issuerRequested;
+        return line;
+    }
+
     private static EquityMarketDirectoryRow Row(string mic, string statedPrimaryMarket) =>
         new()
         {

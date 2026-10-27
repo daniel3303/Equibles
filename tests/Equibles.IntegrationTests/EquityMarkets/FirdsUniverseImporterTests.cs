@@ -227,6 +227,61 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
     }
 
     [Fact]
+    public async Task HomeShares_CountAnIssuerRequestedLineWhoseRelevantVenueTheIssuerNeverSought()
+    {
+        var observedAt = DateTime.UtcNow;
+        FirdsInstrumentRecord Line(
+            string isin,
+            string mic,
+            string relevantVenue,
+            bool? requested,
+            string authority = EsmaFirdsClient.AuthorityCode
+        ) =>
+            new()
+            {
+                Authority = authority,
+                Isin = isin,
+                Mic = mic,
+                IssuerRequested = requested,
+                Cfi = "ESVUFB",
+                RelevantCompetentAuthority = "DE",
+                RelevantTradingVenue = relevantVenue,
+                ObservedAt = observedAt,
+            };
+        DbContext
+            .Set<FirdsInstrumentRecord>()
+            .AddRange(
+                // The issuer sought Madrid only; a German venue that traded the new ISIN first is its relevant venue.
+                Line("ES01717430J3", "XMAD", "EQTB", true),
+                Line("ES01717430J3", "DMAD", "EQTB", true),
+                Line("ES01717430J3", "EQTB", "EQTB", false),
+                // Sought in Madrid and Paris, so neither market can claim it alone.
+                Line("ES0000000002", "XMAD", "SGMU", true),
+                Line("ES0000000002", "XPAR", "SGMU", true),
+                Line("ES0000000002", "SGMU", "SGMU", false),
+                // The FCA register homes this one in London.
+                Line("GB0000000003", "XMAD", "SGMU", true),
+                Line("GB0000000003", "SGMU", "SGMU", false),
+                Line("GB0000000003", "XLON", "XLON", true, FcaFirdsClient.AuthorityCode),
+                // Homed in Madrid the ordinary way, and also issuer-requested there.
+                Line("ES0000000004", "XMAD", "XMAD", true)
+            );
+        await DbContext.SaveChangesAsync();
+        var records = new FirdsInstrumentRecordRepository(DbContext);
+
+        (await records.CountHomeShares(EquityMarketCatalog.TryGet("bme"), observedAt))
+            .Should()
+            .Be(2);
+        (await records.CountHomeShares(EquityMarketCatalog.TryGet("euronext-paris"), observedAt))
+            .Should()
+            .Be(0);
+        (await records.GetLiveShareLines("ES01717430J3", observedAt))
+            .Select(line => line.Mic)
+            .Should()
+            .BeEquivalentTo(["XMAD", "DMAD", "EQTB"]);
+    }
+
+    [Fact]
     public async Task RecordedFiles_AreNeverDownloadedAgain()
     {
         var full = Fixture("FULINS_E_sample.xml");

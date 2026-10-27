@@ -36,8 +36,16 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
             .ThenBy(row => row.Mic)
             .FirstOrDefaultAsync(cancellationToken);
 
+    // Every live share line FIRDS holds for one ISIN, across registers, for home decisions that weigh its other venues.
+    public Task<List<FirdsInstrumentRecord>> GetLiveShareLines(
+        string isin,
+        DateTime asOf,
+        CancellationToken cancellationToken = default
+    ) => GetLiveShares(asOf).Where(row => row.Isin == isin).ToListAsync(cancellationToken);
+
     // Live shares whose relevant venue is a home venue. Where the market requires it, the issuer must also have sought
     // (or not denied) a home admission, since venues elsewhere misreport the flag on their own listings.
+    // Shares EquityMarketDirectoryGate.IsHomedByIssuerRequest homes here count too, by the same conditions.
     public Task<int> CountHomeShares(
         EquityMarket market,
         DateTime asOf,
@@ -46,6 +54,7 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
     {
         var authority = market.FirdsAuthority;
         var homeVenues = market.HomeVenueCodes;
+        var firdsVenues = market.FirdsVenueCodes;
         var live = GetLiveShares(asOf).Where(row => row.Authority == authority);
         var home = live.Where(row => homeVenues.Contains(row.RelevantTradingVenue));
         if (market.HomeRequiresIssuerRequest)
@@ -56,7 +65,45 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
                     && line.IssuerRequested != false
                 )
             );
-        return home.Select(row => row.Isin).Distinct().CountAsync(cancellationToken);
+        var requested = live.Where(row =>
+            firdsVenues.Contains(row.Mic)
+            && row.IssuerRequested == true
+            && !homeVenues.Contains(row.RelevantTradingVenue)
+            && live.Any(line => line.Isin == row.Isin && line.Mic == row.RelevantTradingVenue)
+            && !live.Any(line =>
+                line.Isin == row.Isin
+                && line.Mic == row.RelevantTradingVenue
+                && line.IssuerRequested != false
+            )
+            && !live.Any(line =>
+                line.Isin == row.Isin
+                && line.IssuerRequested != false
+                && !firdsVenues.Contains(line.Mic)
+                && !homeVenues.Contains(line.Mic)
+            )
+        );
+        foreach (
+            var other in EquityMarketCatalog.All.Where(other =>
+                other.Code != market.Code && other.FirdsAuthority != null
+            )
+        )
+        {
+            var otherAuthority = other.FirdsAuthority;
+            var otherFirdsVenues = other.FirdsVenueCodes;
+            var otherHomeVenues = other.HomeVenueCodes;
+            requested = requested.Where(row =>
+                !GetLiveShares(asOf)
+                    .Any(line =>
+                        line.Isin == row.Isin
+                        && line.Authority == otherAuthority
+                        && otherFirdsVenues.Contains(line.Mic)
+                        && otherHomeVenues.Contains(line.RelevantTradingVenue)
+                    )
+            );
+        }
+        return home.Select(row => row.Isin)
+            .Union(requested.Select(row => row.Isin))
+            .CountAsync(cancellationToken);
     }
 
     public Task UpsertRange(
