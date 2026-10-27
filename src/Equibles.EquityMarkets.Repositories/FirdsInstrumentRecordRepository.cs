@@ -79,16 +79,13 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
                 && !homeVenues.Contains(line.Mic)
             )
         );
+        // Correlated by ISIN, so only the few candidates probe the ISIN index instead of hashing every home set.
         foreach (
-            var other in EquityMarketCatalog.All.Where(other =>
-                other.Code != market.Code && other.FirdsAuthority != null
-            )
+            var homedThere in EquityMarketCatalog
+                .All.Where(other => other.Code != market.Code && other.FirdsAuthority != null)
+                .Select(other => HomeLinesByRelevantVenue(other, asOf))
         )
-        {
-            // Correlated by ISIN, so only the few candidates probe the ISIN index instead of hashing every home set.
-            var homedThere = HomeLinesByRelevantVenue(other, asOf);
             requested = requested.Where(row => !homedThere.Any(line => line.Isin == row.Isin));
-        }
         return HomeLinesByRelevantVenue(market, asOf)
             .Select(row => row.Isin)
             .Union(requested.Select(row => row.Isin));
