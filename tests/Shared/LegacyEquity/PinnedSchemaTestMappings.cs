@@ -29,8 +29,9 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         builder.Entity<EquityIssuer>().Ignore(issuer => issuer.BdcHistoryReadOn);
         builder.Entity<EquityIssuer>().Ignore(issuer => issuer.SecRegistrantProfileReadOn);
 
-        // Added by 20261027123841_AddEquityIssuerWebsiteDiscoveryVersion.
+        // Added by 20261027130419_AddEquityIssuerWebsiteRecheck.
         builder.Entity<EquityIssuer>().Ignore(issuer => issuer.WebsiteDiscoveryVersion);
+        builder.Entity<EquityIssuer>().Ignore(issuer => issuer.WebsiteRecheckProbeFailedAt);
 
         // Added by 20260916043012_AddDelayedTrades.
         builder.Entity<EquityListing>().Ignore(listing => listing.YahooPriceSyncAttemptedAt);

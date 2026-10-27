@@ -1,11 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Equibles.Migrations.Migrations
 {
     /// <inheritdoc />
-    public partial class AddEquityIssuerWebsiteDiscoveryVersion : Migration
+    public partial class AddEquityIssuerWebsiteRecheck : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -16,6 +17,12 @@ namespace Equibles.Migrations.Migrations
                 type: "integer",
                 nullable: false,
                 defaultValue: 0);
+
+            migrationBuilder.AddColumn<DateTime>(
+                name: "WebsiteRecheckProbeFailedAt",
+                table: "EquityIssuer",
+                type: "timestamp with time zone",
+                nullable: true);
         }
 
         /// <inheritdoc />
@@ -23,6 +30,10 @@ namespace Equibles.Migrations.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "WebsiteDiscoveryVersion",
+                table: "EquityIssuer");
+
+            migrationBuilder.DropColumn(
+                name: "WebsiteRecheckProbeFailedAt",
                 table: "EquityIssuer");
         }
     }

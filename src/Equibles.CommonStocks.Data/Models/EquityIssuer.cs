@@ -42,6 +42,12 @@ public class EquityIssuer
     /// queues the stored website for its sources to re-check under their current rules.
     /// </summary>
     public int WebsiteDiscoveryVersion { get; set; }
+
+    /// <summary>
+    /// When a re-check's replacement website first failed the reachability probe; the stock
+    /// is re-checked once more a day later, since a probe that could not run reads as a dead site.
+    /// </summary>
+    public DateTime? WebsiteRecheckProbeFailedAt { get; set; }
     public int? FiscalYearEndMonth { get; set; }
     public int? FiscalYearEndDay { get; set; }
 

@@ -37,6 +37,8 @@ public class WebsiteDiscoveryService : IImporter
     private readonly WebsiteDiscoveryOptions _options;
     private readonly IBus _bus;
 
+    private static readonly TimeSpan RecheckProbeRetryDelay = TimeSpan.FromDays(1);
+
     public WebsiteDiscoveryService(
         IServiceScopeFactory scopeFactory,
         IEnumerable<IWebsiteSource> sources,
@@ -210,7 +212,7 @@ public class WebsiteDiscoveryService : IImporter
 
         var remaining = batch;
         var anySourceFailed = false;
-        var probeFailed = new HashSet<Guid>();
+        var deferred = new HashSet<Guid>();
         foreach (var source in _sources)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -253,9 +255,15 @@ public class WebsiteDiscoveryService : IImporter
                 if (replacements.TryGetValue(stock.Id, out var replacement))
                 {
                     var validated = await _probeClient.Validate(replacement, cancellationToken);
+                    // A deferred or settled stock leaves the batch either way, so no later
+                    // source probes it again this cycle.
                     if (validated == null)
-                        probeFailed.Add(stock.Id);
-                    else if (await Replace(stock, validated, source.Name))
+                    {
+                        if (await DeferAfterFailedProbe(stock.Id))
+                            deferred.Add(stock.Id);
+                        continue;
+                    }
+                    if (await Replace(stock, validated, source.Name))
                         continue;
                 }
                 kept.Add(stock);
@@ -263,25 +271,23 @@ public class WebsiteDiscoveryService : IImporter
             remaining = kept;
         }
 
-        // A stock left unstamped after a source error is re-checked next cycle, and so is one
-        // whose replacement failed the probe: a probe that could not run (a sidecar restart)
-        // reads the same as a dead site, and this re-check is the stock's only one.
+        // A stock left unstamped after a source error is re-checked next cycle.
         if (!anySourceFailed)
         {
-            foreach (var stock in remaining.Where(s => !probeFailed.Contains(s.Id)))
+            foreach (var stock in remaining)
                 await StampVersion(stock.Id);
         }
 
         _logger.LogInformation(
-            "Website re-check complete. Replaced {Replaced} of {Count} stored websites, {Unprobed} replacements failed the probe",
-            batch.Count - remaining.Count,
+            "Website re-check complete. {Settled} of {Count} stored websites settled, {Deferred} deferred after a failed replacement probe",
+            batch.Count - deferred.Count,
             batch.Count,
-            probeFailed.Count
+            deferred.Count
         );
-        // Chaining needs progress: a batch held entirely by failed probes waits out the sleep.
+        // Chaining needs progress: a batch held entirely by deferred stocks waits out the sleep.
         return !anySourceFailed
             && batch.Count >= _options.BatchSize
-            && probeFailed.Count < batch.Count;
+            && deferred.Count < batch.Count;
     }
 
     private async Task<List<WebsiteSourceStock>> LoadRecheckCandidates(
@@ -293,7 +299,12 @@ public class WebsiteDiscoveryService : IImporter
             scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var rows = await repo.GetCurrentDirectory()
-            .Where(PendingRecheck(WebsiteDiscoveryVersion.Current))
+            .Where(
+                PendingRecheck(
+                    WebsiteDiscoveryVersion.Current,
+                    DateTime.UtcNow - RecheckProbeRetryDelay
+                )
+            )
             .OrderByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
             .ThenBy(s => s.Presentation.Listing.MarketIdentifierCode ?? "")
             .ThenBy(s => s.Presentation.Listing.Ticker)
@@ -339,6 +350,7 @@ public class WebsiteDiscoveryService : IImporter
         issuer.Website = website;
         issuer.WebsiteCheckedAt = DateTime.UtcNow;
         issuer.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
+        issuer.WebsiteRecheckProbeFailedAt = null;
         await repo.SaveChanges();
         _logger.LogInformation(
             "Website re-check replaced {Old} with {New} for {Symbol} via {Source}",
@@ -363,7 +375,32 @@ public class WebsiteDiscoveryService : IImporter
             return;
 
         stock.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
+        stock.WebsiteRecheckProbeFailedAt = null;
         await repo.SaveChanges();
+    }
+
+    // A probe that could not run (a sidecar restart) reads the same as a dead site, so a first
+    // failure defers the stock a day and a second one settles it. True when deferred.
+    private async Task<bool> DeferAfterFailedProbe(Guid commonStockId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+
+        EquityIssuer stock = await repo.GetCurrentDirectoryIssuer(commonStockId);
+        if (stock == null)
+            return false;
+
+        var firstFailure = stock.WebsiteRecheckProbeFailedAt == null;
+        if (firstFailure)
+            stock.WebsiteRecheckProbeFailedAt = DateTime.UtcNow;
+        else
+        {
+            stock.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
+            stock.WebsiteRecheckProbeFailedAt = null;
+        }
+        await repo.SaveChanges();
+        return firstFailure;
     }
 
     private async Task<List<WebsiteSourceStock>> LoadCandidates(CancellationToken cancellationToken)
@@ -475,11 +512,21 @@ public class WebsiteDiscoveryService : IImporter
 
     /// <summary>
     /// Stocks whose stored website was judged under older discovery rules than
-    /// <paramref name="currentVersion"/>, so their sources re-check it once.
+    /// <paramref name="currentVersion"/>, so their sources re-check it; one deferred after a
+    /// failed replacement probe waits until <paramref name="probeFailedBefore"/>.
     /// </summary>
-    public static Expression<Func<EquityIssuer, bool>> PendingRecheck(int currentVersion)
+    public static Expression<Func<EquityIssuer, bool>> PendingRecheck(
+        int currentVersion,
+        DateTime probeFailedBefore
+    )
     {
         return s =>
-            s.Website != null && s.Website != "" && s.WebsiteDiscoveryVersion < currentVersion;
+            s.Website != null
+            && s.Website != ""
+            && s.WebsiteDiscoveryVersion < currentVersion
+            && (
+                s.WebsiteRecheckProbeFailedAt == null
+                || s.WebsiteRecheckProbeFailedAt < probeFailedBefore
+            );
     }
 }

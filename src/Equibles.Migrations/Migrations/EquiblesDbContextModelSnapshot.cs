@@ -377,6 +377,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int>("WebsiteDiscoveryVersion")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("WebsiteRecheckProbeFailedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Cik")

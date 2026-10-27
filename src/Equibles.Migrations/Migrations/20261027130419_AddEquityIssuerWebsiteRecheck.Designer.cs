@@ -14,8 +14,8 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261027123841_AddEquityIssuerWebsiteDiscoveryVersion")]
-    partial class AddEquityIssuerWebsiteDiscoveryVersion
+    [Migration("20261027130419_AddEquityIssuerWebsiteRecheck")]
+    partial class AddEquityIssuerWebsiteRecheck
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -379,6 +379,9 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<int>("WebsiteDiscoveryVersion")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("WebsiteRecheckProbeFailedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 

@@ -430,10 +430,43 @@ public class WebsiteDiscoveryServiceTests
     }
 
     [Fact]
-    public async Task Recheck_WhoseReplacementFailsTheProbe_KeepsTheWebsite_AndRetries()
+    public async Task Recheck_WhoseReplacementFailsTheProbe_KeepsTheWebsite_AndDefersADay()
     {
         var options = NewDbOptions();
         EquityIssuer stock = await SeedStock(options, "AAA", website: "https://amazon.com");
+        var source = new StubSource(
+            10,
+            [],
+            replacements: new Dictionary<string, string> { ["AAA"] = "www.dead-host.com" }
+        );
+        var sut = BuildSut(options, [source], HttpStatusCode.NotFound);
+
+        await sut.Import(CancellationToken.None);
+        await sut.Import(CancellationToken.None);
+
+        EquityIssuer reloaded = await Reload(options, stock.Id);
+        reloaded.Website.Should().Be("https://amazon.com");
+        reloaded
+            .WebsiteDiscoveryVersion.Should()
+            .Be(
+                0,
+                "a probe that could not run reads as a dead site, so the stock gets a second try"
+            );
+        reloaded.WebsiteRecheckProbeFailedAt.Should().NotBeNull();
+        source.RecheckedStocks.Should().ContainSingle("the retry waits a day");
+    }
+
+    [Fact]
+    public async Task Recheck_WhoseReplacementFailsTheProbeAgainADayLater_IsSettled()
+    {
+        var options = NewDbOptions();
+        EquityIssuer stock = await SeedStock(options, "AAA", website: "https://amazon.com");
+        using (var ctx = NewContext(options))
+        {
+            var seeded = await ctx.Set<EquityIssuer>().FirstAsync(s => s.Id == stock.Id);
+            seeded.WebsiteRecheckProbeFailedAt = DateTime.UtcNow.AddDays(-2);
+            await ctx.SaveChangesAsync();
+        }
         var source = new StubSource(
             10,
             [],
@@ -444,9 +477,8 @@ public class WebsiteDiscoveryServiceTests
 
         EquityIssuer reloaded = await Reload(options, stock.Id);
         reloaded.Website.Should().Be("https://amazon.com");
-        reloaded
-            .WebsiteDiscoveryVersion.Should()
-            .Be(0, "a probe that could not run reads as a dead site, so the stock retries");
+        reloaded.WebsiteDiscoveryVersion.Should().Be(WebsiteDiscoveryVersion.Current);
+        reloaded.WebsiteRecheckProbeFailedAt.Should().BeNull();
     }
 
     [Fact]

@@ -164,6 +164,8 @@ public class FilingWebsiteExtractorTests
     [InlineData(
         "Our transfer agent is Computershare Trust Company, N.A.; its website is www.computershare.com."
     )]
+    [InlineData("Our transfer agent is Computershare, whose website is www.computershare.com.")]
+    [InlineData("We use Computershare, whose website is www.computershare.com.")]
     [InlineData("We file reports with the SEC, and the SEC maintains a website at www.sec.gov.")]
     [InlineData(
         "Transfer Agent Computershare Inc., 480 Washington Blvd., Jersey City, New Jersey 07310, is the transfer agent and registrar for our stock. Its website is www.computershare.com and its telephone number is listed below."
@@ -201,6 +203,7 @@ public class FilingWebsiteExtractorTests
     [InlineData(
         "All material information is disclosed by the Fund on its website at www.acme.com."
     )]
+    [InlineData("Acme Inc. (the “Company”) posts its reports on its website at www.acme.com.")]
     [InlineData("We sell our product lines on our websites at www.acme.com and other channels.")]
     [InlineData(
         "We maintain a website at www.acme.com. The information there is not part of this report."

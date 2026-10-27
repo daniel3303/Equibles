@@ -193,9 +193,10 @@ public static partial class FilingWebsiteExtractor
     )]
     private static partial Regex ConnectorRegex();
 
-    // Another party's possessive inside the phrase: "our proxy agent’s website".
+    // Another party's possessive or pronoun inside the phrase: "our proxy agent’s website",
+    // "our transfer agent is Computershare, whose website".
     [GeneratedRegex(
-        @"\b(?!(?:company|registrant|corporation)['’]s\b)[a-z]+['’]s\b",
+        @"\b(?!(?:company|registrant|corporation)['’]s\b)[a-z]+['’]s\b|\b(?:whose|their)\b",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex OtherPartyPossessiveRegex();
@@ -206,7 +207,7 @@ public static partial class FilingWebsiteExtractor
     private static partial Regex SentenceBoundaryRegex();
 
     [GeneratedRegex(
-        @"\bthe\s+(?:company|registrant|corporation|fund|trust|partnership|bank)\b",
+        @"\bthe\s+[""“]?(?:company|registrant|corporation|fund|trust|partnership|bank)\b",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex CompanyNounRegex();
