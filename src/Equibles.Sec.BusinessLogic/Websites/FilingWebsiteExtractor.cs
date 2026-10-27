@@ -33,11 +33,8 @@ public static partial class FilingWebsiteExtractor
     public static string Extract(string filingText)
     {
         string firstInvestorRelationsHost = null;
-        foreach (var disclosure in Disclosures(filingText))
+        foreach (var disclosure in Disclosures(filingText).Where(d => d.NamesUrl))
         {
-            if (!disclosure.NamesUrl)
-                continue;
-
             // Prefer the corporate host over an investor-relations one, regardless of
             // which the filing discloses first.
             if (!disclosure.InvestorRelations)
@@ -58,17 +55,10 @@ public static partial class FilingWebsiteExtractor
     public static bool Disowns(string filingText, string host)
     {
         var site = RegistrableDomain.Of(host.ToLowerInvariant());
-        var mentioned = false;
-        foreach (var disclosure in Disclosures(filingText))
-        {
-            if (RegistrableDomain.Of(disclosure.Host) != site)
-                continue;
-            if (disclosure.NamesUrl)
-                return false;
-            mentioned = true;
-        }
-
-        return mentioned;
+        var mentions = Disclosures(filingText)
+            .Where(d => RegistrableDomain.Of(d.Host) == site)
+            .ToList();
+        return mentions.Count > 0 && !mentions.Any(d => d.NamesUrl);
     }
 
     // Every URL that follows a self-reference within the context window, with whether that

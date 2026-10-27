@@ -172,13 +172,13 @@ public class FilingsWebsiteSource : IWebsiteSource
             .OrderByDescending(d => d.ReportingDate)
             .Select(d => (Guid?)d.Id)
             .FirstOrDefaultAsync(cancellationToken);
-        if (documentId == null)
+        if (documentId is not { } id)
             return null;
 
         // Chunks tile the document in order and overlap at their boundaries, so the
         // website disclosure is always wholly inside a chunk, and joining in Index
         // order preserves URL order for the extractor's corporate-over-IR preference.
-        var documentChunks = chunks.GetAll().Where(c => c.DocumentId == documentId.Value);
+        var documentChunks = chunks.GetAll().Where(c => c.DocumentId == id);
         if (mentioning != null)
             documentChunks = documentChunks.Where(c => c.Content.ToLower().Contains(mentioning));
         var parts = await documentChunks
