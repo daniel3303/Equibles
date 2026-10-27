@@ -459,6 +459,7 @@ public class WebsiteDiscoveryService : IImporter
         stock.Website = website;
         stock.WebsiteCheckedAt = DateTime.UtcNow;
         stock.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
+        stock.WebsiteRecheckProbeFailedAt = null;
         await repo.SaveChanges();
 
         await PublishDiscovered(stock, website);

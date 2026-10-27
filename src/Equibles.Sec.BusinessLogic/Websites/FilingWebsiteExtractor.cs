@@ -177,8 +177,10 @@ public static partial class FilingWebsiteExtractor
     // The company referring to its own website just before the URL: "our website
     // address is", "on its corporate website,", "the Company's investor relations
     // website at", "We maintain a website at", "the Registrant maintains a website at", …
+    // The phrase holds no second anchor, so the one nearest "website" is the one judged: "our
+    // transfer agent, and its website" is an "its" phrase.
     [GeneratedRegex(
-        @"(?<anchor>\bour\b|\bits\b|\bwe\b|\bthe\s+(?:company|registrant|corporation)(?:['’]s)?)(?<middle>[a-z\s,'’-]{0,40}?)(?:websites?|web\s+sites?|internet\s+(?:web\s+)?(?:site|address))",
+        @"(?<anchor>\bour\b|\bits\b|\bwe\b|\bthe\s+(?:company|registrant|corporation)(?:['’]s)?)(?<middle>(?:(?!\b(?:our|its|we)\b)[a-z\s,'’-]){0,40}?)(?:websites?|web\s+sites?|internet\s+(?:web\s+)?(?:site|address))",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex SelfReferenceRegex();
