@@ -146,4 +146,111 @@ public class FilingWebsiteExtractorTests
 
         FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
     }
+
+    [Theory]
+    [InlineData(
+        "Our products are sold online, including through our website and e-commerce platforms such as Amazon.com."
+    )]
+    [InlineData(
+        "From time to time, we may use our website, our Facebook page at https://www.facebook.com/acme and our X account to disclose information."
+    )]
+    [InlineData(
+        "You may vote over the Internet on our proxy agent’s website at www.cstproxyvote.com, by following the instructions."
+    )]
+    [InlineData("We sell our products through the retailer’s website at Amazon.com and in stores.")]
+    [InlineData(
+        "Our transfer agent is Continental Stock Transfer and Trust Company, whose website is www.continentalstock.com."
+    )]
+    [InlineData(
+        "Our transfer agent is Computershare Trust Company, N.A.; its website is www.computershare.com."
+    )]
+    [InlineData("Our transfer agent is Computershare, whose website is www.computershare.com.")]
+    [InlineData("We use Computershare, whose website is www.computershare.com.")]
+    [InlineData("Computershare is our transfer agent, and its website is www.computershare.com.")]
+    [InlineData("We file reports with the SEC, and the SEC maintains a website at www.sec.gov.")]
+    [InlineData(
+        "Transfer Agent Computershare Inc., 480 Washington Blvd., Jersey City, New Jersey 07310, is the transfer agent and registrar for our stock. Its website is www.computershare.com and its telephone number is listed below."
+    )]
+    [InlineData(
+        "The Trustee will make the Monthly Report available via its website. The Trustee’s website shall initially be located at https://pivot.usbank.com."
+    )]
+    public void ThirdPartySiteNearASelfReference_IsNotTheCompanyWebsite(string text)
+    {
+        FilingWebsiteExtractor.Extract(text).Should().BeNull();
+    }
+
+    [Fact]
+    public void ThirdPartySiteBeforeTheDisclosure_DoesNotWin()
+    {
+        var text =
+            "Our satellite radios are sold directly to consumers through our website, and indirectly "
+            + "through online retailers, such as Amazon.com. Available Information. Our website "
+            + "address is www.acme.com.";
+
+        FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
+    }
+
+    [Theory]
+    [InlineData("Our website address is *www.acme.com*, where reports are posted.")]
+    [InlineData(
+        "Our telephone number is (702) 944-5599, and our website is http://*www.acme.com*."
+    )]
+    [InlineData(
+        "Filings are available at our web site under the investor relations link at https://www.acme.com."
+    )]
+    [InlineData(
+        "The Company makes its filings available free of charge on its website at www.acme.com."
+    )]
+    [InlineData(
+        "All material information is disclosed by the Fund on its website at www.acme.com."
+    )]
+    [InlineData("Acme Inc. (the “Company”) posts its reports on its website at www.acme.com.")]
+    [InlineData("We post each director’s biography on our website at www.acme.com.")]
+    [InlineData("We sell our product lines on our websites at www.acme.com and other channels.")]
+    [InlineData(
+        "We maintain a website at www.acme.com. The information there is not part of this report."
+    )]
+    [InlineData("We maintain an Internet website at www.acme.com, where reports are posted.")]
+    [InlineData("We also maintain a corporate website at *www.acme.com*.")]
+    public void DisclosureWordings_ReturnHost(string text)
+    {
+        FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
+    }
+
+    [Fact]
+    public void ItsAfterASentenceNamingTheCompany_BelongsToTheThirdParty()
+    {
+        var text =
+            "The Company's transfer agent is Computershare. Its website is www.computershare.com.";
+
+        FilingWebsiteExtractor.Extract(text).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("amazon.com", true)]
+    [InlineData("www.amazon.com", true)]
+    [InlineData("www.acme.com", false)]
+    [InlineData("ir.acme.com", false)]
+    [InlineData("other.com", false)]
+    public void Disowns_OnlyASiteMentionedNextToASelfReferenceButNeverNamed(
+        string host,
+        bool disowned
+    )
+    {
+        var text =
+            "Our products are sold through our website and e-commerce platforms such as "
+            + "Amazon.com. Our website address is www.acme.com.";
+
+        FilingWebsiteExtractor.Disowns(text, host).Should().Be(disowned);
+    }
+
+    [Fact]
+    public void Disowns_IsFalseWhenAnotherMentionNamesTheSite()
+    {
+        var text =
+            "Products are sold through our website and Acme.com stores. Our website address is "
+            + "www.acme.com.";
+
+        FilingWebsiteExtractor.Disowns(text, "acme.com").Should().BeFalse();
+    }
 }

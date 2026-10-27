@@ -14,7 +14,8 @@ public sealed record WebsiteSourceStock(
     string LegalEntityIdentifier = null,
     string Isin = null,
     string MarketIdentifierCode = null,
-    string MarketCountryCode = "US"
+    string MarketCountryCode = "US",
+    string Website = null
 )
 {
     public string Symbol =>

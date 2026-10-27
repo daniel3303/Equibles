@@ -31,4 +31,15 @@ public interface IWebsiteSource
         IReadOnlyList<WebsiteSourceStock> stocks,
         CancellationToken cancellationToken
     );
+
+    /// <summary>
+    /// Re-judges stocks' stored <see cref="WebsiteSourceStock.Website"/> under this source's
+    /// current rules and returns a replacement candidate only where its data now disowns the
+    /// stored site and names another; a source that never stored a wrong website keeps the
+    /// default, which replaces nothing.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> FindReplacements(
+        IReadOnlyList<WebsiteSourceStock> stocks,
+        CancellationToken cancellationToken
+    ) => Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
 }

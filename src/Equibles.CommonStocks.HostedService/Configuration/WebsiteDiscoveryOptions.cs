@@ -12,6 +12,12 @@ public class WebsiteDiscoveryOptions : ScraperOptions
     public int BatchSize { get; set; } = 100;
 
     /// <summary>
+    /// Maximum number of stored websites re-checked per cycle. The re-check never chains cycles,
+    /// so a rules change drains over successive sleeps without speeding up discovery's retries.
+    /// </summary>
+    public int RecheckBatchSize { get; set; } = 500;
+
+    /// <summary>
     /// Days to wait before re-attempting a stock whose last discovery attempt found
     /// no website in any source. Definitive misses are stamped on the stock, so
     /// persistent misses back off for this window; transient source errors are not

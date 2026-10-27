@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Equibles.Core.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -22,17 +23,6 @@ public sealed class OutboundHostGate
     private readonly OutboundHostGateOptions _options;
     private readonly ILogger<OutboundHostGate> _logger;
     private readonly ConcurrentDictionary<string, HostState> _hosts = new();
-
-    private static readonly HashSet<string> CountryCodeSecondLevels =
-    [
-        "co",
-        "com",
-        "org",
-        "net",
-        "ac",
-        "gov",
-        "edu",
-    ];
 
     public OutboundHostGate(
         IOptions<OutboundHostGateOptions> options,
@@ -114,24 +104,15 @@ public sealed class OutboundHostGate
 
     /// <summary>
     /// Registrable-domain key: a rate-limit ban is per Cloudflare zone (apex), so investors.bjs.com and
-    /// bjs.com share one cooldown. Approximated as the last two labels, or three when a two-letter country
-    /// code follows a common second-level label: keyed on "co.jp", one blocked site parked every company
-    /// under that suffix, in every lane, for the whole cooldown.
+    /// bjs.com share one cooldown, while one blocked site never parks every company under its
+    /// country-code suffix.
     /// </summary>
     internal static string HostKey(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Host))
             return null;
 
-        var host = uri.Host.ToLowerInvariant();
-        var labels = host.Split('.');
-        var take =
-            labels.Length >= 3
-            && labels[^1].Length == 2
-            && CountryCodeSecondLevels.Contains(labels[^2])
-                ? 3
-                : 2;
-        return labels.Length <= take ? host : string.Join('.', labels[^take..]);
+        return RegistrableDomain.Of(uri.Host.ToLowerInvariant());
     }
 
     private sealed class HostState

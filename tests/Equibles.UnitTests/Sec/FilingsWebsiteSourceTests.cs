@@ -253,4 +253,98 @@ public class FilingsWebsiteSourceTests
 
         results.Should().BeEmpty();
     }
+
+    private static WebsiteSourceStock Stored(Guid id, string website) =>
+        new(id, "EXM", "0000000002", Website: website);
+
+    [Fact]
+    public async Task FindReplacements_ReplacesASiteTheFilingsDisown_WithTheOwnDisclosure()
+    {
+        var options = NewDbOptions();
+        var stockId = Guid.NewGuid();
+        await SeedFiling(
+            options,
+            stockId,
+            DocumentType.TenK,
+            new DateOnly(2025, 9, 27),
+            "Our products are sold through our website and e-commerce platforms such as Amazon.com.",
+            "Available Information. Our website address is www.acme.com."
+        );
+
+        var results = await BuildSut(options)
+            .FindReplacements([Stored(stockId, "https://amazon.com")], CancellationToken.None);
+
+        results[stockId].Should().Be("www.acme.com");
+    }
+
+    [Fact]
+    public async Task FindReplacements_ReadsTheDisowningMentionFromAnyFilingType()
+    {
+        var options = NewDbOptions();
+        var stockId = Guid.NewGuid();
+        await SeedFiling(
+            options,
+            stockId,
+            DocumentType.TenK,
+            new DateOnly(2025, 9, 27),
+            "Our website address is www.acme.com."
+        );
+        await SeedFiling(
+            options,
+            stockId,
+            DocumentType.Def14A,
+            new DateOnly(2026, 1, 10),
+            "You may vote over the Internet on our proxy agent’s website at www.cstproxyvote.com."
+        );
+
+        var results = await BuildSut(options)
+            .FindReplacements(
+                [Stored(stockId, "https://www.cstproxyvote.com")],
+                CancellationToken.None
+            );
+
+        results[stockId].Should().Be("www.acme.com");
+    }
+
+    [Theory]
+    [InlineData("https://www.acme.com/")]
+    [InlineData("https://ir.acme.com")]
+    [InlineData("https://www.unmentioned.com")]
+    public async Task FindReplacements_KeepsASiteTheFilingsNameOrNeverMention(string stored)
+    {
+        var options = NewDbOptions();
+        var stockId = Guid.NewGuid();
+        await SeedFiling(
+            options,
+            stockId,
+            DocumentType.TenK,
+            new DateOnly(2025, 9, 27),
+            "Our products are sold through our website and e-commerce platforms such as Amazon.com.",
+            "Available Information. Our website address is www.acme.com."
+        );
+
+        var results = await BuildSut(options)
+            .FindReplacements([Stored(stockId, stored)], CancellationToken.None);
+
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FindReplacements_KeepsADisownedSite_WhenNoFilingNamesAnother()
+    {
+        var options = NewDbOptions();
+        var stockId = Guid.NewGuid();
+        await SeedFiling(
+            options,
+            stockId,
+            DocumentType.TenK,
+            new DateOnly(2025, 9, 27),
+            "Our products are sold through our website and e-commerce platforms such as Amazon.com."
+        );
+
+        var results = await BuildSut(options)
+            .FindReplacements([Stored(stockId, "https://amazon.com")], CancellationToken.None);
+
+        results.Should().BeEmpty("only a self-disclosed site replaces a stored one");
+    }
 }
