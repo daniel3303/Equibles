@@ -40,8 +40,9 @@ public static class EquityMarketDirectoryGate
     }
 
     // FIRDS can name as relevant venue one the issuer never sought, such as a venue that traded a new or transferred
-    // ISIN first. The line sought here is then the home, provided every line the issuer sought is on this market and no
-    // other catalog market homes the share by its own lines; a null flag counts as sought, so it never grants this.
+    // ISIN first. A line sought on this market is then the home, provided every line the issuer sought is on this
+    // market and no other catalog market homes the share by its own lines; a null flag counts as sought, so it never
+    // grants this. FirdsInstrumentRecordRepository.CountHomeShares counts by the same conditions.
     public static bool IsHomedByIssuerRequest(
         EquityMarket market,
         FirdsInstrumentRecord firds,
@@ -51,13 +52,19 @@ public static class EquityMarketDirectoryGate
         ArgumentNullException.ThrowIfNull(market);
         if (
             lines == null
-            || firds?.IssuerRequested != true
+            || firds?.Isin is not { Length: >= 2 } isin
             || market.IsHomeVenue(firds.RelevantTradingVenue)
+            || EquityMarketCatalog.IssuingCountriesHomedOutsideFirds.Contains(
+                isin[..2],
+                StringComparer.Ordinal
+            )
         )
             return false;
         var register = lines
-            .Where(line => line.Isin == firds.Isin && line.Authority == firds.Authority)
+            .Where(line => line.Isin == isin && line.Authority == firds.Authority)
             .ToList();
+        if (!register.Any(line => market.IsFirdsVenue(line.Mic) && line.IssuerRequested == true))
+            return false;
         var relevant = register.Where(line => line.Mic == firds.RelevantTradingVenue).ToList();
         if (relevant.Count == 0 || relevant.Any(line => line.IssuerRequested != false))
             return false;
@@ -72,12 +79,27 @@ public static class EquityMarketDirectoryGate
         return !EquityMarketCatalog.All.Any(other =>
             other.Code != market.Code
             && other.FirdsAuthority != null
-            && lines.Any(line =>
-                line.Isin == firds.Isin
-                && line.Authority == other.FirdsAuthority
-                && other.IsFirdsVenue(line.Mic)
-                && other.IsHomeVenue(line.RelevantTradingVenue)
-            )
+            && IsHomedByRelevantVenue(other, isin, lines)
         );
+    }
+
+    // The ordinary home CountHomeShares counts: a line of the market's register names one of its home venues as
+    // relevant and, where the market requires it, the issuer sought (or did not deny) a home admission.
+    private static bool IsHomedByRelevantVenue(
+        EquityMarket market,
+        string isin,
+        IReadOnlyCollection<FirdsInstrumentRecord> lines
+    )
+    {
+        var register = lines
+            .Where(line => line.Isin == isin && line.Authority == market.FirdsAuthority)
+            .ToList();
+        return register.Any(line => market.IsHomeVenue(line.RelevantTradingVenue))
+            && (
+                !market.HomeRequiresIssuerRequest
+                || register.Any(line =>
+                    market.IsHomeVenue(line.Mic) && line.IssuerRequested != false
+                )
+            );
     }
 }

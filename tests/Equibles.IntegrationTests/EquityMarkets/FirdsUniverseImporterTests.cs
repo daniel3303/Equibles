@@ -264,17 +264,28 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
                 Line("GB0000000003", "SGMU", "SGMU", false),
                 Line("GB0000000003", "XLON", "XLON", true, FcaFirdsClient.AuthorityCode),
                 // Homed in Madrid the ordinary way, and also issuer-requested there.
-                Line("ES0000000004", "XMAD", "XMAD", true)
+                Line("ES0000000004", "XMAD", "XMAD", true),
+                // Its first Madrid line carries no flag and Xetra's open market quotes it unsought; still Madrid's.
+                Line("ES0000000005", "DMAD", "EQTB", null),
+                Line("ES0000000005", "XMAD", "EQTB", true),
+                Line("ES0000000005", "EQTB", "EQTB", false),
+                Line("ES0000000005", "XETB", "EQTB", false),
+                // A Canadian issuer's Madrid line may be secondary to a Toronto home FIRDS cannot see.
+                Line("CA0000000006", "XMAD", "EQTB", true),
+                Line("CA0000000006", "EQTB", "EQTB", false)
             );
         await DbContext.SaveChangesAsync();
         var records = new FirdsInstrumentRecordRepository(DbContext);
 
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("bme"), observedAt))
             .Should()
-            .Be(2);
+            .Be(3);
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("euronext-paris"), observedAt))
             .Should()
             .Be(0);
+        (await records.CountHomeShares(EquityMarketCatalog.TryGet("xetra"), observedAt))
+            .Should()
+            .Be(0, "no issuer sought a German admission");
         (await records.GetLiveShareLines("ES01717430J3", observedAt))
             .Select(line => line.Mic)
             .Should()

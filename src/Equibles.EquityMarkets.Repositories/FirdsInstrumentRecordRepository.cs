@@ -43,32 +43,29 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
         CancellationToken cancellationToken = default
     ) => GetLiveShares(asOf).Where(row => row.Isin == isin).ToListAsync(cancellationToken);
 
-    // Live shares whose relevant venue is a home venue. Where the market requires it, the issuer must also have sought
-    // (or not denied) a home admission, since venues elsewhere misreport the flag on their own listings.
-    // Shares EquityMarketDirectoryGate.IsHomedByIssuerRequest homes here count too, by the same conditions.
+    // Live shares homed on the market: by relevant venue, or by the issuer's own request where FIRDS names a relevant
+    // venue the issuer never sought (EquityMarketDirectoryGate.IsHomedByIssuerRequest, by the same conditions).
     public Task<int> CountHomeShares(
         EquityMarket market,
         DateTime asOf,
         CancellationToken cancellationToken = default
-    )
+    ) => GetHomeShareIsins(market, asOf).CountAsync(cancellationToken);
+
+    public IQueryable<string> GetHomeShareIsins(EquityMarket market, DateTime asOf)
     {
-        var authority = market.FirdsAuthority;
         var homeVenues = market.HomeVenueCodes;
         var firdsVenues = market.FirdsVenueCodes;
-        var live = GetLiveShares(asOf).Where(row => row.Authority == authority);
-        var home = live.Where(row => homeVenues.Contains(row.RelevantTradingVenue));
-        if (market.HomeRequiresIssuerRequest)
-            home = home.Where(row =>
-                live.Any(line =>
-                    line.Isin == row.Isin
-                    && homeVenues.Contains(line.Mic)
-                    && line.IssuerRequested != false
-                )
-            );
+        var outsideFirds = EquityMarketCatalog.IssuingCountriesHomedOutsideFirds;
+        var live = GetLiveShares(asOf).Where(row => row.Authority == market.FirdsAuthority);
         var requested = live.Where(row =>
             firdsVenues.Contains(row.Mic)
-            && row.IssuerRequested == true
+            && !outsideFirds.Contains(row.Isin.Substring(0, 2))
             && !homeVenues.Contains(row.RelevantTradingVenue)
+            && live.Any(line =>
+                line.Isin == row.Isin
+                && firdsVenues.Contains(line.Mic)
+                && line.IssuerRequested == true
+            )
             && live.Any(line => line.Isin == row.Isin && line.Mic == row.RelevantTradingVenue)
             && !live.Any(line =>
                 line.Isin == row.Isin
@@ -88,22 +85,35 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
             )
         )
         {
-            var otherAuthority = other.FirdsAuthority;
-            var otherFirdsVenues = other.FirdsVenueCodes;
-            var otherHomeVenues = other.HomeVenueCodes;
-            requested = requested.Where(row =>
-                !GetLiveShares(asOf)
-                    .Any(line =>
-                        line.Isin == row.Isin
-                        && line.Authority == otherAuthority
-                        && otherFirdsVenues.Contains(line.Mic)
-                        && otherHomeVenues.Contains(line.RelevantTradingVenue)
-                    )
-            );
+            // Correlated by ISIN, so only the few candidates probe the ISIN index instead of hashing every home set.
+            var homedThere = HomeLinesByRelevantVenue(other, asOf);
+            requested = requested.Where(row => !homedThere.Any(line => line.Isin == row.Isin));
         }
-        return home.Select(row => row.Isin)
-            .Union(requested.Select(row => row.Isin))
-            .CountAsync(cancellationToken);
+        return HomeLinesByRelevantVenue(market, asOf)
+            .Select(row => row.Isin)
+            .Union(requested.Select(row => row.Isin));
+    }
+
+    // Live shares whose relevant venue is a home venue. Where the market requires it, the issuer must also have sought
+    // (or not denied) a home admission, since venues elsewhere misreport the flag on their own listings.
+    private IQueryable<FirdsInstrumentRecord> HomeLinesByRelevantVenue(
+        EquityMarket market,
+        DateTime asOf
+    )
+    {
+        var authority = market.FirdsAuthority;
+        var homeVenues = market.HomeVenueCodes;
+        var live = GetLiveShares(asOf).Where(row => row.Authority == authority);
+        var home = live.Where(row => homeVenues.Contains(row.RelevantTradingVenue));
+        if (market.HomeRequiresIssuerRequest)
+            home = home.Where(row =>
+                live.Any(line =>
+                    line.Isin == row.Isin
+                    && homeVenues.Contains(line.Mic)
+                    && line.IssuerRequested != false
+                )
+            );
+        return home;
     }
 
     public Task UpsertRange(

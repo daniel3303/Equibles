@@ -92,11 +92,8 @@ public class EquityMarketDirectoryImporter(
                     now,
                     cancellationToken
                 );
-                // The share's other lines matter only to an issuer-requested line the relevant venue does not home.
-                if (
-                    firds?.IssuerRequested == true
-                    && !EquityMarketDirectoryGate.IsHomeShare(market, row, firds)
-                )
+                // The share's other lines matter only once the relevant venue alone refuses it.
+                if (firds != null && !EquityMarketDirectoryGate.IsHomeShare(market, row, firds))
                     lines = await records.GetLiveShareLines(row.Isin, now, cancellationToken);
                 if (!EquityMarketDirectoryGate.IsHomeShare(market, row, firds, lines))
                 {

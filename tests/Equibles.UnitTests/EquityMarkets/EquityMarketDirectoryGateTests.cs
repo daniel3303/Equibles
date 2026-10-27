@@ -114,6 +114,48 @@ public class EquityMarketDirectoryGateTests
             .IsHomeShare(EquityMarketCatalog.TryGet("xetra"), Row("XETR", null), firds, lines)
             .Should()
             .BeFalse("the share has no line on Xetra's own venues");
+
+        var unflagged = Line("DMAD", "EQTB", null, "DE");
+        EquityMarketDirectoryGate
+            .IsHomeShare(
+                market,
+                row,
+                unflagged,
+                [unflagged, firds, Line("EQTB", "EQTB", false, "DE")]
+            )
+            .Should()
+            .BeTrue(
+                "any line the issuer sought on the market grants it, not only the one looked up first"
+            );
+        EquityMarketDirectoryGate
+            .IsHomeShare(market, row, firds, [.. lines, Line("XETB", "EQTB", false, "DE")])
+            .Should()
+            .BeTrue("Xetra homes a share only where the issuer sought a German admission");
+    }
+
+    [Theory]
+    [InlineData("CA03753D1042")]
+    [InlineData("US0378331005")]
+    [InlineData("JP3633400001")]
+    public void IsHomeShare_LeavesTheRequestRuleToSharesIssuedWhereFirdsSeesEveryHome(string isin)
+    {
+        // A Canadian issuer's requested Paris line may be secondary to a Toronto home that no FIRDS register reports.
+        var market = EquityMarketCatalog.TryGet("euronext-paris");
+        var row = Row("ALXP", null);
+        var firds = Line("ALXP", "FRAB", true, "DE");
+        var unsought = Line("FRAB", "FRAB", false, "DE");
+        EquityMarketDirectoryGate
+            .IsHomeShare(market, row, firds, [firds, unsought])
+            .Should()
+            .BeTrue();
+
+        row.Isin = isin;
+        firds.Isin = isin;
+        unsought.Isin = isin;
+        EquityMarketDirectoryGate
+            .IsHomeShare(market, row, firds, [firds, unsought])
+            .Should()
+            .BeFalse();
     }
 
     [Fact]
