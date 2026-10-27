@@ -380,6 +380,16 @@ public static class EquityMarketCatalog
         )
         .ToDictionary(pair => pair.mic, pair => pair.market, StringComparer.Ordinal);
 
+    // ISIN issuing countries (ISO 6166 prefix) whose shares may be homed where no FIRDS register reports: US exchanges
+    // and this catalog's markets without a register, whose listings carry neither ISIN nor LEI to compare.
+    public static readonly IReadOnlyList<string> IssuingCountriesHomedOutsideFirds =
+    [
+        "US",
+        .. All.Where(market => market.FirdsAuthority == null)
+            .Select(market => market.CountryCode)
+            .Distinct(StringComparer.Ordinal),
+    ];
+
     public static EquityMarket TryGet(string code) =>
         code != null && ByCode.TryGetValue(code, out var market) ? market : null;
 

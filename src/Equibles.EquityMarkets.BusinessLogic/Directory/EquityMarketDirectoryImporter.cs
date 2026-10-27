@@ -80,6 +80,7 @@ public class EquityMarketDirectoryImporter(
             cancellationToken.ThrowIfCancellationRequested();
             var now = DateTime.UtcNow;
             FirdsInstrumentRecord firds;
+            List<FirdsInstrumentRecord> lines = null;
             using (var scope = scopeFactory.CreateScope())
             {
                 var records =
@@ -91,7 +92,10 @@ public class EquityMarketDirectoryImporter(
                     now,
                     cancellationToken
                 );
-                if (!EquityMarketDirectoryGate.IsHomeShare(market, row, firds))
+                // The share's other lines matter only once the relevant venue alone refuses it.
+                if (firds != null && !EquityMarketDirectoryGate.IsHomeShare(market, row, firds))
+                    lines = await records.GetLiveShareLines(row.Isin, now, cancellationToken);
+                if (!EquityMarketDirectoryGate.IsHomeShare(market, row, firds, lines))
                 {
                     result.Skipped++;
                     continue;
@@ -132,7 +136,8 @@ public class EquityMarketDirectoryImporter(
                     product,
                     firds,
                     issuer,
-                    firdsIssuer
+                    firdsIssuer,
+                    lines
                 );
                 input.DirectorySnapshotId = snapshotId;
                 await identityImporter.ImportListing(input, attempt.Token);
@@ -243,7 +248,8 @@ public class EquityMarketDirectoryImporter(
         EquityMarketDirectoryProduct product,
         FirdsInstrumentRecord firds,
         GleifIssuerIdentity issuer,
-        GleifIssuerIdentity firdsIssuer = null
+        GleifIssuerIdentity firdsIssuer = null,
+        IReadOnlyCollection<FirdsInstrumentRecord> firdsLines = null
     )
     {
         ArgumentNullException.ThrowIfNull(market);
@@ -271,7 +277,7 @@ public class EquityMarketDirectoryImporter(
             row.SourceUrl == null
             || product.SourceUrl != row.SourceUrl
             || issuer.RequestedIsin != row.Isin
-            || !EquityMarketDirectoryGate.IsHomeShare(market, row, firds)
+            || !EquityMarketDirectoryGate.IsHomeShare(market, row, firds, firdsLines)
         )
             throw new InvalidDataException(
                 "Directory identity sources disagree on the requested security."
@@ -328,6 +334,7 @@ public class EquityMarketDirectoryImporter(
                         firds.FullName,
                         firds.RelevantCompetentAuthority,
                         firds.RelevantTradingVenue,
+                        firds.IssuerRequested,
                         firds.FirstTradeDate,
                         firds.TerminationDate,
                     },
