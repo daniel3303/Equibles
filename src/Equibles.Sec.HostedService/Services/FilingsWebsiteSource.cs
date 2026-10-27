@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.BusinessLogic.Websites;
+using Equibles.Core.Extensions;
 using Equibles.Sec.BusinessLogic.Websites;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
@@ -65,6 +66,65 @@ public class FilingsWebsiteSource : IWebsiteSource
         return results;
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> FindReplacements(
+        IReadOnlyList<WebsiteSourceStock> stocks,
+        CancellationToken cancellationToken
+    )
+    {
+        var results = new Dictionary<Guid, string>();
+        foreach (var stock in stocks)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var storedHost = HostOf(stock.Website);
+            if (string.IsNullOrWhiteSpace(stock.Cik) || storedHost == null)
+                continue;
+            if (!await FilingsDisown(stock.Id, storedHost, cancellationToken))
+                continue;
+
+            var replacement = await ExtractForStock(stock.Id, cancellationToken);
+            if (
+                replacement != null
+                && RegistrableDomain.Of(replacement) != RegistrableDomain.Of(storedHost)
+            )
+                results[stock.Id] = replacement;
+        }
+
+        return results;
+    }
+
+    // Reads only the chunks that mention the stored site: every mention that could disown or
+    // name it sits inside one, and most stocks' filings either name it or never mention it.
+    private async Task<bool> FilingsDisown(
+        Guid stockId,
+        string storedHost,
+        CancellationToken cancellationToken
+    )
+    {
+        var site = RegistrableDomain.Of(storedHost);
+        var mentions = new List<string>();
+        foreach (var filingType in FilingTypes)
+        {
+            var text = await LoadLatestFilingText(stockId, filingType, cancellationToken, site);
+            if (text != null)
+                mentions.Add(text);
+        }
+
+        return FilingWebsiteExtractor.Disowns(string.Join("\n", mentions), storedHost);
+    }
+
+    private static string HostOf(string website)
+    {
+        if (string.IsNullOrWhiteSpace(website))
+            return null;
+        var url = website.Contains("://", StringComparison.Ordinal)
+            ? website
+            : "https://" + website;
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Host.Contains('.')
+            ? uri.Host.ToLowerInvariant()
+            : null;
+    }
+
     private async Task<string> ExtractForStock(Guid stockId, CancellationToken cancellationToken)
     {
         foreach (var filingType in FilingTypes)
@@ -92,12 +152,14 @@ public class FilingsWebsiteSource : IWebsiteSource
     /// not stored on <c>Document.Content</c> — the ingestion pipeline splits it into
     /// ordered <c>Chunk</c> rows (for retrieval), so the text is reassembled from
     /// those. Each document gets its own short-lived scope instead of accumulating a
-    /// whole batch's chunks in one change tracker.
+    /// whole batch's chunks in one change tracker. With <paramref name="mentioning"/>, only
+    /// the chunks containing that text are joined.
     /// </summary>
     private async Task<string> LoadLatestFilingText(
         Guid stockId,
         DocumentType filingType,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string mentioning = null
     )
     {
         using var scope = _scopeFactory.CreateScope();
@@ -116,9 +178,10 @@ public class FilingsWebsiteSource : IWebsiteSource
         // Chunks tile the document in order and overlap at their boundaries, so the
         // website disclosure is always wholly inside a chunk, and joining in Index
         // order preserves URL order for the extractor's corporate-over-IR preference.
-        var parts = await chunks
-            .GetAll()
-            .Where(c => c.DocumentId == documentId.Value)
+        var documentChunks = chunks.GetAll().Where(c => c.DocumentId == documentId.Value);
+        if (mentioning != null)
+            documentChunks = documentChunks.Where(c => c.Content.ToLower().Contains(mentioning));
+        var parts = await documentChunks
             .OrderBy(c => c.Index)
             .Select(c => c.Content)
             .ToListAsync(cancellationToken);

@@ -36,6 +36,12 @@ public class EquityIssuer
     public string Website { get; set; }
 
     public DateTime? WebsiteCheckedAt { get; set; }
+
+    /// <summary>
+    /// Website discovery rules version that last judged <see cref="Website"/>; an older value
+    /// queues the stored website for its sources to re-check under their current rules.
+    /// </summary>
+    public int WebsiteDiscoveryVersion { get; set; }
     public int? FiscalYearEndMonth { get; set; }
     public int? FiscalYearEndDay { get; set; }
 
