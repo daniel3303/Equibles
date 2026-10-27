@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Equibles.CommonStocks.Repositories;
 using Equibles.EquityMarkets.BusinessLogic.Directory;
@@ -36,7 +37,13 @@ public class LseEquityMarketDirectorySource(
             )
             .Select(row => row.SourceRecord.PayloadJson)
             .SingleOrDefaultAsync(cancellationToken);
-        var list = await client.GetInstruments(cancellationToken, PreviousEdition(previous));
+        var list = await client.GetInstruments(cancellationToken);
+        // The file's address no longer changes per publication, so a stale copy would otherwise reconcile an older
+        // market and withdraw every share admitted since.
+        if (PreviousAsAt(previous) is { } committed && list.AsAt < committed)
+            throw new InvalidDataException(
+                $"London instrument list as at {list.AsAt:yyyy-MM-dd} is older than the committed {committed:yyyy-MM-dd}."
+            );
         var shares = list
             .Instruments.Where(row =>
                 row.MifirIdentifier == "SHRS"
@@ -90,7 +97,7 @@ public class LseEquityMarketDirectorySource(
                 {
                     list.PageUrl,
                     list.SourceUrl,
-                    list.Edition,
+                    PublishedOn = list.PublishedOn.ToString("yyyy-MM-dd"),
                     AsAt = list.AsAt.ToString("yyyy-MM-dd"),
                     list.StatedCount,
                     list.CapturedAt,
@@ -105,21 +112,26 @@ public class LseEquityMarketDirectorySource(
         };
     }
 
-    internal static int? PreviousEdition(string payload)
+    internal static DateOnly? PreviousAsAt(string payload)
     {
         if (payload == null)
             return null;
         using var document = JsonDocument.Parse(payload);
-        if (
-            document.RootElement.ValueKind != JsonValueKind.Object
-            || !document.RootElement.TryGetProperty("Edition", out var value)
-            || !value.TryGetInt32(out var edition)
-            || edition <= 0
-        )
-            throw new InvalidDataException(
-                "Stored London directory does not identify its publication edition."
+        return
+            document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("AsAt", out var value)
+            && value.ValueKind == JsonValueKind.String
+            && DateOnly.TryParseExact(
+                value.GetString(),
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var asAt
+            )
+            ? asAt
+            : throw new InvalidDataException(
+                "Stored London directory does not state the as-at date it was published for."
             );
-        return edition;
     }
 
     public Task<EquityMarketDirectoryProduct> Resolve(

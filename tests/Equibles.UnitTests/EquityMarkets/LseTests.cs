@@ -145,116 +145,72 @@ public class LseTests
         entry.Write(content);
     }
 
-    [Fact]
-    public async Task EditionWalk_TakesTheHighestPublishedNumberOverAGap()
-    {
-        var workbook = await InstrumentList();
-        var handler = Handler(
-            workbook,
-            LseInstrumentListClient.FirstEdition,
-            LseInstrumentListClient.FirstEdition + 2
-        );
-        using var http = new HttpClient(handler);
+    private const string WorkbookUrl =
+        "https://docs.londonstockexchange.com/reports/instruments/Instrument%20list.xlsx";
 
-        var edition = await new LseInstrumentListClient(http).FindLatestEdition(
-            CancellationToken.None
-        );
-
-        edition.Should().Be(LseInstrumentListClient.FirstEdition + 2);
-        handler
-            .Requests.Should()
-            .HaveCount(
-                3 + LseInstrumentListClient.MissesBeforeStop,
-                "the walk carries on over a gap and stops after the misses that follow the last edition"
-            );
-        handler
-            .Requests.Should()
-            .AllSatisfy(request => request.Method.Should().Be(HttpMethod.Head));
-    }
+    // The report index the exchange's reports page reads, captured as served (see TestAssets README).
+    private static Task<byte[]> ReportIndex() => Fixture("latest.json");
 
     [Fact]
-    public async Task EditionWalk_ContinuesPastTheOldFixedHorizon()
+    public async Task GetInstruments_ReadsTheListTheReportIndexNamesAndKeepsWhereItCameFrom()
     {
-        var handler = Handler(await InstrumentList(), Enumerable.Range(81, 42).ToArray());
-        using var http = new HttpClient(handler);
-        var edition = await new LseInstrumentListClient(http).FindLatestEdition(
-            CancellationToken.None
-        );
-        edition.Should().Be(122);
-        handler.Requests.Should().HaveCount(42 + LseInstrumentListClient.MissesBeforeStop);
-    }
-
-    [Fact]
-    public async Task EditionWalk_RefusesAnUnfinishedSearchInsteadOfImportingAnOldEdition()
-    {
-        var handler = Handler(
-            await InstrumentList(),
-            Enumerable.Range(81, LseInstrumentListClient.MaximumProbes).ToArray()
-        );
-        using var http = new HttpClient(handler);
-        var search = () =>
-            new LseInstrumentListClient(http).FindLatestEdition(CancellationToken.None);
-        await search.Should().ThrowAsync<InvalidDataException>().WithMessage("*exhausted*");
-    }
-
-    [Fact]
-    public async Task AnEditionThatServesAPageOrNothingAtAll_IsNotAnEdition()
-    {
-        using var page = new HttpClient(
-            new LseInstrumentListTestHandler(
-                new Dictionary<string, (HttpStatusCode, string, byte[])>
-                {
-                    [
-                        LseInstrumentListClient
-                            .EditionUrl(LseInstrumentListClient.FirstEdition)
-                            .AbsoluteUri
-                    ] = (HttpStatusCode.OK, "text/html", [0x3c]),
-                }
-            )
-        );
-        var served = () =>
-            new LseInstrumentListClient(page).FindLatestEdition(CancellationToken.None);
-        await served.Should().ThrowAsync<InvalidDataException>();
-
-        using var empty = new HttpClient(
-            new LseInstrumentListTestHandler(
-                new Dictionary<string, (HttpStatusCode, string, byte[])>()
-            )
-        );
-        var none = () =>
-            new LseInstrumentListClient(empty).FindLatestEdition(CancellationToken.None);
-        await none.Should().ThrowAsync<InvalidDataException>();
-    }
-
-    [Fact]
-    public async Task GetInstruments_ReadsTheHighestEditionAndKeepsWhereItCameFrom()
-    {
-        var workbook = await InstrumentList();
-        var handler = Handler(workbook, LseInstrumentListClient.FirstEdition);
+        var handler = Handler(await ReportIndex(), await InstrumentList());
         using var http = new HttpClient(handler);
 
         var list = await new LseInstrumentListClient(http).GetInstruments(CancellationToken.None);
 
-        list.Edition.Should().Be(LseInstrumentListClient.FirstEdition);
-        list.SourceUrl.Should().Be(LseInstrumentListClient.EditionUrl(list.Edition));
-        list.SourceUrl.AbsoluteUri.Should().Contain("Instrument%20list_");
+        list.PublishedOn.Should().Be(new DateOnly(2026, 10, 1));
+        list.SourceUrl.Should().Be(new Uri(WorkbookUrl));
         list.PageUrl.Should().Be(LseInstrumentListClient.PublisherPage);
         list.CapturedAt.Kind.Should().Be(DateTimeKind.Utc);
         list.Instruments.Should().HaveCount(18);
-        handler.Requests.Last().Method.Should().Be(HttpMethod.Get);
-        handler.Requests.Last().Url.Should().Be(list.SourceUrl);
+        handler
+            .Requests.Select(request => request.Url)
+            .Should()
+            .Equal(LseInstrumentListClient.ReportIndex, new Uri(WorkbookUrl));
+        handler.Requests.Should().AllSatisfy(request => request.Method.Should().Be(HttpMethod.Get));
     }
 
-    private static LseInstrumentListTestHandler Handler(byte[] workbook, params int[] editions) =>
+    [Theory]
+    [InlineData("{\"Data\":[],\"rowCount\":0}", "*0 instrument lists*")]
+    [InlineData(
+        "{\"Data\":[{\"reportType\":\"latest-instrument-list\",\"publishedDate\":\"01-10-2026\",\"downloadLink\":\"https://docs.londonstockexchange.com/a.xlsx\"},{\"reportType\":\"latest-instrument-list\",\"publishedDate\":\"01-09-2026\",\"downloadLink\":\"https://docs.londonstockexchange.com/b.xlsx\"}]}",
+        "*2 instrument lists*"
+    )]
+    [InlineData(
+        "{\"Data\":[{\"reportType\":\"latest-instrument-list\",\"publishedDate\":\"01-10-2026\",\"downloadLink\":\"https://example.com/Instrument%20list.xlsx\"}]}",
+        "*not on docs.londonstockexchange.com*"
+    )]
+    [InlineData(
+        "{\"Data\":[{\"reportType\":\"latest-instrument-list\",\"downloadLink\":\"https://docs.londonstockexchange.com/a.xlsx\"}]}",
+        "*no publication date*"
+    )]
+    [InlineData("<html>maintenance</html>", "*not JSON*")]
+    public async Task AReportIndexThatNamesNoSingleOfficialList_IsRefused(
+        string index,
+        string message
+    )
+    {
+        var handler = Handler(System.Text.Encoding.UTF8.GetBytes(index), await InstrumentList());
+        using var http = new HttpClient(handler);
+
+        var capture = () =>
+            new LseInstrumentListClient(http).GetInstruments(CancellationToken.None);
+
+        await capture.Should().ThrowAsync<InvalidDataException>().WithMessage(message);
+        handler.Requests.Should().ContainSingle("no workbook is read without one official list");
+    }
+
+    private static LseInstrumentListTestHandler Handler(byte[] index, byte[] workbook) =>
         new(
-            editions.ToDictionary(
-                edition => LseInstrumentListClient.EditionUrl(edition).AbsoluteUri,
-                _ =>
-                    (
-                        HttpStatusCode.OK,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        workbook
-                    )
-            )
+            new Dictionary<string, (HttpStatusCode, string, byte[])>
+            {
+                [LseInstrumentListClient.ReportIndex.AbsoluteUri] = (
+                    HttpStatusCode.OK,
+                    "application/json",
+                    index
+                ),
+                [WorkbookUrl] = (HttpStatusCode.OK, "binary/octet-stream", workbook),
+            }
         );
 }

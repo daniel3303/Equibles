@@ -1,11 +1,12 @@
-using System.Net;
+using System.Globalization;
+using System.Text.Json;
 using Equibles.Integrations.Common.Http;
 using Equibles.Integrations.Lse.Models;
 
 namespace Equibles.Integrations.Lse;
 
-// The exchange publishes its instrument list as a numbered workbook and its own reports page is a script
-// application, so the newest edition is found by asking the document host which numbers exist.
+// The exchange's reports page is a script application that lists its current reports from one JSON index on the
+// document host; the instrument list is the one entry of its report type, and the index states where it lives.
 public class LseInstrumentListClient(HttpClient httpClient)
 {
     public static readonly Uri PublisherPage = new(
@@ -13,23 +14,19 @@ public class LseInstrumentListClient(HttpClient httpClient)
     );
 
     internal static readonly Uri Origin = new("https://docs.londonstockexchange.com");
-
-    // The edition published when this build was written; editions only ever count up.
-    internal const int FirstEdition = 81;
-    internal const int MaximumProbes = 4096;
-    internal const int MissesBeforeStop = 4;
+    internal static readonly Uri ReportIndex = new(Origin, "reports/instruments/latest.json");
+    internal const string ReportType = "latest-instrument-list";
+    private const int MaxIndexBytes = 1_000_000;
     private const int MaxWorkbookBytes = 64_000_000;
     private const long MaxPartBytes = 64_000_000;
 
     public async Task<LseInstrumentList> GetInstruments(
-        CancellationToken cancellationToken = default,
-        int? firstEdition = null
+        CancellationToken cancellationToken = default
     )
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
-        var edition = await FindLatestEdition(timeout.Token, firstEdition);
-        var source = EditionUrl(edition);
+        var (source, publishedOn) = await FindLatest(timeout.Token);
         var payload = await SameOriginBinaryReader.Read(
             httpClient,
             Origin,
@@ -40,66 +37,75 @@ public class LseInstrumentListClient(HttpClient httpClient)
         var list = LseInstrumentListParser.Read(payload.Bytes, MaxPartBytes);
         list.PageUrl = PublisherPage;
         list.SourceUrl = source;
-        list.Edition = edition;
+        list.PublishedOn = publishedOn;
         list.CapturedAt = DateTime.UtcNow;
         return list;
     }
 
-    internal static Uri EditionUrl(int edition) =>
-        new($"{Origin.AbsoluteUri}sites/default/files/reports/Instrument%20list_{edition}.xlsx");
-
-    // Editions are not published monthly and the series has gaps, so the walk carries on over a few missing
-    // numbers and keeps the highest that answers; finding none is a failure, never an empty market.
-    internal async Task<int> FindLatestEdition(
-        CancellationToken cancellationToken,
-        int? firstEdition = null
+    // Exactly one instrument list, on the document host, with its publication date; anything else is a changed
+    // publisher to re-verify, never an empty market.
+    internal async Task<(Uri Source, DateOnly PublishedOn)> FindLatest(
+        CancellationToken cancellationToken
     )
     {
-        var first = firstEdition ?? FirstEdition;
-        if (first < 1 || first > int.MaxValue - MaximumProbes)
-            throw new ArgumentOutOfRangeException(nameof(firstEdition));
-        var latest = 0;
-        var misses = 0;
-        for (var offset = 0; offset < MaximumProbes; offset++)
-        {
-            var edition = first + offset;
-            if (await Exists(EditionUrl(edition), cancellationToken))
-            {
-                latest = edition;
-                misses = 0;
-            }
-            else if (++misses >= MissesBeforeStop)
-                return latest > 0
-                    ? latest
-                    : throw new InvalidDataException(
-                        "The London instrument list is no longer published at its last known edition."
-                    );
-        }
-        throw new InvalidDataException(
-            "London edition discovery exhausted its budget before reaching the latest publication."
+        var index = await SameOriginBinaryReader.Read(
+            httpClient,
+            Origin,
+            ReportIndex,
+            MaxIndexBytes,
+            cancellationToken,
+            "application/json"
         );
+        List<JsonElement> entries;
+        try
+        {
+            using var document = JsonDocument.Parse(index.Bytes);
+            entries =
+                document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("Data", out var data)
+                && data.ValueKind == JsonValueKind.Array
+                    ? data.EnumerateArray()
+                        .Where(entry =>
+                            entry.ValueKind == JsonValueKind.Object
+                            && Text(entry, "reportType") == ReportType
+                        )
+                        .Select(entry => entry.Clone())
+                        .ToList()
+                    : [];
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The London report index is not JSON.", exception);
+        }
+        if (entries.Count != 1)
+            throw new InvalidDataException(
+                $"The London report index names {entries.Count} instrument lists, not one."
+            );
+        var link = Text(entries[0], "downloadLink");
+        if (
+            !Uri.TryCreate(link, UriKind.Absolute, out var source)
+            || !SameOriginBinaryReader.IsOnOrigin(Origin, source)
+        )
+            throw new InvalidDataException(
+                $"The London instrument list is not on {Origin.Host}: {link}"
+            );
+        if (
+            !DateOnly.TryParseExact(
+                Text(entries[0], "publishedDate"),
+                "dd-MM-yyyy",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var publishedOn
+            )
+        )
+            throw new InvalidDataException(
+                "The London instrument list states no publication date."
+            );
+        return (source, publishedOn);
     }
 
-    private async Task<bool> Exists(Uri uri, CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Head, uri);
-        using var response = await httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken
-        );
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
-            return false;
-        response.EnsureSuccessStatusCode();
-        if (
-            response.RequestMessage?.RequestUri is { } actual
-            && !SameOriginBinaryReader.IsOnOrigin(Origin, actual)
-        )
-            throw new InvalidDataException($"{Origin.Host} response left its official origin.");
-        // The host answers a missing edition with an HTML page under some conditions; only a document is an edition.
-        return response.Content.Headers.ContentType?.MediaType?.StartsWith(
-                "application/",
-                StringComparison.OrdinalIgnoreCase
-            ) == true;
-    }
+    private static string Text(JsonElement entry, string name) =>
+        entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 }

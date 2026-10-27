@@ -1,0 +1,15 @@
+{
+  "Data": [
+    {
+      "reportType": "latest-instrument-list",
+      "year": 2026,
+      "fileName": "Instrument list.xlsx",
+      "displayTitle": "Instrument List",
+      "publishedDate": "01-10-2026",
+      "downloadLink": "https://docs.londonstockexchange.com/reports/instruments/Instrument%20list.xlsx",
+      "fileSize": "8.5 MB",
+      "fileType": "xlsx"
+    }
+  ],
+  "rowCount": 1
+}
