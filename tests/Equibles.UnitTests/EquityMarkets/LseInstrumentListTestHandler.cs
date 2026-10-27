@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 
 namespace Equibles.UnitTests.EquityMarkets;
 
-// Answers the document host: the editions it holds, each with the media type it serves them under.
+// Answers the document host: the files it holds, each with the media type it serves them under.
 internal sealed class LseInstrumentListTestHandler(
     IReadOnlyDictionary<string, (HttpStatusCode Status, string MediaType, byte[] Body)> editions
 ) : HttpMessageHandler
