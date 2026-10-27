@@ -158,6 +158,12 @@ public class FilingWebsiteExtractorTests
         "You may vote over the Internet on our proxy agent’s website at www.cstproxyvote.com, by following the instructions."
     )]
     [InlineData("We sell our products through the retailer’s website at Amazon.com and in stores.")]
+    [InlineData(
+        "Our transfer agent is Continental Stock Transfer and Trust Company, whose website is www.continentalstock.com."
+    )]
+    [InlineData(
+        "Our transfer agent is Computershare Trust Company, N.A.; its website is www.computershare.com."
+    )]
     [InlineData("We file reports with the SEC, and the SEC maintains a website at www.sec.gov.")]
     [InlineData(
         "Transfer Agent Computershare Inc., 480 Washington Blvd., Jersey City, New Jersey 07310, is the transfer agent and registrar for our stock. Its website is www.computershare.com and its telephone number is listed below."

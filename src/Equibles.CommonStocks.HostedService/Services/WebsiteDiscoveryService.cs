@@ -210,6 +210,7 @@ public class WebsiteDiscoveryService : IImporter
 
         var remaining = batch;
         var anySourceFailed = false;
+        var probeFailed = new HashSet<Guid>();
         foreach (var source in _sources)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -249,28 +250,38 @@ public class WebsiteDiscoveryService : IImporter
             var kept = new List<WebsiteSourceStock>();
             foreach (var stock in remaining)
             {
-                var validated = replacements.TryGetValue(stock.Id, out var replacement)
-                    ? await _probeClient.Validate(replacement, cancellationToken)
-                    : null;
-                if (validated == null || !await Replace(stock, validated, source.Name))
-                    kept.Add(stock);
+                if (replacements.TryGetValue(stock.Id, out var replacement))
+                {
+                    var validated = await _probeClient.Validate(replacement, cancellationToken);
+                    if (validated == null)
+                        probeFailed.Add(stock.Id);
+                    else if (await Replace(stock, validated, source.Name))
+                        continue;
+                }
+                kept.Add(stock);
             }
             remaining = kept;
         }
 
-        // A stock left unstamped after a source error is re-checked next cycle.
+        // A stock left unstamped after a source error is re-checked next cycle, and so is one
+        // whose replacement failed the probe: a probe that could not run (a sidecar restart)
+        // reads the same as a dead site, and this re-check is the stock's only one.
         if (!anySourceFailed)
         {
-            foreach (var stock in remaining)
+            foreach (var stock in remaining.Where(s => !probeFailed.Contains(s.Id)))
                 await StampVersion(stock.Id);
         }
 
         _logger.LogInformation(
-            "Website re-check complete. Replaced {Replaced} of {Count} stored websites",
+            "Website re-check complete. Replaced {Replaced} of {Count} stored websites, {Unprobed} replacements failed the probe",
             batch.Count - remaining.Count,
-            batch.Count
+            batch.Count,
+            probeFailed.Count
         );
-        return !anySourceFailed && batch.Count >= _options.BatchSize;
+        // Chaining needs progress: a batch held entirely by failed probes waits out the sleep.
+        return !anySourceFailed
+            && batch.Count >= _options.BatchSize
+            && probeFailed.Count < batch.Count;
     }
 
     private async Task<List<WebsiteSourceStock>> LoadRecheckCandidates(

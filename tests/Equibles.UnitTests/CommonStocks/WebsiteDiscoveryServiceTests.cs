@@ -430,7 +430,7 @@ public class WebsiteDiscoveryServiceTests
     }
 
     [Fact]
-    public async Task Recheck_WhoseReplacementFailsTheProbe_KeepsTheWebsite()
+    public async Task Recheck_WhoseReplacementFailsTheProbe_KeepsTheWebsite_AndRetries()
     {
         var options = NewDbOptions();
         EquityIssuer stock = await SeedStock(options, "AAA", website: "https://amazon.com");
@@ -444,7 +444,9 @@ public class WebsiteDiscoveryServiceTests
 
         EquityIssuer reloaded = await Reload(options, stock.Id);
         reloaded.Website.Should().Be("https://amazon.com");
-        reloaded.WebsiteDiscoveryVersion.Should().Be(WebsiteDiscoveryVersion.Current);
+        reloaded
+            .WebsiteDiscoveryVersion.Should()
+            .Be(0, "a probe that could not run reads as a dead site, so the stock retries");
     }
 
     [Fact]

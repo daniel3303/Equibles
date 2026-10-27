@@ -178,7 +178,7 @@ public static partial class FilingWebsiteExtractor
     // address is", "on its corporate website,", "the Company's investor relations
     // website at", "We maintain a website at", "the Registrant maintains a website at", …
     [GeneratedRegex(
-        @"(?<anchor>\bour\b|\bits\b|\bwe\b|company(?:['’]s)?|registrant(?:['’]s)?|corporation(?:['’]s)?)(?<middle>[a-z\s,'’-]{0,40}?)(?:websites?|web\s+sites?|internet\s+(?:web\s+)?(?:site|address))",
+        @"(?<anchor>\bour\b|\bits\b|\bwe\b|\bthe\s+(?:company|registrant|corporation)(?:['’]s)?)(?<middle>[a-z\s,'’-]{0,40}?)(?:websites?|web\s+sites?|internet\s+(?:web\s+)?(?:site|address))",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex SelfReferenceRegex();
@@ -206,7 +206,7 @@ public static partial class FilingWebsiteExtractor
     private static partial Regex SentenceBoundaryRegex();
 
     [GeneratedRegex(
-        @"\b(?:company|registrant|corporation|fund|trust|partnership|bank)\b",
+        @"\bthe\s+(?:company|registrant|corporation|fund|trust|partnership|bank)\b",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex CompanyNounRegex();
