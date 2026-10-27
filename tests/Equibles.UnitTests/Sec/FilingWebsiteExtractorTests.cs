@@ -198,4 +198,41 @@ public class FilingWebsiteExtractorTests
     {
         FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
     }
+
+    [Fact]
+    public void ItsAfterASentenceNamingTheCompany_BelongsToTheThirdParty()
+    {
+        var text =
+            "The Company's transfer agent is Computershare. Its website is www.computershare.com.";
+
+        FilingWebsiteExtractor.Extract(text).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("amazon.com", true)]
+    [InlineData("www.amazon.com", true)]
+    [InlineData("www.acme.com", false)]
+    [InlineData("ir.acme.com", false)]
+    [InlineData("other.com", false)]
+    public void Disowns_OnlyASiteMentionedNextToASelfReferenceButNeverNamed(
+        string host,
+        bool disowned
+    )
+    {
+        var text =
+            "Our products are sold through our website and e-commerce platforms such as "
+            + "Amazon.com. Our website address is www.acme.com.";
+
+        FilingWebsiteExtractor.Disowns(text, host).Should().Be(disowned);
+    }
+
+    [Fact]
+    public void Disowns_IsFalseWhenAnotherMentionNamesTheSite()
+    {
+        var text =
+            "Products are sold through our website and Acme.com stores. Our website address is "
+            + "www.acme.com.";
+
+        FilingWebsiteExtractor.Disowns(text, "acme.com").Should().BeFalse();
+    }
 }

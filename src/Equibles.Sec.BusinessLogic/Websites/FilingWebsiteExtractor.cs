@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Equibles.Core.Extensions;
 
 namespace Equibles.Sec.BusinessLogic.Websites;
 
@@ -31,10 +32,54 @@ public static partial class FilingWebsiteExtractor
     /// </summary>
     public static string Extract(string filingText)
     {
-        if (string.IsNullOrWhiteSpace(filingText))
-            return null;
-
         string firstInvestorRelationsHost = null;
+        foreach (var disclosure in Disclosures(filingText))
+        {
+            if (!disclosure.NamesUrl)
+                continue;
+
+            // Prefer the corporate host over an investor-relations one, regardless of
+            // which the filing discloses first.
+            if (!disclosure.InvestorRelations)
+                return disclosure.Host;
+
+            firstInvestorRelationsHost ??= disclosure.Host;
+        }
+
+        return firstInvestorRelationsHost;
+    }
+
+    /// <summary>
+    /// True when the filing mentions <paramref name="host"/>'s site right after a
+    /// self-reference yet never names it as the company's own: the shape a third party's
+    /// URL takes ("sold through our website and Amazon.com"), which an earlier extractor
+    /// stored as the company website.
+    /// </summary>
+    public static bool Disowns(string filingText, string host)
+    {
+        var site = RegistrableDomain.Of(host.ToLowerInvariant());
+        var mentioned = false;
+        foreach (var disclosure in Disclosures(filingText))
+        {
+            if (RegistrableDomain.Of(disclosure.Host) != site)
+                continue;
+            if (disclosure.NamesUrl)
+                return false;
+            mentioned = true;
+        }
+
+        return mentioned;
+    }
+
+    // Every URL that follows a self-reference within the context window, with whether that
+    // self-reference names it (see NamesThisUrl).
+    private static IEnumerable<(string Host, bool NamesUrl, bool InvestorRelations)> Disclosures(
+        string filingText
+    )
+    {
+        if (string.IsNullOrWhiteSpace(filingText))
+            yield break;
+
         foreach (Match match in UrlRegex().Matches(filingText))
         {
             var host = HostOf(match.Value);
@@ -51,18 +96,12 @@ public static partial class FilingWebsiteExtractor
             if (selfReferences.Count == 0)
                 continue;
             var nearest = selfReferences[^1];
-            if (!NamesThisUrl(filingText, contextStart, nearest, context))
-                continue;
-
-            // Prefer the corporate host over an investor-relations one, regardless of
-            // which the filing discloses first.
-            if (!IsInvestorRelationsCandidate(host, nearest.Value))
-                return host;
-
-            firstInvestorRelationsHost ??= host;
+            yield return (
+                host,
+                NamesThisUrl(filingText, contextStart, nearest, context),
+                IsInvestorRelationsCandidate(host, nearest.Value)
+            );
         }
-
-        return firstInvestorRelationsHost;
     }
 
     /// <summary>
@@ -107,9 +146,11 @@ public static partial class FilingWebsiteExtractor
         if (!selfReference.Groups["anchor"].Value.Equals("its", StringComparison.OrdinalIgnoreCase))
             return true;
 
+        // The slice keeps the anchor's first letter so the boundary right before a
+        // capitalised "Its" still matches its capital lookahead.
         var anchorAt = contextStart + selfReference.Index;
         var lookBack = Math.Max(0, anchorAt - SentenceLookBack);
-        var preceding = filingText[lookBack..anchorAt];
+        var preceding = filingText[lookBack..(anchorAt + 1)];
         var boundaries = SentenceBoundaryRegex().Matches(preceding);
         var sentence =
             boundaries.Count == 0
