@@ -64,7 +64,8 @@ public class WebsiteDiscoveryServiceTests
         HttpStatusCode probeStatus = HttpStatusCode.OK,
         int? batchSize = null,
         IBus bus = null,
-        IServiceScopeFactory errorScopes = null
+        IServiceScopeFactory errorScopes = null,
+        int? recheckBatchSize = null
     )
     {
         var stealth = Substitute.For<IStealthBrowserClient>();
@@ -77,6 +78,8 @@ public class WebsiteDiscoveryServiceTests
         var discoveryOptions = new WebsiteDiscoveryOptions();
         if (batchSize.HasValue)
             discoveryOptions.BatchSize = batchSize.Value;
+        if (recheckBatchSize.HasValue)
+            discoveryOptions.RecheckBatchSize = recheckBatchSize.Value;
         return new WebsiteDiscoveryService(
             ScopeFactory(options),
             sources,
@@ -479,6 +482,33 @@ public class WebsiteDiscoveryServiceTests
         reloaded.Website.Should().Be("https://amazon.com");
         reloaded.WebsiteDiscoveryVersion.Should().Be(WebsiteDiscoveryVersion.Current);
         reloaded.WebsiteRecheckProbeFailedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Recheck_RunsOneBatchPerCycle_AndNeverChainsTheWorker()
+    {
+        var options = NewDbOptions();
+        EquityIssuer large = await SeedStock(
+            options,
+            "AAA",
+            website: "https://www.aaa.com",
+            marketCap: 2e9
+        );
+        EquityIssuer small = await SeedStock(
+            options,
+            "BBB",
+            website: "https://www.bbb.com",
+            marketCap: 1e9
+        );
+
+        var more = await BuildSut(options, [new StubSource(10, [])], recheckBatchSize: 1)
+            .DiscoverBatch(CancellationToken.None);
+
+        more.Should().BeFalse("chaining would also re-run discovery's retries every few seconds");
+        (await Reload(options, large.Id))
+            .WebsiteDiscoveryVersion.Should()
+            .Be(WebsiteDiscoveryVersion.Current);
+        (await Reload(options, small.Id)).WebsiteDiscoveryVersion.Should().Be(0);
     }
 
     [Fact]

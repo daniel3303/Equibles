@@ -61,10 +61,10 @@ public class WebsiteDiscoveryService : IImporter
     public Task Import(CancellationToken cancellationToken) => DiscoverBatch(cancellationToken);
 
     /// <summary>
-    /// Runs one discovery batch and one re-check batch, and returns true when either filled a full
-    /// batch — i.e. more stocks remain — so the worker chains straight into the next batch (short
-    /// ContinuationInterval) instead of sleeping the full SleepInterval, draining a large backlog in
-    /// successive bursts rather than one batch per cycle.
+    /// Runs one discovery batch and one re-check batch, and returns true when discovery filled a
+    /// full batch — i.e. more pending stocks remain — so the worker chains straight into the next
+    /// batch (short ContinuationInterval) instead of sleeping the full SleepInterval, draining a
+    /// large backlog in successive bursts rather than one batch per cycle.
     /// </summary>
     public async Task<bool> DiscoverBatch(CancellationToken cancellationToken)
     {
@@ -75,8 +75,8 @@ public class WebsiteDiscoveryService : IImporter
         }
 
         var morePending = await DiscoverPending(cancellationToken);
-        var moreToRecheck = await RecheckBatch(cancellationToken);
-        return morePending || moreToRecheck;
+        await RecheckBatch(cancellationToken);
+        return morePending;
     }
 
     private async Task<bool> DiscoverPending(CancellationToken cancellationToken)
@@ -202,13 +202,13 @@ public class WebsiteDiscoveryService : IImporter
     /// Re-checks one batch of stored websites judged under older rules: each source in priority
     /// order may name a replacement, the first that survives the probe overwrites the website and
     /// cascades into IR discovery, and the rest are stamped with the current version so each is
-    /// re-checked once. Returns true when a full batch ran cleanly, so more remain.
+    /// re-checked once.
     /// </summary>
-    private async Task<bool> RecheckBatch(CancellationToken cancellationToken)
+    private async Task RecheckBatch(CancellationToken cancellationToken)
     {
         var batch = await LoadRecheckCandidates(cancellationToken);
         if (batch.Count == 0)
-            return false;
+            return;
 
         var remaining = batch;
         var anySourceFailed = false;
@@ -284,10 +284,6 @@ public class WebsiteDiscoveryService : IImporter
             batch.Count,
             deferred.Count
         );
-        // Chaining needs progress: a batch held entirely by deferred stocks waits out the sleep.
-        return !anySourceFailed
-            && batch.Count >= _options.BatchSize
-            && deferred.Count < batch.Count;
     }
 
     private async Task<List<WebsiteSourceStock>> LoadRecheckCandidates(
@@ -308,7 +304,7 @@ public class WebsiteDiscoveryService : IImporter
             .OrderByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
             .ThenBy(s => s.Presentation.Listing.MarketIdentifierCode ?? "")
             .ThenBy(s => s.Presentation.Listing.Ticker)
-            .Take(_options.BatchSize)
+            .Take(_options.RecheckBatchSize)
             .Select(s => new
             {
                 s.Id,
