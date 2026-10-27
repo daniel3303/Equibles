@@ -95,7 +95,8 @@ public class EquityMarketDirectoryImporterTests
         string venue = "XPAR",
         string cfi = "ESVUFR",
         DateTime? terminated = null,
-        string authority = "FR"
+        string authority = "FR",
+        bool? issuerRequested = null
     )
     {
         using var context = NewContext(options);
@@ -105,6 +106,7 @@ public class EquityMarketDirectoryImporterTests
                 Authority = "ESMA",
                 Isin = isin,
                 Mic = mic,
+                IssuerRequested = issuerRequested,
                 Lei = Lei,
                 Cfi = cfi,
                 Currency = "EUR",
@@ -320,6 +322,46 @@ public class EquityMarketDirectoryImporterTests
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Fact]
+    public async Task AShareFirdsHomesOnAnUnsoughtVenue_IsImportedOnTheMarketItsIssuerSought()
+    {
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        // A Growth transfer FIRDS homes on an MTF the issuer never sought; the issuer sought only Paris.
+        await SeedFirds(options, "FR001401AOZ5", "ALXP", "SGMU", issuerRequested: true);
+        await SeedFirds(options, "FR001401AOZ5", "SGMU", "SGMU", issuerRequested: false);
+        // The same shape for a Canadian-issued share, whose Toronto home no FIRDS register reports.
+        await SeedFirds(
+            options,
+            "CA03753D1042",
+            "XMLI",
+            "FRAB",
+            authority: "DE",
+            issuerRequested: true
+        );
+        await SeedFirds(
+            options,
+            "CA03753D1042",
+            "FRAB",
+            "FRAB",
+            authority: "DE",
+            issuerRequested: false
+        );
+        var harness = Build(
+            options,
+            Row("FR001401AOZ5", "ALPRO", "ALXP"),
+            Row("CA03753D1042", "MLAPX", "XMLI")
+        );
+
+        var result = await harness.Importer.Import(Paris, CancellationToken.None);
+
+        result.Error.Should().BeNull();
+        result.Imported.Should().Be(1);
+        result.Skipped.Should().Be(1);
+        result.Failed.Should().Be(0);
+        harness.Source.Resolved.Should().Equal("FR001401AOZ5");
     }
 
     [Fact]
