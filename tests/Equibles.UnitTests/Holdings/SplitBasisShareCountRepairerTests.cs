@@ -120,4 +120,55 @@ public class SplitBasisShareCountRepairerTests
             .Should()
             .BeNull();
     }
+
+    // Positions of a few shares whose rebase rounds outside the band: 2 by 25:1, 7 and 1 by 10:1.
+    [Theory]
+    [InlineData(2L, 313L, 3_912.5, 25)]
+    [InlineData(7L, 1_125L, 1_605.53, 10)]
+    [InlineData(1L, 42L, 420.0, 10)]
+    public void Classify_RebaseLostToRounding_IsNotACorrection(
+        long shares,
+        long filedValue,
+        double price,
+        int factor
+    )
+    {
+        SplitBasisShareCountRepairer
+            .Classify(shares, filedValue, (decimal)price, factor, neighbourShares: null)
+            .Should()
+            .BeNull();
+    }
+
+    // Three shares after a 1:10 reverse split, filed at the later price: $15 revalues to $1.50,
+    // which rounds to $2.
+    [Fact]
+    public void Classify_RevalueLostToRounding_IsNotACorrection()
+    {
+        SplitBasisShareCountRepairer
+            .Classify(3L, 15L, 0.5m, factor: 0.1m, neighbourShares: 3L)
+            .Should()
+            .BeNull();
+    }
+
+    // One share filed after a 5:1 reverse split rebases to exactly five.
+    [Fact]
+    public void Classify_SmallRebaseThatRoundsExactly_IsACorrection()
+    {
+        SplitBasisShareCountRepairer
+            .Classify(1L, 4L, 0.8m, factor: 0.2m, neighbourShares: null)
+            .Should()
+            .Be(SplitBasisShareCountRepairer.Kind.PostSplitShares);
+    }
+
+    // One share filed after a 10:1 split with its value marked at the later price: alone it reads
+    // as a count that rounds to none, so the pre-filter must keep it for its neighbour to judge.
+    [Fact]
+    public void Classify_TinyLateValueWithItsNeighbour_IsRevalued()
+    {
+        SplitBasisShareCountRepairer.OffByTheRatio(1L, 100L, 1_000m, 10m).Should().BeTrue();
+        SplitBasisShareCountRepairer
+            .Classify(1L, 100L, 1_000m, factor: 10m, neighbourShares: 1L)
+            .Should()
+            .Be(SplitBasisShareCountRepairer.Kind.PostSplitValue);
+    }
 }
