@@ -34,14 +34,15 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class SplitBasisHoldingRepairService
 {
-    // The whole history holds about 2.3M straddling positions, so a sweep takes about ten batches
-    // and, once the history is corrected, reads without writing.
-    internal const int MaxCandidatesPerBatch = 250_000;
+    // The whole history holds about 2.3M straddling positions, so a sweep takes about fifty
+    // batches and, once the history is corrected, reads without writing. Batches of 250,000 ran the
+    // shared worker out of memory alongside its other lanes.
+    internal const int MaxCandidatesPerBatch = 50_000;
 
     // The latest quarter a filing can straddle, with room for late filers and amendments.
     internal const int CandidateWindowDays = 100;
 
-    private const int SplitPageSize = 1_000;
+    private const int SplitPageSize = 250;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IStockPriceProvider _stockPriceProvider;
