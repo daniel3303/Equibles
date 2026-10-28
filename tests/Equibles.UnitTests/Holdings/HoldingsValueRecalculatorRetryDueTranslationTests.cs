@@ -19,19 +19,7 @@ public class HoldingsValueRecalculatorRetryDueTranslationTests
     [Fact]
     public void RetryDue_TranslatesEveryLadderStepToSql()
     {
-        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
-            .UseNpgsql("Host=localhost;Database=translation-only")
-            .EnableServiceProviderCaching(false)
-            .Options;
-        using var ctx = new EquiblesFinancialDbContext(
-            options,
-            new IModuleConfiguration[]
-            {
-                new CommonStocksModuleConfiguration(),
-                new HoldingsModuleConfiguration(),
-                new CorporateActionsModuleConfiguration(),
-            }
-        );
+        using var ctx = CreateTranslationContext();
         var now = new DateTime(2026, 10, 10, 0, 0, 0, DateTimeKind.Utc);
 
         var sql = ctx.Set<InstitutionalHolding>()
@@ -50,5 +38,42 @@ public class HoldingsValueRecalculatorRetryDueTranslationTests
         sql.Should().Contain("2026-10-09");
         sql.Should().Contain("2026-10-03");
         sql.Should().Contain("2026-09-10");
+        // A row older than the whole 68-day ladder is due whatever its count.
+        where.Should().Contain("i.\"CreationTime\" <= @");
+        sql.Should().Contain("2026-08-03");
+    }
+
+    [Fact]
+    public void LadderExhausted_TranslatesTheLastRungAndTheAgeBoundToSql()
+    {
+        using var ctx = CreateTranslationContext();
+        var now = new DateTime(2026, 10, 10, 0, 0, 0, DateTimeKind.Utc);
+
+        var sql = ctx.Set<InstitutionalHolding>()
+            .Where(h => h.ValuePending)
+            .Where(HoldingsValueRecalculator.LadderExhausted(now))
+            .ToQueryString();
+
+        var where = sql[sql.IndexOf("WHERE", StringComparison.Ordinal)..];
+        where.Should().Contain("\"ValueRetryCount\" >= 3");
+        where.Should().Contain("i.\"CreationTime\" <= @");
+        sql.Should().Contain("2026-08-03");
+    }
+
+    private static EquiblesFinancialDbContext CreateTranslationContext()
+    {
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
+            .UseNpgsql("Host=localhost;Database=translation-only")
+            .EnableServiceProviderCaching(false)
+            .Options;
+        return new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[]
+            {
+                new CommonStocksModuleConfiguration(),
+                new HoldingsModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
+            }
+        );
     }
 }

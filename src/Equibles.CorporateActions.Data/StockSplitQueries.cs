@@ -23,4 +23,16 @@ public static class StockSplitQueries
             .Include(split => split.Listing)
             .Where(split => ids.Contains(split.EquityIssuerId));
     }
+
+    /// <summary>
+    /// <see cref="ForIssuers"/> narrowed to splits already effective on <paramref name="today"/>,
+    /// for figures restated onto today's basis. A split row exists from its announcement, but no
+    /// count or close moves until it takes effect, so an announced split must neither restate a
+    /// figure nor hold its valuation as an unreconciled basis.
+    /// </summary>
+    public static IQueryable<StockSplit> EffectiveForIssuers(
+        DbContext dbContext,
+        IEnumerable<Guid> issuerIds,
+        DateOnly today
+    ) => ForIssuers(dbContext, issuerIds).Where(split => split.EffectiveDate <= today);
 }

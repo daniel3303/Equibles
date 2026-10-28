@@ -217,4 +217,81 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
             .ValueLastRetryAt.Should()
             .BeCloseTo(resting.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
     }
+
+    // The production backlog: rows pending since May that a 13F replay put back on the first rung,
+    // stamped two days ago. Pending longer than the whole 68-day ladder, they settle on this pass
+    // whatever their count says. Rows inside the ladder's span keep the ladder exactly: a young row
+    // waits for its step, a 50-day-old row on rung 2 climbs to the last rung, and one on the last
+    // rung retried 10 days ago keeps waiting out its final 30 days.
+    [Fact]
+    public async Task Recalculate_UnpricedRowsPendingLongerThanTheLadder_SettleDespiteARestartedCount()
+    {
+        var now = DateTime.UtcNow;
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OLD", Name: "Old");
+        InstitutionalHolder Holder(string cik) =>
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Cik = cik,
+                Name = "Filer " + cik,
+            };
+        var filedHolder = Holder("3000001");
+        var unfiledHolder = Holder("3000002");
+        var youngHolder = Holder("3000003");
+        var climbingHolder = Holder("3000004");
+        var lastRungHolder = Holder("3000005");
+        var outlivedFiled = Pending(issuer, filedHolder, now.AddDays(-2));
+        outlivedFiled.CreationTime = now.AddDays(-150);
+        outlivedFiled.FiledValue = 7_500L;
+        var outlivedUnfiled = Pending(issuer, unfiledHolder, now.AddDays(-2));
+        outlivedUnfiled.CreationTime = now.AddDays(-150);
+        var young = Pending(issuer, youngHolder, now.AddDays(-2));
+        young.CreationTime = now.AddDays(-10);
+        young.FiledValue = 2_000L;
+        var climbing = Pending(issuer, climbingHolder, now.AddDays(-31));
+        climbing.CreationTime = now.AddDays(-50);
+        climbing.ValueRetryCount = 2;
+        climbing.FiledValue = 3_000L;
+        var lastRung = Pending(issuer, lastRungHolder, now.AddDays(-10));
+        lastRung.CreationTime = now.AddDays(-50);
+        lastRung.ValueRetryCount = 3;
+        lastRung.FiledValue = 4_000L;
+        var seed = CreateSharedContext();
+        seed.Set<EquityIssuer>().Add(issuer);
+        seed.Set<InstitutionalHolder>()
+            .AddRange(filedHolder, unfiledHolder, youngHolder, climbingHolder, lastRungHolder);
+        seed.Set<InstitutionalHolding>()
+            .AddRange(outlivedFiled, outlivedUnfiled, young, climbing, lastRung);
+        await seed.SaveChangesAsync();
+        _priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
+
+        await CreateRecalculator().Recalculate(CancellationToken.None);
+
+        var rows = await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .ToDictionaryAsync(h => h.Id);
+        rows[outlivedFiled.Id].ValuePending.Should().BeFalse();
+        rows[outlivedFiled.Id].ValueSource.Should().Be(ValueSource.Filed);
+        rows[outlivedFiled.Id].Value.Should().Be(7_500L);
+        rows[outlivedUnfiled.Id].ValuePending.Should().BeFalse();
+        rows[outlivedUnfiled.Id].ValueUnavailable.Should().BeTrue();
+        rows[young.Id].ValuePending.Should().BeTrue();
+        rows[young.Id].ValueRetryCount.Should().Be(1);
+        rows[young.Id]
+            .ValueLastRetryAt.Should()
+            .BeCloseTo(young.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+        rows[climbing.Id].ValuePending.Should().BeTrue();
+        rows[climbing.Id].ValueRetryCount.Should().Be(3);
+        rows[lastRung.Id].ValuePending.Should().BeTrue();
+        rows[lastRung.Id].ValueRetryCount.Should().Be(3);
+        rows[lastRung.Id]
+            .ValueLastRetryAt.Should()
+            .BeCloseTo(lastRung.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+    }
 }

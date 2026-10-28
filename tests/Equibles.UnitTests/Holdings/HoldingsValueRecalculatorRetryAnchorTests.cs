@@ -16,10 +16,10 @@ public class HoldingsValueRecalculatorRetryAnchorTests
 {
     // The backoff window is anchored on ValueLastRetryAt ?? CreationTime. Once a holding has been
     // retried, the NEXT attempt must gate on the LAST retry, not the original creation. A holding
-    // created long ago but retried 3 days back (ValueRetryCount=1 → 7-day delay) is still inside its
-    // window and must NOT be bumped. Anchoring on the old CreationTime would re-bump it early — a
-    // retry storm. The existing window test uses a null ValueLastRetryAt (anchor = CreationTime), so
-    // only this pins the re-retry anchor. Oracle from the contract.
+    // created 20 days ago but retried 3 days back (ValueRetryCount=1 → 7-day delay) is still inside
+    // its window and must NOT be bumped. Anchoring on CreationTime would re-bump it early — a retry
+    // storm. Creation stays inside the 68-day ladder: an older row settles instead (pinned by
+    // HoldingsValueRecalculatorDuePairsTests). Oracle from the contract.
     [Fact]
     public async Task Recalculate_RetriedHoldingInsideLaterBackoffWindow_AnchorsOnLastRetryNotCreation()
     {
@@ -28,8 +28,8 @@ public class HoldingsValueRecalculatorRetryAnchorTests
         SeedHolding(
             db,
             commonStockId: Guid.NewGuid(),
-            // Created 100 days ago, but already retried once 3 days ago. RetryCount=1 → 7-day delay.
-            creationTime: DateTime.UtcNow.AddDays(-100),
+            // Created 20 days ago, already retried once 3 days ago. RetryCount=1 → 7-day delay.
+            creationTime: DateTime.UtcNow.AddDays(-20),
             valueRetryCount: 1,
             valueLastRetryAt: DateTime.UtcNow.AddDays(-3)
         );

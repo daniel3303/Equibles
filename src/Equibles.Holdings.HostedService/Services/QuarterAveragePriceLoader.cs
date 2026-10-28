@@ -125,9 +125,8 @@ internal static class QuarterAveragePriceLoader
         // The whole effective history, since the basis rules also read splits before the quarter.
         var splits = (
             await StockSplitQueries
-                .ForIssuers(dbContext, issuerIds)
+                .EffectiveForIssuers(dbContext, issuerIds, today)
                 .AsNoTracking()
-                .Where(split => split.EffectiveDate <= today)
                 .ToListAsync(cancellationToken)
         ).ToLookup(split => split.EquityIssuerId);
 

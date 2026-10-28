@@ -261,7 +261,11 @@ public class ImpossiblePositionRepairService
         var candidateStockIds = candidates.Select(c => c.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
             await StockSplitQueries
-                .ForIssuers(dbContext, candidateStockIds)
+                .EffectiveForIssuers(
+                    dbContext,
+                    candidateStockIds,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                )
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.EquityIssuerId)
