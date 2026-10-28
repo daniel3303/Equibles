@@ -3,7 +3,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
 
-// GLEIF's answer for one listed ISIN. It is merge evidence only and never assigns an issuer's LEI.
+// GLEIF's answer for one listed ISIN, or for the LEI its issuer already holds. It is merge evidence only and never
+// assigns an issuer's LEI.
 [Index(nameof(NextAttemptAt))]
 [Index(nameof(LegalEntityIdentifier))]
 public class IsinLegalEntityLookup
