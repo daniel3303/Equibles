@@ -35,4 +35,17 @@ public static class StockSplitQueries
         IEnumerable<Guid> issuerIds,
         DateOnly today
     ) => ForIssuers(dbContext, issuerIds).Where(split => split.EffectiveDate <= today);
+
+    /// <summary>
+    /// Every split already effective on <paramref name="today"/> whose price adjustment has been
+    /// applied, for a pass that walks the whole split history rather than one issuer's: only
+    /// those splits have moved both the stored closes and the counts restated against them.
+    /// </summary>
+    public static IQueryable<StockSplit> AppliedEffective(DbContext dbContext, DateOnly today) =>
+        dbContext
+            .Set<StockSplit>()
+            .Include(split => split.Listing)
+            .Where(split =>
+                split.EffectiveDate <= today && split.PriceAdjustmentAppliedTime != null
+            );
 }

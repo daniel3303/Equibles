@@ -85,6 +85,10 @@ public class ImportContext
     // never split, so its count and price already share a basis.
     public Dictionary<Guid, List<StockSplit>> StockSplits { get; set; } = [];
 
+    // (CommonStockId, ListedTicker, ReportDate) quarters whose other holders confirmed the price
+    // basis the split-basis repair judges against, so a later filing of the quarter skips the query.
+    public HashSet<(Guid, string, DateOnly)> CorroboratedSplitBasisQuarters { get; } = [];
+
     // Tally of derived-vs-filed value disagreements across this import. Advisory only — it changes
     // nothing that is stored, it just makes a units error loud instead of silent.
     public ValueBasisAudit ValueBasisAudit { get; } = new();
