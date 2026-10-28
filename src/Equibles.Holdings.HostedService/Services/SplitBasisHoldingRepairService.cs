@@ -164,9 +164,12 @@ public class SplitBasisHoldingRepairService
             cancellationToken
         );
 
-        // A candidate's straddled ratio and its quarter's price on the report-date basis, or null
-        // when either cannot be stated honestly (the recalculator's own deferral gates).
-        (decimal Factor, decimal Price)? ReportBasis(InstitutionalHolding holding)
+        // A candidate off by its straddled ratio, with that ratio and its quarter's price on the
+        // report-date basis; null when consistent or when either figure cannot be stated honestly
+        // (the recalculator's own deferral gates).
+        (InstitutionalHolding Holding, decimal Factor, decimal Price)? Suspect(
+            InstitutionalHolding holding
+        )
         {
             if (
                 !prices.TryGetValue(
@@ -185,24 +188,22 @@ public class SplitBasisHoldingRepairService
                     is not { } factor
             )
                 return null;
-            return (factor, reportFactor * closePrice);
-        }
-
-        var suspects = candidates
-            .Values.Select(holding => (Holding: holding, Basis: ReportBasis(holding)))
-            .Where(candidate =>
-                candidate.Basis is (var factor, var price)
-                && SplitBasisShareCountRepairer.Classify(
-                    candidate.Holding.Shares,
-                    candidate.Holding.FiledValue ?? 0L,
+            var price = reportFactor * closePrice;
+            return
+                SplitBasisShareCountRepairer.Classify(
+                    holding.Shares,
+                    holding.FiledValue ?? 0L,
                     price,
                     factor,
                     neighbourShares: null
-                ) != null
-            )
-            .Select(candidate =>
-                (candidate.Holding, candidate.Basis.Value.Factor, candidate.Basis.Value.Price)
-            )
+                ) == null
+                ? null
+                : (holding, factor, price);
+        }
+
+        var suspects = candidates
+            .Values.Select(Suspect)
+            .OfType<(InstitutionalHolding Holding, decimal Factor, decimal Price)>()
             .ToList();
         if (suspects.Count == 0)
         {
