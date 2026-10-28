@@ -2,8 +2,10 @@ using System.Data;
 using System.Text.Json;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Gleif;
+using Equibles.Integrations.Gleif.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -11,8 +13,10 @@ using Microsoft.Extensions.Logging;
 namespace Equibles.EquityMarkets.BusinessLogic.Directory;
 
 /// <summary>
-/// Records GLEIF's answer for listed ISINs whose issuer has no LEI. The answer is stored as source
-/// evidence for duplicate-issuer review and never assigns an LEI, which would be an inferred merge.
+/// Records GLEIF's answer for listed ISINs: the LEI GLEIF names for the ISIN, or, for an issuer that
+/// already holds an LEI, the ISINs GLEIF relates to that LEI, since GLEIF relates no ISIN of some
+/// registers (India's) to their company. The answer is stored as source evidence for duplicate-issuer
+/// review and never assigns an LEI, which would be an inferred merge.
 /// </summary>
 [Service]
 public partial class IsinLegalEntityLookupImporter(
@@ -29,7 +33,7 @@ public partial class IsinLegalEntityLookupImporter(
     /// <summary>Looks up one batch; returns how many ISINs were due so the caller can continue.</summary>
     public async Task<int> Refresh(CancellationToken cancellationToken)
     {
-        List<string> due;
+        List<IsinLegalEntityLookupDue> due;
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
             due = await scope
@@ -37,13 +41,19 @@ public partial class IsinLegalEntityLookupImporter(
                 .GetDue(DateTime.UtcNow, BatchSize, cancellationToken);
         }
         var found = 0;
-        foreach (var isin in due)
+        // One issuer's securities share its LEI's answer within a batch.
+        var answered = new Dictionary<string, GleifIssuerIdentity>(StringComparer.Ordinal);
+        foreach (var (isin, lei) in due)
         {
             using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             attempt.CancelAfter(TimeSpan.FromMinutes(5));
             try
             {
-                var identity = await gleifClient.GetIssuerForIsin(isin, attempt.Token);
+                GleifIssuerIdentity identity;
+                if (lei == null)
+                    identity = await gleifClient.GetIssuerForIsin(isin, attempt.Token);
+                else if (!answered.TryGetValue(lei, out identity))
+                    answered[lei] = identity = await gleifClient.GetIsinsForLei(lei, attempt.Token);
                 await Store(isin, identity, cancellationToken);
                 if (identity.LegalEntityIdentifier != null)
                     found++;
@@ -70,7 +80,7 @@ public partial class IsinLegalEntityLookupImporter(
 
     private async Task Store(
         string isin,
-        Integrations.Gleif.Models.GleifIssuerIdentity identity,
+        GleifIssuerIdentity identity,
         CancellationToken cancellationToken
     )
     {
