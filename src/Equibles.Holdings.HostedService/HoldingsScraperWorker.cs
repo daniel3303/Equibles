@@ -219,6 +219,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
             );
         }
 
+        // Rebase stored positions a filer stated on a straddled split's later basis. Resets them
+        // for repricing, so it runs before the passes that republish pending rows this cycle.
+        await RepairSplitBasisHoldings(stoppingToken);
+
         // Revise mis-published filed values, heal abandoned zero-value rows (publish the filed
         // figure) and reset implausible derivations for honest repricing. Bounded per cycle;
         // self-terminating once the backlog drains. Runs BEFORE the pending recalculation so a
@@ -412,6 +416,22 @@ public class HoldingsScraperWorker : BaseScraperWorker
         {
             // Maintenance, not ingestion: its failure must not fail the import cycle.
             Logger.LogWarning(exception, "Filing rollup type backfill pass failed");
+        }
+    }
+
+    private async Task RepairSplitBasisHoldings(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var repairer =
+                scope.ServiceProvider.GetRequiredService<SplitBasisHoldingRepairService>();
+            await repairer.Repair(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // Maintenance, not ingestion — same contract as the impossible-position pass.
+            Logger.LogWarning(exception, "Split-basis repair pass failed");
         }
     }
 

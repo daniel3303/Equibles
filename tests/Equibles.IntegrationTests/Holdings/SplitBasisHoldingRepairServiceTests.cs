@@ -1,0 +1,363 @@
+using Equibles.CommonStocks.Data.Models;
+using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.Data;
+using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService.Models;
+using Equibles.Holdings.HostedService.Services;
+using Equibles.IntegrationTests.Helpers;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
+
+namespace Equibles.IntegrationTests.Holdings;
+
+/// <summary>
+/// Against Postgres: stored Broadcom Q2 2024 positions filed after its 10:1 split, one with the
+/// count on the later basis and one with the value marked at the later price, are rebased and
+/// reset for repricing, the recalculator then values both on the report-date basis, evidence
+/// keeps the filed figures once, and a consistent position is left alone.
+/// </summary>
+[Collection(ParadeDbCollection.Name)]
+public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
+{
+    private static readonly DateOnly PriorQuarter = new(2024, 3, 31);
+    private static readonly DateOnly ReportDate = new(2024, 6, 30);
+    private static readonly DateOnly SplitDate = new(2024, 7, 15);
+
+    // The stored close on today's basis: $1,605.53 a share on the report date's.
+    private const decimal Close = 160.553m;
+
+    private readonly ParadeDbFixture _fixture;
+    private readonly IStockPriceProvider _priceProvider = Substitute.For<IStockPriceProvider>();
+    private readonly List<EquiblesFinancialDbContext> _contexts = [];
+
+    public SplitBasisHoldingRepairServiceTests(ParadeDbFixture fixture) => _fixture = fixture;
+
+    public async Task InitializeAsync()
+    {
+        await _fixture.ResetAsync();
+        SplitBasisHoldingRepairService.ResetFrontier();
+    }
+
+    public Task DisposeAsync()
+    {
+        foreach (var ctx in _contexts)
+            ctx.Dispose();
+        return Task.CompletedTask;
+    }
+
+    private EquiblesFinancialDbContext CreateSharedContext()
+    {
+        var ctx = _fixture.CreateDbContext();
+        _contexts.Add(ctx);
+        return ctx;
+    }
+
+    private IServiceScopeFactory CreateScopeFactory()
+    {
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory
+            .CreateScope()
+            .Returns(_ =>
+            {
+                var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(CreateSharedContext());
+                var scope = Substitute.For<IServiceScope>();
+                scope.ServiceProvider.Returns(sp);
+                return scope;
+            });
+        return scopeFactory;
+    }
+
+    private SplitBasisHoldingRepairService CreateService() =>
+        new(
+            CreateScopeFactory(),
+            _priceProvider,
+            Substitute.For<ILogger<SplitBasisHoldingRepairService>>()
+        );
+
+    private HoldingsValueRecalculator CreateRecalculator() =>
+        new(
+            CreateScopeFactory(),
+            _priceProvider,
+            Substitute.For<ILogger<HoldingsValueRecalculator>>()
+        );
+
+    private static InstitutionalHolding Position(
+        EquityIssuer issuer,
+        InstitutionalHolder holder,
+        DateOnly reportDate,
+        DateOnly filingDate,
+        string accession,
+        long filedValue,
+        ValueSource valueSource,
+        params long[] legs
+    )
+    {
+        var shares = legs.Sum();
+        return new InstitutionalHolding
+        {
+            Id = Guid.NewGuid(),
+            EquityIssuerId = issuer.Id,
+            InstitutionalHolderId = holder.Id,
+            ReportDate = reportDate,
+            FilingDate = filingDate,
+            Shares = shares,
+            VotingAuthSole = shares,
+            FiledValue = filedValue,
+            Value = filedValue,
+            ValueSource = valueSource,
+            ShareType = ShareType.Shares,
+            InvestmentDiscretion = InvestmentDiscretion.Sole,
+            Cusip = "11135F101",
+            AccessionNumber = accession,
+            CreationTime = DateTime.UtcNow.AddDays(-30),
+            ManagerEntries = legs.Select(leg => new HoldingManagerEntry
+                {
+                    ManagerNumber = null,
+                    Shares = leg,
+                    Value = (long)(filedValue * ((decimal)leg / shares)),
+                    InvestmentDiscretion = InvestmentDiscretion.Sole,
+                })
+                .ToList(),
+        };
+    }
+
+    private async Task<(
+        InstitutionalHolding LateCount,
+        InstitutionalHolding LateValue,
+        InstitutionalHolding Consistent
+    )> SeedBroadcomQuarter()
+    {
+        var seed = CreateSharedContext();
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AVGO",
+            Name: "Broadcom Inc."
+        );
+        var scotia = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "9631",
+            Name = "Bank of Nova Scotia",
+        };
+        var pension = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "1608046",
+            Name = "National Pension Service",
+        };
+        var consistent = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "1000001",
+            Name = "Consistent filer",
+        };
+        var lateCount = Position(
+            issuer,
+            scotia,
+            ReportDate,
+            new DateOnly(2024, 8, 14),
+            "0001085146-24-003837",
+            870_443_781L,
+            ValueSource.Filed,
+            5_420_597L,
+            9_144L
+        );
+        var lateValue = Position(
+            issuer,
+            pension,
+            ReportDate,
+            new DateOnly(2024, 8, 13),
+            "0001608046-24-000005",
+            115_964_060L,
+            ValueSource.Filed,
+            722_279L
+        );
+        var onBasis = Position(
+            issuer,
+            consistent,
+            ReportDate,
+            new DateOnly(2024, 8, 14),
+            "0001000001-24-000002",
+            160_553_000L,
+            ValueSource.Derived,
+            100_000L
+        );
+        seed.Set<EquityIssuer>().Add(issuer);
+        seed.Set<InstitutionalHolder>().AddRange(scotia, pension, consistent);
+        seed.Set<InstitutionalHolding>()
+            .AddRange(
+                lateCount,
+                lateValue,
+                onBasis,
+                Position(
+                    issuer,
+                    scotia,
+                    PriorQuarter,
+                    new DateOnly(2024, 5, 15),
+                    "0001085146-24-002485",
+                    668_700_389L,
+                    ValueSource.Derived,
+                    504_523L
+                ),
+                Position(
+                    issuer,
+                    pension,
+                    PriorQuarter,
+                    new DateOnly(2024, 5, 14),
+                    "0001608046-24-000004",
+                    945_308_920L,
+                    ValueSource.Derived,
+                    713_220L
+                )
+            );
+        await seed.SaveChangesAsync();
+        seed.Add(
+            new StockSplit
+            {
+                EquityIssuerId = issuer.Id,
+                EquityListingId = issuer.Presentation.EquityListingId,
+                PriceSeriesTicker = "AVGO",
+                EffectiveDate = SplitDate,
+                Numerator = 10m,
+                Denominator = 1m,
+                Source = StockSplitSource.External,
+                PriceAdjustmentAppliedTime = new DateTime(2024, 7, 16, 0, 0, 0, DateTimeKind.Utc),
+                ShareCountEvidence = StockSplitShareCountEvidence.Confirmed,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        _priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new Dictionary<(Guid, string, DateOnly), decimal>
+                {
+                    [(issuer.Id, null, ReportDate)] = Close,
+                    [(issuer.Id, null, PriorQuarter)] = 132.541m,
+                }
+            );
+        return (lateCount, lateValue, onBasis);
+    }
+
+    private async Task<Dictionary<Guid, InstitutionalHolding>> Reload() =>
+        await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .ToDictionaryAsync(h => h.Id);
+
+    [Fact]
+    public async Task Repair_PositionsOnTheLaterBasis_AreRebasedThenValuedByTheRecalculator()
+    {
+        var (lateCount, lateValue, consistent) = await SeedBroadcomQuarter();
+
+        var corrected = await CreateService().Repair(CancellationToken.None);
+
+        corrected.Should().Be(2);
+        var rows = await Reload();
+        var count = rows[lateCount.Id];
+        count.Shares.Should().Be(542_974);
+        count.VotingAuthSole.Should().Be(542_974);
+        count.ManagerEntries.Select(e => e.Shares).Should().BeEquivalentTo([542_060L, 914L]);
+        count.FiledValue.Should().Be(870_443_781);
+        count.ValuePending.Should().BeTrue();
+        count.Value.Should().Be(0);
+        var value = rows[lateValue.Id];
+        value.Shares.Should().Be(722_279);
+        value.FiledValue.Should().Be(1_159_640_600);
+        value.ValuePending.Should().BeTrue();
+        rows[consistent.Id].Value.Should().Be(160_553_000);
+        rows[consistent.Id].ValuePending.Should().BeFalse();
+
+        await CreateRecalculator().Recalculate(CancellationToken.None);
+
+        rows = await Reload();
+        rows[lateCount.Id].Value.Should().Be((long)(542_974 * 10 * Close));
+        rows[lateCount.Id].ValueSource.Should().Be(ValueSource.Derived);
+        rows[lateValue.Id].Value.Should().Be((long)(722_279 * 10 * Close));
+        rows[lateValue.Id].ValueSource.Should().Be(ValueSource.Derived);
+    }
+
+    [Fact]
+    public async Task Repair_SecondSweep_WritesNothingAndKeepsOneEvidenceRowPerPosition()
+    {
+        await SeedBroadcomQuarter();
+        await CreateService().Repair(CancellationToken.None);
+        var afterFirst = await Reload();
+
+        var corrected = await CreateService().Repair(CancellationToken.None);
+
+        corrected.Should().Be(0);
+        var afterSecond = await Reload();
+        afterSecond
+            .Values.Select(h => (h.Id, h.Shares, h.FiledValue, h.ValuePending))
+            .Should()
+            .BeEquivalentTo(
+                afterFirst.Values.Select(h => (h.Id, h.Shares, h.FiledValue, h.ValuePending))
+            );
+        var evidence = await CreateSharedContext()
+            .Set<HoldingsCorrectionEvidence>()
+            .AsNoTracking()
+            .OrderBy(e => e.CorrectionKey)
+            .ToListAsync();
+        evidence
+            .Select(e => (e.CorrectionKey, e.SourceTable, e.SourceRecordId))
+            .Should()
+            .Equal(
+                (
+                    SplitBasisCorrectionEvidence.SharesCorrectionKey,
+                    "InstitutionalHolding",
+                    "0001085146-24-003837|11135F101|"
+                ),
+                (
+                    SplitBasisCorrectionEvidence.ValueCorrectionKey,
+                    "InstitutionalHolding",
+                    "0001608046-24-000005|11135F101|"
+                )
+            );
+        evidence[0].OriginalRow.Should().Contain("\"Shares\": 5429741");
+    }
+
+    // A replay re-stages the corrections an earlier import already recorded.
+    [Fact]
+    public async Task Stage_CorrectionAlreadyRecorded_AddsNothing()
+    {
+        var correction = new SplitBasisCorrection(
+            SplitBasisShareCountRepairer.Kind.PostSplitShares,
+            10m,
+            "0001085146-24-003837",
+            "11135F101",
+            null,
+            ReportDate,
+            new DateOnly(2024, 8, 14),
+            5_429_741L,
+            870_443_781L,
+            504_523L
+        );
+        var first = CreateSharedContext();
+        (await SplitBasisCorrectionEvidence.Stage(first, [correction], CancellationToken.None))
+            .Should()
+            .Be(1);
+        await first.SaveChangesAsync();
+
+        var replay = CreateSharedContext();
+        (
+            await SplitBasisCorrectionEvidence.Stage(
+                replay,
+                [correction, correction],
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(0);
+        await replay.SaveChangesAsync();
+
+        (await CreateSharedContext().Set<HoldingsCorrectionEvidence>().CountAsync()).Should().Be(1);
+    }
+}
