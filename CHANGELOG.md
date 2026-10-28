@@ -61,6 +61,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- The 13F split-basis sweep judges at most 50,000 positions over 250 splits per batch, down from 250,000 over 1,000. On a shared worker its larger batches ran the process out of memory, and the failures reached other lanes running alongside it.
 - The 13F split-basis repair no longer corrects a position whose rebase, rounded to whole shares or dollars, falls outside its agreement band: two shares rebased by a 25:1 split became none, and seven by 10:1 became one. Each sweep queues the filing of a correction an earlier release made this way for recovery once, since its evidence keeps position totals but not voting columns or manager legs; the replay rewrites the position from the source, and a `13f-split-basis-rounding-replay` evidence row keeps the damaged figures.
 - The 13F split-basis repair now walks every applied split on each bulk cycle, in batches of up to 250,000 positions. It used to judge one batch per cycle and keep its place only in memory, and the worker restarts several times a day, so every cycle re-judged the same first 1,000 splits and never reached the rest.
 - A 13F position the split-basis repair would rebase onto the same figure (one share rebased by 2:1 rounds back to one share) is no longer recorded as a correction or reset for repricing, so a later sweep no longer re-judges it every time.
