@@ -185,6 +185,8 @@ public class EquityMarketCatalogTests
     [InlineData("tsx-venture", "XTSX", "CA", "CAD", ".V", "VAN", "America/Toronto")]
     [InlineData("cse", "XCNQ", "CA", "CAD", ".CN", "CNQ", "America/Toronto")]
     [InlineData("cboe-canada", "NEOE", "CA", "CAD", ".NE", "NEO", "America/Toronto")]
+    [InlineData("nse", "XNSE", "IN", "INR", ".NS", "NSI", "Asia/Kolkata")]
+    [InlineData("bse", "XBOM", "IN", "INR", ".BO", "BSE", "Asia/Kolkata")]
     public void NativeMarketsRequireHostDirectoryEvidenceWithoutFirds(
         string code,
         string mic,
@@ -338,5 +340,28 @@ public class EquityMarketCatalogTests
         market.SessionClose.Should().Be(new TimeOnly(16, 0));
         market.ClosingAuctionEnd.Should().Be(new TimeOnly(16, 0));
         market.DelayedTradeSource.Should().BeNull();
+    }
+
+    // Both exchanges' normal market runs 09:15 to 15:30 India time with no closing auction: the close is the last
+    // half hour's volume-weighted price, so the session ends with the last continuous print.
+    [Theory]
+    [InlineData("nse", "XNSE")]
+    [InlineData("bse", "XBOM")]
+    public void IndianSessions_MatchTheVenuesOwnPrints(string code, string mic)
+    {
+        var market = EquityMarketCatalog.TryGet(code);
+        market.SessionOpen.Should().Be(new TimeOnly(9, 15));
+        market.SessionClose.Should().Be(new TimeOnly(15, 30));
+        market.ClosingAuctionEnd.Should().Be(new TimeOnly(15, 30));
+        market.DelayedTradeSource.Should().BeNull();
+        EquityMarketCatalog.ByMarketIdentifierCode(mic).Should().BeSameAs(market);
+    }
+
+    [Fact]
+    public void Nse_PrecedesBseAndLondonSoAnNseLineHoldsThePresentation()
+    {
+        var codes = EquityMarketCatalog.All.Select(market => market.Code).ToList();
+        codes.IndexOf("nse").Should().BeLessThan(codes.IndexOf("bse"));
+        codes.IndexOf("bse").Should().BeLessThan(codes.IndexOf("lse"));
     }
 }
