@@ -36,6 +36,8 @@ public class HoldingsValueRecalculator
     // backlog drains over several passes instead of one that holds the bulk cycle for hours.
     internal const int MaxSettledRowsPerPass = 500_000;
 
+    internal int SettledRowsPerPass { get; init; } = MaxSettledRowsPerPass;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IStockPriceProvider _stockPriceProvider;
     private readonly ILogger<HoldingsValueRecalculator> _logger;
@@ -257,7 +259,7 @@ public class HoldingsValueRecalculator
 
             // Only an exhausted row changes shape and needs its manager legs loaded. It is settled
             // before the climb below so a row stepped onto the last rung now is not re-read.
-            if (exhaustedPairs.Contains(pair) && totalGivenUp >= MaxSettledRowsPerPass)
+            if (exhaustedPairs.Contains(pair) && totalGivenUp >= SettledRowsPerPass)
             {
                 deferredExhaustedPairs++;
             }

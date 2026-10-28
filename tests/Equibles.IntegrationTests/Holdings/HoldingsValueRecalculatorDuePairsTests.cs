@@ -43,7 +43,9 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
         return ctx;
     }
 
-    private HoldingsValueRecalculator CreateRecalculator()
+    private HoldingsValueRecalculator CreateRecalculator(
+        int settledRowsPerPass = HoldingsValueRecalculator.MaxSettledRowsPerPass
+    )
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory
@@ -60,7 +62,10 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
             scopeFactory,
             _priceProvider,
             Substitute.For<ILogger<HoldingsValueRecalculator>>()
-        );
+        )
+        {
+            SettledRowsPerPass = settledRowsPerPass,
+        };
     }
 
     private static InstitutionalHolding Pending(
@@ -293,5 +298,62 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
         rows[lastRung.Id]
             .ValueLastRetryAt.Should()
             .BeCloseTo(lastRung.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+    }
+
+    // A pass settles at most its budget, newest quarter first. The quarter it leaves for later is
+    // neither stamped nor climbed meanwhile, and settles on the next pass.
+    [Fact]
+    public async Task Recalculate_SettlingBudgetSpent_LeavesOlderQuartersUntouchedForTheNextPass()
+    {
+        var now = DateTime.UtcNow;
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "BIG", Name: "Big");
+        var holder = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "4000001",
+            Name = "Filer",
+        };
+        var newer = Pending(issuer, holder, now.AddDays(-2));
+        newer.CreationTime = now.AddDays(-150);
+        newer.FiledValue = 1_000L;
+        var older = Pending(issuer, holder, now.AddDays(-2));
+        older.ReportDate = ReportDate.AddMonths(-3);
+        older.CreationTime = now.AddDays(-150);
+        older.FiledValue = 2_000L;
+        var seed = CreateSharedContext();
+        seed.Set<EquityIssuer>().Add(issuer);
+        seed.Set<InstitutionalHolder>().Add(holder);
+        seed.Set<InstitutionalHolding>().AddRange(newer, older);
+        await seed.SaveChangesAsync();
+        _priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
+
+        await CreateRecalculator(settledRowsPerPass: 1).Recalculate(CancellationToken.None);
+
+        var afterFirst = await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .ToDictionaryAsync(h => h.Id);
+        afterFirst[newer.Id].ValuePending.Should().BeFalse();
+        afterFirst[newer.Id].Value.Should().Be(1_000L);
+        afterFirst[older.Id].ValuePending.Should().BeTrue();
+        afterFirst[older.Id].ValueRetryCount.Should().Be(1);
+        afterFirst[older.Id]
+            .ValueLastRetryAt.Should()
+            .BeCloseTo(older.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+
+        await CreateRecalculator(settledRowsPerPass: 1).Recalculate(CancellationToken.None);
+
+        var afterSecond = await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .FirstAsync(h => h.Id == older.Id);
+        afterSecond.ValuePending.Should().BeFalse();
+        afterSecond.ValueSource.Should().Be(ValueSource.Filed);
+        afterSecond.Value.Should().Be(2_000L);
     }
 }
