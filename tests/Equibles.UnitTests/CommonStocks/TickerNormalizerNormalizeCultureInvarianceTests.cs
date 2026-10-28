@@ -31,6 +31,8 @@ public class TickerNormalizerNormalizeCultureInvarianceTests
     [Theory]
     [InlineData("brk.b", "BRK.B")]
     [InlineData(" BRK-B ", "BRK-B")]
+    [InlineData("m&m", "M&M")]
+    [InlineData("J&KBANK", "J&KBANK")]
     public void NormalizeListed_AcceptsBoundedExchangeSpelling(string ticker, string expected)
     {
         TickerNormalizer.NormalizeListed(ticker).Should().Be(expected);
@@ -38,6 +40,8 @@ public class TickerNormalizerNormalizeCultureInvarianceTests
 
     [Theory]
     [InlineData("@@@")]
+    [InlineData("&&")]
+    [InlineData("M&M?x=1")]
     [InlineData("AAPL/../../x")]
     [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
     [InlineData("ſPY")]
