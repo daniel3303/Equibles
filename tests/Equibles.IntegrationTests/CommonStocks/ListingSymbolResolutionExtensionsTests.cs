@@ -88,6 +88,21 @@ public class ListingSymbolResolutionExtensionsTests : IDisposable
         usWins.Venue.Should().BeNull();
     }
 
+    // NSE spells a few companies with an ampersand; the venue symbol and the provider suffix reach it.
+    [Fact]
+    public async Task AmpersandSpelling_ReachesTheStoredVenueTicker()
+    {
+        Venue("M&M", "XNSE", "IN", "Mahindra & Mahindra Limited");
+        await _dbContext.SaveChangesAsync();
+
+        (await _repository.ResolveListing("XNSE:m&m"))
+            .Stock.Name.Should()
+            .Be("Mahindra & Mahindra Limited");
+        (await _repository.ResolveListing("M&M.NS"))
+            .Stock.Name.Should()
+            .Be("Mahindra & Mahindra Limited");
+    }
+
     [Fact]
     public async Task NumericAndSeparatorSpellings_ReachTheStoredVenueTicker()
     {

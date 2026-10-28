@@ -155,6 +155,7 @@ public class YahooListingSourceTests
     [InlineData("000001", "CN", "XSHE", "000001.SZ")]
     [InlineData("00001", "HK", "XHKG", "0001.HK")]
     [InlineData("80700", "HK", "XHKG", "80700.HK")]
+    [InlineData("M&M", "IN", "XNSE", "M&M.NS")]
     [InlineData("0001", "HK", "XHKG", null)]
     [InlineData("1", "HK", "XHKG", null)]
     [InlineData("ALPHA", "HK", "XHKG", null)]
