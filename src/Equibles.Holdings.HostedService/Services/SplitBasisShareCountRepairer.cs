@@ -124,14 +124,23 @@ internal static class SplitBasisShareCountRepairer
             return null;
         if (shares / factor > long.MaxValue || filedValue * factor > long.MaxValue)
             return null;
-        if (neighbourShares is not > 0)
-            return Kind.PostSplitShares;
+        var kind = Kind.PostSplitShares;
+        if (neighbourShares is > 0)
+        {
+            var asFiledDistance = Math.Abs(Math.Log((double)neighbourShares.Value / shares));
+            var rebasedDistance = Math.Abs(
+                Math.Log((double)neighbourShares.Value * (double)factor / shares)
+            );
+            kind = rebasedDistance < asFiledDistance ? Kind.PostSplitShares : Kind.PostSplitValue;
+        }
 
-        var asFiledDistance = Math.Abs(Math.Log((double)neighbourShares.Value / shares));
-        var rebasedDistance = Math.Abs(
-            Math.Log((double)neighbourShares.Value * (double)factor / shares)
-        );
-        return rebasedDistance < asFiledDistance ? Kind.PostSplitShares : Kind.PostSplitValue;
+        // A one-share position rebased by 2:1 rounds back to one share: nothing to correct, and
+        // judging it again would reset it on every sweep.
+        var unchanged =
+            kind == Kind.PostSplitShares
+                ? Rebase(shares, factor) == shares
+                : Revalue(filedValue, factor) == filedValue;
+        return unchanged ? null : kind;
     }
 
     // Only a quarter this close tells a late count from a late value; further away the position

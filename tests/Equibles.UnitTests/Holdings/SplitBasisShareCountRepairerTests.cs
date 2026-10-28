@@ -110,4 +110,14 @@ public class SplitBasisShareCountRepairerTests
     {
         SplitBasisShareCountRepairer.Rebase(long.MaxValue / 2, 0.1m).Should().Be(long.MaxValue);
     }
+
+    // Two Schwab ETF positions of one share each, filed after a 2:1 split for $25 and $27.
+    [Fact]
+    public void Classify_RebaseRoundingBackToTheFiledCount_IsNotACorrection()
+    {
+        SplitBasisShareCountRepairer
+            .Classify(1L, 25L, 49.36m, factor: 2m, neighbourShares: null)
+            .Should()
+            .BeNull();
+    }
 }
