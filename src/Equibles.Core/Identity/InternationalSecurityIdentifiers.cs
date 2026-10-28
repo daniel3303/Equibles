@@ -65,6 +65,11 @@ public static class InternationalSecurityIdentifiers
         return (10 - sum % 10) % 10 == isin[10] - '0' ? isin[..8] : null;
     }
 
+    // India's numbering agency writes IN, an issuer-type letter and a four-character issuer code, then the security type,
+    // an issue serial and the check digit, so a valid Indian ISIN's first seven characters name its issuer; else null.
+    public static string IndianIssuerCode(string isin) =>
+        IsValidIsin(isin) && isin.StartsWith("IN", StringComparison.Ordinal) ? isin[..7] : null;
+
     // ISO 17442 uses the ISO 7064 MOD 97-10 check.
     public static bool IsValidLei(string value)
     {
