@@ -348,6 +348,12 @@ public static class EquityMarketCatalog
         Canadian("tsx-venture", "TSX Venture Exchange", "XTSX", ".V", "VAN"),
         Canadian("cse", "Canadian Securities Exchange", "XCNQ", ".CN", "CNQ"),
         Canadian("cboe-canada", "Cboe Canada", "NEOE", ".NE", "NEO"),
+        // India has no FIRDS register either; each exchange's own list states its listings, and one ISIN names a
+        // share on both venues. Continuous trading runs 09:15 to 15:30 India time with no closing auction: the
+        // close is the last half hour's volume-weighted price. NSE precedes BSE, so an NSE line holds the
+        // presentation when a share trades on both.
+        Indian("nse", "National Stock Exchange of India", "XNSE", ".NS", "NSI"),
+        Indian("bse", "BSE", "XBOM", ".BO", "BSE"),
         // Last on purpose: the FCA register homes the EEA issuers' London lines too, so their EEA directories
         // run first and hold the presentation before a London listing of the same share arrives. AIM is its own
         // venue code, so the growth market is a market identifier here rather than a segment of XLON.
@@ -450,6 +456,31 @@ public static class EquityMarketCatalog
             new(9, 30),
             new(16, 0),
             new(16, 0),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null
+        );
+
+    private static EquityMarket Indian(
+        string code,
+        string name,
+        string mic,
+        string suffix,
+        string exchange
+    ) =>
+        new(
+            code,
+            name,
+            "IN",
+            [mic],
+            "INR",
+            suffix,
+            exchange,
+            "Asia/Kolkata",
+            new(9, 15),
+            new(15, 30),
+            new(15, 30),
             DirectorySource: null,
             DelayedTradeSource: null,
             DelayedTradeLocationCode: null,
