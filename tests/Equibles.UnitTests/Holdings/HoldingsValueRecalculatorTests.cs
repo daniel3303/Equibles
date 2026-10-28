@@ -161,7 +161,7 @@ public class HoldingsValueRecalculatorTests
         // OTC issue without a Yahoo feed) would loop ValuePending=true forever, dragging
         // every nightly Recalculate run through a request set that grows unboundedly
         // across quarters. The 30-day delay on RetryDelays[2] caps the worst-case wait at
-        // ~38 days (1 + 7 + 30) before the row resolves to "give up with Value=0", which
+        // ~68 days (1 + 7 + 30 to the last rung, then its 30) before the row resolves to "give up", which
         // is what the dashboards then surface as "price unavailable" rather than
         // pretending the position is worth $0. The asymmetric risk a regression could
         // introduce: flipping `>` to `>=` in the give-up check would give up one cycle

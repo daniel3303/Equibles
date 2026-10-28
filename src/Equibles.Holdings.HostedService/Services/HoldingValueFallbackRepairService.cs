@@ -325,7 +325,9 @@ public class HoldingValueFallbackRepairService
 
         var stockIds = rows.Select(h => h.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
-            await StockSplitQueries.ForIssuers(dbContext, stockIds).ToListAsync(cancellationToken)
+            await StockSplitQueries
+                .EffectiveForIssuers(dbContext, stockIds, DateOnly.FromDateTime(DateTime.UtcNow))
+                .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());

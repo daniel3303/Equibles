@@ -40,6 +40,22 @@ public class StockSplitQueriesTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         factor.Should().Be(1m / 50m);
     }
 
+    [Fact]
+    public async Task EffectiveForIssuers_LeavesOutASplitAnnouncedForLater()
+    {
+        var issuerId = await SeedIssuerWithListedSplit();
+
+        var effectiveBefore = await StockSplitQueries
+            .EffectiveForIssuers(DbContext, [issuerId], new DateOnly(2026, 8, 2))
+            .ToListAsync();
+        var effectiveOn = await StockSplitQueries
+            .EffectiveForIssuers(DbContext, [issuerId], new DateOnly(2026, 8, 3))
+            .ToListAsync();
+
+        effectiveBefore.Should().BeEmpty();
+        effectiveOn.Should().ContainSingle().Which.Listing.Should().NotBeNull();
+    }
+
     // Negative control: without the include, the same shape lazy-loads on the disposed context
     // and throws, which is the production failure the helper exists to prevent.
     [Fact]

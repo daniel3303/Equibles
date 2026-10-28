@@ -872,7 +872,7 @@ public class HoldingsImportService
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var splits = await StockSplitQueries
-            .ForIssuers(dbContext, stockIds)
+            .EffectiveForIssuers(dbContext, stockIds, DateOnly.FromDateTime(DateTime.UtcNow))
             .ToListAsync(cancellationToken);
 
         context.StockSplits = splits

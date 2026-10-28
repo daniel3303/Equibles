@@ -22,6 +22,22 @@ public class HoldingsValueRecalculator
         TimeSpan.FromDays(30),
     ];
 
+    // A row pending longer than the whole ladder has had every retry its age allows. A re-import or
+    // repair that restarted its count must not hold its filed value back for another full ladder:
+    // a 13F replay once put 4.3M rows pending since May back on the first rung. The full run is one
+    // wait per rung up to the last, then the last rung's own wait (1 + 7 + 30 + 30 days), so an
+    // unrestarted row settles on its last rung before the age bound applies.
+    internal static readonly TimeSpan LadderSpan = RetryDelays.Aggregate(
+        RetryDelays[^1],
+        (sum, delay) => sum + delay
+    );
+
+    // Settling loads each row with its manager legs and re-sums every touched filing, so a large
+    // backlog drains over several passes instead of one that holds the bulk cycle for hours.
+    internal const int MaxSettledRowsPerPass = 500_000;
+
+    internal int SettledRowsPerPass { get; init; } = MaxSettledRowsPerPass;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IStockPriceProvider _stockPriceProvider;
     private readonly ILogger<HoldingsValueRecalculator> _logger;
@@ -40,7 +56,8 @@ public class HoldingsValueRecalculator
     /// <summary>
     /// Recalculates Value for all holdings with ValuePending = true
     /// where a Yahoo stock price is now available. Uses exponential backoff
-    /// (1 day, 1 week, 1 month) and gives up after 3 failed retries.
+    /// (1 day, 1 week, 1 month) and gives up after 3 failed retries, or once a row has been
+    /// pending longer than the whole ladder.
     /// </summary>
     public async Task Recalculate(CancellationToken cancellationToken)
     {
@@ -94,7 +111,11 @@ public class HoldingsValueRecalculator
         var pendingStockIds = pendingPairs.Select(p => p.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
             await StockSplitQueries
-                .ForIssuers(lookupContext, pendingStockIds)
+                .EffectiveForIssuers(
+                    lookupContext,
+                    pendingStockIds,
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                )
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.EquityIssuerId)
@@ -209,11 +230,14 @@ public class HoldingsValueRecalculator
     )
     {
         var totalGivenUp = 0;
+        var deferredExhaustedPairs = 0;
         var settledAccessions = new HashSet<string>();
         var settledReportDates = new HashSet<DateOnly>();
         var exhaustedPairs =
             unresolvedPairs.Count == 0 ? [] : await LoadExhaustedPairs(now, cancellationToken);
-        foreach (var pair in unresolvedPairs)
+        // Newest quarters first, so a pass that spends its settling budget clears the quarters
+        // surfaces read most.
+        foreach (var pair in unresolvedPairs.OrderByDescending(pair => pair.ReportDate))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -233,12 +257,16 @@ public class HoldingsValueRecalculator
                 )
                 .Where(RetryDue(now));
 
-            // Only a row on the last rung changes shape and needs its manager legs loaded. It is
-            // settled before the climb below so a row stepped onto that rung now is not re-read.
-            if (exhaustedPairs.Contains(pair))
+            // Only an exhausted row changes shape and needs its manager legs loaded. It is settled
+            // before the climb below so a row stepped onto the last rung now is not re-read.
+            if (exhaustedPairs.Contains(pair) && totalGivenUp >= SettledRowsPerPass)
+            {
+                deferredExhaustedPairs++;
+            }
+            else if (exhaustedPairs.Contains(pair))
             {
                 var exhausted = await dueRows
-                    .Where(h => h.ValueRetryCount >= MaxRetries)
+                    .Where(LadderExhausted(now))
                     .Include(h => h.ManagerEntries)
                     .ToListAsync(cancellationToken);
                 foreach (var holding in exhausted)
@@ -269,6 +297,14 @@ public class HoldingsValueRecalculator
 
             await ClimbOneRung(dbContext, dueRows, now, cancellationToken);
         }
+        if (deferredExhaustedPairs > 0)
+        {
+            _logger.LogInformation(
+                "Settled {Settled} exhausted holding(s), this pass's budget; {Deferred} pair(s) with exhausted rows wait for the next pass",
+                totalGivenUp,
+                deferredExhaustedPairs
+            );
+        }
         // One rollup pass for everything that settled this cycle — the per-accession re-sum
         // scans every position of every touched filing, so running it once per pair repeated
         // that scan for every pair in the pass.
@@ -276,8 +312,9 @@ public class HoldingsValueRecalculator
         return totalGivenUp;
     }
 
-    // Every due row below the last rung only gains a step and a stamp: one UPDATE per pair,
+    // Every due row that is not exhausted only gains a step and a stamp: one UPDATE per pair,
     // not a load, a tracked change and a statement per row (millions of rows in a retry wave).
+    // An exhausted row left for a later pass by the settling budget is not stamped meanwhile.
     private static async Task ClimbOneRung(
         EquiblesFinancialDbContext dbContext,
         IQueryable<InstitutionalHolding> dueRows,
@@ -285,7 +322,10 @@ public class HoldingsValueRecalculator
         CancellationToken cancellationToken
     )
     {
-        var climbing = dueRows.Where(h => h.ValueRetryCount < MaxRetries);
+        var outlived = now - LadderSpan;
+        var climbing = dueRows.Where(h =>
+            h.ValueRetryCount < MaxRetries && h.CreationTime > outlived
+        );
         if (dbContext.Database.IsRelational())
         {
             await climbing.ExecuteUpdateAsync(
@@ -306,7 +346,7 @@ public class HoldingsValueRecalculator
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    // The pairs holding a due row on the ladder's last rung; every other pair needs no entity load.
+    // The pairs holding a due exhausted row; every other pair needs no entity load.
     private async Task<
         HashSet<(Guid CommonStockId, string ListedTicker, DateOnly ReportDate)>
     > LoadExhaustedPairs(DateTime now, CancellationToken cancellationToken)
@@ -316,9 +356,8 @@ public class HoldingsValueRecalculator
         ExtendCommandTimeout(dbContext);
         var pairs = await dbContext
             .Set<InstitutionalHolding>()
-            .Where(h =>
-                h.ValuePending && h.ShareType == ShareType.Shares && h.ValueRetryCount >= MaxRetries
-            )
+            .Where(h => h.ValuePending && h.ShareType == ShareType.Shares)
+            .Where(LadderExhausted(now))
             .Where(RetryDue(now))
             .Select(h => new
             {
@@ -504,8 +543,9 @@ public class HoldingsValueRecalculator
     }
 
     // The ladder as a predicate: a row is due once its anchor (last retry, else creation) plus
-    // the delay for its retry count has passed. Mirrors the in-memory gate over RetryDelays, one
-    // branch per step; a fourth step would need a fourth branch here.
+    // the delay for its retry count has passed, or once it has outlived the whole ladder. Mirrors
+    // the in-memory gate over RetryDelays, one branch per step; a fourth step would need a fourth
+    // branch here.
     internal static System.Linq.Expressions.Expression<Func<InstitutionalHolding, bool>> RetryDue(
         DateTime now
     )
@@ -513,10 +553,23 @@ public class HoldingsValueRecalculator
         var first = now - RetryDelays[0];
         var second = now - RetryDelays[1];
         var later = now - RetryDelays[MaxRetries - 1];
+        var outlived = now - LadderSpan;
         return h =>
             (h.ValueRetryCount == 0 && (h.ValueLastRetryAt ?? h.CreationTime) <= first)
             || (h.ValueRetryCount == 1 && (h.ValueLastRetryAt ?? h.CreationTime) <= second)
-            || (h.ValueRetryCount >= 2 && (h.ValueLastRetryAt ?? h.CreationTime) <= later);
+            || (h.ValueRetryCount >= 2 && (h.ValueLastRetryAt ?? h.CreationTime) <= later)
+            || h.CreationTime <= outlived;
+    }
+
+    // A due row the unresolved pass settles instead of climbing: on the last rung, or pending
+    // since before the whole ladder could have run. CreationTime survives re-imports, so the age
+    // bound holds even when a replay restarted the count.
+    internal static System.Linq.Expressions.Expression<
+        Func<InstitutionalHolding, bool>
+    > LadderExhausted(DateTime now)
+    {
+        var outlived = now - LadderSpan;
+        return h => h.ValueRetryCount >= MaxRetries || h.CreationTime <= outlived;
     }
 
     /// <summary>

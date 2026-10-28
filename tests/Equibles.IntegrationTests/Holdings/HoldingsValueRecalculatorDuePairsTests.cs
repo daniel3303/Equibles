@@ -43,7 +43,9 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
         return ctx;
     }
 
-    private HoldingsValueRecalculator CreateRecalculator()
+    private HoldingsValueRecalculator CreateRecalculator(
+        int settledRowsPerPass = HoldingsValueRecalculator.MaxSettledRowsPerPass
+    )
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory
@@ -60,7 +62,10 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
             scopeFactory,
             _priceProvider,
             Substitute.For<ILogger<HoldingsValueRecalculator>>()
-        );
+        )
+        {
+            SettledRowsPerPass = settledRowsPerPass,
+        };
     }
 
     private static InstitutionalHolding Pending(
@@ -216,5 +221,139 @@ public class HoldingsValueRecalculatorDuePairsTests : IAsyncLifetime
         rows[resting.Id]
             .ValueLastRetryAt.Should()
             .BeCloseTo(resting.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+    }
+
+    // The production backlog: rows pending since May that a 13F replay put back on the first rung,
+    // stamped two days ago. Pending longer than the whole 68-day ladder, they settle on this pass
+    // whatever their count says. Rows inside the ladder's span keep the ladder exactly: a young row
+    // waits for its step, a 50-day-old row on rung 2 climbs to the last rung, and one on the last
+    // rung retried 10 days ago keeps waiting out its final 30 days.
+    [Fact]
+    public async Task Recalculate_UnpricedRowsPendingLongerThanTheLadder_SettleDespiteARestartedCount()
+    {
+        var now = DateTime.UtcNow;
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "OLD", Name: "Old");
+        InstitutionalHolder Holder(string cik) =>
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Cik = cik,
+                Name = "Filer " + cik,
+            };
+        var filedHolder = Holder("3000001");
+        var unfiledHolder = Holder("3000002");
+        var youngHolder = Holder("3000003");
+        var climbingHolder = Holder("3000004");
+        var lastRungHolder = Holder("3000005");
+        var outlivedFiled = Pending(issuer, filedHolder, now.AddDays(-2));
+        outlivedFiled.CreationTime = now.AddDays(-150);
+        outlivedFiled.FiledValue = 7_500L;
+        var outlivedUnfiled = Pending(issuer, unfiledHolder, now.AddDays(-2));
+        outlivedUnfiled.CreationTime = now.AddDays(-150);
+        var young = Pending(issuer, youngHolder, now.AddDays(-2));
+        young.CreationTime = now.AddDays(-10);
+        young.FiledValue = 2_000L;
+        var climbing = Pending(issuer, climbingHolder, now.AddDays(-31));
+        climbing.CreationTime = now.AddDays(-50);
+        climbing.ValueRetryCount = 2;
+        climbing.FiledValue = 3_000L;
+        var lastRung = Pending(issuer, lastRungHolder, now.AddDays(-10));
+        lastRung.CreationTime = now.AddDays(-50);
+        lastRung.ValueRetryCount = 3;
+        lastRung.FiledValue = 4_000L;
+        var seed = CreateSharedContext();
+        seed.Set<EquityIssuer>().Add(issuer);
+        seed.Set<InstitutionalHolder>()
+            .AddRange(filedHolder, unfiledHolder, youngHolder, climbingHolder, lastRungHolder);
+        seed.Set<InstitutionalHolding>()
+            .AddRange(outlivedFiled, outlivedUnfiled, young, climbing, lastRung);
+        await seed.SaveChangesAsync();
+        _priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
+
+        await CreateRecalculator().Recalculate(CancellationToken.None);
+
+        var rows = await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .ToDictionaryAsync(h => h.Id);
+        rows[outlivedFiled.Id].ValuePending.Should().BeFalse();
+        rows[outlivedFiled.Id].ValueSource.Should().Be(ValueSource.Filed);
+        rows[outlivedFiled.Id].Value.Should().Be(7_500L);
+        rows[outlivedUnfiled.Id].ValuePending.Should().BeFalse();
+        rows[outlivedUnfiled.Id].ValueUnavailable.Should().BeTrue();
+        rows[young.Id].ValuePending.Should().BeTrue();
+        rows[young.Id].ValueRetryCount.Should().Be(1);
+        rows[young.Id]
+            .ValueLastRetryAt.Should()
+            .BeCloseTo(young.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+        rows[climbing.Id].ValuePending.Should().BeTrue();
+        rows[climbing.Id].ValueRetryCount.Should().Be(3);
+        rows[lastRung.Id].ValuePending.Should().BeTrue();
+        rows[lastRung.Id].ValueRetryCount.Should().Be(3);
+        rows[lastRung.Id]
+            .ValueLastRetryAt.Should()
+            .BeCloseTo(lastRung.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+    }
+
+    // A pass settles at most its budget, newest quarter first. The quarter it leaves for later is
+    // neither stamped nor climbed meanwhile, and settles on the next pass.
+    [Fact]
+    public async Task Recalculate_SettlingBudgetSpent_LeavesOlderQuartersUntouchedForTheNextPass()
+    {
+        var now = DateTime.UtcNow;
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "BIG", Name: "Big");
+        var holder = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "4000001",
+            Name = "Filer",
+        };
+        var newer = Pending(issuer, holder, now.AddDays(-2));
+        newer.CreationTime = now.AddDays(-150);
+        newer.FiledValue = 1_000L;
+        var older = Pending(issuer, holder, now.AddDays(-2));
+        older.ReportDate = ReportDate.AddMonths(-3);
+        older.CreationTime = now.AddDays(-150);
+        older.FiledValue = 2_000L;
+        var seed = CreateSharedContext();
+        seed.Set<EquityIssuer>().Add(issuer);
+        seed.Set<InstitutionalHolder>().Add(holder);
+        seed.Set<InstitutionalHolding>().AddRange(newer, older);
+        await seed.SaveChangesAsync();
+        _priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
+
+        await CreateRecalculator(settledRowsPerPass: 1).Recalculate(CancellationToken.None);
+
+        var afterFirst = await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .ToDictionaryAsync(h => h.Id);
+        afterFirst[newer.Id].ValuePending.Should().BeFalse();
+        afterFirst[newer.Id].Value.Should().Be(1_000L);
+        afterFirst[older.Id].ValuePending.Should().BeTrue();
+        afterFirst[older.Id].ValueRetryCount.Should().Be(1);
+        afterFirst[older.Id]
+            .ValueLastRetryAt.Should()
+            .BeCloseTo(older.ValueLastRetryAt!.Value, TimeSpan.FromMilliseconds(1));
+
+        await CreateRecalculator(settledRowsPerPass: 1).Recalculate(CancellationToken.None);
+
+        var afterSecond = await CreateSharedContext()
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .FirstAsync(h => h.Id == older.Id);
+        afterSecond.ValuePending.Should().BeFalse();
+        afterSecond.ValueSource.Should().Be(ValueSource.Filed);
+        afterSecond.Value.Should().Be(2_000L);
     }
 }
