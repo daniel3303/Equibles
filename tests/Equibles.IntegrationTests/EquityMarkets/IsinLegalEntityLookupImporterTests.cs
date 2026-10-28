@@ -191,6 +191,32 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
         await gleif.Received(1).GetIsinsForLei(Lei, Arg.Any<CancellationToken>());
     }
 
+    // An answer asked by the LEI never lists the row's own ISIN, so it is not GLEIF's mapping of that ISIN;
+    // once the issuer no longer holds the LEI the ISIN is asked again by itself.
+    [Fact]
+    public async Task AnLeiAnswerIsAskedAgainByIsinOnceTheIssuerNoLongerHoldsThatLei()
+    {
+        await using var services = Services();
+        await SeedListing(services);
+        await HoldLei();
+        var gleif = Gleif();
+        gleif.GetIsinsForLei(Lei, Arg.Any<CancellationToken>()).Returns(LeiAnswer());
+        gleif
+            .GetIssuerForIsin(Isin, Arg.Any<CancellationToken>())
+            .Returns(new GleifIssuerIdentity { RequestedIsin = Isin });
+        var importer = Importer(services, gleif);
+        (await importer.Refresh(CancellationToken.None)).Should().Be(1);
+
+        await HoldLei(null);
+
+        (await importer.Refresh(CancellationToken.None)).Should().Be(1);
+        (await importer.Refresh(CancellationToken.None)).Should().Be(0);
+        DbContext.ChangeTracker.Clear();
+        var lookup = await DbContext.Set<IsinLegalEntityLookup>().SingleAsync();
+        (lookup.LegalEntityIdentifier, lookup.RelatedIsins.Count).Should().Be((null, 0));
+        await gleif.Received(1).GetIssuerForIsin(Isin, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AFailedLeiAnswerWaitsForItsRetry()
     {
@@ -214,10 +240,11 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
             .BeCloseTo(DateTime.UtcNow.AddDays(1), TimeSpan.FromMinutes(5));
     }
 
-    private async Task HoldLei()
+    private async Task HoldLei(string lei = Lei)
     {
+        DbContext.ChangeTracker.Clear();
         var issuer = await DbContext.Set<EquityIssuer>().SingleAsync();
-        issuer.LegalEntityIdentifier = Lei;
+        issuer.LegalEntityIdentifier = lei;
         await DbContext.SaveChangesAsync();
     }
 
