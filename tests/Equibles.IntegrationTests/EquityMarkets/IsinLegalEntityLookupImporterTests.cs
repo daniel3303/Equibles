@@ -138,22 +138,107 @@ public class IsinLegalEntityLookupImporterTests(ParadeDbFixture fixture)
         (await importer.Refresh(CancellationToken.None)).Should().Be(0);
     }
 
+    // GLEIF relates no ISIN of some registers (India's) to their company, so an issuer holding an LEI is
+    // answered with the ISINs GLEIF relates to that LEI, such as its American depositary receipt.
     [Fact]
-    public async Task AnIssuerWithAnLeiIsNeverLookedUp()
+    public async Task AnIssuerWithAnLeiIsAnsweredWithTheIsinsGleifRelatesToThatLei()
     {
         await using var services = Services();
         await SeedListing(services);
+        await HoldLei();
+        var gleif = Gleif();
+        gleif.GetIsinsForLei(Lei, Arg.Any<CancellationToken>()).Returns(LeiAnswer());
+        var importer = Importer(services, gleif);
+
+        (await importer.Refresh(CancellationToken.None)).Should().Be(1);
+        (await importer.Refresh(CancellationToken.None)).Should().Be(0);
+
+        DbContext.ChangeTracker.Clear();
+        var lookup = await DbContext.Set<IsinLegalEntityLookup>().SingleAsync();
+        lookup.LegalEntityIdentifier.Should().Be(Lei);
+        lookup.RelatedIsins.Should().Equal("US01609W1027");
+        lookup.RelatedIsinCount.Should().Be(1);
+        lookup.SourceRecordId.Should().NotBeNull();
+        lookup.NextAttemptAt.Should().BeAfter(DateTime.UtcNow.AddDays(29));
+        await gleif.DidNotReceiveWithAnyArgs().GetIssuerForIsin(default, default);
+        (await DbContext.Set<EquityIssuer>().SingleAsync()).LegalEntityIdentifier.Should().Be(Lei);
+    }
+
+    // The ISIN was answered before its issuer held an LEI; the LEI's own ISINs are asked for at once rather
+    // than at the next monthly refresh.
+    [Fact]
+    public async Task AnAnswerFromBeforeTheIssuerHeldItsLeiIsAskedAgainByThatLei()
+    {
+        await using var services = Services();
+        await SeedListing(services);
+        var gleif = Gleif();
+        gleif
+            .GetIssuerForIsin(Isin, Arg.Any<CancellationToken>())
+            .Returns(new GleifIssuerIdentity { RequestedIsin = Isin });
+        gleif.GetIsinsForLei(Lei, Arg.Any<CancellationToken>()).Returns(LeiAnswer());
+        var importer = Importer(services, gleif);
+        (await importer.Refresh(CancellationToken.None)).Should().Be(1);
+
+        await HoldLei();
+
+        (await importer.Refresh(CancellationToken.None)).Should().Be(1);
+        (await importer.Refresh(CancellationToken.None)).Should().Be(0);
+        DbContext.ChangeTracker.Clear();
+        var lookup = await DbContext.Set<IsinLegalEntityLookup>().SingleAsync();
+        (lookup.LegalEntityIdentifier, lookup.RelatedIsins.Single())
+            .Should()
+            .Be((Lei, "US01609W1027"));
+        await gleif.Received(1).GetIsinsForLei(Lei, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AFailedLeiAnswerWaitsForItsRetry()
+    {
+        await using var services = Services();
+        await SeedListing(services);
+        await HoldLei();
+        var gleif = Gleif();
+        gleif
+            .GetIsinsForLei(Lei, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Service unavailable"));
+        var importer = Importer(services, gleif);
+
+        (await importer.Refresh(CancellationToken.None)).Should().Be(1);
+        (await importer.Refresh(CancellationToken.None)).Should().Be(0);
+
+        DbContext.ChangeTracker.Clear();
+        var lookup = await DbContext.Set<IsinLegalEntityLookup>().SingleAsync();
+        (lookup.LegalEntityIdentifier, lookup.SourceRecordId).Should().Be((null, (Guid?)null));
+        lookup
+            .NextAttemptAt.Should()
+            .BeCloseTo(DateTime.UtcNow.AddDays(1), TimeSpan.FromMinutes(5));
+    }
+
+    private async Task HoldLei()
+    {
         var issuer = await DbContext.Set<EquityIssuer>().SingleAsync();
         issuer.LegalEntityIdentifier = Lei;
         await DbContext.SaveChangesAsync();
-        var gleif = Gleif();
-        var importer = new IsinLegalEntityLookupImporter(
+    }
+
+    private static GleifIssuerIdentity LeiAnswer() =>
+        new()
+        {
+            RequestedLei = Lei,
+            LegalEntityIdentifier = Lei,
+            LegalName = "Alibaba Group Holding Limited",
+            RelatedIsins = ["US01609W1027"],
+            RelatedIsinCount = 1,
+            SourceUrl = new Uri("https://api.gleif.org/api/v1/lei-records/" + Lei),
+        };
+
+    private static IsinLegalEntityLookupImporter Importer(
+        ServiceProvider services,
+        GleifIdentityClient gleif
+    ) =>
+        new(
             services.GetRequiredService<IServiceScopeFactory>(),
             gleif,
             NullLogger<IsinLegalEntityLookupImporter>()
         );
-
-        (await importer.Refresh(CancellationToken.None)).Should().Be(0);
-        await gleif.DidNotReceiveWithAnyArgs().GetIssuerForIsin(default, default);
-    }
 }
