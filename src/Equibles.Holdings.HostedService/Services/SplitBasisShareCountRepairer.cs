@@ -212,10 +212,9 @@ internal static class SplitBasisShareCountRepairer
         foreach (
             var position in rows.Where(row => MayClassify(row.Holding))
                 .GroupBy(row => positionKey(row.Holding))
+                .Where(position => inputs.CorroboratedPositions.Contains(position.Key))
         )
         {
-            if (!inputs.CorroboratedPositions.Contains(position.Key))
-                continue;
             var legs = position.ToList();
             var first = legs[0].Holding;
             if (

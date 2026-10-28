@@ -164,8 +164,9 @@ public class SplitBasisHoldingRepairService
             cancellationToken
         );
 
-        var suspects = new List<(InstitutionalHolding Holding, decimal Factor, decimal Price)>();
-        foreach (var holding in candidates.Values)
+        // A candidate's straddled ratio and its quarter's price on the report-date basis, or null
+        // when either cannot be stated honestly (the recalculator's own deferral gates).
+        (decimal Factor, decimal Price)? ReportBasis(InstitutionalHolding holding)
         {
             if (
                 !prices.TryGetValue(
@@ -183,19 +184,26 @@ public class SplitBasisHoldingRepairService
                 )
                     is not { } factor
             )
-                continue;
-            var price = reportFactor * closePrice;
-            if (
-                SplitBasisShareCountRepairer.Classify(
-                    holding.Shares,
-                    holding.FiledValue ?? 0L,
+                return null;
+            return (factor, reportFactor * closePrice);
+        }
+
+        var suspects = candidates
+            .Values.Select(holding => (Holding: holding, Basis: ReportBasis(holding)))
+            .Where(candidate =>
+                candidate.Basis is (var factor, var price)
+                && SplitBasisShareCountRepairer.Classify(
+                    candidate.Holding.Shares,
+                    candidate.Holding.FiledValue ?? 0L,
                     price,
                     factor,
                     neighbourShares: null
                 ) != null
             )
-                suspects.Add((holding, factor, price));
-        }
+            .Select(candidate =>
+                (candidate.Holding, candidate.Basis.Value.Factor, candidate.Basis.Value.Price)
+            )
+            .ToList();
         if (suspects.Count == 0)
         {
             _logger.LogInformation(
