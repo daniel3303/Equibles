@@ -11,8 +11,9 @@ public static class TickerNormalizer
 
     /// <summary>
     /// Canonical exact-listing symbol accepted from authoritative directories. Every symbol is
-    /// bounded to the database/API contract and contains only ASCII letters, digits, dots, and
-    /// dashes with at least one alphanumeric character.
+    /// bounded to the database/API contract and contains only ASCII letters, digits, dots, dashes
+    /// and ampersands (a venue spelling such as NSE's M&amp;M) with at least one alphanumeric
+    /// character. Callers encode it in URLs like any other route or query value.
     /// </summary>
     public static string NormalizeListed(string ticker)
     {
@@ -24,7 +25,10 @@ public static class TickerNormalizer
             trimmed.Length > MaxListedLength
             || !trimmed.Any(character => char.IsAsciiLetterOrDigit(character))
             || trimmed.Any(character =>
-                !char.IsAsciiLetterOrDigit(character) && character != '-' && character != '.'
+                !char.IsAsciiLetterOrDigit(character)
+                && character != '-'
+                && character != '.'
+                && character != '&'
             )
         )
             return null;

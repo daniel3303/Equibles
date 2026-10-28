@@ -57,8 +57,8 @@ public class EquityListingSymbolTests
     [Fact]
     public void DisplayForm_CanNeverCollideWithAListedTicker()
     {
-        // A directory ticker may hold only ASCII letters, digits, dots and dashes, so the colon
-        // in a venue-qualified symbol is proof it is not a ticker.
+        // A directory ticker may hold only ASCII letters, digits, dots, dashes and ampersands, so
+        // the colon in a venue-qualified symbol is proof it is not a ticker.
         TickerNormalizer.NormalizeListed("XPAR:AIR").Should().BeNull();
     }
 
@@ -66,6 +66,7 @@ public class EquityListingSymbolTests
     [InlineData("XPAR:AIR", "XPAR", "AIR")]
     [InlineData(" xlon:bt-a ", "XLON", "BT-A")]
     [InlineData("XHKG:00005", "XHKG", "00005")]
+    [InlineData("XNSE:M&M", "XNSE", "M&M")]
     public void TryParse_ReadsTheDisplaySpellingBack(string symbol, string mic, string ticker)
     {
         EquityListingSymbol
