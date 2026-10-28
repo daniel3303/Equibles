@@ -36,11 +36,7 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
 
     public SplitBasisHoldingRepairServiceTests(ParadeDbFixture fixture) => _fixture = fixture;
 
-    public async Task InitializeAsync()
-    {
-        await _fixture.ResetAsync();
-        SplitBasisHoldingRepairService.ResetFrontier();
-    }
+    public Task InitializeAsync() => _fixture.ResetAsync();
 
     public Task DisposeAsync()
     {
@@ -130,7 +126,7 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
         InstitutionalHolding LateCount,
         InstitutionalHolding LateValue,
         InstitutionalHolding Consistent
-    )> SeedBroadcomQuarter(decimal close = Close)
+    )> SeedBroadcomQuarter(decimal close = Close, Guid? splitId = null)
     {
         var seed = CreateSharedContext();
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -244,6 +240,7 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
         seed.Add(
             new StockSplit
             {
+                Id = splitId ?? Guid.NewGuid(),
                 EquityIssuerId = issuer.Id,
                 EquityListingId = issuer.Presentation.EquityListingId,
                 PriceSeriesTicker = "AVGO",
@@ -308,6 +305,71 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
         rows[lateCount.Id].ValueSource.Should().Be(ValueSource.Derived);
         rows[lateValue.Id].Value.Should().Be((long)(722_279 * 10 * Close));
         rows[lateValue.Id].ValueSource.Should().Be(ValueSource.Derived);
+    }
+
+    // Splits with no straddling position fill the first batches ahead of Broadcom's.
+    private async Task SeedSplitsWithoutPositions(int count)
+    {
+        var seed = CreateSharedContext();
+        for (var i = 1; i <= count; i++)
+        {
+            var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: $"NONE{i}",
+                Name: $"Issuer without positions {i}"
+            );
+            seed.Set<EquityIssuer>().Add(issuer);
+            await seed.SaveChangesAsync();
+            seed.Add(
+                new StockSplit
+                {
+                    Id = Guid.Parse($"00000000-0000-0000-0000-{i:D12}"),
+                    EquityIssuerId = issuer.Id,
+                    EquityListingId = issuer.Presentation.EquityListingId,
+                    PriceSeriesTicker = $"NONE{i}",
+                    EffectiveDate = SplitDate,
+                    Numerator = 2m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.External,
+                    PriceAdjustmentAppliedTime = new DateTime(
+                        2024,
+                        7,
+                        16,
+                        0,
+                        0,
+                        0,
+                        DateTimeKind.Utc
+                    ),
+                    ShareCountEvidence = StockSplitShareCountEvidence.Confirmed,
+                }
+            );
+        }
+        await seed.SaveChangesAsync();
+    }
+
+    // The worker restarts several times a day, so a sweep that stopped after one batch per cycle
+    // never reached a split past the first batch.
+    [Fact]
+    public async Task Repair_SplitBeyondTheFirstBatch_IsCorrectedInTheSameSweep()
+    {
+        var (lateCount, lateValue, _) = await SeedBroadcomQuarter(
+            splitId: Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+        );
+        await SeedSplitsWithoutPositions(2);
+        var service = new SplitBasisHoldingRepairService(
+            CreateScopeFactory(),
+            _priceProvider,
+            Substitute.For<ILogger<SplitBasisHoldingRepairService>>()
+        )
+        {
+            SplitsPerBatch = 1,
+        };
+
+        var corrected = await service.Repair(CancellationToken.None);
+
+        corrected.Should().Be(2);
+        var rows = await Reload();
+        rows[lateCount.Id].Shares.Should().Be(542_974);
+        rows[lateValue.Id].FiledValue.Should().Be(1_159_640_600);
     }
 
     [Fact]

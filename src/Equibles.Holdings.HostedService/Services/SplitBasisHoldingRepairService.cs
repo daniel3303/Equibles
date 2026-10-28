@@ -18,8 +18,8 @@ namespace Equibles.Holdings.HostedService.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Walks every applied split with a wrap-around frontier and judges the issuer's positions whose
-/// quarter ended shortly before the split and whose filing came after it. Only a position whose
+/// Each call walks every applied split, a bounded batch at a time, and judges the issuer's
+/// positions whose quarter ended shortly before the split and whose filing came after it. Only a position whose
 /// figures disagree by the split's ratio loads its holder's neighbouring quarters, so a pass reads
 /// candidates, not the issuer's whole book.
 /// </para>
@@ -32,16 +32,14 @@ namespace Equibles.Holdings.HostedService.Services;
 [Service]
 public class SplitBasisHoldingRepairService
 {
-    // The whole history holds about 2.3M straddling positions, so the first sweep takes about ten
-    // passes and later sweeps read without writing.
-    internal const int MaxCandidatesPerPass = 250_000;
+    // The whole history holds about 2.3M straddling positions, so a sweep takes about ten batches
+    // and, once the history is corrected, reads without writing.
+    internal const int MaxCandidatesPerBatch = 250_000;
 
     // The latest quarter a filing can straddle, with room for late filers and amendments.
     internal const int CandidateWindowDays = 100;
 
     private const int SplitPageSize = 1_000;
-
-    private static Guid _frontier = Guid.Empty;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IStockPriceProvider _stockPriceProvider;
@@ -58,13 +56,14 @@ public class SplitBasisHoldingRepairService
         _logger = logger;
     }
 
-    internal static void ResetFrontier() => _frontier = Guid.Empty;
+    internal int SplitsPerBatch { get; init; } = SplitPageSize;
 
     // Guid.CompareTo is the only way to express the frontier in LINQ; Npgsql renders it as >.
     internal static IQueryable<SplitWindow> BuildSplitPageQuery(
         EquiblesFinancialDbContext dbContext,
         Guid frontier,
-        DateOnly today
+        DateOnly today,
+        int pageSize = SplitPageSize
     ) =>
         StockSplitQueries
             .AppliedEffective(dbContext, today)
@@ -76,7 +75,7 @@ public class SplitBasisHoldingRepairService
                 EquityIssuerId = split.EquityIssuerId,
                 EffectiveDate = split.EffectiveDate,
             })
-            .Take(SplitPageSize);
+            .Take(pageSize);
 
     internal static IQueryable<InstitutionalHolding> BuildCandidateQuery(
         EquiblesFinancialDbContext dbContext,
@@ -115,7 +114,24 @@ public class SplitBasisHoldingRepairService
             });
     }
 
+    // The sweep restarts from the first split on every call: the worker restarts several times a
+    // day, so a frontier kept in memory between cycles never got past the first batch.
     public async Task<int> Repair(CancellationToken cancellationToken)
+    {
+        var corrected = 0;
+        var frontier = Guid.Empty;
+        do
+        {
+            (var batch, frontier) = await RepairBatch(frontier, cancellationToken);
+            corrected += batch;
+        } while (frontier != Guid.Empty);
+        return corrected;
+    }
+
+    private async Task<(int Corrected, Guid Frontier)> RepairBatch(
+        Guid frontier,
+        CancellationToken cancellationToken
+    )
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -123,7 +139,7 @@ public class SplitBasisHoldingRepairService
             dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var splits = await BuildSplitPageQuery(dbContext, _frontier, today)
+        var splits = await BuildSplitPageQuery(dbContext, frontier, today, SplitsPerBatch)
             .ToListAsync(cancellationToken);
         var candidates = new Dictionary<Guid, InstitutionalHolding>();
         var walked = 0;
@@ -140,15 +156,15 @@ public class SplitBasisHoldingRepairService
             )
                 candidates.TryAdd(holding.Id, holding);
             walked++;
-            if (candidates.Count >= MaxCandidatesPerPass)
+            if (candidates.Count >= MaxCandidatesPerBatch)
                 break;
         }
-        _frontier =
-            walked == splits.Count && splits.Count < SplitPageSize
+        var next =
+            walked == splits.Count && splits.Count < SplitsPerBatch
                 ? Guid.Empty
                 : splits[walked - 1].Id;
         if (candidates.Count == 0)
-            return 0;
+            return (0, next);
 
         var bases = await IssuerBases.Load(
             dbContext,
@@ -212,7 +228,7 @@ public class SplitBasisHoldingRepairService
                 candidates.Count,
                 walked
             );
-            return 0;
+            return (0, next);
         }
 
         var judged = await KeepCorroboratedQuarters(dbContext, suspects, cancellationToken);
@@ -320,7 +336,7 @@ public class SplitBasisHoldingRepairService
             ),
             deferred
         );
-        return corrected.Count;
+        return (corrected.Count, next);
     }
 
     // Legs are updated in place, never cleared and re-added (manager-entry key budget).
