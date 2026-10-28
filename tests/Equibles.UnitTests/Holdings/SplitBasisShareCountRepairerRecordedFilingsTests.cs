@@ -162,6 +162,20 @@ public class SplitBasisShareCountRepairerRecordedFilingsTests
         replay.Rows.Select(Snapshot).Should().Equal(before);
     }
 
+    // A quarter whose other holders do not confirm the price basis may be priced on the wrong
+    // side of the split itself, so nothing in it is rebased.
+    [Fact]
+    public void QuarterNotConfirmingItsPriceBasis_LeavesTheFilingAsFiled()
+    {
+        var replay = Replay("0001085146-24-003837.json");
+        var before = replay.Rows.Select(Snapshot).ToList();
+
+        var corrections = replay.Repair(neighbourQuarters: ["2024-03-31"], basisConfirmed: false);
+
+        corrections.Should().BeEmpty();
+        replay.Rows.Select(Snapshot).Should().Equal(before);
+    }
+
     private static (long, long, long?, long, long, bool, ValueSource) Snapshot(
         BufferedHoldingRow row
     ) =>
@@ -189,8 +203,11 @@ public class SplitBasisShareCountRepairerRecordedFilingsTests
             Rows.Where(row => row.Holding.Cusip != cusip).ToList();
 
         // The import's own neighbour restatement over the holder's stored quarters, limited to the
-        // named report dates.
-        public List<SplitBasisCorrection> Repair(string[] neighbourQuarters)
+        // named report dates. The quarter's other holders confirm its price basis unless told not.
+        public List<SplitBasisCorrection> Repair(
+            string[] neighbourQuarters,
+            bool basisConfirmed = true
+        )
         {
             var dates = neighbourQuarters.Select(DateOnly.Parse).ToHashSet();
             var neighbours = new Dictionary<string, long>();
@@ -208,12 +225,15 @@ public class SplitBasisShareCountRepairerRecordedFilingsTests
                 )
                     neighbours[HoldingsImportService.BuildHoldingKey(position)] = shares;
             }
+            var confirmed = basisConfirmed
+                ? Rows.Select(row => HoldingsImportService.BuildHoldingKey(row.Holding)).ToHashSet()
+                : [];
             return HoldingsImportService.RepairFiling(
                 Accession,
                 Rows,
                 Context,
                 NullLogger.Instance,
-                neighbours
+                new SplitBasisInputs(neighbours, confirmed)
             );
         }
     }

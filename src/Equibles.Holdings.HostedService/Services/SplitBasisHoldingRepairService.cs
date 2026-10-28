@@ -206,13 +206,15 @@ public class SplitBasisHoldingRepairService
             return 0;
         }
 
+        var judged = await KeepCorroboratedQuarters(dbContext, suspects, cancellationToken);
+        var deferred = suspects.Count - judged.Count;
         var neighbourQuarters = await LoadNeighbourQuarters(
             dbContext,
-            suspects.Select(s => s.Holding).ToList(),
+            judged.Select(s => s.Holding).ToList(),
             cancellationToken
         );
         var corrections = new Dictionary<Guid, SplitBasisCorrection>();
-        foreach (var (holding, factor, price) in suspects)
+        foreach (var (holding, factor, price) in judged)
         {
             var neighbour = SplitBasisShareCountRepairer.NearestNeighbour(
                 holding.ReportDate,
@@ -220,6 +222,7 @@ public class SplitBasisHoldingRepairService
                     .Where(q =>
                         q.InstitutionalHolderId == holding.InstitutionalHolderId
                         && q.EquityIssuerId == holding.EquityIssuerId
+                        && q.AccessionNumber != holding.AccessionNumber
                         && string.Equals(
                             q.ListedTicker ?? "",
                             holding.ListedTicker ?? "",
@@ -296,7 +299,8 @@ public class SplitBasisHoldingRepairService
 
         _logger.LogWarning(
             "Split-basis repair: judged {Candidates} straddling position(s) over {Splits} split(s); "
-                + "rebased {Shares} share count(s) and {Values} filed value(s) for repricing",
+                + "rebased {Shares} share count(s) and {Values} filed value(s) for repricing, "
+                + "deferred {Deferred} whose quarter does not confirm its price basis",
             candidates.Count,
             walked,
             corrected.Count(h =>
@@ -304,7 +308,8 @@ public class SplitBasisHoldingRepairService
             ),
             corrected.Count(h =>
                 corrections[h.Id].Kind == SplitBasisShareCountRepairer.Kind.PostSplitValue
-            )
+            ),
+            deferred
         );
         return corrected.Count;
     }
@@ -349,6 +354,56 @@ public class SplitBasisHoldingRepairService
             entry.Value = 0L;
     }
 
+    // The quarter's other holders in the listing vouch for the price basis each suspect is judged
+    // against; a quarter they do not confirm waits for a later sweep.
+    private static async Task<
+        List<(InstitutionalHolding Holding, decimal Factor, decimal Price)>
+    > KeepCorroboratedQuarters(
+        EquiblesFinancialDbContext dbContext,
+        List<(InstitutionalHolding Holding, decimal Factor, decimal Price)> suspects,
+        CancellationToken cancellationToken
+    )
+    {
+        var kept = new List<(InstitutionalHolding Holding, decimal Factor, decimal Price)>();
+        foreach (
+            var quarter in suspects.GroupBy(suspect =>
+                (
+                    suspect.Holding.EquityIssuerId,
+                    suspect.Holding.ListedTicker,
+                    suspect.Holding.ReportDate
+                )
+            )
+        )
+        {
+            var (issuerId, listedTicker, reportDate) = quarter.Key;
+            var positions = await dbContext
+                .Set<InstitutionalHolding>()
+                .AsNoTracking()
+                .Where(h =>
+                    h.EquityIssuerId == issuerId
+                    && h.ReportDate == reportDate
+                    && h.ListedTicker == listedTicker
+                    && h.FilingType == FilingType.Form13F
+                    && h.ShareType == ShareType.Shares
+                    && h.OptionType == null
+                    && h.Shares > 0
+                    && h.FiledValue > 0
+                )
+                .Select(h => new { h.Shares, h.FiledValue })
+                .ToListAsync(cancellationToken);
+            var (_, factor, price) = quarter.First();
+            if (
+                SplitBasisShareCountRepairer.PriceBasisCorroborated(
+                    positions.Select(h => (h.Shares, h.FiledValue ?? 0L)),
+                    price,
+                    factor
+                )
+            )
+                kept.AddRange(quarter);
+        }
+        return kept;
+    }
+
     private static async Task<List<InstitutionalHolding>> LoadNeighbourQuarters(
         EquiblesFinancialDbContext dbContext,
         List<InstitutionalHolding> suspects,
@@ -382,6 +437,7 @@ public class SplitBasisHoldingRepairService
                         ListedTicker = h.ListedTicker,
                         ReportDate = h.ReportDate,
                         Shares = h.Shares,
+                        AccessionNumber = h.AccessionNumber,
                     })
                     .ToListAsync(cancellationToken)
             );

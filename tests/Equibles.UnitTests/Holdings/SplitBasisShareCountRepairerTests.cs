@@ -68,4 +68,46 @@ public class SplitBasisShareCountRepairerTests
                     : SplitBasisShareCountRepairer.Kind.PostSplitValue
             );
     }
+
+    // Closes still on the as-traded basis put every consistent holder off by the ratio.
+    [Fact]
+    public void PriceBasisCorroborated_MostHoldersOffByTheRatio_DoesNotConfirm()
+    {
+        var asTraded = Enumerable.Repeat((1_000L, 10_000L), 20).Append((100L, 10_000L));
+
+        SplitBasisShareCountRepairer
+            .PriceBasisCorroborated(asTraded, 100m, factor: 10m)
+            .Should()
+            .BeFalse();
+    }
+
+    [Fact]
+    public void PriceBasisCorroborated_LaterBasisFilersAMinority_Confirms()
+    {
+        var quarter = Enumerable.Repeat((100L, 10_000L), 20).Append((1_000L, 10_000L));
+
+        SplitBasisShareCountRepairer
+            .PriceBasisCorroborated(quarter, 100m, factor: 10m)
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public void PriceBasisCorroborated_TooFewConsistentHolders_DoesNotConfirm()
+    {
+        var quarter = new[] { (100L, 10_000L), (100L, 10_000L) };
+
+        SplitBasisShareCountRepairer
+            .PriceBasisCorroborated(quarter, 100m, factor: 10m)
+            .Should()
+            .BeFalse();
+    }
+
+    // A filer-written voting column rebased across a reverse split can leave a stored figure's
+    // range; it keeps the bound instead of failing the filing.
+    [Fact]
+    public void Rebase_PastTheStoredRange_Saturates()
+    {
+        SplitBasisShareCountRepairer.Rebase(long.MaxValue / 2, 0.1m).Should().Be(long.MaxValue);
+    }
 }

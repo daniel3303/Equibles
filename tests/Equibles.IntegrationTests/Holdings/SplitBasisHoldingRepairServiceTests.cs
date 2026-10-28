@@ -130,7 +130,7 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
         InstitutionalHolding LateCount,
         InstitutionalHolding LateValue,
         InstitutionalHolding Consistent
-    )> SeedBroadcomQuarter()
+    )> SeedBroadcomQuarter(decimal close = Close)
     {
         var seed = CreateSharedContext();
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -187,7 +187,33 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
             100_000L
         );
         seed.Set<EquityIssuer>().Add(issuer);
-        seed.Set<InstitutionalHolder>().AddRange(scotia, pension, consistent);
+        // Holders that filed before the split took effect: the quarter's control, never judged.
+        var early = Enumerable
+            .Range(0, 2)
+            .Select(i => new InstitutionalHolder
+            {
+                Id = Guid.NewGuid(),
+                Cik = $"100000{i + 2}",
+                Name = $"Early filer {i}",
+            })
+            .ToList();
+        seed.Set<InstitutionalHolder>().AddRange([scotia, pension, consistent, .. early]);
+        seed.Set<InstitutionalHolding>()
+            .AddRange(
+                early.Select(
+                    (holder, i) =>
+                        Position(
+                            issuer,
+                            holder,
+                            ReportDate,
+                            new DateOnly(2024, 7, 10),
+                            $"000100000{i + 2}-24-000002",
+                            80_276_500L,
+                            ValueSource.Derived,
+                            50_000L
+                        )
+                )
+            );
         seed.Set<InstitutionalHolding>()
             .AddRange(
                 lateCount,
@@ -239,7 +265,7 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
             .Returns(
                 new Dictionary<(Guid, string, DateOnly), decimal>
                 {
-                    [(issuer.Id, null, ReportDate)] = Close,
+                    [(issuer.Id, null, ReportDate)] = close,
                     [(issuer.Id, null, PriorQuarter)] = 132.541m,
                 }
             );
@@ -322,6 +348,27 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
                 )
             );
         evidence[0].OriginalRow.Should().Contain("\"Shares\": 5429741");
+    }
+
+    // A split stamped as price-adjusted while the closes are still as traded prices every consistent
+    // holder ten times over; their filed figures must survive until the closes are fixed.
+    [Fact]
+    public async Task Repair_ClosesStillAsTraded_RewritesNothing()
+    {
+        await SeedBroadcomQuarter(close: Close * 10);
+        var before = await Reload();
+
+        var corrected = await CreateService().Repair(CancellationToken.None);
+
+        corrected.Should().Be(0);
+        var after = await Reload();
+        after
+            .Values.Select(h => (h.Id, h.Shares, h.FiledValue, h.Value, h.ValuePending))
+            .Should()
+            .BeEquivalentTo(
+                before.Values.Select(h => (h.Id, h.Shares, h.FiledValue, h.Value, h.ValuePending))
+            );
+        (await CreateSharedContext().Set<HoldingsCorrectionEvidence>().CountAsync()).Should().Be(0);
     }
 
     // A replay re-stages the corrections an earlier import already recorded.

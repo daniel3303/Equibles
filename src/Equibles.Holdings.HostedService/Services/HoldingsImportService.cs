@@ -2027,7 +2027,8 @@ public class HoldingsImportService
                 group => group.Key,
                 group => group.Select(row => row.Cusip).ToHashSet(StringComparer.OrdinalIgnoreCase)
             );
-        var splitBasisNeighbours = await LoadSplitBasisNeighbours(
+        var splitBasisInputs = await LoadSplitBasisInputs(
+            accession,
             bufferedRows,
             context,
             cancellationToken
@@ -2037,7 +2038,7 @@ public class HoldingsImportService
             bufferedRows,
             context,
             _logger,
-            splitBasisNeighbours
+            splitBasisInputs
         );
 
         var holdingsMap = new Dictionary<string, InstitutionalHolding>();
@@ -2101,7 +2102,7 @@ public class HoldingsImportService
         List<BufferedHoldingRow> bufferedRows,
         ImportContext context,
         ILogger logger,
-        IReadOnlyDictionary<string, long> splitBasisNeighbours = null
+        SplitBasisInputs splitBasisInputs = null
     )
     {
         if (Corrupt13FShareCountRepairer.IsSuspect(bufferedRows))
@@ -2141,7 +2142,7 @@ public class HoldingsImportService
             BuildHoldingKey,
             holding => SplitBasisStraddle(holding, context),
             holding => FilingBasisPrice(holding, context),
-            splitBasisNeighbours ?? new Dictionary<string, long>(),
+            splitBasisInputs ?? SplitBasisInputs.None,
             row => Revalue(row, context)
         );
         if (corrections.Count > 0)
@@ -2194,44 +2195,101 @@ public class HoldingsImportService
     }
 
     /// <summary>
-    /// The holder's nearest other quarter of each position whose figures sit on a straddled
-    /// split's later basis, earlier first, restated onto the position's report-date basis and
-    /// keyed like the upsert. A filing with no such position costs no query.
+    /// The stored data the split-basis repair needs for the positions of one filing whose figures
+    /// sit on a straddled split's later basis: whether the quarter's other holders confirm its
+    /// price basis, and the holder's nearest other quarter. A filing with no such position costs no
+    /// query.
     /// </summary>
-    private async Task<Dictionary<string, long>> LoadSplitBasisNeighbours(
+    private async Task<SplitBasisInputs> LoadSplitBasisInputs(
+        string accession,
         List<BufferedHoldingRow> bufferedRows,
         ImportContext context,
         CancellationToken cancellationToken
     )
     {
-        var candidates = bufferedRows
-            .Select(row => row.Holding)
-            .Where(SplitBasisShareCountRepairer.MayClassify)
-            .GroupBy(BuildHoldingKey)
-            .Where(position =>
-                SplitBasisStraddle(position.First(), context) is { } factor
-                && FilingBasisPrice(position.First(), context) is { } price
+        var candidates = new List<(InstitutionalHolding Position, decimal Factor, decimal Price)>();
+        foreach (
+            var position in bufferedRows
+                .Select(row => row.Holding)
+                .Where(SplitBasisShareCountRepairer.MayClassify)
+                .GroupBy(BuildHoldingKey)
+        )
+        {
+            var first = position.First();
+            if (
+                SplitBasisStraddle(first, context) is { } factor
+                && FilingBasisPrice(first, context) is { } price
+                && SplitBasisShareCountRepairer.PositionTotals(position)
+                    is (var shares, var filedValue)
                 && SplitBasisShareCountRepairer.Classify(
-                    position.Sum(h => h.Shares),
-                    position.Sum(h => h.FiledValue ?? 0L),
+                    shares,
+                    filedValue,
                     price,
                     factor,
                     neighbourShares: null
                 ) != null
             )
-            .Select(position => position.First())
-            .ToList();
-        var neighbours = new Dictionary<string, long>();
+                candidates.Add((first, factor, price));
+        }
         if (candidates.Count == 0)
-            return neighbours;
+            return SplitBasisInputs.None;
 
-        var holderIds = candidates.Select(h => h.InstitutionalHolderId).Distinct().ToList();
-        var issuerIds = candidates.Select(h => h.EquityIssuerId).Distinct().ToList();
-        var window = SplitBasisShareCountRepairer.NeighbourWindowDays;
-        var from = candidates.Min(h => h.ReportDate).AddDays(-window);
-        var to = candidates.Max(h => h.ReportDate).AddDays(window);
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var corroborated = new List<InstitutionalHolding>();
+        foreach (
+            var quarter in candidates.GroupBy(candidate =>
+                (
+                    candidate.Position.EquityIssuerId,
+                    candidate.Position.ListedTicker,
+                    candidate.Position.ReportDate
+                )
+            )
+        )
+        {
+            // Only a confirmed basis is remembered: holders still being imported can confirm it later.
+            if (!context.CorroboratedSplitBasisQuarters.Contains(quarter.Key))
+            {
+                var (issuerId, listedTicker, reportDate) = quarter.Key;
+                var others = await dbContext
+                    .Set<InstitutionalHolding>()
+                    .AsNoTracking()
+                    .Where(h =>
+                        h.EquityIssuerId == issuerId
+                        && h.ReportDate == reportDate
+                        && h.ListedTicker == listedTicker
+                        && h.AccessionNumber != accession
+                        && h.FilingType == FilingType.Form13F
+                        && h.ShareType == ShareType.Shares
+                        && h.OptionType == null
+                        && h.Shares > 0
+                        && h.FiledValue > 0
+                    )
+                    .Select(h => new { h.Shares, h.FiledValue })
+                    .ToListAsync(cancellationToken);
+                var (_, factor, price) = quarter.First();
+                if (
+                    !SplitBasisShareCountRepairer.PriceBasisCorroborated(
+                        others.Select(h => (h.Shares, h.FiledValue ?? 0L)),
+                        price,
+                        factor
+                    )
+                )
+                    continue;
+                context.CorroboratedSplitBasisQuarters.Add(quarter.Key);
+            }
+            corroborated.AddRange(quarter.Select(candidate => candidate.Position));
+        }
+        if (corroborated.Count == 0)
+            return SplitBasisInputs.None;
+
+        var holderIds = corroborated.Select(h => h.InstitutionalHolderId).Distinct().ToList();
+        var issuerIds = corroborated.Select(h => h.EquityIssuerId).Distinct().ToList();
+        var window = SplitBasisShareCountRepairer.NeighbourWindowDays;
+        var from = corroborated.Min(h => h.ReportDate).AddDays(-window);
+        var to = corroborated.Max(h => h.ReportDate).AddDays(window);
+        // The filing's own rows stored under another quarter carry the same late figures, so they
+        // cannot stand as the holder's neighbour.
         var stored = await dbContext
             .Set<InstitutionalHolding>()
             .AsNoTracking()
@@ -2240,6 +2298,7 @@ public class HoldingsImportService
                 && issuerIds.Contains(h.EquityIssuerId)
                 && h.ReportDate >= from
                 && h.ReportDate <= to
+                && h.AccessionNumber != accession
                 && h.FilingType == FilingType.Form13F
                 && h.ShareType == ShareType.Shares
                 && h.OptionType == null
@@ -2254,7 +2313,8 @@ public class HoldingsImportService
             })
             .ToListAsync(cancellationToken);
 
-        foreach (var candidate in candidates)
+        var neighbours = new Dictionary<string, long>();
+        foreach (var candidate in corroborated)
         {
             var neighbour = SplitBasisNeighbour(
                 candidate,
@@ -2274,7 +2334,7 @@ public class HoldingsImportService
             if (neighbour is { } shares)
                 neighbours[BuildHoldingKey(candidate)] = shares;
         }
-        return neighbours;
+        return new SplitBasisInputs(neighbours, corroborated.Select(BuildHoldingKey).ToHashSet());
     }
 
     // The holder's nearest stored quarter of one position, on the position's report-date basis.

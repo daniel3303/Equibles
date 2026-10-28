@@ -14,7 +14,10 @@ namespace Equibles.Holdings.HostedService.Services;
 /// Both errors leave one trace: the count times the quarter's price on the report-date basis
 /// disagrees with the filed value by the straddled split's ratio. Only the holder's neighbouring
 /// quarter tells them apart, a neighbour near the filed count meaning the value was marked late.
-/// With no neighbour the count is taken as late, the more common of the two errors.
+/// With no neighbour the count is taken as late, the more common of the two errors. The quarter's
+/// other positions are the control: a split stamped as price-adjusted before its closes moved puts
+/// every consistent position off by the same ratio, and rebasing those would rewrite filed figures
+/// that no later price fix undoes.
 /// </remarks>
 internal static class SplitBasisShareCountRepairer
 {
@@ -50,6 +53,56 @@ internal static class SplitBasisShareCountRepairer
     /// </summary>
     internal static bool MayClassify(InstitutionalHolding holding) =>
         holding.ShareType == ShareType.Shares && holding.OptionType == null && holding.Shares > 0;
+
+    /// <summary>
+    /// A position's summed count and filed value across its legs, or null when either leaves the
+    /// range of a stored figure (both are filer-written).
+    /// </summary>
+    internal static (long Shares, long FiledValue)? PositionTotals(
+        IEnumerable<InstitutionalHolding> legs
+    )
+    {
+        var shares = 0m;
+        var filedValue = 0m;
+        foreach (var leg in legs)
+        {
+            shares += leg.Shares;
+            filedValue += leg.FiledValue ?? 0L;
+        }
+        return shares <= long.MaxValue && filedValue <= long.MaxValue
+            ? ((long)shares, (long)filedValue)
+            : null;
+    }
+
+    // Fewer consistent positions than this cannot vouch for the quarter's price basis.
+    internal const int MinCorroboratingPositions = 3;
+
+    /// <summary>
+    /// True when the quarter's positions in the listing confirm its price basis: at least
+    /// <see cref="MinCorroboratingPositions"/> fit the price as filed, and they outnumber those off
+    /// by the split's ratio. A later-basis filer is a minority of the quarter's holders; a price
+    /// series still on the as-traded basis puts nearly every holder off by the ratio.
+    /// </summary>
+    internal static bool PriceBasisCorroborated(
+        IEnumerable<(long Shares, long FiledValue)> quarter,
+        decimal filingBasisPrice,
+        decimal factor
+    )
+    {
+        var consistent = 0;
+        var offByRatio = 0;
+        foreach (var (shares, filedValue) in quarter)
+        {
+            if (shares <= 0 || filedValue <= 0)
+                continue;
+            var ratio = shares * filingBasisPrice / filedValue;
+            if (Agrees(ratio, 1m))
+                consistent++;
+            else if (Agrees(ratio, factor))
+                offByRatio++;
+        }
+        return consistent >= MinCorroboratingPositions && consistent > offByRatio;
+    }
 
     /// <summary>
     /// Which figure the filer moved to the later basis, or null when the position is consistent
@@ -102,7 +155,9 @@ internal static class SplitBasisShareCountRepairer
                     <= NeighbourWindowDays
             )
             .GroupBy(quarter => quarter.ReportDate)
-            .Select(quarter => (ReportDate: quarter.Key, Shares: quarter.Sum(q => q.Shares)))
+            .Select(quarter =>
+                (ReportDate: quarter.Key, Shares: quarter.Sum(q => (decimal)q.Shares))
+            )
             .ToList();
         var earlier = quarters.Where(quarter => quarter.ReportDate < reportDate).ToList();
         var later = quarters.Where(quarter => quarter.ReportDate > reportDate).ToList();
@@ -118,29 +173,38 @@ internal static class SplitBasisShareCountRepairer
             || positionFactor <= 0
         )
             return null;
-        return (long)Math.Round(neighbour.Shares * neighbourFactor / positionFactor);
+        var restated = Math.Round(neighbour.Shares * neighbourFactor / positionFactor);
+        return restated <= long.MaxValue ? (long)restated : null;
     }
 
     /// <summary>A count moved back from the later basis onto the report date's.</summary>
-    internal static long Rebase(long count, decimal factor) =>
-        (long)Math.Round(count / factor, MidpointRounding.AwayFromZero);
+    internal static long Rebase(long count, decimal factor) => Saturate(count / factor);
 
     /// <summary>A value marked at the later basis's price moved back onto the report date's.</summary>
-    internal static long Revalue(long value, decimal factor) =>
-        (long)Math.Round(value * factor, MidpointRounding.AwayFromZero);
+    internal static long Revalue(long value, decimal factor) => Saturate(value * factor);
+
+    // Voting columns are filer-written and never range-checked, so a rebase past a stored figure's
+    // range keeps the bound rather than failing the whole filing.
+    private static long Saturate(decimal value)
+    {
+        var rounded = Math.Round(value, MidpointRounding.AwayFromZero);
+        return rounded >= long.MaxValue ? long.MaxValue
+            : rounded <= long.MinValue ? long.MinValue
+            : (long)rounded;
+    }
 
     /// <summary>
-    /// Repairs every position of one filing whose figures sit on a straddled split's later basis.
-    /// A position's legs are judged together, since the neighbour is the whole position;
-    /// <paramref name="revalue"/> re-derives each repaired leg. Returns one correction per
-    /// repaired position.
+    /// Repairs every position of one filing whose figures sit on a straddled split's later basis
+    /// and whose quarter <paramref name="inputs"/> names as corroborated. A position's legs are
+    /// judged together, since the neighbour is the whole position; <paramref name="revalue"/>
+    /// re-derives each repaired leg. Returns one correction per repaired position.
     /// </summary>
     internal static List<SplitBasisCorrection> Repair(
         List<BufferedHoldingRow> rows,
         Func<InstitutionalHolding, string> positionKey,
         Func<InstitutionalHolding, decimal?> straddledFactor,
         Func<InstitutionalHolding, decimal?> filingBasisPrice,
-        IReadOnlyDictionary<string, long> neighbourShares,
+        SplitBasisInputs inputs,
         Action<BufferedHoldingRow> revalue
     )
     {
@@ -150,16 +214,19 @@ internal static class SplitBasisShareCountRepairer
                 .GroupBy(row => positionKey(row.Holding))
         )
         {
+            if (!inputs.CorroboratedPositions.Contains(position.Key))
+                continue;
             var legs = position.ToList();
             var first = legs[0].Holding;
             if (
                 straddledFactor(first) is not { } factor
                 || filingBasisPrice(first) is not { } price
+                || PositionTotals(legs.Select(leg => leg.Holding))
+                    is not
+                    (var shares, var filedValue)
             )
                 continue;
-            var shares = legs.Sum(leg => leg.Holding.Shares);
-            var filedValue = legs.Sum(leg => leg.Holding.FiledValue ?? 0L);
-            long? neighbour = neighbourShares.TryGetValue(position.Key, out var found)
+            long? neighbour = inputs.Neighbours.TryGetValue(position.Key, out var found)
                 ? found
                 : null;
             if (Classify(shares, filedValue, price, factor, neighbour) is not { } kind)
