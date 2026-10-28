@@ -372,6 +372,70 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
         rows[lateValue.Id].FiledValue.Should().Be(1_159_640_600);
     }
 
+    // An earlier release rebased a 7-share Broadcom position filed after the 10:1 split to one
+    // share. Its evidence cannot restore the voting columns or legs, so the sweep queues the
+    // filing for recovery once and leaves the stored row for that replay.
+    [Fact]
+    public async Task Repair_CorrectionLostToRounding_QueuesItsFilingForRecoveryOnce()
+    {
+        await SeedBroadcomQuarter();
+        var seed = CreateSharedContext();
+        var issuer = await seed.Set<EquityIssuer>().SingleAsync();
+        var holder = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "2009426",
+            Name = "Seven-share filer",
+        };
+        var damaged = Position(
+            issuer,
+            holder,
+            ReportDate,
+            new DateOnly(2024, 8, 14),
+            "0002009426-24-000003",
+            1_125L,
+            ValueSource.Derived,
+            1L
+        );
+        damaged.Value = 1_605L;
+        seed.Set<InstitutionalHolder>().Add(holder);
+        seed.Set<InstitutionalHolding>().Add(damaged);
+        seed.Add(
+            new HoldingsCorrectionEvidence
+            {
+                CorrectionKey = SplitBasisCorrectionEvidence.SharesCorrectionKey,
+                SourceTable = SplitBasisCorrectionEvidence.SourceTable,
+                SourceRecordId = "0002009426-24-000003|11135F101|",
+                SourceSchema = "[]",
+                OriginalRow =
+                    @"{""AccessionNumber"":""0002009426-24-000003"",""Cusip"":""11135F101"",""ListedTicker"":null,""ReportDate"":""2024-06-30"",""FilingDate"":""2024-08-14"",""Shares"":7,""FiledValue"":1125,""Factor"":10,""NeighbourShares"":1}",
+                MigratedAt = DateTime.UtcNow,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await CreateService().Repair(CancellationToken.None);
+        await CreateService().Repair(CancellationToken.None);
+
+        var db = CreateSharedContext();
+        var request = await db.Set<HoldingsImportFailure>()
+            .SingleAsync(f => f.AccessionNumber == "0002009426-24-000003");
+        request.Cik.Should().Be("2009426");
+        request.FilingDate.Should().Be(new DateOnly(2024, 8, 14));
+        request.Reason.Should().Be(HoldingsImportFailureReason.PendingRecovery);
+        request.ResolvedAt.Should().BeNull();
+        (
+            await db.Set<HoldingsCorrectionEvidence>()
+                .CountAsync(e =>
+                    e.CorrectionKey == SplitBasisCorrectionEvidence.RoundingReplayKey
+                    && e.SourceRecordId == "0002009426-24-000003|11135F101|"
+                )
+        )
+            .Should()
+            .Be(1);
+        (await Reload())[damaged.Id].Shares.Should().Be(1);
+    }
+
     [Fact]
     public async Task Repair_SecondSweep_WritesNothingAndKeepsOneEvidenceRowPerPosition()
     {

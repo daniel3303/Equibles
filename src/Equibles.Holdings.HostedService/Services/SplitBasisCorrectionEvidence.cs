@@ -16,6 +16,10 @@ internal static class SplitBasisCorrectionEvidence
 {
     internal const string SharesCorrectionKey = "13f-split-basis-shares";
     internal const string ValueCorrectionKey = "13f-split-basis-value";
+
+    // Marks a correction rounding had lost whose filing was queued for recovery; it keeps the
+    // damaged figures the replay overwrites.
+    internal const string RoundingReplayKey = "13f-split-basis-rounding-replay";
     internal const string SourceTable = nameof(InstitutionalHolding);
 
     private static readonly string SourceSchema = JsonSerializer.Serialize(
@@ -101,6 +105,61 @@ internal static class SplitBasisCorrectionEvidence
             .ToList();
         dbContext.Set<HoldingsCorrectionEvidence>().AddRange(added);
         return added.Count;
+    }
+
+    private static readonly string RoundingReplaySchema = JsonSerializer.Serialize(
+        new[]
+        {
+            Column("AccessionNumber", "character varying(32)", 1, false),
+            Column("Cusip", "character varying(9)", 2, true),
+            Column("ListedTicker", "character varying(32)", 3, true),
+            Column("Shares", "bigint", 4, false),
+            Column("FiledValue", "bigint", 5, false),
+            Column("VotingAuthSole", "bigint", 6, false),
+            Column("VotingAuthShared", "bigint", 7, false),
+            Column("VotingAuthNone", "bigint", 8, false),
+        }
+    );
+
+    internal sealed record RoundingReplay(
+        string AccessionNumber,
+        string Cusip,
+        string ListedTicker,
+        long Shares,
+        long FiledValue,
+        long VotingAuthSole,
+        long VotingAuthShared,
+        long VotingAuthNone
+    );
+
+    /// <summary>
+    /// Adds one marker per position to <paramref name="dbContext"/>; the caller saves them with the
+    /// recovery request in one transaction.
+    /// </summary>
+    internal static void StageRoundingReplays(
+        EquiblesFinancialDbContext dbContext,
+        IReadOnlyCollection<RoundingReplay> replays
+    )
+    {
+        var preservedAt = DateTime.UtcNow;
+        dbContext
+            .Set<HoldingsCorrectionEvidence>()
+            .AddRange(
+                replays
+                    .DistinctBy(replay =>
+                        $"{replay.AccessionNumber}|{replay.Cusip}|{replay.ListedTicker}"
+                    )
+                    .Select(replay => new HoldingsCorrectionEvidence
+                    {
+                        CorrectionKey = RoundingReplayKey,
+                        SourceTable = SourceTable,
+                        SourceRecordId =
+                            $"{replay.AccessionNumber}|{replay.Cusip}|{replay.ListedTicker}",
+                        SourceSchema = RoundingReplaySchema,
+                        OriginalRow = JsonSerializer.Serialize(replay),
+                        MigratedAt = preservedAt,
+                    })
+            );
     }
 
     private static object Column(string name, string type, int ordinal, bool nullable) =>

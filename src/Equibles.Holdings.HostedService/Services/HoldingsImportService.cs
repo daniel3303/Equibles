@@ -2221,13 +2221,7 @@ public class HoldingsImportService
                 && FilingBasisPrice(first, context) is { } price
                 && SplitBasisShareCountRepairer.PositionTotals(position)
                     is (var shares, var filedValue)
-                && SplitBasisShareCountRepairer.Classify(
-                    shares,
-                    filedValue,
-                    price,
-                    factor,
-                    neighbourShares: null
-                ) != null
+                && SplitBasisShareCountRepairer.OffByTheRatio(shares, filedValue, price, factor)
             )
                 candidates.Add((first, factor, price));
         }

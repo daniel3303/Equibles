@@ -117,12 +117,7 @@ internal static class SplitBasisShareCountRepairer
         long? neighbourShares
     )
     {
-        if (shares <= 0 || filedValue <= 0 || filingBasisPrice <= 0 || factor <= 0)
-            return null;
-        var ratio = shares * filingBasisPrice / filedValue;
-        if (!Agrees(ratio, factor) || Agrees(ratio, 1m))
-            return null;
-        if (shares / factor > long.MaxValue || filedValue * factor > long.MaxValue)
+        if (!OffByTheRatio(shares, filedValue, filingBasisPrice, factor))
             return null;
         var kind = Kind.PostSplitShares;
         if (neighbourShares is > 0)
@@ -134,13 +129,43 @@ internal static class SplitBasisShareCountRepairer
             kind = rebasedDistance < asFiledDistance ? Kind.PostSplitShares : Kind.PostSplitValue;
         }
 
-        // A one-share position rebased by 2:1 rounds back to one share: nothing to correct, and
-        // judging it again would reset it on every sweep.
-        var unchanged =
-            kind == Kind.PostSplitShares
-                ? Rebase(shares, factor) == shares
-                : Revalue(filedValue, factor) == filedValue;
-        return unchanged ? null : kind;
+        // A tiny position cannot be rebased honestly once rounded (one share by 10:1 becomes none,
+        // by 2:1 stays one), so it stays as filed rather than being reset on every sweep.
+        return SurvivesRounding(kind, shares, filedValue, factor) ? kind : null;
+    }
+
+    /// <summary>
+    /// Whether a position's figures disagree by the straddled ratio and so need their neighbouring
+    /// quarter to be judged; the cheap test candidates pass before any neighbour is loaded.
+    /// </summary>
+    internal static bool OffByTheRatio(
+        long shares,
+        long filedValue,
+        decimal filingBasisPrice,
+        decimal factor
+    )
+    {
+        if (shares <= 0 || filedValue <= 0 || filingBasisPrice <= 0 || factor <= 0)
+            return false;
+        var ratio = shares * filingBasisPrice / filedValue;
+        return Agrees(ratio, factor)
+            && !Agrees(ratio, 1m)
+            && shares / factor <= long.MaxValue
+            && filedValue * factor <= long.MaxValue;
+    }
+
+    /// <summary>
+    /// Whether the rebased figure, rounded to whole shares or dollars, still agrees with the exact
+    /// rebase within the band the classifier judges by.
+    /// </summary>
+    internal static bool SurvivesRounding(Kind kind, long shares, long filedValue, decimal factor)
+    {
+        if (factor <= 0)
+            return false;
+        var exact = kind == Kind.PostSplitShares ? shares / factor : filedValue * factor;
+        var rounded =
+            kind == Kind.PostSplitShares ? Rebase(shares, factor) : Revalue(filedValue, factor);
+        return exact > 0 && rounded > 0 && Agrees(rounded / exact, 1m);
     }
 
     // Only a quarter this close tells a late count from a late value; further away the position

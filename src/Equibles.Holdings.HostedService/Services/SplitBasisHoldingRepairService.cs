@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Contracts;
@@ -6,6 +7,7 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
+using Equibles.Holdings.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.HostedService.Services;
@@ -118,6 +120,7 @@ public class SplitBasisHoldingRepairService
     // day, so a frontier kept in memory between cycles never got past the first batch.
     public async Task<int> Repair(CancellationToken cancellationToken)
     {
+        await ReplayRoundingLosses(cancellationToken);
         var corrected = 0;
         var frontier = Guid.Empty;
         do
@@ -205,16 +208,14 @@ public class SplitBasisHoldingRepairService
             )
                 return null;
             var price = reportFactor * closePrice;
-            return
-                SplitBasisShareCountRepairer.Classify(
-                    holding.Shares,
-                    holding.FiledValue ?? 0L,
-                    price,
-                    factor,
-                    neighbourShares: null
-                ) == null
-                ? null
-                : (holding, factor, price);
+            return SplitBasisShareCountRepairer.OffByTheRatio(
+                holding.Shares,
+                holding.FiledValue ?? 0L,
+                price,
+                factor
+            )
+                ? (holding, factor, price)
+                : null;
         }
 
         var suspects = candidates
@@ -339,6 +340,162 @@ public class SplitBasisHoldingRepairService
         return (corrected.Count, next);
     }
 
+    // Corrections made before the classifier refused rounding losses (two shares rebased by 25:1
+    // became none) cannot be undone from their evidence, which keeps position totals but not the
+    // voting columns or manager legs. Each such filing is queued once for recovery, whose replay
+    // rewrites every column from the source under the fixed classifier; a marker evidence row
+    // keeps the damaged figures and stops a second request.
+    private async Task ReplayRoundingLosses(CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        if (dbContext.Database.IsRelational())
+            dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
+        var evidence = await dbContext
+            .Set<HoldingsCorrectionEvidence>()
+            .AsNoTracking()
+            .Where(row =>
+                row.SourceTable == SplitBasisCorrectionEvidence.SourceTable
+                && (
+                    row.CorrectionKey == SplitBasisCorrectionEvidence.SharesCorrectionKey
+                    || row.CorrectionKey == SplitBasisCorrectionEvidence.ValueCorrectionKey
+                    || row.CorrectionKey == SplitBasisCorrectionEvidence.RoundingReplayKey
+                )
+            )
+            .Select(row => new
+            {
+                row.CorrectionKey,
+                row.SourceRecordId,
+                row.OriginalRow,
+            })
+            .ToListAsync(cancellationToken);
+        var requested = evidence
+            .Where(row => row.CorrectionKey == SplitBasisCorrectionEvidence.RoundingReplayKey)
+            .Select(row => row.SourceRecordId)
+            .ToHashSet();
+        var lost = evidence
+            .Where(row =>
+                row.CorrectionKey != SplitBasisCorrectionEvidence.RoundingReplayKey
+                && !requested.Contains(row.SourceRecordId)
+            )
+            .Select(row => RecordedCorrection.Read(row.CorrectionKey, row.OriginalRow))
+            .Where(recorded =>
+                !SplitBasisShareCountRepairer.SurvivesRounding(
+                    recorded.Kind,
+                    recorded.Shares,
+                    recorded.FiledValue,
+                    recorded.Factor
+                )
+            )
+            .ToList();
+        if (lost.Count == 0)
+            return;
+
+        var accessions = lost.Select(recorded => recorded.AccessionNumber).Distinct().ToList();
+        var stored = await dbContext
+            .Set<InstitutionalHolding>()
+            .AsNoTracking()
+            .Where(h =>
+                accessions.Contains(h.AccessionNumber)
+                && h.FilingType == FilingType.Form13F
+                && h.ShareType == ShareType.Shares
+                && h.OptionType == null
+            )
+            .Select(h => new
+            {
+                h.AccessionNumber,
+                h.Cusip,
+                h.ListedTicker,
+                h.Shares,
+                h.FiledValue,
+                h.VotingAuthSole,
+                h.VotingAuthShared,
+                h.VotingAuthNone,
+                h.FilingDate,
+                h.InstitutionalHolder.Cik,
+            })
+            .ToListAsync(cancellationToken);
+        var replays = new Dictionary<string, (string Cik, DateOnly FilingDate)>();
+        var markers = new List<SplitBasisCorrectionEvidence.RoundingReplay>();
+        foreach (var recorded in lost)
+        {
+            var holding = stored.FirstOrDefault(h =>
+                h.AccessionNumber == recorded.AccessionNumber
+                && h.Cusip == recorded.Cusip
+                && (h.ListedTicker ?? "") == (recorded.ListedTicker ?? "")
+            );
+            // Gone, or already back on the filed figure (a later import rewrote it).
+            if (
+                holding == null
+                || (
+                    recorded.Kind == SplitBasisShareCountRepairer.Kind.PostSplitShares
+                        ? holding.Shares == recorded.Shares
+                        : holding.FiledValue == recorded.FiledValue
+                )
+            )
+                continue;
+            replays[holding.AccessionNumber] = (holding.Cik, holding.FilingDate);
+            markers.Add(
+                new SplitBasisCorrectionEvidence.RoundingReplay(
+                    holding.AccessionNumber,
+                    holding.Cusip,
+                    holding.ListedTicker,
+                    holding.Shares,
+                    holding.FiledValue ?? 0L,
+                    holding.VotingAuthSole,
+                    holding.VotingAuthShared,
+                    holding.VotingAuthNone
+                )
+            );
+        }
+        if (replays.Count == 0)
+            return;
+
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        SplitBasisCorrectionEvidence.StageRoundingReplays(dbContext, markers);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        var failures = new HoldingsImportFailureRepository(dbContext);
+        foreach (var (accession, (cik, filingDate)) in replays)
+            await failures.EnqueueRecovery(accession, cik, filingDate, cancellationToken);
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+        _logger.LogWarning(
+            "Split-basis repair: queued {Filings} filing(s) for recovery to undo {Positions} correction(s) rounding had lost",
+            replays.Count,
+            markers.Count
+        );
+    }
+
+    private sealed record RecordedCorrection(
+        SplitBasisShareCountRepairer.Kind Kind,
+        string AccessionNumber,
+        string Cusip,
+        string ListedTicker,
+        long Shares,
+        long FiledValue,
+        decimal Factor
+    )
+    {
+        internal static RecordedCorrection Read(string correctionKey, string originalRow)
+        {
+            using var row = JsonDocument.Parse(originalRow);
+            var root = row.RootElement;
+            return new RecordedCorrection(
+                correctionKey == SplitBasisCorrectionEvidence.SharesCorrectionKey
+                    ? SplitBasisShareCountRepairer.Kind.PostSplitShares
+                    : SplitBasisShareCountRepairer.Kind.PostSplitValue,
+                root.GetProperty("AccessionNumber").GetString(),
+                root.GetProperty("Cusip").GetString(),
+                root.GetProperty("ListedTicker").GetString(),
+                root.GetProperty("Shares").GetInt64(),
+                root.GetProperty("FiledValue").GetInt64(),
+                root.GetProperty("Factor").GetDecimal()
+            );
+        }
+    }
+
     // Legs are updated in place, never cleared and re-added (manager-entry key budget).
     private static void Apply(InstitutionalHolding holding, SplitBasisCorrection correction)
     {
@@ -368,7 +525,12 @@ public class SplitBasisHoldingRepairService
                 factor
             );
         }
+        ResetForRepricing(holding);
+    }
 
+    // Repricing belongs to the recalculator that runs next in the cycle, under every guard.
+    private static void ResetForRepricing(InstitutionalHolding holding)
+    {
         holding.Value = 0L;
         holding.ValuePending = true;
         holding.ValueUnavailable = false;
