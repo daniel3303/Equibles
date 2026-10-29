@@ -18,6 +18,7 @@ using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.Data.Prices;
 using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.HostedService.Services;
 using Equibles.Yahoo.Repositories;
@@ -127,6 +128,7 @@ public class YahooPriceImportServiceTests : IDisposable
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
     private readonly YahooPriceImportService _service;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public YahooPriceImportServiceTests()
     {
@@ -182,6 +184,7 @@ public class YahooPriceImportServiceTests : IDisposable
             )
         );
 
+        _scopeFactory = scopeFactory;
         var tickerMapService = new TickerMapService(scopeFactory);
 
         _service = new YahooPriceImportService(
@@ -2430,6 +2433,56 @@ public class YahooPriceImportServiceTests : IDisposable
             .Single(s => s.Presentation.Listing.Ticker == "MKT");
         updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(1_500_000_000d);
         updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(10_000_000);
+    }
+
+    [Theory]
+    [InlineData(true, 7_000_000L, 70_000_000d)]
+    [InlineData(false, 9_000_000L, 90_000_000d)]
+    public async Task Import_KeyStatistics_LeaveAVenueOwnedSecurityToItsOwner(
+        bool owned,
+        long shares,
+        double marketCap
+    )
+    {
+        EquityIssuer stock = CreateStock("VEN", "Venue Owned Co.");
+        stock.Presentation.Listing.Security.SharesOutstanding = 7_000_000;
+        stock.Presentation.Listing.Security.MarketCapitalization = 70_000_000d;
+        await SeedStocks(stock);
+        var owner = Substitute.For<IVenueCapitalizationOwner>();
+        owner
+            .Owns(
+                Arg.Is<EquitySecurity>(security =>
+                    security.Id == stock.Presentation.Listing.EquitySecurityId
+                ),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(owned);
+        _scopeFactory
+            .CreateScope()
+            .ServiceProvider.GetService(typeof(IEnumerable<IVenueCapitalizationOwner>))
+            .Returns(new[] { owner });
+
+        _yahooClient
+            .GetChart("VEN", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("VEN")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 9_000_000,
+                    MarketCapitalization = 90_000_000d,
+                }
+            );
+
+        await AttributeFixtureActions();
+        await _service.Import(CancellationToken.None);
+
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "VEN");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(shares);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(marketCap);
     }
 
     [Fact]

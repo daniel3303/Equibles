@@ -3365,6 +3365,11 @@ public class YahooPriceImportService
         // A listed note has no equity share count or market cap, and Yahoo's figures for it are the
         // parent's, so a debt-presented issuer stores none and loses any written before.
         var presented = stock.Presentation.Listing.Security;
+        if (await IsCapitalizationVenueOwned(scope, presented, cancellationToken))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return;
+        }
         if (presented.RegistrationType == ListedSecurityType.DebtSecurities)
         {
             var cleared = presented.SharesOutstanding != 0 || presented.MarketCapitalization > 0;
@@ -3537,6 +3542,21 @@ public class YahooPriceImportService
             stats.SharesOutstanding,
             stats.MarketCapitalization
         );
+    }
+
+    private static async Task<bool> IsCapitalizationVenueOwned(
+        IServiceScope scope,
+        EquitySecurity security,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (
+            var owner in scope.ServiceProvider.GetService<IEnumerable<IVenueCapitalizationOwner>>()
+                ?? []
+        )
+            if (await owner.Owns(security, cancellationToken))
+                return true;
+        return false;
     }
 
     // When EDGAR is the authoritative share source the importer keeps EDGAR's SharesOutStanding,
