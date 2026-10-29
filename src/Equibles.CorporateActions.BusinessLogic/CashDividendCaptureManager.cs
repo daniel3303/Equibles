@@ -203,6 +203,9 @@ public class CashDividendCaptureManager
                     match.PriceAdjustmentAppliedTime = null;
                 }
 
+                // A provider that now states the payment, or a new amount, may be served on the next
+                // full fetch, so an earlier unserved verdict no longer holds.
+                match.PriceAdjustmentUnservedTime = null;
                 match.Source = dividend.Source;
                 changes++;
             }

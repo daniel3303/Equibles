@@ -55,6 +55,10 @@ public class ParadeDbFixture : IAsyncLifetime
     protected virtual string MigrationTarget => null;
     protected virtual bool IncludeLegacyMappings => false;
 
+    // Columns a pinned schema predates but the current code filters on in SQL, which an ignored
+    // mapping cannot serve.
+    protected virtual string PostMigrationSql => null;
+
     private Respawner _respawner;
 
     public string ConnectionString { get; private set; }
@@ -72,6 +76,8 @@ public class ParadeDbFixture : IAsyncLifetime
             // first-run cold start where Postgres is still warming up its shared buffers.
             ctx.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
             await ctx.GetService<IMigrator>().MigrateAsync(MigrationTarget);
+            if (PostMigrationSql != null)
+                await ctx.Database.ExecuteSqlRawAsync(PostMigrationSql);
         }
 
         // Respawn snapshots user tables once and replays TRUNCATE on every reset — far faster

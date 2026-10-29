@@ -47,4 +47,10 @@ public class CashDividend
     /// captured listing's price series.
     /// </summary>
     public DateTime? PriceAdjustmentAppliedTime { get; set; }
+
+    /// <summary>
+    /// When a full provider-history replacement served bars well past this dividend's ex-date
+    /// without it. The dividend stays unapplied but stops queueing reconciliation until it changes.
+    /// </summary>
+    public DateTime? PriceAdjustmentUnservedTime { get; set; }
 }

@@ -376,6 +376,105 @@ public class CorporateActionPriceReconciliationManagerStampingTests
             .ContainSingle(snapshot => snapshot.Id == dividend.Id);
     }
 
+    // A replacement that served bars past the same-event window without the dividend settles it
+    // unapplied: the provider's answer will not change on the next fetch, so it leaves the queue.
+    [Fact]
+    public async Task StampApplied_DividendUnservedPastTheWindow_LeavesTheQueueUnapplied()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var exDate = new DateOnly(2024, 5, 9);
+        var dividend = PendingDividend(stockId, exDate, 0.25m);
+        dividend.Source = CashDividendSource.External;
+        db.Add(Stock(stockId));
+        db.Add(dividend);
+        await SaveFixture(db);
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        var appliedTime = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
+
+        var stamped = await manager.StampApplied(
+            selected,
+            [],
+            SettledBefore,
+            appliedTime,
+            servedThrough: exDate.AddDays(SplitEvents.SameEventWindowDays)
+        );
+
+        stamped.Should().Be(0);
+        dividend.PriceAdjustmentAppliedTime.Should().BeNull();
+        dividend.PriceAdjustmentUnservedTime.Should().Be(appliedTime);
+        (await manager.SelectPendingSeries(50, SettledBefore)).Series.Should().BeEmpty();
+    }
+
+    // Providers list a payment days after a source announces it, so one inside the window stays queued.
+    [Fact]
+    public async Task StampApplied_DividendUnservedWithinTheWindow_StaysPending()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var exDate = new DateOnly(2024, 5, 9);
+        var dividend = PendingDividend(stockId, exDate, 0.25m);
+        db.Add(Stock(stockId));
+        db.Add(dividend);
+        await SaveFixture(db);
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+
+        await manager.StampApplied(
+            selected,
+            [],
+            SettledBefore,
+            DateTime.UtcNow,
+            servedThrough: exDate.AddDays(SplitEvents.SameEventWindowDays - 1)
+        );
+
+        dividend.PriceAdjustmentUnservedTime.Should().BeNull();
+        (await manager.SelectPendingSeries(50, SettledBefore))
+            .Series.Should()
+            .ContainSingle()
+            .Which.Dividends.Should()
+            .ContainSingle(snapshot => snapshot.Id == dividend.Id);
+    }
+
+    // A settled dividend the provider later serves is stamped from that response like any other.
+    [Fact]
+    public async Task StampApplied_UnservedDividendLaterServed_IsStampedAndCleared()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var exDate = new DateOnly(2024, 5, 9);
+        var stock = Stock(stockId);
+        var dividend = PendingDividend(stockId, exDate, 0.25m);
+        dividend.PriceAdjustmentUnservedTime = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+        db.Add(stock);
+        db.Add(dividend);
+        await SaveFixture(db);
+
+        var manager = NewManager(db);
+        (await manager.SelectPendingSeries(50, SettledBefore)).Series.Should().BeEmpty();
+        var series = new PendingPriceReconciliationSeries(
+            stockId,
+            "AAPL",
+            [],
+            [],
+            stock.Presentation.EquityListingId
+        );
+
+        var stamped = await manager.StampApplied(
+            series,
+            [PriceSeriesDividend(exDate, 0.25m)],
+            SettledBefore,
+            DateTime.UtcNow
+        );
+
+        stamped.Should().Be(1);
+        dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.25m);
+        dividend.PriceAdjustmentUnservedTime.Should().BeNull();
+    }
+
     [Fact]
     public async Task StampApplied_NewPriceSeriesDividendAfterSelection_StampsSameFetch()
     {

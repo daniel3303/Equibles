@@ -1418,6 +1418,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<DateTime?>("PriceAdjustmentAppliedTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("PriceAdjustmentUnservedTime")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("text");
