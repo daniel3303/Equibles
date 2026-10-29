@@ -321,6 +321,12 @@ public class YahooDividendReconciliationTests : ParadeDbMcpTestBase
     private static YahooChartData Chart(
         IReadOnlyList<HistoricalPrice> prices,
         params CashDividendEvent[] dividends
+    ) => Chart(prices, "USD", dividends);
+
+    private static YahooChartData Chart(
+        IReadOnlyList<HistoricalPrice> prices,
+        string currency,
+        params CashDividendEvent[] dividends
     ) =>
         new()
         {
@@ -328,7 +334,7 @@ public class YahooDividendReconciliationTests : ParadeDbMcpTestBase
             SourceIdentity = new()
             {
                 Symbol = "AAPL",
-                Currency = "USD",
+                Currency = currency,
                 ExchangeCode = "NMS",
                 ExchangeTimeZone = "America/New_York",
             },
@@ -351,9 +357,16 @@ public class YahooDividendReconciliationTests : ParadeDbMcpTestBase
 
     // A dividend only another source reports, which the provider's full history leaves out although it
     // serves bars past the same-event window, settles unapplied, so the daily reconcile stops refetching
-    // the series for it.
-    [Fact]
-    public async Task Import_DividendTheProviderNeverServes_LeavesTheReconcileQueue()
+    // the series for it. A response whose currency is unproven has its dividend events left unread, so
+    // it cannot show the provider leaves the dividend out, and the dividend stays queued.
+    [Theory]
+    [InlineData("USD", false, true)]
+    [InlineData(null, true, false)]
+    public async Task Import_DividendTheProviderNeverServes_LeavesTheReconcileQueue(
+        string currency,
+        bool servesEvent,
+        bool settled
+    )
     {
         InitializeServices();
         var apple = await SeedApple();
@@ -388,17 +401,21 @@ public class YahooDividendReconciliationTests : ParadeDbMcpTestBase
         _yahooClient
             .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(
-                Chart([
-                    Bar(new DateOnly(2026, 5, 8), 100m, 100m),
-                    Bar(exDate, 100m, 100m),
-                    Bar(exDate.AddDays(SplitEvents.SameEventWindowDays), 101m, 101m),
-                ])
+                Chart(
+                    [
+                        Bar(new DateOnly(2026, 5, 8), 100m, 100m),
+                        Bar(exDate, 100m, 100m),
+                        Bar(exDate.AddDays(SplitEvents.SameEventWindowDays), 101m, 101m),
+                    ],
+                    currency,
+                    servesEvent ? [new CashDividendEvent { Date = exDate, Amount = 0.27m }] : []
+                )
             );
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         dividend.PriceAdjustmentAppliedTime.Should().BeNull();
-        dividend.PriceAdjustmentUnservedTime.Should().NotBeNull();
+        (dividend.PriceAdjustmentUnservedTime != null).Should().Be(settled);
         var manager = new CorporateActionPriceReconciliationManager(
             _splitRepo,
             _dividendRepo,
@@ -407,7 +424,7 @@ public class YahooDividendReconciliationTests : ParadeDbMcpTestBase
         );
         (await manager.SelectPendingSeries(50, new DateOnly(2026, 10, 1)))
             .Series.Should()
-            .BeEmpty();
+            .HaveCount(settled ? 0 : 1);
     }
 
     // A first history is the response it stores, so the dividends that response served are already in
