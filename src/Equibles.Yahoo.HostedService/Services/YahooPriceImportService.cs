@@ -1281,6 +1281,7 @@ public class YahooPriceImportService
             );
         }
         var lastServedDate = chartData.Prices.Max(price => price.Date);
+        DateOnly? servedThrough = ReadsDividendEvents(target, chartData) ? lastServedDate : null;
 
         // A split changes the share base, so refresh the authoritative current share count +
         // market cap by refetch, not arithmetic (#2879). A dividend-only price reconciliation is
@@ -1304,7 +1305,8 @@ public class YahooPriceImportService
                 DateTime.UtcNow,
                 target.HistoricalEvidenceId!.Value,
                 target.HistoryEndDate!.Value,
-                cancellationToken
+                cancellationToken,
+                servedThrough: servedThrough
             )
             : await manager.StampApplied(
                 certifiableSeries,
@@ -1313,13 +1315,61 @@ public class YahooPriceImportService
                 DateTime.UtcNow,
                 expectedActive: true,
                 expectedDelistedOn: null,
-                cancellationToken: cancellationToken
+                cancellationToken: cancellationToken,
+                servedThrough: servedThrough
             );
         _logger.LogInformation(
             "Reconciled {Ticker}: replaced stored price history and stamped {Count} corporate action(s) applied",
             target.Ticker,
             stamped
         );
+    }
+
+    // The full history just stored is this response, so the dividends it served are reconciled by
+    // construction; stamping them here keeps a first history out of the reconcile queue. Splits stay
+    // with the reconcile, which certifies their basis.
+    private async Task StampServedDividends(
+        PriceSeriesTarget target,
+        IReadOnlyCollection<CapturedDividend> servedDividends,
+        DateOnly settledBefore,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            servedDividends.Count == 0
+            || (target.IsHistorical && target.HistoricalEvidenceId == null)
+        )
+            return;
+        var series = new PendingPriceReconciliationSeries(
+            target.EquityIssuerId,
+            target.Ticker,
+            [],
+            [],
+            target.EquityListingId
+        );
+        using var scope = _scopeFactory.CreateScope();
+        var manager =
+            scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
+        if (target.IsHistorical)
+            await manager.StampAppliedHistorical(
+                series,
+                servedDividends,
+                settledBefore,
+                DateTime.UtcNow,
+                target.HistoricalEvidenceId.Value,
+                target.HistoryEndDate!.Value,
+                cancellationToken
+            );
+        else
+            await manager.StampApplied(
+                series,
+                servedDividends,
+                settledBefore,
+                DateTime.UtcNow,
+                expectedActive: true,
+                expectedDelistedOn: null,
+                cancellationToken: cancellationToken
+            );
     }
 
     private async Task RequeueStampedSplitBasisMismatches(
@@ -2552,7 +2602,12 @@ public class YahooPriceImportService
                     "Replaced grouped bootstrap rows with full Yahoo history for reference listing {Ticker}",
                     target.Ticker
                 );
-                await CaptureDividends(target, chartData, cancellationToken);
+                await StampServedDividends(
+                    target,
+                    await CaptureDividends(target, chartData, cancellationToken),
+                    settledAsOf,
+                    cancellationToken
+                );
             }
             return new TickerImportResult(
                 Fetched: true,
@@ -2596,7 +2651,12 @@ public class YahooPriceImportService
                     "Reconciled {Ticker}: replaced its full listed price history",
                     target.Ticker
                 );
-                await CaptureDividends(target, chartData, cancellationToken);
+                await StampServedDividends(
+                    target,
+                    await CaptureDividends(target, chartData, cancellationToken),
+                    settledAsOf,
+                    cancellationToken
+                );
             }
             return new TickerImportResult(
                 Fetched: true,
@@ -2641,7 +2701,12 @@ public class YahooPriceImportService
                     "Reconciled {Ticker}: replaced its full listed price history",
                     target.Ticker
                 );
-                await CaptureDividends(target, fullChart, cancellationToken);
+                await StampServedDividends(
+                    target,
+                    await CaptureDividends(target, fullChart, cancellationToken),
+                    settledAsOf,
+                    cancellationToken
+                );
             }
             return new TickerImportResult(Fetched: true, Inserted: 0);
         }
@@ -3207,19 +3272,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        // Cash amounts require explicit source currency independently of stored price history.
-        if (
-            chartData.Dividends.Count == 0
-            || !IsCatalogMarket(target)
-            || !(
-                target.IsUs
-                    ? YahooQuotationIdentity.HasUsDollarEvidence(
-                        target.Ticker,
-                        chartData.SourceIdentity
-                    )
-                    : YahooListingSource.MatchesChart(target, chartData.SourceIdentity)
-            )
-        )
+        if (chartData.Dividends.Count == 0 || !ReadsDividendEvents(target, chartData))
             return [];
 
         // Map Yahoo's dividend shape onto the source-neutral capture DTO at the
@@ -3268,6 +3321,19 @@ public class YahooPriceImportService
 
         return captured;
     }
+
+    // Cash amounts require explicit source currency independently of stored price history. A response
+    // whose events are not read says nothing about which dividends the provider serves.
+    private static bool ReadsDividendEvents(PriceSeriesTarget target, YahooChartData chartData) =>
+        IsCatalogMarket(target)
+        && (
+            target.IsUs
+                ? YahooQuotationIdentity.HasUsDollarEvidence(
+                    target.Ticker,
+                    chartData.SourceIdentity
+                )
+                : YahooListingSource.MatchesChart(target, chartData.SourceIdentity)
+        );
 
     private async Task FlushPriceBatch(PriceSeriesTarget target, List<EquityDailyStockPrice> batch)
     {

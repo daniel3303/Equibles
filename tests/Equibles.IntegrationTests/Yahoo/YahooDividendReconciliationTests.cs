@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
@@ -303,5 +304,151 @@ public class YahooDividendReconciliationTests : ParadeDbMcpTestBase
             .Received()
             .GetChart("AAPL", new DateOnly(2026, 5, 1), Arg.Any<DateOnly>());
         await _yahooClient.DidNotReceive().GetKeyStatistics("AAPL");
+    }
+
+    private static HistoricalPrice Bar(DateOnly date, decimal close, decimal adjustedClose) =>
+        new()
+        {
+            Date = date,
+            Open = close - 1,
+            High = close + 1,
+            Low = close - 2,
+            Close = close,
+            AdjustedClose = adjustedClose,
+            Volume = 1_000_000,
+        };
+
+    private static YahooChartData Chart(
+        IReadOnlyList<HistoricalPrice> prices,
+        params CashDividendEvent[] dividends
+    ) => Chart(prices, "USD", dividends);
+
+    private static YahooChartData Chart(
+        IReadOnlyList<HistoricalPrice> prices,
+        string currency,
+        params CashDividendEvent[] dividends
+    ) =>
+        new()
+        {
+            Prices = prices.ToList(),
+            SourceIdentity = new()
+            {
+                Symbol = "AAPL",
+                Currency = currency,
+                ExchangeCode = "NMS",
+                ExchangeTimeZone = "America/New_York",
+            },
+            Dividends = dividends.ToList(),
+        };
+
+    private async Task<EquityIssuer> SeedApple()
+    {
+        var apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        apple.Presentation.Listing.TradingCurrency = "USD";
+        _dbContext.Add(apple);
+        await _dbContext.SaveChangesAsync();
+        _workerOptions.MinSyncDate = new DateTime(2026, 5, 1);
+        return apple;
+    }
+
+    // A dividend only another source reports, which the provider's full history leaves out although it
+    // serves bars past the same-event window, settles unapplied, so the daily reconcile stops refetching
+    // the series for it. A response whose currency is unproven has its dividend events left unread, so
+    // it cannot show the provider leaves the dividend out, and the dividend stays queued.
+    [Theory]
+    [InlineData("USD", false, true)]
+    [InlineData(null, true, false)]
+    public async Task Import_DividendTheProviderNeverServes_LeavesTheReconcileQueue(
+        string currency,
+        bool servesEvent,
+        bool settled
+    )
+    {
+        InitializeServices();
+        var apple = await SeedApple();
+        var exDate = new DateOnly(2026, 5, 11);
+        foreach (var date in new[] { new DateOnly(2026, 5, 8), exDate })
+            _dbContext.Add(
+                new EquityDailyStockPrice
+                {
+                    Listing = apple.Presentation.Listing,
+                    EquityListingId = apple.Presentation.EquityListingId,
+                    SourceTicker = "AAPL",
+                    Date = date,
+                    Open = 99m,
+                    High = 101m,
+                    Low = 98m,
+                    Close = 100m,
+                    AdjustedClose = 100m,
+                    Volume = 1_000_000,
+                }
+            );
+        var dividend = new CashDividend
+        {
+            EquityIssuerId = apple.Id,
+            EquityListingId = apple.Presentation.EquityListingId,
+            Currency = "USD",
+            ExDate = exDate,
+            AmountPerShare = 0.27m,
+            Source = CashDividendSource.External,
+        };
+        _dbContext.Add(dividend);
+        await _dbContext.SaveChangesAsync();
+        _yahooClient
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                Chart(
+                    [
+                        Bar(new DateOnly(2026, 5, 8), 100m, 100m),
+                        Bar(exDate, 100m, 100m),
+                        Bar(exDate.AddDays(SplitEvents.SameEventWindowDays), 101m, 101m),
+                    ],
+                    currency,
+                    servesEvent ? [new CashDividendEvent { Date = exDate, Amount = 0.27m }] : []
+                )
+            );
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        dividend.PriceAdjustmentAppliedTime.Should().BeNull();
+        (dividend.PriceAdjustmentUnservedTime != null).Should().Be(settled);
+        var manager = new CorporateActionPriceReconciliationManager(
+            _splitRepo,
+            _dividendRepo,
+            _stockRepo,
+            new CorporateActionPriceReconciliationCursorRepository(_dbContext)
+        );
+        (await manager.SelectPendingSeries(50, new DateOnly(2026, 10, 1)))
+            .Series.Should()
+            .HaveCount(settled ? 0 : 1);
+    }
+
+    // A first history is the response it stores, so the dividends that response served are already in
+    // its adjusted closes and never wait for the reconcile.
+    [Fact]
+    public async Task Import_FirstHistory_StampsTheDividendsItServed()
+    {
+        InitializeServices();
+        await SeedApple();
+        var exDate = new DateOnly(2026, 5, 11);
+        _yahooClient
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                Chart(
+                    [Bar(new DateOnly(2026, 5, 8), 100m, 99.73m), Bar(exDate, 105m, 105m)],
+                    new CashDividendEvent { Date = exDate, Amount = 0.27m }
+                )
+            );
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        var stored = await _dbContext.Set<CashDividend>().SingleAsync();
+        stored.AmountPerShare.Should().Be(0.27m);
+        stored.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.27m);
+        stored.PriceAdjustmentAppliedTime.Should().NotBeNull();
     }
 }

@@ -297,6 +297,62 @@ public class CashDividendCaptureManagerTests
         stored.PriceAdjustmentAppliedTime.Should().Be(appliedAt);
     }
 
+    // A provider that now states the payment, or a restated amount, may be served on the next full
+    // fetch, so the earlier unserved verdict is dropped and the dividend queues again.
+    [Theory]
+    [InlineData(0.26, CashDividendSource.Yahoo)]
+    [InlineData(0.27, CashDividendSource.External)]
+    public async Task Capture_UnservedDividendPromotedOrRestated_QueuesAgain(
+        double amount,
+        CashDividendSource source
+    )
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = await AddStock(db);
+        var exDate = new DateOnly(2024, 2, 9);
+        await NewManager(db)
+            .Capture(
+                stock.Id,
+                stock.Presentation.Listing.Ticker,
+                [Dividend(exDate, 0.26m, CashDividendSource.External)]
+            );
+        var original = await db.Set<CashDividend>().SingleAsync();
+        original.PriceAdjustmentUnservedTime = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var changes = await NewManager(db)
+            .Capture(
+                stock.Id,
+                stock.Presentation.Listing.Ticker,
+                [Dividend(exDate, (decimal)amount, source)]
+            );
+
+        changes.Should().Be(1);
+        (await db.Set<CashDividend>().SingleAsync()).PriceAdjustmentUnservedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Capture_SameUnservedDividendAgain_KeepsItsVerdict()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = await AddStock(db);
+        var exDate = new DateOnly(2024, 2, 9);
+        CapturedDividend[] reported = [Dividend(exDate, 0.26m, CashDividendSource.External)];
+        await NewManager(db).Capture(stock.Id, stock.Presentation.Listing.Ticker, reported);
+        var original = await db.Set<CashDividend>().SingleAsync();
+        var unservedAt = DateTime.UtcNow;
+        original.PriceAdjustmentUnservedTime = unservedAt;
+        await db.SaveChangesAsync();
+
+        var changes = await NewManager(db)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, reported);
+
+        changes.Should().Be(0);
+        (await db.Set<CashDividend>().SingleAsync())
+            .PriceAdjustmentUnservedTime.Should()
+            .Be(unservedAt);
+    }
+
     [Fact]
     public async Task Capture_AutomaticSources_DoNotOverwriteManualAmount()
     {
