@@ -31,6 +31,8 @@ internal static class StylesheetProseConversionStep
         var children = page.Children.ToArray();
         if (originalChildren.Length != children.Length || original.TextContent != page.TextContent)
             return;
+        // content-visibility: auto only defers offscreen rendering, so a page carrying it still
+        // prints every line; pdf2htmlEX sets it on every page.
         for (var ancestor = page; ancestor != null; ancestor = ancestor.ParentElement)
         {
             if (ancestor.HasAttribute("hidden"))
@@ -48,7 +50,7 @@ internal static class StylesheetProseConversionStep
                     "perspective",
                     "filter",
                 }.Any(property => style.GetPropertyValue(property) is not ("" or "none"))
-                || style.GetPropertyValue("content-visibility") is not ("" or "visible")
+                || style.GetPropertyValue("content-visibility") is not ("" or "visible" or "auto")
                 || style.GetPropertyValue("clip-path") is not ("" or "none")
                 || style.GetPropertyValue("clip") is not ("" or "auto")
                 || style.GetPropertyValue("display") == "none"
