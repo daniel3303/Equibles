@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.BusinessLogic.Websites;
+using Equibles.Core.Extensions;
 using Equibles.Integrations.Common.RateLimiter;
 using Microsoft.Extensions.Logging;
 
@@ -66,9 +67,11 @@ public class WebsiteProbeClient
 
         // A disclosure without a scheme ("www.acme.co.in") names no protocol, and many small
         // companies' sites serve plain HTTP only, so https is only the first guess; a candidate
-        // that stated https keeps it.
+        // that stated https keeps it. The fallback is a plain request even with a sidecar, as only
+        // it reports where it landed: an answer from another site (a parked domain, a webmail
+        // login) is not the company's own.
         var plain = PlainHttp(candidate, normalized);
-        if (plain != null && await Probe(plain, cancellationToken))
+        if (plain != null && await ProbePlain(plain, ownSite: true, cancellationToken))
             return plain;
 
         return null;
@@ -121,6 +124,19 @@ public class WebsiteProbeClient
             }
         }
 
+        return await ProbePlain(url, ownSite: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// Probes one absolute URL with a plain request; with <paramref name="ownSite"/> the
+    /// response must also come from the URL's own registrable domain after any redirect.
+    /// </summary>
+    private async Task<bool> ProbePlain(
+        string url,
+        bool ownSite,
+        CancellationToken cancellationToken
+    )
+    {
         try
         {
             await RateLimiter.WaitAsync();
@@ -132,7 +148,13 @@ public class WebsiteProbeClient
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken
             );
-            return response.IsSuccessStatusCode;
+            var landed = response.RequestMessage?.RequestUri ?? new Uri(url);
+            return response.IsSuccessStatusCode
+                && (
+                    !ownSite
+                    || RegistrableDomain.Of(landed.Host.ToLowerInvariant())
+                        == RegistrableDomain.Of(new Uri(url).Host.ToLowerInvariant())
+                );
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
