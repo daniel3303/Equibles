@@ -11,7 +11,14 @@ services:
     # Pinned: chunk searches use parallel BM25 workers, which need pg_search 0.25.11 or
     # later. A bump that changes pg_search ships with a migration running
     # ALTER EXTENSION ... UPDATE, or BM25 queries fail on the existing database.
-    image: paradedb/paradedb:0.26.2-pg18
+    #
+    # The pin must never trail the extension version a database has already been
+    # updated to: UpdateParadeDbExtensions runs `ALTER EXTENSION pg_search UPDATE`,
+    # so the database adopts whatever the image ships, and Down() is empty because
+    # pg_search provides no downgrade scripts. Deploying a pin older than the
+    # installed extension is a one-way downgrade against bm25 indexes the newer
+    # version wrote. Keep this equal to the pg_search in the tag you deploy.
+    image: paradedb/paradedb:0.26.3-pg18
     ports:
       - "5432:5432"
     environment:
