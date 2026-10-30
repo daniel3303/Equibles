@@ -179,6 +179,33 @@ public class FilingWebsiteExtractorTests
         FilingWebsiteExtractor.Extract(text).Should().BeNull();
     }
 
+    // RLJ Lodging Trust's proxy statement: a "website" token before the anchor once made the
+    // generated self-reference matcher return a match that never advanced, so the scan ran
+    // until the worker ran out of memory.
+    [Fact]
+    public void WebsiteTokenBeforeTheAnchor_TerminatesWithoutADisclosure()
+    {
+        var text =
+            "RLJ maintains an updated website devoted to the Company’s ongoing ESG initiatives, "
+            + "which can be accessed at: www.rljlodgingtrust.com/corporate-responsibility-strategy/.";
+        var extract = Task.Run(() => FilingWebsiteExtractor.Extract(text));
+        var disowns = Task.Run(() =>
+            FilingWebsiteExtractor.Disowns(text, "www.rljlodgingtrust.com")
+        );
+
+        Task.WaitAll(new Task[] { extract, disowns }, TimeSpan.FromSeconds(10)).Should().BeTrue();
+        extract.Result.Should().BeNull();
+        disowns.Result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SecondWebsiteTokenInThePhrase_StillNamesTheUrl()
+    {
+        var text = "Reports are posted on our website or web site at www.acme.com.";
+
+        FilingWebsiteExtractor.Extract(text).Should().Be("www.acme.com");
+    }
+
     [Fact]
     public void ThirdPartySiteBeforeTheDisclosure_DoesNotWin()
     {

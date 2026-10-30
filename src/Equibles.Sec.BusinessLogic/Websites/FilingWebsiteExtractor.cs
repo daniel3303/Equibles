@@ -169,8 +169,11 @@ public static partial class FilingWebsiteExtractor
     // website at", "We maintain a website at", "the Registrant maintains a website at", …
     // The phrase holds no second anchor, so the one nearest "website" is the one judged: "our
     // transfer agent, and its website" is an "its" phrase.
+    // The middle loop must stay greedy: the generated matcher for a lazy loop around that
+    // lookahead returns a match ending before its anchor when a "website" token precedes the
+    // anchor, and Matches() then never advances (pinned by FilingWebsiteExtractorTests).
     [GeneratedRegex(
-        @"(?<anchor>\bour\b|\bits\b|\bwe\b|\bthe\s+(?:company|registrant|corporation)(?:['’]s)?)(?<middle>(?:(?!\b(?:our|its|we)\b)[a-z\s,'’-]){0,40}?)(?:websites?|web\s+sites?|internet\s+(?:web\s+)?(?:site|address))",
+        @"(?<anchor>\bour\b|\bits\b|\bwe\b|\bthe\s+(?:company|registrant|corporation)(?:['’]s)?)(?<middle>(?:(?!\b(?:our|its|we)\b)[a-z\s,'’-]){0,40})(?:websites?|web\s+sites?|internet\s+(?:web\s+)?(?:site|address))",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex SelfReferenceRegex();
