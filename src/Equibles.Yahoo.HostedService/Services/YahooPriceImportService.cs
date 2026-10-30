@@ -1081,6 +1081,7 @@ public class YahooPriceImportService
     {
         await RequeueStampedSplitBasisMismatches(today, cancellationToken);
 
+        var floor = PriceHistoryFloor();
         PendingPriceReconciliationSelection selection;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -1089,6 +1090,7 @@ public class YahooPriceImportService
             selection = await manager.SelectPendingSeries(
                 _workerOptions.MaxCorporateActionPriceReconciliationsPerCycle,
                 today,
+                floor,
                 cancellationToken
             );
         }
@@ -1106,8 +1108,6 @@ public class YahooPriceImportService
                     + "and will be reconciled on a later cycle",
                 selection.Skipped
             );
-
-        var floor = PriceHistoryFloor();
 
         foreach (var series in selection.Series)
         {

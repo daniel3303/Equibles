@@ -39,9 +39,22 @@ public class CorporateActionPriceReconciliationManager
     /// Actions stay pending through their effective date so the provider history is not stamped
     /// before that session has settled and incorporated the adjustment.
     /// </summary>
+    public Task<PendingPriceReconciliationSelection> SelectPendingSeries(
+        int maxPerCycle,
+        DateOnly settledBefore,
+        CancellationToken cancellationToken = default
+    ) => SelectPendingSeries(maxPerCycle, settledBefore, DateOnly.MinValue, cancellationToken);
+
+    /// <summary>
+    /// As above, for a reconciler whose history fetch starts at <paramref name="historyFloor"/>: a
+    /// dividend on or before it is never selected, as that fetch can neither serve it nor adjust a
+    /// bar before it, so each such payment would cost a fetch to settle nothing. A lowered floor
+    /// admits it again.
+    /// </summary>
     public async Task<PendingPriceReconciliationSelection> SelectPendingSeries(
         int maxPerCycle,
         DateOnly settledBefore,
+        DateOnly historyFloor,
         CancellationToken cancellationToken = default
     )
     {
@@ -51,7 +64,7 @@ public class CorporateActionPriceReconciliationManager
         );
         var cursor = await GetCursorForUpdate(cancellationToken);
         var splits = await LoadPendingSplits(settledBefore, cancellationToken);
-        var dividends = await LoadPendingDividends(settledBefore, cancellationToken);
+        var dividends = await LoadPendingDividends(settledBefore, historyFloor, cancellationToken);
         var pendingSeries = splits
             .Keys.Concat(dividends.Keys)
             .Distinct()
@@ -389,7 +402,11 @@ public class CorporateActionPriceReconciliationManager
 
     private async Task<
         Dictionary<PriceReconciliationKey, IReadOnlyList<PendingDividendSnapshot>>
-    > LoadPendingDividends(DateOnly settledBefore, CancellationToken cancellationToken)
+    > LoadPendingDividends(
+        DateOnly settledBefore,
+        DateOnly historyFloor,
+        CancellationToken cancellationToken
+    )
     {
         var rows = await _dividendRepository
             .GetPendingPriceAdjustment()
@@ -397,6 +414,7 @@ public class CorporateActionPriceReconciliationManager
                 dividend.EquityListingId != null
                 && dividend.Currency != null
                 && dividend.ExDate < settledBefore
+                && dividend.ExDate > historyFloor
                 && dividend.PriceAdjustmentUnservedTime == null
             )
             .Select(dividend => new

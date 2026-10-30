@@ -207,6 +207,53 @@ public class CorporateActionPriceReconciliationManagerSelectionTests
         series.Dividends.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task SelectPendingSeries_DividendsOnOrBeforeHistoryFloor_AreNotSelected()
+    {
+        await using var db = NewDb();
+        var (early, current) = (Guid.NewGuid(), Guid.NewGuid());
+        var floor = new DateOnly(2020, 1, 1);
+        db.AddRange(Stock(early, "OLD"), Stock(current, "NEW"));
+        db.AddRange(
+            PendingDividend(early, new DateOnly(2014, 7, 3)),
+            PendingDividend(early, floor),
+            PendingDividend(current, floor.AddDays(1))
+        );
+        await SaveFixture(db);
+
+        var manager = NewManager(db);
+        var selection = await manager.SelectPendingSeries(50, SettledBefore, floor);
+
+        selection.Series.Should().ContainSingle().Which.EquityIssuerId.Should().Be(current);
+        selection.TotalPending.Should().Be(1);
+        (await manager.SelectPendingSeries(50, SettledBefore, floor.AddYears(-10)))
+            .Series.Single(series => series.EquityIssuerId == early)
+            .Dividends.Should()
+            .HaveCount(2);
+    }
+
+    [Fact]
+    public async Task SelectPendingSeries_SplitBeforeHistoryFloor_StillQueuesItsSeries()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var floor = new DateOnly(2020, 1, 1);
+        db.Add(Stock(stockId));
+        db.AddRange(
+            PendingSplit(stockId, new DateOnly(2016, 5, 2)),
+            PendingDividend(stockId, new DateOnly(2015, 8, 6))
+        );
+        await SaveFixture(db);
+
+        var series = (await NewManager(db).SelectPendingSeries(50, SettledBefore, floor))
+            .Series.Should()
+            .ContainSingle()
+            .Which;
+
+        series.Splits.Should().ContainSingle();
+        series.Dividends.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(10)]
     [InlineData(12)]
