@@ -64,7 +64,30 @@ public class WebsiteProbeClient
         if (bareHost != null && await Probe(bareHost, cancellationToken))
             return bareHost;
 
+        // A disclosure without a scheme ("www.acme.co.in") names no protocol, and many small
+        // companies' sites serve plain HTTP only, so https is only the first guess; a candidate
+        // that stated https keeps it.
+        var plain = PlainHttp(candidate, normalized);
+        if (plain != null && await Probe(plain, cancellationToken))
+            return plain;
+
         return null;
+    }
+
+    /// <summary>
+    /// The plain-HTTP form of <paramref name="normalizedUrl"/> when its https scheme was assumed
+    /// by <see cref="Normalize"/> rather than stated in <paramref name="candidate"/>, or null.
+    /// </summary>
+    public static string PlainHttp(string candidate, string normalizedUrl)
+    {
+        const string assumed = "https://";
+        if (
+            string.IsNullOrEmpty(normalizedUrl)
+            || candidate.Contains("://")
+            || !normalizedUrl.StartsWith(assumed, StringComparison.Ordinal)
+        )
+            return null;
+        return "http://" + normalizedUrl[assumed.Length..];
     }
 
     /// <summary>
