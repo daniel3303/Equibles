@@ -41,6 +41,11 @@
       Link="TestAssets/Holdings13DG/%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="../Equibles.UnitTests/TestAssets/Congress/house-ptr-*-original.pdf;../Equibles.UnitTests/TestAssets/Congress/house-ptr-*-amendment.pdf"
+      Link="TestAssets/Congress/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

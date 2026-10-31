@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <InternalsVisibleTo Include="Equibles.UnitTests" />
+    <InternalsVisibleTo Include="Equibles.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>

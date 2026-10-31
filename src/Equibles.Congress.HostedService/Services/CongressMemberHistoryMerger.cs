@@ -28,6 +28,7 @@ internal sealed class CongressMemberHistoryMerger
         PreserveStateDistrict(survivor, retired);
         var memberIds = retired.Select(member => member.Id).Append(survivor.Id).ToList();
         var (reassignedTrades, duplicateTrades) = await MergeTrades(survivor.Id, memberIds, ct);
+        await MergeTradeAmendments(survivor.Id, memberIds, ct);
         var (reassignedDisclosures, duplicateDisclosures) = await MergeDisclosures(
             survivor.Id,
             memberIds,
@@ -94,6 +95,24 @@ internal sealed class CongressMemberHistoryMerger
             trade.CongressMemberId = survivorId;
         await _dbContext.SaveChangesAsync(ct);
         return (reassigned.Count, duplicates.Count);
+    }
+
+    // Amendment rows keep distinct source keys, so a merge only moves them to the survivor.
+    private async Task MergeTradeAmendments(
+        Guid survivorId,
+        IReadOnlyCollection<Guid> memberIds,
+        CancellationToken ct
+    )
+    {
+        var rows = await _dbContext
+            .Set<CongressionalTradeAmendment>()
+            .Where(row =>
+                memberIds.Contains(row.CongressMemberId) && row.CongressMemberId != survivorId
+            )
+            .ToListAsync(ct);
+        foreach (var row in rows)
+            row.CongressMemberId = survivorId;
+        await _dbContext.SaveChangesAsync(ct);
     }
 
     private async Task<(int Reassigned, int Duplicates)> MergeDisclosures(
