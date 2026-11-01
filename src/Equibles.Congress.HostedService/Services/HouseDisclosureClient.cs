@@ -452,6 +452,7 @@ public partial class HouseDisclosureClient
             }
 
             var subholding = FindSubholding(lines, i + 1);
+            var filingStatus = FindFilingStatus(lines, i, anchor.Index);
 
             var transaction = BuildTransaction(
                 assetText,
@@ -464,6 +465,7 @@ public partial class HouseDisclosureClient
             if (transaction != null)
             {
                 transaction.SourceRowIndex = sourceRowIndex;
+                transaction.FilingStatus = filingStatus;
                 transactions.Add(transaction);
             }
             else
@@ -503,6 +505,45 @@ public partial class HouseDisclosureClient
         }
 
         return null;
+    }
+
+    // The status sits either in the row's own asset text, before its anchor, or on a detail line
+    // between this anchor and the next one.
+    private static CongressionalTradeFilingStatus FindFilingStatus(
+        IReadOnlyList<string> lines,
+        int anchorLine,
+        int anchorIndex
+    )
+    {
+        var inline = ReadFilingStatus(lines[anchorLine][..anchorIndex]);
+        if (inline != CongressionalTradeFilingStatus.Unstated)
+            return inline;
+
+        for (var i = anchorLine + 1; i < lines.Count; i++)
+        {
+            if (TransactionAnchorRegex().IsMatch(lines[i]))
+                break;
+
+            var status = ReadFilingStatus(lines[i]);
+            if (status != CongressionalTradeFilingStatus.Unstated)
+                return status;
+        }
+
+        return CongressionalTradeFilingStatus.Unstated;
+    }
+
+    internal static CongressionalTradeFilingStatus ReadFilingStatus(string text)
+    {
+        var match = FilingStatusValueRegex().Match(text);
+        if (!match.Success)
+            return CongressionalTradeFilingStatus.Unstated;
+
+        return match.Groups[1].Value.ToLowerInvariant() switch
+        {
+            "new" => CongressionalTradeFilingStatus.New,
+            "amended" => CongressionalTradeFilingStatus.Amended,
+            _ => CongressionalTradeFilingStatus.Deleted,
+        };
     }
 
     // Lines that continue the current row's asset name or amount: not the next
@@ -751,6 +792,12 @@ public partial class HouseDisclosureClient
 
     [GeneratedRegex(@"(?:^|\s)(?:F\s+S|F\s*iling\s+S\s*tatus)\s*:", RegexOptions.IgnoreCase)]
     private static partial Regex InlineFilingStatusRegex();
+
+    [GeneratedRegex(
+        @"(?:^|\s)(?:F\s+S|F\s*iling\s+S\s*tatus)\s*:\s*(New|Amended|Deleted)\b",
+        RegexOptions.IgnoreCase
+    )]
+    private static partial Regex FilingStatusValueRegex();
 
     internal static HouseInlineAssetDetails ExtractInlineAssetDetails(string assetText)
     {

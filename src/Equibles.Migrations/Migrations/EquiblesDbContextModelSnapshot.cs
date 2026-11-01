@@ -1356,6 +1356,101 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("CongressionalTrade");
                 });
 
+            modelBuilder.Entity("Equibles.Congress.Data.Models.CongressionalTradeAmendment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AmountFrom")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("AmountTo")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AssetName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("AssetType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("CongressMemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FiledTicker")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("FilingDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("FilingKind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("FirstDisclosedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("OwnerType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("SourceRowIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Subholding")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SupersededSourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("SupersededSourceRowIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("TransactionDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("TransactionType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Verdict")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CongressMemberId");
+
+                    b.HasIndex("Verdict");
+
+                    b.HasIndex(new[] { "FilingKind", "SourceId", "SourceRowIndex" }, "IX_CongressionalTradeAmendment_SourceRow")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "SupersededSourceId", "SupersededSourceRowIndex" }, "IX_CongressionalTradeAmendment_Superseded");
+
+                    b.ToTable("CongressionalTradeAmendment");
+                });
+
             modelBuilder.Entity("Equibles.Congress.Data.Models.CongressionalTradeImportPartition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7711,6 +7806,17 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("CongressMember");
 
                     b.Navigation("Issuer");
+                });
+
+            modelBuilder.Entity("Equibles.Congress.Data.Models.CongressionalTradeAmendment", b =>
+                {
+                    b.HasOne("Equibles.Congress.Data.Models.CongressMember", "CongressMember")
+                        .WithMany()
+                        .HasForeignKey("CongressMemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CongressMember");
                 });
 
             modelBuilder.Entity("Equibles.CorporateActions.Data.Models.CashDividend", b =>

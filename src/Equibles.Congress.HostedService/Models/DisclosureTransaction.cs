@@ -31,4 +31,7 @@ public class DisclosureTransaction
     public string Subholding { get; init; }
     public long AmountFrom { get; init; }
     public long AmountTo { get; init; }
+
+    // Only House PTRs print a per-row status; Senate rows stay Unstated.
+    public CongressionalTradeFilingStatus FilingStatus { get; set; }
 }

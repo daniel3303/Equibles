@@ -23,6 +23,7 @@ public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<CongressionalAnnualDisclosure>();
         builder.Entity<CongressionalDisclosureLine>();
         builder.Entity<CongressionalFilingRecord>();
+        builder.Entity<CongressionalTradeAmendment>();
         builder.Entity<CongressionalTradeImportPartition>();
         builder.Entity<CongressMemberRedirect>();
         builder.Entity<CongressLegislator>();
