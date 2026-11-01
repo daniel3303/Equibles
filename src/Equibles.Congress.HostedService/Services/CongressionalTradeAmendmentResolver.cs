@@ -50,11 +50,10 @@ public class CongressionalTradeAmendmentResolver
             .ToList();
 
         var superseded = 0;
-        foreach (var filing in filings)
-        {
-            var rows = filing.OrderBy(row => row.SourceRowIndex).ToList();
+        foreach (
+            var rows in filings.Select(group => group.OrderBy(row => row.SourceRowIndex).ToList())
+        )
             superseded += await Resolve(rows, ct);
-        }
 
         if (superseded > 0)
         {
@@ -195,7 +194,7 @@ public class CongressionalTradeAmendmentResolver
         CancellationToken ct
     )
     {
-        var visited = new HashSet<Guid> { row.Id };
+        // A lowered row now carries firstDisclosed, so the date guard also ends any cycle.
         var pending = new Queue<CongressionalTradeAmendment>([row]);
         while (pending.TryDequeue(out var current))
         {
@@ -208,11 +207,12 @@ public class CongressionalTradeAmendmentResolver
                     && next.SupersededSourceRowIndex == current.SourceRowIndex
                 )
                 .ToListAsync(ct);
-            foreach (var next in successors)
+            foreach (
+                var next in successors.Where(next =>
+                    next.FirstDisclosedDate is null || next.FirstDisclosedDate > firstDisclosed
+                )
+            )
             {
-                if (!visited.Add(next.Id) || next.FirstDisclosedDate <= firstDisclosed)
-                    continue;
-
                 next.FirstDisclosedDate = firstDisclosed;
                 if (next.Status == CongressionalTradeFilingStatus.Amended)
                 {

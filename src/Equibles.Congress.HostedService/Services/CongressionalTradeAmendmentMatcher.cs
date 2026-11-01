@@ -42,9 +42,13 @@ internal static class CongressionalTradeAmendmentMatcher
     {
         var explanations = new List<IReadOnlyList<AmendmentPair>>();
         var ambiguous = false;
-        foreach (var filing in candidates.GroupBy(trade => trade.SourceId, StringComparer.Ordinal))
+        foreach (
+            var filing in candidates
+                .GroupBy(trade => trade.SourceId, StringComparer.Ordinal)
+                .Select(group => group.ToList())
+        )
         {
-            var outcome = Pair(rows, filing.ToList(), out var pairs);
+            var outcome = Pair(rows, filing, out var pairs);
             if (outcome == PairOutcome.Explains)
                 explanations.Add(pairs);
             else if (outcome == PairOutcome.Ambiguous)
@@ -200,8 +204,10 @@ internal static class CongressionalTradeAmendmentMatcher
         HashSet<int> visited
     )
     {
-        foreach (var candidate in edges[row])
+        var candidates = edges[row];
+        for (var i = 0; i < candidates.Count; i++)
         {
+            var candidate = candidates[i];
             if (!visited.Add(candidate))
                 continue;
             if (

@@ -984,12 +984,17 @@ public class CongressionalTradeSyncService
                 row.Status == CongressionalTradeFilingStatus.Amended
                 && row.FirstDisclosedDate.HasValue
             )
-            .ToDictionary(TradeSourceIdentity.From, row => row.FirstDisclosedDate.Value);
-        foreach (var trade in trades)
-        {
-            if (firstDisclosed.TryGetValue(TradeSourceIdentity.From(trade), out var date))
-                trade.FilingDate = date;
-        }
+            .ToDictionary(
+                TradeSourceIdentity.From,
+                row => row.FirstDisclosedDate.GetValueOrDefault()
+            );
+        foreach (
+            var (trade, date) in trades
+                .Select(trade => (Trade: trade, Key: TradeSourceIdentity.From(trade)))
+                .Where(pair => firstDisclosed.ContainsKey(pair.Key))
+                .Select(pair => (pair.Trade, firstDisclosed[pair.Key]))
+        )
+            trade.FilingDate = date;
     }
 
     /// <summary>
