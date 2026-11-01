@@ -40,20 +40,15 @@ internal static class CongressionalTradeAmendmentMatcher
         IReadOnlyList<CongressionalTrade> candidates
     )
     {
-        var explanations = new List<IReadOnlyList<AmendmentPair>>();
-        var ambiguous = false;
-        foreach (
-            var filing in candidates
-                .GroupBy(trade => trade.SourceId, StringComparer.Ordinal)
-                .Select(group => group.ToList())
-        )
-        {
-            var outcome = Pair(rows, filing, out var pairs);
-            if (outcome == PairOutcome.Explains)
-                explanations.Add(pairs);
-            else if (outcome == PairOutcome.Ambiguous)
-                ambiguous = true;
-        }
+        var outcomes = candidates
+            .GroupBy(trade => trade.SourceId, StringComparer.Ordinal)
+            .Select(filing => Pair(rows, filing.ToList()))
+            .ToList();
+        var explanations = outcomes
+            .Where(outcome => outcome.Outcome == PairOutcome.Explains)
+            .Select(outcome => outcome.Pairs)
+            .ToList();
+        var ambiguous = outcomes.Any(outcome => outcome.Outcome == PairOutcome.Ambiguous);
 
         if (explanations.Count == 1 && !ambiguous)
             return new AmendmentMatch(CongressionalTradeAmendmentVerdict.Matched, explanations[0]);
@@ -62,19 +57,17 @@ internal static class CongressionalTradeAmendmentMatcher
             : new AmendmentMatch(CongressionalTradeAmendmentVerdict.Ambiguous, []);
     }
 
-    private static PairOutcome Pair(
+    private static (PairOutcome Outcome, IReadOnlyList<AmendmentPair> Pairs) Pair(
         IReadOnlyList<CongressionalTradeAmendment> rows,
-        IReadOnlyList<CongressionalTrade> filing,
-        out IReadOnlyList<AmendmentPair> pairs
+        IReadOnlyList<CongressionalTrade> filing
     )
     {
-        pairs = [];
         var edges = new List<int>[rows.Count];
         for (var i = 0; i < rows.Count; i++)
         {
             edges[i] = CandidatesFor(rows[i], filing);
             if (edges[i].Count == 0)
-                return PairOutcome.DoesNotExplain;
+                return (PairOutcome.DoesNotExplain, []);
         }
 
         // Rows and candidates that share an edge form one group. A group with as many candidates
@@ -85,19 +78,18 @@ internal static class CongressionalTradeAmendmentMatcher
         {
             var groupCandidates = group.SelectMany(row => edges[row]).Distinct().Count();
             if (groupCandidates != group.Count)
-                return PairOutcome.Ambiguous;
+                return (PairOutcome.Ambiguous, []);
 
             var assignment = PerfectPairing(group, edges);
             if (assignment == null)
-                return PairOutcome.Ambiguous;
+                return (PairOutcome.Ambiguous, []);
 
             result.AddRange(
                 assignment.Select(pair => new AmendmentPair(rows[pair.Key], filing[pair.Value]))
             );
         }
 
-        pairs = result;
-        return PairOutcome.Explains;
+        return (PairOutcome.Explains, result);
     }
 
     // A deleted row reprints its original exactly. An amended row prefers an exact copy (only an
