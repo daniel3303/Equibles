@@ -31,6 +31,13 @@ public abstract class BaseRepository<TEntity, TContext>
         return DbContext.Set<TEntity>().AsQueryable();
     }
 
+    /// <summary>
+    /// The context this repository is bound to. Exposed so a caller can reach the
+    /// EF model and the underlying connection without injecting a second context -
+    /// used by the status-page row estimate in <c>DataCountService</c>.
+    /// </summary>
+    public TContext Context => DbContext;
+
     public virtual TEntity Add(TEntity entity)
     {
         DbContext.Set<TEntity>().Add(entity);
