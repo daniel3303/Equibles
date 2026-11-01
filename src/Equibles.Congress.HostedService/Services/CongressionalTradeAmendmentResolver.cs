@@ -74,7 +74,7 @@ public class CongressionalTradeAmendmentResolver
         var memberIds = rows.Select(row => row.CongressMemberId).Distinct().ToList();
         var tickers = rows.Select(row => row.FiledTicker).Distinct().ToList();
         var filingDate = rows.Max(row => row.FilingDate);
-        var candidates = await _dbContext
+        var stored = await _dbContext
             .Set<CongressionalTrade>()
             .Where(trade =>
                 trade.FilingKind == kind
@@ -83,9 +83,14 @@ public class CongressionalTradeAmendmentResolver
                 && trade.SourceId != first.SourceId
                 && memberIds.Contains(trade.CongressMemberId)
                 && tickers.Contains(trade.FiledTicker)
-                && trade.FilingDate <= filingDate
             )
             .ToListAsync(ct);
+        var reportDates = await ReportFilingDates(first.FilingKind, stored, ct);
+        var candidates = stored
+            .Where(trade =>
+                reportDates.GetValueOrDefault(trade.SourceId, trade.FilingDate) <= filingDate
+            )
+            .ToList();
 
         var match =
             memberIds.Count == 1
@@ -154,9 +159,79 @@ public class CongressionalTradeAmendmentResolver
             );
             if (amended != null)
                 amended.FilingDate = pair.Superseded.FilingDate;
+            await PropagateFirstDisclosure(row, pair.Superseded.FilingDate, ct);
         }
 
         await _dbContext.SaveChangesAsync(ct);
+    }
+
+    // An amended trade carries its original's filing date, so a candidate filing is judged by the
+    // date its own report was filed, which its amendment rows keep.
+    private async Task<Dictionary<string, DateOnly>> ReportFilingDates(
+        CongressionalFilingKind kind,
+        List<CongressionalTrade> stored,
+        CancellationToken ct
+    )
+    {
+        var sourceIds = stored.Select(trade => trade.SourceId).Distinct().ToList();
+        var rows = await _dbContext
+            .Set<CongressionalTradeAmendment>()
+            .Where(row => row.FilingKind == kind && sourceIds.Contains(row.SourceId))
+            .Select(row => new { row.SourceId, row.FilingDate })
+            .ToListAsync(ct);
+        return rows.GroupBy(row => row.SourceId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Max(row => row.FilingDate),
+                StringComparer.Ordinal
+            );
+    }
+
+    // A later amendment can resolve first (a replay reads newest first), taking this amendment's
+    // date; hand the earlier first disclosure down every amendment that superseded this row.
+    private async Task PropagateFirstDisclosure(
+        CongressionalTradeAmendment row,
+        DateOnly firstDisclosed,
+        CancellationToken ct
+    )
+    {
+        var visited = new HashSet<Guid> { row.Id };
+        var pending = new Queue<CongressionalTradeAmendment>([row]);
+        while (pending.TryDequeue(out var current))
+        {
+            var successors = await _dbContext
+                .Set<CongressionalTradeAmendment>()
+                .Where(next =>
+                    next.Verdict == CongressionalTradeAmendmentVerdict.Matched
+                    && next.FilingKind == current.FilingKind
+                    && next.SupersededSourceId == current.SourceId
+                    && next.SupersededSourceRowIndex == current.SourceRowIndex
+                )
+                .ToListAsync(ct);
+            foreach (var next in successors)
+            {
+                if (!visited.Add(next.Id) || next.FirstDisclosedDate <= firstDisclosed)
+                    continue;
+
+                next.FirstDisclosedDate = firstDisclosed;
+                if (next.Status == CongressionalTradeFilingStatus.Amended)
+                {
+                    var kind = (CongressionalFilingKind?)next.FilingKind;
+                    var trade = await _dbContext
+                        .Set<CongressionalTrade>()
+                        .SingleOrDefaultAsync(
+                            stored =>
+                                stored.FilingKind == kind
+                                && stored.SourceId == next.SourceId
+                                && stored.SourceRowIndex == next.SourceRowIndex,
+                            ct
+                        );
+                    if (trade != null)
+                        trade.FilingDate = firstDisclosed;
+                }
+                pending.Enqueue(next);
+            }
+        }
     }
 
     internal static string DescribeAmbiguous(CongressionalTradeAmendment first, int rowCount) =>

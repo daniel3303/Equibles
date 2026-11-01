@@ -343,4 +343,76 @@ public class CongressionalTradeAmendmentTests : ParadeDbMcpTestBase
         trades.Should().OnlyContain(trade => trade.SourceId == "20019200");
         trades.Should().OnlyContain(trade => trade.FilingDate == CastorOriginalFiled);
     }
+
+    private static List<DisclosureTransaction> Filed(
+        string sourceId,
+        DateOnly filingDate,
+        string subholding,
+        long amountFrom,
+        long amountTo,
+        CongressionalTradeFilingStatus status
+    ) =>
+        [
+            new()
+            {
+                MemberName = "Test Member",
+                Position = CongressPosition.Representative,
+                Ticker = "AAPL",
+                AssetName = "Apple Inc. (AAPL)",
+                TransactionDate = new DateOnly(2025, 11, 3),
+                FilingDate = filingDate,
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "JT",
+                AssetType = "ST",
+                Subholding = subholding,
+                AmountFrom = amountFrom,
+                AmountTo = amountTo,
+                SourceId = sourceId,
+                FilingKind = CongressionalFilingKind.HousePeriodicTransactionReport,
+                SourceRowIndex = 0,
+                FilingStatus = status,
+            },
+        ];
+
+    [Fact]
+    public async Task Resolve_ChainReplayedNewestFirst_SupersedesBothLinksAndKeepsTheFirstDate()
+    {
+        // O is amended by A0 (account corrected), then A0 by A (amount corrected). A replay reads
+        // newest first, so A resolves against A0 before A0 is read again.
+        var original = new DateOnly(2025, 11, 20);
+        var firstAmendment = new DateOnly(2025, 12, 10);
+        var secondAmendment = new DateOnly(2026, 1, 15);
+        List<DisclosureTransaction> O(CongressionalTradeFilingStatus status) =>
+            Filed("O", original, "Brokerage", 1_001, 15_000, status);
+        List<DisclosureTransaction> A0(CongressionalTradeFilingStatus status) =>
+            Filed("A0", firstAmendment, "IRA", 1_001, 15_000, status);
+        List<DisclosureTransaction> A(CongressionalTradeFilingStatus status) =>
+            Filed("A", secondAmendment, "IRA", 15_001, 50_000, status);
+
+        var sut = BuildSut();
+        // As stored before the status was read.
+        await Persist(sut, O(CongressionalTradeFilingStatus.Unstated));
+        await Persist(sut, A0(CongressionalTradeFilingStatus.Unstated));
+        await Persist(sut, A(CongressionalTradeFilingStatus.Unstated));
+
+        await Persist(sut, A(CongressionalTradeFilingStatus.Amended));
+        await Resolve();
+        await Persist(sut, A0(CongressionalTradeFilingStatus.Amended));
+        await Resolve();
+        await Persist(sut, O(CongressionalTradeFilingStatus.New));
+        await Resolve();
+
+        var trade = (await StoredTrades()).Should().ContainSingle().Subject;
+        trade.SourceId.Should().Be("A");
+        trade.AmountFrom.Should().Be(15_001);
+        trade.FilingDate.Should().Be(original);
+        await using var verify = Fixture.CreateDbContext();
+        var records = await verify
+            .Set<CongressionalTradeAmendment>()
+            .AsNoTracking()
+            .ToDictionaryAsync(row => row.SourceId);
+        records["A"].SupersededSourceId.Should().Be("A0");
+        records["A0"].SupersededSourceId.Should().Be("O");
+        records.Values.Should().OnlyContain(row => row.FirstDisclosedDate == original);
+    }
 }
