@@ -31,7 +31,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **Insider Trading** | SEC Forms 3/4/5/144 | ✅ | ✅ | Director, officer, and 10% owner transactions, annual ownership statements, and proposed (Form 144) sales |
 | **Congressional Trading** | House/Senate disclosures | ✅ | ✅ | Securities transactions by members of Congress, including the filed stock, option, bond, or other instrument |
 | **Short Data** | SEC / FINRA | ✅ | ✅ | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
-| **Economic Indicators** | FRED (Federal Reserve) | ✅ | ✅ | Interest rates, inflation, employment, GDP, yield spreads, and more |
+| **Economic Indicators** | FRED (Federal Reserve), Bank of Canada, Statistics Canada | ✅ | ✅ | US and Canadian interest rates, inflation, employment, GDP, yield spreads, and more |
 | **Stock Prices** | Yahoo Finance | ✅ | ✅ | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
 | **European Listings** | ESMA/FCA FIRDS + exchange directories | ✅ | ✅ | Verified share listings on Euronext (Paris, Amsterdam, Brussels, Dublin, Oslo, Milan, Lisbon), Xetra, Nasdaq Stockholm, Helsinki and Copenhagen (main market and First North), BME, GPW and the London Stock Exchange (main market and AIM), keyed by ISIN and venue, with daily prices in the listing's own currency; every market with a directory adapter runs automatically; the price, dividend, financial-statement and fund-holding MCP tools accept them as `MIC:TICKER` (`XPAR:AIR`; see `docs/equity-identity.md`) |
 | **Futures Positioning** | CFTC | ✅ | ✅ | Commitments of Traders (COT) data for 30+ futures contracts |
@@ -94,7 +94,7 @@ This starts:
 | **db** | 5432 | ParadeDB (PostgreSQL + pgvector + pg_search) |
 | **web** | 8080 | Web portal for browsing data |
 | **mcp** | 8081 | MCP server for AI assistants |
-| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Yahoo, CFTC, CBOE, USAspending, FDA, FIRDS, European exchange directories) |
+| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Bank of Canada, Statistics Canada, Yahoo, CFTC, CBOE, USAspending, FDA, FIRDS, European exchange directories) |
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
@@ -205,7 +205,7 @@ The web portal at `http://localhost:8080` provides a browser-based interface for
 - **Advisers** — Browse SEC-registered and exempt reporting investment advisers (`/advisers`), ranked by assets under management, with per-firm profiles (regulatory AUM, main office, employee count, fee structure)
 - **Insider Trading** — Dashboard showing the top insider buys, sells, and biggest transactions over the last 90 days
 - **Short Activity** — Most-shorted leaderboard (`/most-shorted`, ranked by FINRA short interest) and largest daily short volume (`/short-volume`), each with a date selector, server-side sort, and pagination
-- **Economy** — Browse FRED economic indicators grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
+- **Economy** — Browse US and Canadian economic indicators from FRED, the Bank of Canada and Statistics Canada, grouped by category (interest rates, inflation, employment, GDP, etc.) with charts and statistics
 - **Futures** — CFTC Commitments of Traders positioning data for 30+ futures contracts (commodities, indices, currencies) with commercial/non-commercial position charts
 - **Market** — CBOE market indicators: VIX volatility index with OHLC charts, put/call ratios (equity, index, total, VIX, ETP)
 - **Search** — Global search across stocks, institutions, insiders, and congress members with category filtering and date ranges
@@ -222,7 +222,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Financial Statements** — XBRL fact time series per ticker, cross-ticker fact comparison, full income statement / balance sheet / cash flow per fiscal period
 - **Fund & Adviser Filings** — Fund portfolio holdings (NPORT), registered-fund operations (N-CEN), exempt offerings (Form D), and SEC-registered and exempt reporting investment-adviser lookup and search (Form ADV)
 - **Short Data** — Daily short volume, market-wide largest daily short volume, bi-monthly short interest, and the latest short-interest snapshot across tickers
-- **Economic Indicators** — FRED data lookup, latest macro snapshot, indicator search across categories
+- **Economic Indicators** — FRED, Bank of Canada and Statistics Canada lookup, a latest macro snapshot per country (US or CA), indicator search across categories
 - **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume, Bollinger Bands)
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
@@ -402,10 +402,10 @@ This self-hosted build exposes 70 tools over MCP. The hosted server at `https://
 - CompareFinancialFact — a concept across companies
 - GetRevenueBreakdown — revenue by segment/geography/product plus reported segment operating income and derived margin
 
-**Economic data (FRED)**
+**Economic data (FRED, Bank of Canada, Statistics Canada)**
 
-- GetEconomicIndicator — a FRED series
-- GetLatestEconomicIndicators — latest values by category
+- GetEconomicIndicator — a curated US or Canadian series
+- GetLatestEconomicIndicators — latest values by category for one country (US or CA)
 - SearchEconomicIndicators — strict-first tokenized curated-series search with standard macro aliases
 - GetEconomicCalendar — US macro release calendar
 

@@ -170,7 +170,180 @@ public static class CuratedSeriesRegistry
         new("DJIA", FredSeriesCategory.Market),
         new("NASDAQ100", FredSeriesCategory.Market),
         new("ANFCI", FredSeriesCategory.Market),
+        // Canada. FRED's own Canadian CPI and policy-rate series stopped updating (2025 and 2023),
+        // so those come from Statistics Canada and the Bank of Canada; FRED keeps the two Canadian
+        // series it still carries current.
+        new("IR3TIB01CAM156N", FredSeriesCategory.InterestRates, "CA"),
+        new("QCAR628BIS", FredSeriesCategory.Housing, "CA"),
+        Canadian(
+            "BOC-V39079",
+            IndicatorSource.BankOfCanada,
+            "V39079",
+            "Bank of Canada Target for the Overnight Rate",
+            FredSeriesCategory.InterestRates,
+            "D",
+            "Percent",
+            "NSA",
+            "https://www.bankofcanada.ca/core-functions/monetary-policy/key-interest-rate/"
+        ),
+        Canadian(
+            "BOC-AVG.INTWO",
+            IndicatorSource.BankOfCanada,
+            "AVG.INTWO",
+            "Canadian Overnight Repo Rate Average (CORRA)",
+            FredSeriesCategory.InterestRates,
+            "D",
+            "Percent",
+            "NSA",
+            "https://www.bankofcanada.ca/rates/interest-rates/corra/"
+        ),
+        Canadian(
+            "BOC-BD.CDN.2YR.DQ.YLD",
+            IndicatorSource.BankOfCanada,
+            "BD.CDN.2YR.DQ.YLD",
+            "Government of Canada Benchmark Bond Yield, 2-Year",
+            FredSeriesCategory.InterestRates,
+            "D",
+            "Percent",
+            "NSA",
+            "https://www.bankofcanada.ca/rates/interest-rates/canadian-bonds/"
+        ),
+        Canadian(
+            "BOC-BD.CDN.10YR.DQ.YLD",
+            IndicatorSource.BankOfCanada,
+            "BD.CDN.10YR.DQ.YLD",
+            "Government of Canada Benchmark Bond Yield, 10-Year",
+            FredSeriesCategory.InterestRates,
+            "D",
+            "Percent",
+            "NSA",
+            "https://www.bankofcanada.ca/rates/interest-rates/canadian-bonds/"
+        ),
+        Canadian(
+            "STATCAN-V41690973",
+            IndicatorSource.StatisticsCanada,
+            "41690973",
+            "Consumer Price Index: All Items for Canada",
+            FredSeriesCategory.Inflation,
+            "M",
+            "Index 2002=100",
+            "NSA",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810000401"
+        ),
+        Canadian(
+            "STATCAN-V41690914",
+            IndicatorSource.StatisticsCanada,
+            "41690914",
+            "Consumer Price Index: All Items for Canada, Seasonally Adjusted",
+            FredSeriesCategory.Inflation,
+            "M",
+            "Index 2002=100",
+            "SA",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810000601"
+        ),
+        Canadian(
+            "STATCAN-V108785715",
+            IndicatorSource.StatisticsCanada,
+            "108785715",
+            "Core Inflation for Canada: CPI-trim",
+            FredSeriesCategory.Inflation,
+            "M",
+            "Percent Change from Year Ago",
+            "NSA",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810025601"
+        ),
+        Canadian(
+            "STATCAN-V108785714",
+            IndicatorSource.StatisticsCanada,
+            "108785714",
+            "Core Inflation for Canada: CPI-median",
+            FredSeriesCategory.Inflation,
+            "M",
+            "Percent Change from Year Ago",
+            "NSA",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810025601"
+        ),
+        Canadian(
+            "STATCAN-V2062815",
+            IndicatorSource.StatisticsCanada,
+            "2062815",
+            "Unemployment Rate for Canada, 15 Years and Over",
+            FredSeriesCategory.Employment,
+            "M",
+            "Percent",
+            "SA",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1410028701"
+        ),
+        Canadian(
+            "STATCAN-V2062811",
+            IndicatorSource.StatisticsCanada,
+            "2062811",
+            "Employment for Canada, 15 Years and Over",
+            FredSeriesCategory.Employment,
+            "M",
+            "Thousands of Persons",
+            "SA",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1410028701"
+        ),
+        Canadian(
+            "STATCAN-V65201210",
+            IndicatorSource.StatisticsCanada,
+            "65201210",
+            "Real Gross Domestic Product for Canada, All Industries (Monthly)",
+            FredSeriesCategory.GdpAndOutput,
+            "M",
+            "Millions of Chained 2017 Canadian Dollars",
+            "SAAR",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=3610043401"
+        ),
+        Canadian(
+            "STATCAN-V62305752",
+            IndicatorSource.StatisticsCanada,
+            "62305752",
+            "Real Gross Domestic Product for Canada (Quarterly)",
+            FredSeriesCategory.GdpAndOutput,
+            "Q",
+            "Millions of Chained 2017 Canadian Dollars",
+            "SAAR",
+            "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=3610010401"
+        ),
     ];
+
+    private static CuratedSeries Canadian(
+        string seriesId,
+        IndicatorSource source,
+        string sourceKey,
+        string title,
+        FredSeriesCategory category,
+        string frequency,
+        string units,
+        string seasonalAdjustment,
+        string sourceUrl
+    ) =>
+        new(seriesId, category, "CA", source)
+        {
+            SourceKey = sourceKey,
+            Title = title,
+            Frequency = frequency,
+            Units = units,
+            SeasonalAdjustment = seasonalAdjustment,
+            SourceUrl = sourceUrl,
+        };
 }
 
-public record CuratedSeries(string SeriesId, FredSeriesCategory Category);
+// A series outside FRED states its own title, frequency, units and page, since its publisher's
+// metadata does not follow FRED's vocabulary.
+public record CuratedSeries(
+    string SeriesId,
+    FredSeriesCategory Category,
+    string CountryCode = "US",
+    IndicatorSource Source = IndicatorSource.Fred
+)
+{
+    public string SourceKey { get; init; }
+    public string Title { get; init; }
+    public string Frequency { get; init; }
+    public string Units { get; init; }
+    public string SeasonalAdjustment { get; init; }
+    public string SourceUrl { get; init; }
+}

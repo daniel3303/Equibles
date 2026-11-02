@@ -12,6 +12,15 @@ public static class ServiceCollectionExtensions
         services.AutoWireServicesFrom<Equibles.Integrations.Fred.FredClient>();
 
         services.AddHostedService<FredScraperWorker>();
+        services.AddHttpClient(
+            Canada.CanadianIndicatorImportService.ClientName,
+            client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(2);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Equibles/1.0");
+            }
+        );
+        services.AddHostedService<Canada.CanadianIndicatorWorker>();
 
         return services;
     }

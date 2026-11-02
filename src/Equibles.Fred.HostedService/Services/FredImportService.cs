@@ -44,7 +44,9 @@ public class FredImportService : IImporter
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        foreach (var curated in CuratedSeriesRegistry.Series)
+        foreach (
+            var curated in CuratedSeriesRegistry.Series.Where(s => s.Source == IndicatorSource.Fred)
+        )
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -258,6 +260,8 @@ public class FredImportService : IImporter
             SeriesId = metadata.Id,
             Title = metadata.Title,
             Category = curated.Category,
+            CountryCode = curated.CountryCode,
+            Source = IndicatorSource.Fred,
             Frequency = metadata.FrequencyShort,
             Units = metadata.Units,
             SeasonalAdjustment = metadata.SeasonalAdjustmentShort,
