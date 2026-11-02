@@ -42,6 +42,9 @@ public class CompanyMetadata
     /// <summary>Filing date of the newest N-54C (withdrawal of that election) among the recent filings.</summary>
     public DateOnly? BdcWithdrawalFiledOn { get; set; }
 
+    /// <summary>The newest successor-issuer report (Form 8-K12B, 8-K12G3 or 8-K15D5) among the recent filings; null when none is listed.</summary>
+    public SuccessorRegistration SuccessorRegistration { get; set; }
+
     /// <summary>True when EDGAR pages older filings out of the recent list, so the recent list is not the whole history.</summary>
     public bool HasArchivedFilings { get; set; }
 
