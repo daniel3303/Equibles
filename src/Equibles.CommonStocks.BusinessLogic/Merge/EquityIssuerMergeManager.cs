@@ -212,8 +212,11 @@ public class EquityIssuerMergeManager
     }
 
     // The retired issuer's U.S. listings now belong to the survivor; each one that repeats a survivor
-    // listing's ticker folds into that listing, so the ticker keeps one series and one id, and the
-    // survivor listing takes over the live directory designation.
+    // listing's ticker folds into that listing, so the ticker keeps one series and one id. The survivor
+    // listing takes the live directory designation and the retired listing's current identity (venue,
+    // verification), and a retired security emptied by the folds passes its identity (ISIN, CUSIP,
+    // registration, source identifiers) to the security that absorbed its listings, the predecessor's
+    // CUSIP staying resolvable as an alias.
     private async Task FoldListings(
         EquityIssuer retired,
         EquityIssuer survivor,
@@ -232,12 +235,7 @@ public class EquityIssuerMergeManager
                 .Where(listing => listing.MarketCountryCode == "US")
         )
         {
-            var matches = survivorListings
-                .Where(listing =>
-                    listing.Ticker == from.Ticker
-                    && listing.MarketIdentifierCode == from.MarketIdentifierCode
-                )
-                .ToList();
+            var matches = survivorListings.Where(listing => listing.Ticker == from.Ticker).ToList();
             if (matches.Count > 1)
             {
                 report.Refusals.Add(
@@ -245,8 +243,44 @@ public class EquityIssuerMergeManager
                 );
                 return;
             }
-            if (matches.Count == 1)
-                folds.Add((from, matches[0]));
+            if (matches.Count == 0)
+                continue;
+            var to = matches[0];
+            // A listing's denomination is fixed once it records a dividend, so two never blend.
+            if (
+                from.TradingCurrency != null
+                && to.TradingCurrency != null
+                && from.TradingCurrency != to.TradingCurrency
+            )
+            {
+                report.Refusals.Add(
+                    $"Listing {from.Ticker} trades in {to.TradingCurrency} on the survivor and {from.TradingCurrency} on the retired issuer."
+                );
+                return;
+            }
+            folds.Add((from, to));
+        }
+        var absorbed = new List<(EquitySecurity From, EquitySecurity To)>();
+        foreach (
+            var security in retired.Securities.Where(security =>
+                security.Listings.Count > 0
+                && security.Listings.All(listing => folds.Any(fold => fold.From.Id == listing.Id))
+            )
+        )
+        {
+            var targets = folds
+                .Where(fold => fold.From.EquitySecurityId == security.Id)
+                .Select(fold => fold.To.EquitySecurityId)
+                .Distinct()
+                .ToList();
+            if (targets.Count != 1)
+            {
+                report.Refusals.Add(
+                    $"Security {security.Id} folds into {targets.Count} survivor securities."
+                );
+                return;
+            }
+            absorbed.Add((security, survivor.Securities.Single(row => row.Id == targets[0])));
         }
 
         var policy = ListingPolicy();
@@ -262,6 +296,13 @@ public class EquityIssuerMergeManager
             .ToList();
         foreach (var (from, to) in folds)
         {
+            // Re-inserted dividends must match the listing's denomination, so a survivor listing
+            // without one takes the retired listing's first; one that records dividends has one.
+            if (to.TradingCurrency == null && from.TradingCurrency != null)
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE \"EquityListing\" SET \"TradingCurrency\" = {from.TradingCurrency} WHERE \"Id\" = {to.Id}",
+                    cancellationToken
+                );
             foreach (var reference in references)
                 await rekeyer.Rekey(reference, from.Id, to.Id, cancellationToken);
             if (!report.IsClean)
@@ -271,16 +312,25 @@ public class EquityIssuerMergeManager
                 $"DELETE FROM \"EquityListing\" WHERE \"Id\" = {from.Id}",
                 cancellationToken
             );
-            // The live designation passes to the survivor listing, whose series changed, so its
-            // completion is verified again.
+            // The live designation and venue identity pass to the survivor listing, once the retired
+            // listing no longer holds the active (venue, ticker) slot; its series changed, so its
+            // completion is verified again. A lifecycle whose later listing date follows the earlier
+            // delisting was relisted, so the delisting no longer stands.
             await _context.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                 UPDATE "EquityListing" SET
                     "Active" = "Active" OR {from.Active},
                     "IsDirectoryListed" = "IsDirectoryListed" OR {from.IsDirectoryListed},
                     "IsReferenceListed" = "IsReferenceListed" OR {from.IsReferenceListed},
-                    "DelistedOn" = CASE WHEN "Active" OR {from.Active} THEN NULL ELSE coalesce("DelistedOn", {from.DelistedOn}) END,
-                    "ListedOn" = coalesce("ListedOn", {from.ListedOn}),
+                    "ListedOn" = LEAST("ListedOn", {from.ListedOn}),
+                    "DelistedOn" = CASE
+                        WHEN "Active" OR {from.Active} THEN NULL
+                        WHEN GREATEST("DelistedOn", {from.DelistedOn}) < LEAST("ListedOn", {from.ListedOn}) THEN NULL
+                        ELSE GREATEST("DelistedOn", {from.DelistedOn}) END,
+                    "MarketIdentifierCode" = coalesce({from.MarketIdentifierCode}, "MarketIdentifierCode"),
+                    "QuoteUnitMultiplier" = coalesce({from.QuoteUnitMultiplier}, "QuoteUnitMultiplier"),
+                    "IdentityState" = GREATEST("IdentityState", {(int)from.IdentityState}),
+                    "IdentitySourceUrl" = coalesce({from.IdentitySourceUrl}, "IdentitySourceUrl"),
                     "PriceHistoryBackfilled" = FALSE,
                     "HistoricalPriceBackfillAttemptedAt" = NULL
                 WHERE "Id" = {to.Id}
@@ -290,7 +340,51 @@ public class EquityIssuerMergeManager
             report.Change(ListingTable, ListingKey).DroppedDuplicates++;
             report.Remaps.Add(new EquityKeyRemap(ListingTable, from.Id, to.Id));
         }
-        // A retired security left without listings goes with its issuer.
+        foreach (var (from, to) in absorbed)
+        {
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"EquitySecuritySourceIdentifier\" SET \"EquitySecurityId\" = {to.Id} WHERE \"EquitySecurityId\" = {from.Id}",
+                cancellationToken
+            );
+            // Deleted first, so the unique ISIN is free for the security that continues.
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"EquitySecurity\" WHERE \"Id\" = {from.Id}",
+                cancellationToken
+            );
+            if (from.Cusip != null && to.Cusip != null && from.Cusip != to.Cusip)
+                // Filings cite the retired CUSIP for quarters after a change, so it stays resolvable.
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO "EquityIssuerCusipAlias" ("Id", "EquityIssuerId", "Cusip", "CreationTime")
+                    VALUES ({Guid.NewGuid()}, {survivor.Id}, {to.Cusip}, {DateTime.UtcNow})
+                    ON CONFLICT ("Cusip") DO NOTHING
+                    """,
+                    cancellationToken
+                );
+            if (from.Cusip != null)
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"EquityIssuerCusipAlias\" WHERE \"EquityIssuerId\" = {survivor.Id} AND \"Cusip\" = {from.Cusip}",
+                    cancellationToken
+                );
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                UPDATE "EquitySecurity" SET
+                    "Isin" = coalesce({from.Isin}, "Isin"),
+                    "Cusip" = coalesce({from.Cusip}, "Cusip"),
+                    "SharesOutstanding" = CASE WHEN {from.SharesOutstanding} > 0 THEN {from.SharesOutstanding} ELSE "SharesOutstanding" END,
+                    "MarketCapitalization" = CASE WHEN {from.MarketCapitalization} > 0 THEN {from.MarketCapitalization} ELSE "MarketCapitalization" END,
+                    "RegistrationType" = CASE WHEN {(int)from.RegistrationType} <> 0 THEN {(int)
+                    from.RegistrationType} ELSE "RegistrationType" END,
+                    "RegistrationTitle" = coalesce({from.RegistrationTitle}, "RegistrationTitle"),
+                    "SecurityType" = CASE WHEN {(int)from.SecurityType} <> 0 THEN {(int)
+                    from.SecurityType} ELSE "SecurityType" END,
+                    "IdentitySourceUrl" = coalesce({from.IdentitySourceUrl}, "IdentitySourceUrl")
+                WHERE "Id" = {to.Id}
+                """,
+                cancellationToken
+            );
+        }
+        // Any other retired security left without listings goes with its issuer.
         foreach (var security in retired.Securities)
             await _context.Database.ExecuteSqlInterpolatedAsync(
                 $"""
