@@ -1,8 +1,71 @@
 namespace Equibles.CommonStocks.BusinessLogic.Merge;
 
-/// <summary>Merge rules for the open-source tables that hold an issuer key.</summary>
+/// <summary>Merge rules for the open-source tables that hold an issuer key, and for those that hold a listing key.</summary>
 public static class CommonEquityReferenceRules
 {
+    /// <summary>Applied when a successor fold joins two listings of one ticker: observations of one day keep the survivor's row.</summary>
+    public static IReadOnlyList<EquityReferenceRule> Listings { get; } =
+    [
+        new("EquityDailyStockPrice")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
+        new("DailyShortVolume")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
+        new("ShortInterest")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
+        new("FailToDeliver")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
+        new("OffExchangeVolume")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
+        new("LatestDelayedTrade")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
+        new("EquityListingTickerAlias")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
+        new("EquityIssuerPresentation") { OnCollision = EquityReferenceCollision.KeepSurvivor },
+        // The owner trigger forbids re-pointing a recorded corporate action, so one follows by re-insertion
+        // under the survivor listing; an action already recorded there for the same date stands.
+        new("CashDividend")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            Reinsert = true,
+            RecordRemaps = false,
+        },
+        new("StockSplit")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            Reinsert = true,
+            RecordRemaps = false,
+            ReinsertResets =
+            [
+                "ShareCountEvidence",
+                "ShareCountEvidenceAsOf",
+                "ShareCountEvidenceTime",
+            ],
+        },
+        // A reconciliation cursor names its last listing without a foreign key.
+        new("CorporateActionPriceReconciliationCursor"),
+    ];
+
     public static IReadOnlyList<EquityReferenceRule> All { get; } =
     [
         // Facts left after the withdrawn sources belong to a governing source the survivor lacks.

@@ -35,12 +35,19 @@ public sealed record EquityReferenceRule(string Table)
 
     // Rows with this column null are scoped to the issuer itself and never follow a merge.
     public string RefuseRowsWithout { get; init; }
+
+    // A dropped duplicate is reported as a remap so dependents elsewhere can follow it; an
+    // observation row (a price, a volume) has none, and thousands of them would only swell the audit.
+    public bool RecordRemaps { get; init; } = true;
 }
 
 /// <summary>Supplies merge rules for tables a module owns.</summary>
 public interface IEquityReferenceRules
 {
     IEnumerable<EquityReferenceRule> Rules { get; }
+
+    /// <summary>Rules for the module's tables that hold a listing key, applied when two listings of one ticker fold.</summary>
+    IEnumerable<EquityReferenceRule> ListingRules => [];
 }
 
 public sealed class EquityReferencePolicy

@@ -98,6 +98,8 @@
 - SEC ticker reassignment withdraws every obsolete U.S. directory claim under the locked issuer.
 - Independent reference coverage protects its exact listing; foreign listings and all historical observations remain intact.
 - A newly acquired reference claim on the displaced symbol refuses retirement when the locked graph is refreshed.
+- A CIK that recently filed a successor-issuer report (Form 8-K12B, 8-K12G3 or 8-K15D5) and takes a ticker from the registrant the directory ledger listed under it until the latest captures continues that issuer in place: the issuer adopts the new CIK and keeps the old one as a secondary CIK, so it is neither retired nor duplicated; an unreadable EDGAR index keeps the incumbent until the next cycle.
+- A report that trails the directory move still splits the company into the withdrawn predecessor and a shell under the new CIK; `EquityIssuerMergeManager` folds such a shell into the predecessor (`EquityIssuerMergeRequest.SuccessorFold`), joining the two listings of each ticker on the predecessor's listing, carrying the shell's listing and security identity over, and continuing the predecessor under the successor CIK.
 
 ## Market capture
 
