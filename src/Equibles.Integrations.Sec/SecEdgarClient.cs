@@ -231,6 +231,9 @@ public class SecEdgarClient : ISecEdgarClient
                 ),
                 BdcElectionFiledOn = SecRegistrantFilings.LatestBdcElection(recentFilings),
                 BdcWithdrawalFiledOn = SecRegistrantFilings.LatestBdcWithdrawal(recentFilings),
+                SuccessorRegistration = SecRegistrantFilings.LatestSuccessorRegistration(
+                    recentFilings
+                ),
                 HasArchivedFilings = apiResponse.Filings?.Files is { Count: > 0 },
             };
         }

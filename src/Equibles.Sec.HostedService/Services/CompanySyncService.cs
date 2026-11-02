@@ -8,6 +8,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Integrations.Sec;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Messaging.Contracts.CommonStocks;
@@ -602,10 +603,12 @@ public class CompanySyncService : ICompanySyncService
         StockSyncState state
     )
     {
-        // Only a collision against another company's primary ticker blocks us.
-        // Secondary-ticker overlap is allowed by the domain.
+        // Only a collision against another company's primary ticker blocks us; this stock's own
+        // listing holds the ticker only while active, since a withdrawn listing keeps its symbol
+        // after another issuer took the ticker over. Secondary-ticker overlap is allowed by the domain.
         if (
-            existingStock.Presentation?.Listing is { MarketCountryCode: "US" } currentUsListing
+            existingStock.Presentation?.Listing
+                is { MarketCountryCode: "US", Active: true } currentUsListing
                 && currentUsListing.Ticker == primaryTicker
             || !state.ExistingPrimaryTickers.Contains(primaryTicker)
         )
@@ -682,19 +685,6 @@ public class CompanySyncService : ICompanySyncService
         // own CIK dropped out of the feed.
         state.PrimaryTickerToStock.TryGetValue(primaryTicker, out EquityIssuer obsoleteStock);
 
-        if (
-            obsoleteStock != null
-            && state.SecCiks.Contains(CikNormalizer.Canonicalize(obsoleteStock.Cik))
-        )
-        {
-            // Both CIKs are active in SEC's feed — this is the legitimate parent/subsidiary
-            // case (e.g. ATAI Life Sciences + AtaiBeckley sharing ATAI). Resolve which one
-            // is the listed parent and attach the loser as a SecondaryCik on the winner
-            // so its filings still flow through, without re-warning on future syncs.
-            await ResolveTickerCollision(secCompany, obsoleteStock, primaryTicker, state);
-            return;
-        }
-
         if (obsoleteStock == null)
         {
             _logger.LogWarning(
@@ -703,6 +693,29 @@ public class CompanySyncService : ICompanySyncService
                 secCompany.Cik,
                 primaryTicker
             );
+            return;
+        }
+
+        // A reorganization moves the ticker to a new CIK that filed to succeed the holder's
+        // registration; the holder then continues under that CIK instead of being retired.
+        if (
+            await TryAdoptSuccessorCik(
+                secCompany,
+                obsoleteStock,
+                primaryTicker,
+                secondaryTickers,
+                state
+            )
+        )
+            return;
+
+        if (state.SecCiks.Contains(CikNormalizer.Canonicalize(obsoleteStock.Cik)))
+        {
+            // Both CIKs are active in SEC's feed — this is the legitimate parent/subsidiary
+            // case (e.g. ATAI Life Sciences + AtaiBeckley sharing ATAI). Resolve which one
+            // is the listed parent and attach the loser as a SecondaryCik on the winner
+            // so its filings still flow through, without re-warning on future syncs.
+            await ResolveTickerCollision(secCompany, obsoleteStock, primaryTicker, state);
             return;
         }
 
@@ -750,6 +763,161 @@ public class CompanySyncService : ICompanySyncService
                 $"ticker: {primaryTicker}, cik: {secCompany.Cik}"
             );
         }
+    }
+
+    /// <summary>
+    /// Continues <paramref name="incumbent"/> under <paramref name="secCompany"/>'s CIK when that
+    /// CIK recently filed a successor-issuer report (<see cref="SecRegistrantFilings.LatestSuccessorRegistration"/>):
+    /// the predecessor CIK becomes a secondary CIK, so the one issuer keeps its filings, facts and
+    /// history. Returns true when the incoming company needs no further handling this cycle. That
+    /// includes an unreadable EDGAR index and a failed write, because retiring the incumbent would
+    /// strand its history; the next cycle tries again. A reorganization whose report lands only
+    /// after SEC's directory moved the ticker still splits into two issuers and is repaired by the
+    /// issuer merge lane, not here.
+    /// </summary>
+    private async Task<bool> TryAdoptSuccessorCik(
+        CompanyInfo secCompany,
+        EquityIssuer incumbent,
+        string primaryTicker,
+        List<string> secondaryTickers,
+        StockSyncState state
+    )
+    {
+        if (incumbent.Cik == null)
+            return false;
+
+        CompanyMetadata metadata = null;
+        HttpRequestException failure = null;
+        try
+        {
+            metadata = await _secEdgarClient.GetCompanyMetadata(secCompany.Cik);
+        }
+        catch (HttpRequestException ex)
+        {
+            failure = ex;
+        }
+        if (metadata == null)
+        {
+            _logger.LogWarning(
+                failure,
+                "EDGAR submissions for CIK {Cik} claiming ticker {Ticker} are unreadable; keeping CIK {IncumbentCik} until the next cycle",
+                secCompany.Cik,
+                primaryTicker,
+                incumbent.Cik
+            );
+            return true;
+        }
+        var registration = metadata.SuccessorRegistration;
+        if (
+            !SecRegistrantFilings.IsCurrentSuccessorRegistration(
+                registration,
+                DateOnly.FromDateTime(DateTime.UtcNow)
+            )
+        )
+            return false;
+
+        var predecessorCik = incumbent.Cik;
+        var canonicalPredecessor = CikNormalizer.Canonicalize(predecessorCik);
+        var canonicalSuccessor = CikNormalizer.Canonicalize(secCompany.Cik);
+        await using var identityTransaction =
+            await state.CommonStockRepository.BeginDirectoryIdentityWrite();
+        var issuer = await state.CommonStockRepository.GetForUpdate(incumbent.Id);
+        if (issuer == null)
+        {
+            _logger.LogWarning(
+                "Ticker {Ticker} holder CIK {IncumbentCik} vanished before CIK {Cik} could succeed it; retrying next cycle",
+                primaryTicker,
+                predecessorCik,
+                secCompany.Cik
+            );
+            return true;
+        }
+        var directorySnapshot = new EquityDirectorySnapshot(state.DbContext, issuer);
+        var oldName = issuer.Name;
+        try
+        {
+            issuer.SecondaryCiks = issuer
+                .SecondaryCiks.Where(cik => CikNormalizer.Canonicalize(cik) != canonicalSuccessor)
+                .Append(predecessorCik)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            issuer.Cik = secCompany.Cik;
+            issuer.Name = NormalizeCompanyName(secCompany.Name);
+            if (
+                !string.IsNullOrWhiteSpace(oldName)
+                && !string.Equals(oldName, issuer.Name, StringComparison.OrdinalIgnoreCase)
+                && !issuer.NameAliases.Contains(oldName, StringComparer.OrdinalIgnoreCase)
+            )
+                issuer.NameAliases = [.. issuer.NameAliases, oldName];
+            if (!string.IsNullOrWhiteSpace(metadata.EntityType))
+                issuer.EntityType = metadata.EntityType;
+            // The registrant profile is read again under the successor CIK.
+            issuer.SecRegistrantProfileReadOn = null;
+            issuer.BdcHistoryReadOn = null;
+            UsEquityDirectory.ReplaceDirectorySymbols(
+                issuer,
+                primaryTicker,
+                MergeSecondaryTickers(
+                    primaryTicker,
+                    secondaryTickers,
+                    issuer
+                        .Securities.SelectMany(security => security.Listings)
+                        .Where(listing =>
+                            listing.MarketCountryCode == "US" && listing.IsReferenceListed
+                        )
+                        .Select(listing => listing.Ticker)
+                        .ToList()
+                ),
+                activate: true
+            );
+            await state.CommonStockManager.Update(issuer);
+            if (identityTransaction != null)
+                await identityTransaction.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            if (identityTransaction != null)
+                await identityTransaction.RollbackAsync();
+            directorySnapshot.Restore();
+            _logger.LogError(
+                ex,
+                "Error continuing {Ticker} under successor CIK {Cik} (predecessor CIK: {PredecessorCik})",
+                primaryTicker,
+                secCompany.Cik,
+                predecessorCik
+            );
+            await ReportError(
+                "CompanySync.AdoptSuccessor",
+                ex,
+                $"ticker: {primaryTicker}, cik: {secCompany.Cik}, predecessor: {predecessorCik}"
+            );
+            return true;
+        }
+
+        // SEC's directory may keep listing the predecessor CIK for a while; it is now an attached
+        // registrant of this issuer and is skipped like any other.
+        if (canonicalPredecessor != null)
+        {
+            state.ExistingCiks.Remove(canonicalPredecessor);
+            state.SecondaryCikToParent[canonicalPredecessor] = issuer;
+        }
+        if (canonicalSuccessor != null)
+            state.ExistingCiks.Add(canonicalSuccessor);
+        state.ExistingStocks.Remove(incumbent);
+        state.ExistingStocks.Add(issuer);
+        state.ExistingPrimaryTickers.Add(primaryTicker);
+        state.PrimaryTickerToStock[primaryTicker] = issuer;
+
+        _logger.LogInformation(
+            "Continued {Ticker} under successor CIK {Cik} ({Name}); predecessor CIK {PredecessorCik} stays attached (Form {Form} filed {FiledOn})",
+            primaryTicker,
+            secCompany.Cik,
+            issuer.Name,
+            predecessorCik,
+            registration.Form,
+            registration.FiledOn
+        );
+        return true;
     }
 
     private async Task CreateNewStock(
