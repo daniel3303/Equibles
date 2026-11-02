@@ -256,6 +256,37 @@ public class StatementLineFactsPickFactTests
             .BeNull("a cumulative fact must never appear as one discrete quarter");
     }
 
+    // Kroger FY2026 as stored: a reported 16-week first quarter beside its 28-week half-year.
+    [Fact]
+    public void PickCurrentlyReported_SixteenWeekQuarterIsDiscrete_AndItsHalfYearIsNot()
+    {
+        var firstQuarter = new FinancialFact
+        {
+            Value = 46_121_000_000m,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2026, 2, 1),
+            PeriodEnd = new DateOnly(2026, 5, 23),
+            FiscalPeriod = SecFiscalPeriod.Q1,
+        };
+        var halfYear = new FinancialFact
+        {
+            Value = 80_742_000_000m,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2026, 2, 1),
+            PeriodEnd = new DateOnly(2026, 8, 15),
+            FiscalPeriod = SecFiscalPeriod.Q2,
+        };
+
+        StatementLineFacts
+            .PickCurrentlyReported([firstQuarter], SecFiscalPeriod.Q1)
+            .Should()
+            .BeSameAs(firstQuarter);
+        StatementLineFacts
+            .PickCurrentlyReported([halfYear], SecFiscalPeriod.Q2)
+            .Should()
+            .BeNull("a 28-week half-year is cumulative, never one quarter");
+    }
+
     [Fact]
     public void PickCurrentlyReported_FullYearPrefersAnnualFilingOverLaterInterimFiling()
     {
