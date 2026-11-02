@@ -62,8 +62,6 @@ public static class CommonEquityReferenceRules
                 "ShareCountEvidenceTime",
             ],
         },
-        new("EquityListingSourceIdentifier"),
-        new("MajorHoldingNotification"),
         // A reconciliation cursor names its last listing without a foreign key.
         new("CorporateActionPriceReconciliationCursor"),
     ];
