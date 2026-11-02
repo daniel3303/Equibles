@@ -775,6 +775,10 @@ public class CompanySyncService : ICompanySyncService
     /// after SEC's directory moved the ticker still splits into two issuers and is repaired by the
     /// issuer merge lane, not here.
     /// </summary>
+    // The ticker ledger closes the predecessor's span at the last capture that listed it, a day or a
+    // few before a succession is seen; a longer gap is a lapsed entry, not a handover.
+    private static readonly TimeSpan SuccessorHandoverWindow = TimeSpan.FromDays(7);
+
     private async Task<bool> TryAdoptSuccessorCik(
         CompanyInfo secCompany,
         EquityIssuer incumbent,
@@ -784,6 +788,22 @@ public class CompanySyncService : ICompanySyncService
     )
     {
         if (incumbent.Cik == null)
+            return false;
+        // Only SEC's listed holder of the ticker up to this capture can be the predecessor: a registrant
+        // whose directory entry lapsed long ago lost the ticker to an unrelated company that recycled it.
+        var canonicalPredecessor = CikNormalizer.Canonicalize(incumbent.Cik);
+        var identityTicker = TickerNormalizer.NormalizeIdentity(primaryTicker);
+        var handoverSince = DateOnly
+            .FromDateTime(DateTime.UtcNow)
+            .AddDays(-SuccessorHandoverWindow.Days);
+        var heldUntilNow = await state
+            .DbContext.Set<SecTickerDirectoryObservation>()
+            .AnyAsync(observation =>
+                observation.Cik == canonicalPredecessor
+                && observation.Ticker == identityTicker
+                && observation.LastObservedOn >= handoverSince
+            );
+        if (!heldUntilNow)
             return false;
 
         CompanyMetadata metadata = null;
@@ -817,7 +837,6 @@ public class CompanySyncService : ICompanySyncService
             return false;
 
         var predecessorCik = incumbent.Cik;
-        var canonicalPredecessor = CikNormalizer.Canonicalize(predecessorCik);
         var canonicalSuccessor = CikNormalizer.Canonicalize(secCompany.Cik);
         await using var identityTransaction =
             await state.CommonStockRepository.BeginDirectoryIdentityWrite();

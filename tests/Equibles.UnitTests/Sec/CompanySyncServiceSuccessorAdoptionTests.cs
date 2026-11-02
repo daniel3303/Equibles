@@ -135,11 +135,14 @@ public class CompanySyncServiceSuccessorAdoptionTests
                 .GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)
                 .Invoke(sut, [company, Ticker, new List<string>(), state]);
 
+    // The ticker ledger lists the issuer's CIK under the ticker until heldUntil (by default the previous
+    // capture), as it does for a registrant SEC's directory just moved the ticker away from.
     private static async Task<EquityIssuer> Seed(
         EquiblesFinancialDbContext db,
         string cik,
         string name,
-        bool active
+        bool active,
+        DateOnly? heldUntil = null
     )
     {
         var seed = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -151,7 +154,18 @@ public class CompanySyncServiceSuccessorAdoptionTests
             SecondaryTickers: active ? ["JSM"] : null
         );
         seed.SecRegistrantProfileReadOn = Today;
+        var lastObservedOn = heldUntil ?? Today.AddDays(-1);
         db.Add(seed);
+        db.Add(
+            new SecTickerDirectoryObservation
+            {
+                Cik = cik,
+                Ticker = Ticker,
+                Exchange = "Nasdaq",
+                FirstObservedOn = lastObservedOn.AddDays(-30),
+                LastObservedOn = lastObservedOn,
+            }
+        );
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         return await new EquityIssuerRepository(db).GetAll().FirstAsync(stock => stock.Cik == cik);
@@ -245,17 +259,35 @@ public class CompanySyncServiceSuccessorAdoptionTests
         await AssertContinuedUnderTheSuccessor(db, incumbent, state);
     }
 
+    // "lapsed": the incumbent's directory entry ended months ago, so a successor report by the new
+    // holder of its ticker speaks of another company's reorganization.
     [Theory]
     [InlineData("none")]
     [InlineData("stale")]
+    [InlineData("lapsed")]
     public async Task WithoutACurrentSuccessorReport_TheIncumbentIsRetiredAsBefore(string report)
     {
         using var db = NewDb();
-        var incumbent = await Seed(db, PredecessorCik, "Navient Corp", active: true);
+        var incumbent = await Seed(
+            db,
+            PredecessorCik,
+            "Navient Corp",
+            active: true,
+            heldUntil: report == "lapsed" ? Today.AddDays(-90) : null
+        );
         var (sut, edgar, _) = BuildSut();
         edgar
             .GetCompanyMetadata(SuccessorCik)
-            .Returns(Successor(report == "stale" ? Report(Today.AddDays(-200)) : null));
+            .Returns(
+                Successor(
+                    report switch
+                    {
+                        "stale" => Report(Today.AddDays(-200)),
+                        "lapsed" => Report(Today.AddDays(-3)),
+                        _ => null,
+                    }
+                )
+            );
         var state = BuildState(db, [incumbent], SuccessorCik);
 
         await Invoke(sut, "ReplaceObsoleteStock", SuccessorCompany(), state);
