@@ -9,8 +9,9 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// </summary>
 public static class StatementQuarterDerivation
 {
-    private const int MinQuarterDays = 80;
-    private const int MaxQuarterDays = 100;
+    // The shared quarter band: a 16-week quarter (Kroger's first) must chain like any other.
+    private const int MinQuarterDays = FiscalPeriodSpanDays.MinQuarter;
+    private const int MaxQuarterDays = FiscalPeriodSpanDays.MaxQuarter;
     private static readonly HashSet<string> NonNegativeAliases =
     [
         "depreciation-and-amortization",

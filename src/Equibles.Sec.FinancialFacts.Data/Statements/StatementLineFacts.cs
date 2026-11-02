@@ -27,9 +27,9 @@ public static class StatementLineFacts
         );
     }
 
-    // The longest span a discrete fiscal quarter can cover — 13 weeks on a
-    // 4-4-5 calendar plus the occasional 14-week quarter, with headroom.
-    private const int MaxDiscreteQuarterDays = 100;
+    // The longest span a discrete fiscal quarter can cover, a 16- or 17-week quarter included;
+    // at 100 days Kroger's reported 111-day first quarter showed no line items at all.
+    private const int MaxDiscreteQuarterDays = FiscalPeriodSpanDays.MaxQuarter;
 
     // The shortest span a fiscal year can cover — 52 weeks on a 52/53-week
     // calendar, with headroom for short transition years.

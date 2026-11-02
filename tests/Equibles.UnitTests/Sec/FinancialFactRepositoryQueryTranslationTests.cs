@@ -86,7 +86,7 @@ public class FinancialFactRepositoryQueryTranslationTests
         );
 
         where.Should().Contain("\"PeriodEnd\" >= f.\"PeriodStart\" + 1 ");
-        where.Should().Contain("\"PeriodEnd\" <= f.\"PeriodStart\" + 100");
+        where.Should().Contain("\"PeriodEnd\" <= f.\"PeriodStart\" + 119");
         where.Should().NotContain("350", "a quarter bucket is never gated by the annual bounds");
     }
 

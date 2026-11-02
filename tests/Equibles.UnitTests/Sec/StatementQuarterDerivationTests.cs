@@ -35,6 +35,26 @@ public class StatementQuarterDerivationTests
         derived.FiscalPeriod.Should().Be(SecFiscalPeriod.Q2);
     }
 
+    // Kroger FY2026 operating income: a 16-week first quarter, then a 28-week half-year. The derived
+    // second quarter equals the 12-week figure Kroger reported (971M).
+    [Fact]
+    public void AppendDerived_SixteenWeekFirstQuarter_ChainsIntoTheSecondQuarter()
+    {
+        var facts = new[]
+        {
+            Fact("2026-02-01", "2026-05-23", 1_407_000_000m, SecFiscalPeriod.Q1, "q1"),
+            Fact("2026-02-01", "2026-08-15", 2_378_000_000m, SecFiscalPeriod.Q2, "h1"),
+        };
+
+        var derived = StatementQuarterDerivation
+            .AppendDerived(facts)
+            .Single(StatementQuarterDerivation.IsDerived);
+
+        derived.Value.Should().Be(971_000_000m);
+        derived.PeriodStart.Should().Be(new DateOnly(2026, 5, 24));
+        derived.PeriodEnd.Should().Be(new DateOnly(2026, 8, 15));
+    }
+
     // Interim reporters outside the US (CNINFO, ESEF) state cumulative spans in their own currency.
     [Theory]
     [InlineData("CNY")]

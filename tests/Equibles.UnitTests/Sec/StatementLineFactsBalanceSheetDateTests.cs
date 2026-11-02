@@ -203,8 +203,8 @@ public class StatementLineFactsBalanceSheetDateTests
     [Theory]
     [InlineData(0, false)]
     [InlineData(1, true)]
-    [InlineData(100, true)]
-    [InlineData(101, false)]
+    [InlineData(119, true)]
+    [InlineData(120, false)]
     public void MeasuresGranularityInSql_AgreesWithMeasuresGranularity_ForAQuarter(
         int spanDays,
         bool measures
