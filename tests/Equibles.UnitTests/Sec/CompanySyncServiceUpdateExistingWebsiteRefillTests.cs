@@ -102,7 +102,8 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
     }
 
     private async Task<(EquiblesFinancialDbContext Db, EquityIssuer Stock)> SeedStock(
-        string website
+        string website,
+        string description = null
     )
     {
         var db = NewDb();
@@ -112,7 +113,8 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
                     Cik: _cik,
                     Ticker: "EXM",
                     Name: "Example Corp",
-                    Website: website
+                    Website: website,
+                    Description: description
                 )
             );
         await db.SaveChangesAsync();
@@ -234,5 +236,33 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
             .GetAll()
             .FirstAsync(s => s.Cik == _cik);
         updated.Website.Should().Be("https://www.apple.com");
+    }
+
+    // KINGSWAY: created as KFS, renamed KWY, and still described as "Company with tickers: KFS"
+    // because nothing else in the directory changed afterwards.
+    [Theory]
+    [InlineData("Company with tickers: KFS", "Company with tickers: EXM")]
+    [InlineData("Company with tickers: EXM", "Company with tickers: EXM")]
+    [InlineData(
+        "Example Corp designs and sells widgets.",
+        "Example Corp designs and sells widgets."
+    )]
+    public async Task TickerPlaceholder_FollowsTheCurrentSecTickers_AndARealDescriptionStays(
+        string stored,
+        string expected
+    )
+    {
+        var (db, stock) = await SeedStock("https://www.already-set.com", stored);
+        using var _ = db;
+        var edgar = Substitute.For<ISecEdgarClient>();
+
+        await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
+
+        db.ChangeTracker.Clear();
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
+        updated.Description.Should().Be(expected);
+        updated.Presentation.Listing.Ticker.Should().Be("EXM");
     }
 }
