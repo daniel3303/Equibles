@@ -13,6 +13,11 @@ public sealed class EquityIssuerMergeRequest
 
     // False runs every step and rolls back, so a preview reports exactly what a merge would do.
     public bool Execute { get; init; }
+
+    // True folds a successor registrant's shell into the predecessor issuer that kept the company's
+    // history: the survivor adopts the retired issuer's CIK and name, keeps its own CIK as a secondary
+    // CIK, and each retired listing that repeats a survivor listing's ticker folds into that listing.
+    public bool SuccessorFold { get; init; }
 }
 
 /// <summary>Rows of one table that followed (or would follow) a merge.</summary>

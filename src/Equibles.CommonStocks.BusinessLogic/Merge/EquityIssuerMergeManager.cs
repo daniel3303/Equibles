@@ -12,7 +12,10 @@ namespace Equibles.CommonStocks.BusinessLogic.Merge;
 /// <summary>
 /// Folds a duplicate issuer into the issuer that represents the same company, in one transaction:
 /// securities, listings and their ids are kept, every reference follows the survivor, and the
-/// retired issuer is deleted last so any reference left behind aborts the merge.
+/// retired issuer is deleted last so any reference left behind aborts the merge. A successor fold
+/// (<see cref="EquityIssuerMergeRequest.SuccessorFold"/>) additionally joins the retired issuer's
+/// listings into the survivor's listings of the same ticker and continues the survivor under the
+/// retired issuer's CIK.
 /// </summary>
 [Service]
 public class EquityIssuerMergeManager
@@ -20,6 +23,9 @@ public class EquityIssuerMergeManager
     public const string IssuerTable = "EquityIssuer";
     public const string IssuerKey = "Id";
     public const string IssuerColumnSuffix = "EquityIssuerId";
+    public const string ListingTable = "EquityListing";
+    public const string ListingKey = "Id";
+    public const string ListingColumnSuffix = "EquityListingId";
 
     private readonly EquiblesFinancialDbContext _context;
     private readonly EquityIssuerRepository _issuers;
@@ -38,6 +44,17 @@ public class EquityIssuerMergeManager
 
     public EquityReferencePolicy Policy() =>
         new(CommonEquityReferenceRules.All.Concat(_rules.SelectMany(source => source.Rules)));
+
+    public EquityReferencePolicy ListingPolicy() =>
+        new(
+            CommonEquityReferenceRules.Listings.Concat(
+                _rules.SelectMany(source => source.ListingRules)
+            )
+        );
+
+    // A successor's own figures come from the same SEC source as the predecessor's, so they follow the fold.
+    private EquityReferencePolicy SuccessorPolicy() =>
+        new(Policy().Rules.Where(rule => rule.Table != "FinancialFact"));
 
     /// <summary>Runs the merge; a request that does not execute, or any refusal, rolls everything back.</summary>
     public Task<EquityIssuerMergeReport> Merge(
@@ -121,6 +138,8 @@ public class EquityIssuerMergeManager
             .AsNoTracking()
             .Include(issuer => issuer.Securities)
                 .ThenInclude(security => security.Listings)
+            .Include(issuer => issuer.Presentation)
+                .ThenInclude(presentation => presentation.Listing)
             .Where(issuer => issuer.Id == retiredId || issuer.Id == survivorId)
             .ToListAsync(cancellationToken);
         var retired = issuers.SingleOrDefault(issuer => issuer.Id == retiredId);
@@ -142,7 +161,7 @@ public class EquityIssuerMergeManager
             );
         }
 
-        var policy = Policy();
+        var policy = request.SuccessorFold ? SuccessorPolicy() : Policy();
         var rekeyer = await EquityReferenceRekeyer.Create(
             _context.Database,
             policy,
@@ -159,6 +178,13 @@ public class EquityIssuerMergeManager
         if (!report.IsClean)
             return;
         await rekeyer.Reattach(survivorId, cancellationToken);
+        // Only once the issuer-level staging is re-inserted: the listing fold stages rows of its own.
+        if (request.SuccessorFold)
+        {
+            await FoldListings(retired, survivor, report, cancellationToken);
+            if (!report.IsClean)
+                return;
+        }
 
         // The audit row commits only with the merge, so it records the merge as executed.
         report.Executed = request.Execute;
@@ -180,7 +206,130 @@ public class EquityIssuerMergeManager
             $"DELETE FROM \"EquityIssuer\" WHERE \"Id\" = {retiredId}",
             cancellationToken
         );
-        await Enrich(survivor, retired, cancellationToken);
+        await Enrich(survivor, retired, request.SuccessorFold, cancellationToken);
+        if (request.SuccessorFold)
+            await AdoptRegistrant(survivor, retired, cancellationToken);
+    }
+
+    // The retired issuer's U.S. listings now belong to the survivor; each one that repeats a survivor
+    // listing's ticker folds into that listing, so the ticker keeps one series and one id, and the
+    // survivor listing takes over the live directory designation.
+    private async Task FoldListings(
+        EquityIssuer retired,
+        EquityIssuer survivor,
+        EquityIssuerMergeReport report,
+        CancellationToken cancellationToken
+    )
+    {
+        var survivorListings = survivor
+            .Securities.SelectMany(security => security.Listings)
+            .Where(listing => listing.MarketCountryCode == "US")
+            .ToList();
+        var folds = new List<(EquityListing From, EquityListing To)>();
+        foreach (
+            var from in retired
+                .Securities.SelectMany(security => security.Listings)
+                .Where(listing => listing.MarketCountryCode == "US")
+        )
+        {
+            var matches = survivorListings
+                .Where(listing =>
+                    listing.Ticker == from.Ticker
+                    && listing.MarketIdentifierCode == from.MarketIdentifierCode
+                )
+                .ToList();
+            if (matches.Count > 1)
+            {
+                report.Refusals.Add(
+                    $"Listing {from.Ticker} matches {matches.Count} survivor listings."
+                );
+                return;
+            }
+            if (matches.Count == 1)
+                folds.Add((from, matches[0]));
+        }
+
+        var policy = ListingPolicy();
+        var rekeyer = await EquityReferenceRekeyer.Create(
+            _context.Database,
+            policy,
+            report,
+            cancellationToken
+        );
+        var references = rekeyer
+            .IssuerReferences(ListingTable, ListingKey, ListingColumnSuffix)
+            .OrderBy(reference => policy.Rule(reference.Table)?.Reinsert == true ? 0 : 1)
+            .ToList();
+        foreach (var (from, to) in folds)
+        {
+            foreach (var reference in references)
+                await rekeyer.Rekey(reference, from.Id, to.Id, cancellationToken);
+            if (!report.IsClean)
+                return;
+            await rekeyer.Reattach(to.Id, cancellationToken);
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"EquityListing\" WHERE \"Id\" = {from.Id}",
+                cancellationToken
+            );
+            // The live designation passes to the survivor listing, whose series changed, so its
+            // completion is verified again.
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                UPDATE "EquityListing" SET
+                    "Active" = "Active" OR {from.Active},
+                    "IsDirectoryListed" = "IsDirectoryListed" OR {from.IsDirectoryListed},
+                    "IsReferenceListed" = "IsReferenceListed" OR {from.IsReferenceListed},
+                    "DelistedOn" = CASE WHEN "Active" OR {from.Active} THEN NULL ELSE coalesce("DelistedOn", {from.DelistedOn}) END,
+                    "ListedOn" = coalesce("ListedOn", {from.ListedOn}),
+                    "PriceHistoryBackfilled" = FALSE,
+                    "HistoricalPriceBackfillAttemptedAt" = NULL
+                WHERE "Id" = {to.Id}
+                """,
+                cancellationToken
+            );
+            report.Change(ListingTable, ListingKey).DroppedDuplicates++;
+            report.Remaps.Add(new EquityKeyRemap(ListingTable, from.Id, to.Id));
+        }
+        // A retired security left without listings goes with its issuer.
+        foreach (var security in retired.Securities)
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                DELETE FROM "EquitySecurity" WHERE "Id" = {security.Id}
+                    AND NOT EXISTS (SELECT 1 FROM "EquityListing" WHERE "EquitySecurityId" = {security.Id})
+                """,
+                cancellationToken
+            );
+    }
+
+    // The survivor continues as the successor registrant: its CIK, and its filings from here on, are the
+    // retired issuer's, while its own CIK stays attached so the predecessor's filings keep flowing in.
+    // The registrant profile is read again under the new CIK.
+    private async Task AdoptRegistrant(
+        EquityIssuer survivor,
+        EquityIssuer retired,
+        CancellationToken cancellationToken
+    )
+    {
+        var secondaryCiks = survivor
+            .SecondaryCiks.Concat(retired.SecondaryCiks)
+            .Append(survivor.Cik)
+            .Where(cik => cik != null && cik != retired.Cik)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE "EquityIssuer" SET
+                "Cik" = {retired.Cik},
+                "SecondaryCiks" = {secondaryCiks},
+                "EntityType" = coalesce({retired.EntityType}, "EntityType"),
+                "Sic" = coalesce({retired.Sic}, "Sic"),
+                "SecRegistrantProfileReadOn" = NULL,
+                "BdcHistoryReadOn" = NULL,
+                "PeriodicReportFileNumber" = NULL
+            WHERE "Id" = {survivor.Id}
+            """,
+            cancellationToken
+        );
     }
 
     private async Task Validate(
@@ -208,7 +357,26 @@ public class EquityIssuerMergeManager
             refusals.Add(
                 "A withdrawn fact prefix must name a source; a blank one matches every fact."
             );
-        if (retired.Cik != null || retired.SecondaryCiks.Count > 0)
+        if (request.SuccessorFold)
+        {
+            if (retired.Cik == null || survivor.Cik == null)
+                refusals.Add("A successor fold joins two SEC filers.");
+            var listedTicker = retired.Presentation?.Listing is { MarketCountryCode: "US" } listed
+                ? listed.Ticker
+                : null;
+            if (
+                listedTicker == null
+                || !survivor
+                    .Securities.SelectMany(security => security.Listings)
+                    .Any(listing =>
+                        listing.MarketCountryCode == "US" && listing.Ticker == listedTicker
+                    )
+            )
+                refusals.Add(
+                    "A successor fold needs the retired issuer's listed ticker on the survivor."
+                );
+        }
+        else if (retired.Cik != null || retired.SecondaryCiks.Count > 0)
             refusals.Add("An SEC filer is never the retired issuer.");
         if (
             retired.LegalEntityIdentifier != null
@@ -241,21 +409,33 @@ public class EquityIssuerMergeManager
     }
 
     // Names stay searchable, and only empty survivor fields are filled; fiscal calendars never transfer.
-    private async Task Enrich(EquityIssuer survivor, EquityIssuer retired, CancellationToken token)
+    // A successor fold takes the retired issuer's name, the registrant's current one, and keeps the old
+    // name as an alias.
+    private async Task Enrich(
+        EquityIssuer survivor,
+        EquityIssuer retired,
+        bool successorFold,
+        CancellationToken token
+    )
     {
+        var name =
+            successorFold && !string.IsNullOrWhiteSpace(retired.Name)
+                ? retired.Name
+                : survivor.Name;
         var aliases = survivor.NameAliases.ToList();
-        foreach (var name in retired.NameAliases.Prepend(retired.Name))
+        foreach (var candidate in retired.NameAliases.Prepend(retired.Name).Prepend(survivor.Name))
         {
             if (
-                !string.IsNullOrWhiteSpace(name)
-                && !string.Equals(name, survivor.Name, StringComparison.OrdinalIgnoreCase)
-                && !aliases.Contains(name, StringComparer.OrdinalIgnoreCase)
+                !string.IsNullOrWhiteSpace(candidate)
+                && !string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase)
+                && !aliases.Contains(candidate, StringComparer.OrdinalIgnoreCase)
             )
-                aliases.Add(name);
+                aliases.Add(candidate);
         }
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $"""
             UPDATE "EquityIssuer" SET
+                "Name" = {name},
                 "NameAliases" = {aliases},
                 "LegalEntityIdentifier" = coalesce("LegalEntityIdentifier", {retired.LegalEntityIdentifier}),
                 "Website" = coalesce("Website", {retired.Website}),
@@ -273,6 +453,8 @@ public class EquityIssuerMergeManager
             issuer.Id,
             issuer.Name,
             issuer.NameAliases,
+            issuer.Cik,
+            issuer.SecondaryCiks,
             issuer.LegalEntityIdentifier,
             issuer.Website,
             issuer.Description,

@@ -355,7 +355,8 @@ public sealed class EquityReferenceRekeyer
         if (_report.Refusals.Count != refusals)
             return false;
 
-        _report.Remaps.Add(new EquityKeyRemap(table, retiredKey, survivorKey));
+        if (rule.RecordRemaps)
+            _report.Remaps.Add(new EquityKeyRemap(table, retiredKey, survivorKey));
         await Execute(
             $"DELETE FROM {Quote(table)} WHERE {Quote(key)} = @key",
             cancellationToken,
