@@ -765,6 +765,10 @@ public class CompanySyncService : ICompanySyncService
         }
     }
 
+    // The ticker ledger closes the predecessor's span at the last capture that listed it, a day or a
+    // few before a succession is seen; a longer gap is a lapsed entry, not a handover.
+    private static readonly TimeSpan SuccessorHandoverWindow = TimeSpan.FromDays(7);
+
     /// <summary>
     /// Continues <paramref name="incumbent"/> under <paramref name="secCompany"/>'s CIK when that
     /// CIK recently filed a successor-issuer report (<see cref="SecRegistrantFilings.LatestSuccessorRegistration"/>):
@@ -775,10 +779,6 @@ public class CompanySyncService : ICompanySyncService
     /// after SEC's directory moved the ticker still splits into two issuers and is repaired by the
     /// issuer merge lane, not here.
     /// </summary>
-    // The ticker ledger closes the predecessor's span at the last capture that listed it, a day or a
-    // few before a succession is seen; a longer gap is a lapsed entry, not a handover.
-    private static readonly TimeSpan SuccessorHandoverWindow = TimeSpan.FromDays(7);
-
     private async Task<bool> TryAdoptSuccessorCik(
         CompanyInfo secCompany,
         EquityIssuer incumbent,
