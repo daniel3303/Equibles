@@ -123,7 +123,7 @@ public class EconomicDataController : BaseController
 
         ViewData["Title"] = $"{series.SeriesId} — {series.Title}";
         ViewData["Description"] =
-            $"{series.Title} ({series.SeriesId}) — {series.Units}. FRED economic data.";
+            $"{series.Title} ({series.SeriesId}) — {series.Units}. {viewModel.SourceName} economic data.";
         return View(viewModel);
     }
 

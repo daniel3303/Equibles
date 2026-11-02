@@ -142,6 +142,55 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
         dates.Should().OnlyContain(d => d.FredReleaseId == releases[0].Id);
     }
 
+    // Only US FRED series are linked to the calendar: FRED is never asked about another
+    // publisher's id, which it would refuse and so end the cycle before any date imports.
+    [Fact]
+    public async Task Import_SeriesOutsideTheUsFredCalendar_AreNeverLinked()
+    {
+        _seriesRepo.Add(new FredSeries { SeriesId = "CPIAUCSL", Title = "CPI All Items" });
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "BOC-V39079",
+                Title = "Bank of Canada Target for the Overnight Rate",
+                CountryCode = "CA",
+                Source = IndicatorSource.BankOfCanada,
+                SourceKey = "V39079",
+            }
+        );
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "QCAR628BIS",
+                Title = "Real Residential Property Prices for Canada",
+                CountryCode = "CA",
+            }
+        );
+        await _seriesRepo.SaveChanges();
+        var cpiRelease = new FredReleaseRecord
+        {
+            Id = 10,
+            Name = "Consumer Price Index",
+            PressRelease = true,
+        };
+        _fredClient.GetSeriesRelease("CPIAUCSL").Returns(Task.FromResult(cpiRelease));
+        SetupReleaseDates(
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 10,
+                ReleaseName = "Consumer Price Index",
+                Date = "2026-11-13",
+            }
+        );
+
+        await _sut.Import(CancellationToken.None);
+
+        await _fredClient.Received(1).GetSeriesRelease("CPIAUCSL");
+        await _fredClient.DidNotReceive().GetSeriesRelease("BOC-V39079");
+        await _fredClient.DidNotReceive().GetSeriesRelease("QCAR628BIS");
+        _dateRepo.GetAll().Select(d => d.Date).Should().Equal(new DateOnly(2026, 11, 13));
+    }
+
     [Fact]
     public async Task Import_ContinuousCarryForwardRelease_DropsItButKeepsGenuinePeriodicRelease()
     {
