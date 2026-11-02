@@ -354,4 +354,16 @@ public static class EdgarStateCodes
     /// </summary>
     public static bool IsUnitedStates(string code) =>
         !string.IsNullOrWhiteSpace(code) && UnitedStatesCodes.Contains(code.Trim());
+
+    /// <summary>
+    /// EDGAR's codes for Canada: each province or territory it lists, plus the federal level.
+    /// Exposed as a list so a query can match a stored code server-side.
+    /// </summary>
+    public static IReadOnlyList<string> CanadaCodes { get; } =
+    ["A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "B0", "Z4"];
+
+    /// <summary>True when the EDGAR code names Canada; false for a blank or unknown code.</summary>
+    public static bool IsCanada(string code) =>
+        !string.IsNullOrWhiteSpace(code)
+        && CanadaCodes.Contains(code.Trim(), StringComparer.OrdinalIgnoreCase);
 }

@@ -64,4 +64,33 @@ public class EdgarStateCodesDecodeTests
     {
         EdgarStateCodes.IsUnitedStates(code).Should().BeFalse();
     }
+
+    [Fact]
+    public void CanadaCodes_EachDecodesToACanadianLocation()
+    {
+        EdgarStateCodes
+            .CanadaCodes.Select(EdgarStateCodes.Decode)
+            .Should()
+            .OnlyContain(name => name.Contains("Canada"));
+    }
+
+    [Theory]
+    [InlineData("A6")] // Ontario
+    [InlineData("a8")] // Quebec, lower case
+    [InlineData(" Z4 ")] // federal level, padded
+    public void IsCanada_CanadianCode_IsTrue(string code)
+    {
+        EdgarStateCodes.IsCanada(code).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("CA")] // California, not Canada
+    [InlineData("DE")]
+    [InlineData("X0")] // United Kingdom
+    [InlineData("")]
+    [InlineData(null)]
+    public void IsCanada_OtherBlankOrUnknown_IsFalse(string code)
+    {
+        EdgarStateCodes.IsCanada(code).Should().BeFalse();
+    }
 }
