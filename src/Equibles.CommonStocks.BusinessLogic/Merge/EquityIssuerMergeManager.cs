@@ -258,6 +258,12 @@ public class EquityIssuerMergeManager
                 );
                 return;
             }
+            // Two retired listings of one ticker would each hand the survivor a different venue identity.
+            if (folds.Any(fold => fold.To.Id == to.Id))
+            {
+                report.Refusals.Add($"Listing {from.Ticker} is held twice by the retired issuer.");
+                return;
+            }
             folds.Add((from, to));
         }
         var absorbed = new List<(EquitySecurity From, EquitySecurity To)>();
@@ -322,10 +328,10 @@ public class EquityIssuerMergeManager
                     "Active" = "Active" OR {from.Active},
                     "IsDirectoryListed" = "IsDirectoryListed" OR {from.IsDirectoryListed},
                     "IsReferenceListed" = "IsReferenceListed" OR {from.IsReferenceListed},
-                    "ListedOn" = LEAST("ListedOn", {from.ListedOn}),
+                    "ListedOn" = CASE WHEN "ListedOn" IS NULL THEN NULL ELSE LEAST("ListedOn", {from.ListedOn}) END,
                     "DelistedOn" = CASE
                         WHEN "Active" OR {from.Active} THEN NULL
-                        WHEN GREATEST("DelistedOn", {from.DelistedOn}) < LEAST("ListedOn", {from.ListedOn}) THEN NULL
+                        WHEN "ListedOn" IS NOT NULL AND GREATEST("DelistedOn", {from.DelistedOn}) < LEAST("ListedOn", {from.ListedOn}) THEN NULL
                         ELSE GREATEST("DelistedOn", {from.DelistedOn}) END,
                     "MarketIdentifierCode" = coalesce({from.MarketIdentifierCode}, "MarketIdentifierCode"),
                     "QuoteUnitMultiplier" = coalesce({from.QuoteUnitMultiplier}, "QuoteUnitMultiplier"),
