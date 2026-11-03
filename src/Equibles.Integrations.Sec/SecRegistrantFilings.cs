@@ -4,8 +4,8 @@ namespace Equibles.Integrations.Sec;
 
 /// <summary>
 /// Registrant facts read from a filer's EDGAR filing index rather than from any document: its
-/// business development company election (Form N-54A) and withdrawal (Form N-54C), whether it
-/// files annual reports, the file number EDGAR indexes its periodic reports under, and its newest
+/// business development company election (Form N-54A) and withdrawal (Form N-54C), its newest
+/// annual report, the file number EDGAR indexes its periodic reports under, and its newest
 /// successor-issuer report.
 /// </summary>
 public static class SecRegistrantFilings
@@ -33,13 +33,6 @@ public static class SecRegistrantFilings
         "40-F/A",
     ];
 
-    /// <summary>
-    /// How recent a filer's newest annual report must be for it to file annual reports now. An
-    /// annual filer files every year; an older report belongs to a past registration, whose year
-    /// end may have changed since.
-    /// </summary>
-    public static readonly int AnnualReportYears = 2;
-
     private static readonly string[] SuccessorForms = ["8-K12B", "8-K12G3", "8-K15D5"];
 
     /// <summary>
@@ -60,10 +53,6 @@ public static class SecRegistrantFilings
             .Where(f => AnnualReportForms.Contains(f.Form) && f.FilingDate != DateOnly.MinValue)
             .Select(f => (DateOnly?)f.FilingDate)
             .Max();
-
-    /// <summary>True when the newest annual report was filed within <see cref="AnnualReportYears"/>.</summary>
-    public static bool FilesAnnualReports(DateOnly? latestAnnualReportFiledOn, DateOnly today) =>
-        latestAnnualReportFiledOn is { } filed && filed >= today.AddYears(-AnnualReportYears);
 
     public static string PeriodicReportFileNumber(IEnumerable<FilingData> filings) =>
         filings

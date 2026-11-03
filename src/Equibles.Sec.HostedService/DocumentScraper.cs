@@ -5,10 +5,10 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
-using Equibles.Integrations.Sec;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.BusinessLogic;
+using Equibles.Sec.Data.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
@@ -505,7 +505,7 @@ public class DocumentScraper : IDocumentScraper
                 // that left years ago) states a year end no report of its confirms, so it fills a
                 // blank but never replaces the one its own annual reports elsewhere recorded.
                 if (
-                    SecRegistrantFilings.FilesAnnualReports(
+                    SecAnnualFiler.IsCurrent(
                         metadata.LatestAnnualReportFiledOn,
                         DateOnly.FromDateTime(DateTime.UtcNow)
                     ) || company.FiscalYearEndMonth is null
