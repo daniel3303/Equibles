@@ -63,6 +63,13 @@ public static class StockOwnershipPrecedence
                 && row.AsOf < context.Today.AddMonths(-InsiderStaleMonths)
             )
                 row.Flags |= StockHolderRowFlags.Stale;
+            // An old 13D or 13G is labelled, never hidden: it stays in force until amended.
+            if (
+                IsSchedule(row.Source)
+                && row.Shares > 0
+                && Schedule13DGStatus.IsUnconfirmed(row.AsOf, context.Today)
+            )
+                row.Flags |= StockHolderRowFlags.Unconfirmed;
         }
 
         // One group per holder: a CIK joins every source; any other key stands alone.

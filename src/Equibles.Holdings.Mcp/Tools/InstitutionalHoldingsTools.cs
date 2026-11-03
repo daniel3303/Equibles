@@ -21,6 +21,8 @@ using Equibles.Holdings.BusinessLogic.Intelligence;
 using Equibles.Holdings.BusinessLogic.Intelligence.Benchmarks;
 using Equibles.Holdings.BusinessLogic.Intelligence.Models;
 using Equibles.Holdings.BusinessLogic.Models;
+using Equibles.Holdings.BusinessLogic.Ownership;
+using Equibles.Holdings.BusinessLogic.Ownership.Models;
 using Equibles.Holdings.BusinessLogic.Signals;
 using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.Data.Models;
@@ -106,6 +108,7 @@ public class InstitutionalHoldingsTools
     // the signal sorts and the portfolio's tenure and cost columns read as not computed.
     private readonly HolderSignalsReader _holderSignalsReader;
     private readonly HolderPositionFactsReader _positionFactsReader;
+    private readonly HolderBeneficialOwnershipReader _holderBeneficialOwnershipReader;
 
     public InstitutionalHoldingsTools(
         InstitutionalHoldingRepository holdingRepository,
@@ -123,7 +126,8 @@ public class InstitutionalHoldingsTools
         IEnumerable<IHolderStrategyStatements> strategyStatements = null,
         HolderSignalsReader holderSignalsReader = null,
         HolderPositionFactsReader positionFactsReader = null,
-        FundOwnershipReader fundOwnershipReader = null
+        FundOwnershipReader fundOwnershipReader = null,
+        HolderBeneficialOwnershipReader holderBeneficialOwnershipReader = null
     )
     {
         _strategyStatements = strategyStatements?.FirstOrDefault();
@@ -151,6 +155,13 @@ public class InstitutionalHoldingsTools
                 _stockSplitRepository,
                 _combinedQuarterService,
                 _corpusCoverage
+            );
+        _holderBeneficialOwnershipReader =
+            holderBeneficialOwnershipReader
+            ?? new HolderBeneficialOwnershipReader(
+                _holdingRepository,
+                _commonStockRepository,
+                _stockSplitRepository
             );
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
@@ -2541,6 +2552,131 @@ public class InstitutionalHoldingsTools
             "GetInstitutionSummary",
             $"institution: {institutionName}"
         );
+    }
+
+    [McpServerTool(
+        Name = "GetInstitutionBeneficialOwnership",
+        Title = "Institution 13D and 13G Stakes",
+        ReadOnly = true
+    )]
+    [Description(
+        "Get the Schedule 13D and 13G stakes a named institution has disclosed: its latest filing on each listed security (13D or 13G, amendment or not) with the event and filing dates, accession, the shares (restated onto today's split basis) and percent of class, the change since the filer's previous filing on that security, a 13D's Item 4 purpose where described, and a status: current; unconfirmed (no filing in 24 months; a 13D or 13G stays in force until amended, so the stake is kept and never assumed sold); below 5% (the final amendment that ends the filer's duty to amend, not necessarily the holding); exited (no shares); or security retired (the issuer no longer trades in the US). Current and unconfirmed stakes list by default; includeHistory adds the rest. These are event-dated 5% stakes, not a quarter-end portfolio: GetInstitutionPortfolio covers the 13F book. Resolve exact CIKs with SearchInstitutions; a filer that files only 13D or 13G resolves too."
+    )]
+    public Task<string> GetInstitutionBeneficialOwnership(
+        [Description(
+            "Institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
+        )]
+            string institutionName,
+        [Description(
+            "Also list stakes reported below 5%, exited, or on securities that no longer trade (default: false)"
+        )]
+            bool includeHistory = false,
+        [Description("Maximum number of stakes to return (default: 20, clamped to 1-500)")]
+            int maxResults = 20,
+        [Description("Number of stakes to skip before returning results (default: 0)")]
+            int offset = 0
+    )
+    {
+        return _runner.Execute(
+            async () =>
+            {
+                var (holder, _, error) = await ResolveHolderByName(institutionName);
+                if (error != null)
+                    return error;
+                var stakes = await _holderBeneficialOwnershipReader.Read(holder);
+                var shown = includeHistory
+                    ? stakes
+                    : stakes.Where(stake => Schedule13DGStatus.IsHeld(stake.Status)).ToList();
+                var hidden = stakes.Count - shown.Count;
+                var filer = $"{MarkdownTable.EscapeCell(holder.Name, "—")} (CIK {holder.Cik})";
+                if (shown.Count == 0)
+                    return hidden > 0
+                        ? $"No current Schedule 13D or 13G stake for {filer}. {HiddenNote(hidden)}"
+                        : $"No Schedule 13D or 13G filings on record for {filer}.";
+                maxResults = McpLimit.Clamp(maxResults);
+                offset = McpLimit.ClampOffset(offset);
+                var page = shown.Skip(offset).Take(maxResults).ToList();
+                if (page.Count == 0)
+                    return McpOutput.PagedTruncationNote(0, shown.Count, offset);
+                return RenderInstitutionBeneficialOwnership(
+                    filer,
+                    shown.Count,
+                    hidden,
+                    includeHistory,
+                    page,
+                    offset
+                );
+            },
+            "GetInstitutionBeneficialOwnership",
+            $"institution: {institutionName}, includeHistory: {includeHistory}, maxResults: {maxResults}, offset: {offset}"
+        );
+    }
+
+    private static string HiddenNote(int hidden) =>
+        $"{McpFormat.WholeNumber(hidden)} {(hidden == 1 ? "stake" : "stakes")} reported below 5%, exited or on a retired security {(hidden == 1 ? "is" : "are")} listed with includeHistory=true.";
+
+    private static string RenderInstitutionBeneficialOwnership(
+        string filer,
+        int total,
+        int hidden,
+        bool includeHistory,
+        List<HolderBeneficialOwnershipStake> page,
+        int offset
+    )
+    {
+        var result = new StringBuilder();
+        result.AppendLine($"## Schedule 13D and 13G stakes of {filer}");
+        result.AppendLine(
+            $"{McpFormat.WholeNumber(total)} {(total == 1 ? "stake" : "stakes")}"
+                + (includeHistory ? "" : " held at or above 5%")
+                + ", each on the filer's latest 13D or 13G for the security, newest event first; shares restated onto today's split basis."
+                + (hidden > 0 ? " " + HiddenNote(hidden) : "")
+        );
+        result.AppendLine();
+        result.AppendLine(
+            "| # | Ticker | Company | Schedule | Event date | Filed | Shares | % of class | Change | Status | Accession |"
+        );
+        result.AppendLine(
+            "|---|--------|---------|----------|------------|-------|--------|------------|--------|--------|-----------|"
+        );
+        var rank = offset;
+        var purposes = new List<string>();
+        foreach (var stake in page)
+        {
+            rank++;
+            var ticker =
+                stake.CurrentTicker != null
+                && !string.Equals(stake.CurrentTicker, stake.Ticker, StringComparison.Ordinal)
+                    ? $"{stake.Ticker} (now {stake.CurrentTicker})"
+                    : stake.Ticker ?? "—";
+            var change = stake.ChangeShares is { } delta
+                ? $"{(delta > 0 ? "+" : "")}{McpFormat.WholeNumber(delta)} since {FormatDate(stake.PriorEventDate!.Value)}"
+                : "—";
+            var shares =
+                McpFormat.WholeNumber(stake.Shares) + (stake.SplitUnresolved ? " (as filed)" : "");
+            result.AppendLine(
+                $"| {rank} | {ticker} | {MarkdownTable.EscapeCell(stake.IssuerName, "—")} | "
+                    + $"{StockOwnershipTools.FormLabel(stake.FilingType, stake.IsAmendment)}{StockOwnershipTools.RuleText(stake.Rules)} | "
+                    + $"{FormatDate(stake.EventDate)} | {FormatDate(stake.FilingDate)} | {shares} | "
+                    + $"{(stake.PercentOfClass is { } percent ? McpFormat.Invariant(percent, "0.##") + "%" : "—")} | {change} | "
+                    + $"{StockOwnershipTools.StatusText(stake.Status, stake.EventDate, stake.DelistedOn)} | {stake.AccessionNumber ?? "—"} |"
+            );
+            if (stake.Purpose != null)
+                purposes.Add($"- {stake.Ticker}: {stake.Purpose.Summary}");
+        }
+        if (purposes.Count > 0)
+        {
+            result.AppendLine();
+            result.AppendLine("Purpose (Item 4) stated on the 13D:");
+            foreach (var purpose in purposes)
+                result.AppendLine(purpose);
+        }
+        result.AppendLine();
+        result.AppendLine(
+            "_A 13D or 13G stays in force until its filer amends it: a stake with no filing in 24 months is kept and labelled unconfirmed, never assumed sold; an amendment reporting under 5% ends the filer's duty to amend, not necessarily the holding. These are event-dated stakes, not a quarter-end portfolio; GetInstitutionPortfolio covers the 13F book._"
+        );
+        result.Append(McpOutput.PagedTruncationNote(page.Count, total, offset));
+        return result.ToString().TrimEnd();
     }
 
     private Task<List<HolderLinkRow>> LoadHolderLinks(InstitutionalHolder holder) =>

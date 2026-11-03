@@ -35,4 +35,17 @@ public class Schedule13DGPosition
     public long? PriorShares { get; set; }
     public DateOnly? PriorEventDate { get; set; }
     public FilingType? PriorFilingType { get; set; }
+
+    // The issuer the stake is in, filled by the per-holder read; the per-listing read already
+    // knows its issuer and leaves these default.
+    public Guid EquityIssuerId { get; set; }
+    public string IssuerName { get; set; }
+
+    /// <summary>The issuer's presentation ticker; null when it has no presentation line.</summary>
+    public string PresentationTicker { get; set; }
+
+    /// <summary>True when the issuer's presentation line trades in the US today.</summary>
+    public bool IssuerListed { get; set; }
+
+    public DateOnly? DelistedOn { get; set; }
 }

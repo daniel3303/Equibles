@@ -77,6 +77,24 @@ public class StockOwnershipPrecedenceTests
     }
 
     [Fact]
+    public void Old13G_IsUnconfirmedAndStillVisible_AZeroBalanceStaysStale()
+    {
+        // A 13G stays in force until amended: two years of silence labels it, never hides it.
+        var old = Schedule13G("200", 1_400, Today.AddMonths(-25));
+        var recent = Schedule13G("300", 1_200, Today.AddMonths(-23));
+        var exited = Schedule13G("400", 0, Today.AddMonths(-25));
+
+        var tops = Arrange([old, recent, exited]);
+
+        old.Has(StockHolderRowFlags.Unconfirmed).Should().BeTrue();
+        old.Has(StockHolderRowFlags.Stale).Should().BeFalse();
+        recent.Has(StockHolderRowFlags.Unconfirmed).Should().BeFalse();
+        exited.Has(StockHolderRowFlags.Stale).Should().BeTrue();
+        exited.Has(StockHolderRowFlags.Unconfirmed).Should().BeFalse();
+        StockOwnershipPrecedence.Visible(tops).Should().BeEquivalentTo([old, recent]);
+    }
+
+    [Fact]
     public void SubsidiaryGNests_UnderTheParent13FItsConfirmedRollupNames()
     {
         var parent = Form13F(Fmr, 50_000);

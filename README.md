@@ -367,6 +367,7 @@ This self-hosted build exposes 70 tools over MCP. The hosted server at `https://
 - GetInstitutionStyleHistory — a filer's measured style, turnover and horizon bands quarter by quarter
 - GetInstitutionSectorAllocation — allocation by sector
 - GetInstitutionQuarterlyActivity — initiated/increased/reduced/exited vs prior quarter
+- GetInstitutionBeneficialOwnership — an institution's Schedule 13D and 13G stakes, each with its dates and a status (current, unconfirmed, below 5%, exited, security retired)
 - CompareInstitutionPortfolios — portfolio overlap between two institutions
 - GetInstitutionConsensusHoldings — consensus portfolio of 2–25 institutions
 

@@ -374,7 +374,102 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var rows = await GetSchedule13DGHistoryByListing(stock, listedTicker)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-        return rows.GroupBy(row => row.InstitutionalHolderId)
+        return LatestWithPrior(rows, row => row.InstitutionalHolderId);
+    }
+
+    /// <summary>
+    /// Every Schedule 13D and 13G row one filer holds, in any issuer, left-joined to its cover-page
+    /// filing as <see cref="GetSchedule13DGHistoryByListing"/> is, with the issuer's name and
+    /// presentation line. Retired and merged issuers stay in: the stake was real when filed.
+    /// </summary>
+    public IQueryable<Schedule13DGPosition> GetSchedule13DGHistoryByHolder(
+        InstitutionalHolder holder
+    )
+    {
+        var rows = GetAll()
+            .Where(h =>
+                h.FilingType == FilingType.Schedule13D || h.FilingType == FilingType.Schedule13G
+            )
+            .Where(h => h.InstitutionalHolderId == holder.Id);
+        return from h in rows
+            join f in DbContext.Set<BeneficialOwnershipFiling>()
+                on h.AccessionNumber equals f.AccessionNumber
+                into filings
+            from f in filings.DefaultIfEmpty()
+            select new Schedule13DGPosition
+            {
+                HoldingId = h.Id,
+                InstitutionalHolderId = h.InstitutionalHolderId,
+                HolderCik = h.InstitutionalHolder.Cik,
+                HolderName = h.InstitutionalHolder.Name,
+                HolderStateOrCountry = h.InstitutionalHolder.StateOrCountry,
+                FilingType = h.FilingType,
+                EventDate = h.ReportDate,
+                FilingDate = h.FilingDate,
+                AccessionNumber = h.AccessionNumber,
+                IsAmendment = h.IsAmendment,
+                Shares = h.Shares,
+                PercentOfClass = h.PercentOfClass,
+                ListedTicker = h.ListedTicker,
+                HasCoverPage = f != null,
+                Rules = f == null ? Schedule13GRules.None : f.Rules,
+                FilingPersonTypes = f == null ? ReportingPersonTypes.None : f.FilingPersonTypes,
+                EquityIssuerId = h.EquityIssuerId,
+                IssuerName = h.Issuer.Name,
+                PresentationTicker =
+                    h.Issuer.Presentation != null ? h.Issuer.Presentation.Listing.Ticker : null,
+                IssuerListed =
+                    h.Issuer.Presentation != null
+                    && h.Issuer.Presentation.Listing.MarketCountryCode == "US"
+                    && h.Issuer.Presentation.Listing.Active,
+                DelistedOn =
+                    h.Issuer.Presentation != null ? h.Issuer.Presentation.Listing.DelistedOn : null,
+            };
+    }
+
+    /// <summary>
+    /// One filer's latest Schedule 13D or 13G on each exact listed security it ever disclosed,
+    /// ranked as <see cref="GetSchedule13DGByListing"/> ranks a listing's filers, with its previous
+    /// filing on that security as the prior position. A filer holds at most a few hundred such
+    /// rows, so they are ranked in memory.
+    /// </summary>
+    public async Task<List<Schedule13DGPosition>> GetSchedule13DGByHolder(
+        InstitutionalHolder holder,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var rows = await GetSchedule13DGHistoryByHolder(holder)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        return LatestWithPrior(rows, row => (row.EquityIssuerId, row.ListedTicker));
+    }
+
+    /// <summary>
+    /// Each filer that ever reported a Schedule 13D or 13G stake at or above the reporting
+    /// threshold, with its newest such filing date: the cheap proxy a sitemap uses to list filers
+    /// whose stake pages have something to show. The exact status of each stake is read per filer.
+    /// </summary>
+    public IQueryable<Schedule13DGHolderActivity> GetSchedule13DGHolderActivity() =>
+        GetAll()
+            .Where(h =>
+                (h.FilingType == FilingType.Schedule13D || h.FilingType == FilingType.Schedule13G)
+                && h.Shares > 0
+                && h.PercentOfClass >= 5
+            )
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(group => new Schedule13DGHolderActivity
+            {
+                InstitutionalHolderId = group.Key,
+                LastFilingDate = group.Max(h => h.FilingDate),
+            });
+
+    // The latest row per key by event date, filing date, accession and row id, carrying the next
+    // older row's shares and date as the prior position.
+    private static List<Schedule13DGPosition> LatestWithPrior<TKey>(
+        IEnumerable<Schedule13DGPosition> rows,
+        Func<Schedule13DGPosition, TKey> key
+    ) =>
+        rows.GroupBy(key)
             .Select(group =>
             {
                 var ordered = group
@@ -393,7 +488,6 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 return latest;
             })
             .ToList();
-    }
 
     /// <summary>The reporting persons of these Schedule 13D and 13G accessions, in filed order.</summary>
     public IQueryable<BeneficialOwnershipReportingPerson> GetBeneficialOwnershipPersons(

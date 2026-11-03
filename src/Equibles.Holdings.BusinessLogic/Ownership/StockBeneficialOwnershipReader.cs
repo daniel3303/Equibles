@@ -116,6 +116,13 @@ public class StockBeneficialOwnershipReader
                     PriorEventDate = prior == null ? null : p.PriorEventDate,
                     SplitUnresolved = scope.SplitUnresolved(p.EventDate, p.ListedTicker),
                     HasCoverPage = p.HasCoverPage,
+                    Status = Schedule13DGStatus.Of(
+                        shares,
+                        p.PercentOfClass,
+                        p.EventDate,
+                        today,
+                        Schedule13DGStatus.IsListed(stock)
+                    ),
                     Persons = (
                         p.AccessionNumber != null
                             ? personsByAccession.GetValueOrDefault(p.AccessionNumber) ?? []
