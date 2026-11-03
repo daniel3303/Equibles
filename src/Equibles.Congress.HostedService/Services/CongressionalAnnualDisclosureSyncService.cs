@@ -177,6 +177,16 @@ public class CongressionalAnnualDisclosureSyncService
         {
             throw;
         }
+        catch (SenateAccessDeniedException denial)
+        {
+            await SenateAccessGate.Record(
+                denial,
+                _errorReporter,
+                _logger,
+                "Senate annual report fetch"
+            );
+            return new AnnualReportFetchResult();
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fetch {Source} annual disclosure data", sourceLabel);

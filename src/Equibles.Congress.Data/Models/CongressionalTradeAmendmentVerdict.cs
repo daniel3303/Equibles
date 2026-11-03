@@ -16,7 +16,7 @@ public enum CongressionalTradeAmendmentVerdict
     NoPredecessor = 2,
 
     // Several earlier filings explain the amendment, or its rows cannot pair one-to-one; nothing
-    // is superseded because picking one would guess.
+    // is superseded because picking one would guess. Retried every cycle, reported once.
     [Display(Name = "Ambiguous")]
     Ambiguous = 3,
 }

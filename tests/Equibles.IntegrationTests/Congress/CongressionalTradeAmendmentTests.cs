@@ -415,4 +415,57 @@ public class CongressionalTradeAmendmentTests : ParadeDbMcpTestBase
         records["A0"].SupersededSourceId.Should().Be("O");
         records.Values.Should().OnlyContain(row => row.FirstDisclosedDate == original);
     }
+
+    [Fact]
+    public async Task Resolve_AmbiguousVerdictOnRecord_IsRetriedAndSupersedesATwin()
+    {
+        // An earlier matcher left this ambiguous: the original lists the trade twice, and the
+        // amendment reprints one of the twins.
+        var original = new DateOnly(2025, 11, 20);
+        var twins = Filed(
+                "O",
+                original,
+                "Brokerage",
+                1_001,
+                15_000,
+                CongressionalTradeFilingStatus.New
+            )
+            .Concat(
+                Filed("O", original, "Brokerage", 1_001, 15_000, CongressionalTradeFilingStatus.New)
+            )
+            .ToList();
+        twins[1].SourceRowIndex = 1;
+        var sut = BuildSut();
+        await Persist(sut, twins);
+        await Persist(
+            sut,
+            Filed(
+                "A",
+                new DateOnly(2025, 12, 10),
+                "Brokerage",
+                1_001,
+                15_000,
+                CongressionalTradeFilingStatus.Amended
+            )
+        );
+        await DbContext
+            .Set<CongressionalTradeAmendment>()
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters.SetProperty(
+                        row => row.Verdict,
+                        CongressionalTradeAmendmentVerdict.Ambiguous
+                    ),
+                CancellationToken.None
+            );
+
+        await Resolve();
+
+        var trades = await StoredTrades();
+        trades
+            .Select(trade => (trade.SourceId, trade.SourceRowIndex))
+            .Should()
+            .Equal(("A", 0), ("O", 1));
+        trades.Should().OnlyContain(trade => trade.FilingDate == original);
+    }
 }
