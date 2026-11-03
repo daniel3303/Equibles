@@ -51,6 +51,30 @@ public class YahooListingSourceTests
     }
 
     [Fact]
+    public void AnExchangeTradedFundChartsAsAnEtfAndAShareOrNoteAsAnEquity()
+    {
+        var fund = Target("SXR8", "DE", "XETR", "IE00B5BMR087", "EUR") with
+        {
+            IsExchangeTradedFund = true,
+        };
+        var note = Target("IGLD", "DE", "XETR", "IE0009JOT9U1", "EUR");
+        YahooChartSourceIdentity Chart(string symbol, string type) =>
+            new()
+            {
+                Symbol = symbol,
+                Currency = "EUR",
+                ExchangeCode = "GER",
+                InstrumentType = type,
+                ExchangeTimeZone = "Europe/Berlin",
+            };
+
+        YahooListingSource.MatchesChart(fund, Chart("SXR8.DE", "ETF")).Should().BeTrue();
+        YahooListingSource.MatchesChart(fund, Chart("SXR8.DE", "EQUITY")).Should().BeFalse();
+        YahooListingSource.MatchesChart(note, Chart("IGLD.DE", "EQUITY")).Should().BeTrue();
+        YahooListingSource.MatchesChart(note, Chart("IGLD.DE", "ETF")).Should().BeFalse();
+    }
+
+    [Fact]
     public void LondonQuotesInPenceAndAFewOfItsLinesInAnotherCurrency()
     {
         var pence = Target("BT-A", "GB", "XLON", "GB0030913577", "GBP", 0.01m);

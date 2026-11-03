@@ -395,7 +395,8 @@ public class YahooPriceImportService
                         listing.TradingCurrency,
                         listing.QuoteUnitMultiplier,
                         listing.YahooPriceSyncAttemptedAt,
-                        listing.EquitySecurityId
+                        listing.EquitySecurityId,
+                        listing.Security.SecurityType == EquitySecurityKind.ExchangeTradedFund
                     ))
                     .ToListAsync(cancellationToken)
             );
@@ -1196,7 +1197,9 @@ public class YahooPriceImportService
                 Isin: listing.Security.Isin,
                 TradingCurrency: listing.TradingCurrency,
                 QuoteUnitMultiplier: listing.QuoteUnitMultiplier,
-                EquitySecurityId: listing.EquitySecurityId
+                EquitySecurityId: listing.EquitySecurityId,
+                IsExchangeTradedFund: listing.Security.SecurityType
+                    == EquitySecurityKind.ExchangeTradedFund
             );
             if (
                 !IsCatalogMarket(target)

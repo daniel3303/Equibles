@@ -63,6 +63,99 @@ public class SourceDirectorySnapshotTests(ParadeDbFixture fixture) : ParadeDbMcp
                 .ToList(),
         };
 
+    private static EquityDirectoryListingInput XetraLine(
+        string isin,
+        string ticker,
+        EquitySecurityKind? kind = null
+    ) =>
+        new()
+        {
+            Source = kind == null ? "xetra" : "xetra-etp",
+            SourceIssuerIdentifier = isin,
+            IssuerName = "Source issuer " + isin,
+            Isin = isin,
+            RelatedIsins = [isin],
+            Ticker = ticker,
+            MarketIdentifierCode = "XETR",
+            MarketCountryCode = "DE",
+            TradingCurrency = "EUR",
+            QuoteUnitMultiplier = 1m,
+            SecurityType = kind,
+            SourceUrl = "https://www.xetra.com/instruments.csv",
+            PayloadJson = JsonSerializer.Serialize(new { isin, ticker }),
+        };
+
+    private static EquityDirectorySnapshotInput XetraSnapshot(
+        int revision,
+        bool products,
+        params EquityDirectoryListingInput[] listings
+    ) =>
+        new()
+        {
+            Source = products ? "xetra-etp" : "xetra",
+            EvidenceSource = products ? "xetra-products-v1" : "xetra-shares-v1",
+            SourceRecordKey = "https://www.xetra.com/instruments.csv",
+            PayloadJson = JsonSerializer.Serialize(
+                new
+                {
+                    revision,
+                    products,
+                    listings,
+                }
+            ),
+            ObservedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(revision),
+            MarketCountryCode = "DE",
+            MarketIdentifierCodes = ["XETR"],
+            ExchangeTradedProducts = products,
+            Listings = listings
+                .Select(row => new EquityDirectoryListingKey(
+                    row.Isin,
+                    row.MarketIdentifierCode,
+                    row.Ticker
+                ))
+                .ToList(),
+        };
+
+    [Fact]
+    public async Task ShareAndProductCapturesOfOneVenue_WithdrawOnlyTheirOwnAbsentees()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var snapshots = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var share = XetraLine("DE0007164600", "SAP");
+        share.DirectorySnapshotId = await snapshots.Reconcile(XetraSnapshot(0, false, share));
+        var shareId = await importer.ImportListing(share);
+        var fund = XetraLine("IE00B5BMR087", "SXR8", EquitySecurityKind.ExchangeTradedFund);
+        fund.DirectorySnapshotId = await snapshots.Reconcile(XetraSnapshot(0, true, fund));
+        var fundId = await importer.ImportListing(fund);
+
+        // Each capture omits the other half of the venue, which must stay listed.
+        await snapshots.Reconcile(XetraSnapshot(1, false, share));
+        await snapshots.Reconcile(XetraSnapshot(1, true, fund));
+        (await Active(shareId)).Should().BeTrue();
+        (await Active(fundId)).Should().BeTrue();
+
+        // A product capture that no longer states the fund withdraws it, and only it.
+        await snapshots.Reconcile(
+            XetraSnapshot(
+                2,
+                true,
+                XetraLine("IE00B4L5Y983", "EUNL", EquitySecurityKind.ExchangeTradedFund)
+            )
+        );
+        (await Active(fundId)).Should().BeFalse();
+        (await Active(shareId)).Should().BeTrue();
+    }
+
+    private async Task<bool> Active(Guid listingId) =>
+        (
+            await DbContext
+                .Set<EquityListing>()
+                .AsNoTracking()
+                .SingleAsync(row => row.Id == listingId)
+        ).Active;
+
     [Fact]
     public async Task ReassignedSymbolRevokesOldCaptureBeforeNewProductImportAndKeepsItsPrices()
     {

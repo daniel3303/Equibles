@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.EquityMarkets.BusinessLogic.Directory;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
@@ -213,6 +214,57 @@ public class EquityMarketDirectoryGateTests
             .Should()
             .BeFalse("only an explicit request grants a home");
     }
+
+    [Theory]
+    [InlineData("CEOGES", true)]
+    [InlineData("EYAYFT", true)]
+    [InlineData("ESVUFR", false)]
+    [InlineData("CIOGES", false)]
+    public void ProductLine_IsAnyLiveFundOrNoteLineOnTheMarketWhateverItsHomeVenue(
+        string cfi,
+        bool admitted
+    )
+    {
+        var xetra = EquityMarketCatalog.TryGet("xetra");
+        var row = Row("XETR", statedPrimaryMarket: "XLON");
+        var firds = Firds("XETA", relevantVenue: "XLON", authority: "IE");
+        firds.Cfi = cfi;
+
+        EquityMarketDirectoryGate
+            .IsExchangeTradedProductLine(xetra, row, firds)
+            .Should()
+            .Be(admitted);
+    }
+
+    [Fact]
+    public void ProductLine_RefusesALineOfAnotherMarketOrAnotherSecurity()
+    {
+        var xetra = EquityMarketCatalog.TryGet("xetra");
+        var firds = Firds("XETA", relevantVenue: "XLON", authority: "IE");
+        firds.Cfi = "CEOGES";
+
+        EquityMarketDirectoryGate
+            .IsExchangeTradedProductLine(xetra, Row("XPAR", null), firds)
+            .Should()
+            .BeFalse();
+        firds.Isin = "IE00B5BMR087";
+        EquityMarketDirectoryGate
+            .IsExchangeTradedProductLine(xetra, Row("XETR", null), firds)
+            .Should()
+            .BeFalse();
+        EquityMarketDirectoryGate
+            .IsExchangeTradedProductLine(xetra, Row("XETR", null), null)
+            .Should()
+            .BeFalse();
+    }
+
+    [Theory]
+    [InlineData("CEOGES", EquitySecurityKind.ExchangeTradedFund)]
+    [InlineData("EYAYFT", EquitySecurityKind.ExchangeTradedNote)]
+    [InlineData("ESVUFR", null)]
+    [InlineData(null, null)]
+    public void ProductKind_ComesFromTheCfiAlone(string cfi, EquitySecurityKind? kind) =>
+        EquityMarketDirectoryGate.ProductKind(cfi).Should().Be(kind);
 
     private static FirdsInstrumentRecord Line(
         string mic,

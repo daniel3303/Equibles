@@ -1,4 +1,5 @@
 using Equibles.Core.Configuration;
+using Equibles.CorporateActions.BusinessLogic;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Worker;
@@ -14,6 +15,12 @@ public class YahooPriceScraperWorker : BaseScraperWorker
 {
     private readonly WorkerOptions _workerOptions;
     private bool _ohlcRepairComplete;
+
+    // Issuer-only dividends from captures before listing attribution are re-read once per
+    // process; an issuer the source no longer serves is not retried until the next start.
+    private const int DividendRecaptureBatchSize = 100;
+    private readonly HashSet<Guid> _dividendRecaptureAttempted = [];
+    private bool _dividendRecaptureComplete;
 
     protected override string WorkerName => "Yahoo price scraper";
     protected override TimeSpan SleepInterval { get; }
@@ -58,5 +65,17 @@ public class YahooPriceScraperWorker : BaseScraperWorker
         // intentionally verifies the invariant once more.
         if (!_ohlcRepairComplete)
             _ohlcRepairComplete = await importService.RepairInvalidOhlc(stoppingToken);
+        if (!_dividendRecaptureComplete)
+        {
+            var recapture =
+                scope.ServiceProvider.GetRequiredService<UnattributedDividendRecaptureManager>();
+            var attempted = await recapture.RecaptureNext(
+                _dividendRecaptureAttempted,
+                DividendRecaptureBatchSize,
+                stoppingToken
+            );
+            _dividendRecaptureAttempted.UnionWith(attempted);
+            _dividendRecaptureComplete = attempted.Count == 0;
+        }
     }
 }

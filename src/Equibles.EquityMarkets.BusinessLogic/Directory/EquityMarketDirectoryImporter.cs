@@ -16,10 +16,12 @@ using Microsoft.Extensions.Logging;
 namespace Equibles.EquityMarkets.BusinessLogic.Directory;
 
 // One pass over a market: the venue's directory is reconciled whole, then each row the gate confirms as the
-// market's own share listing is verified against the source product and GLEIF before it becomes a listing.
+// market's own share listing is verified against the source product and GLEIF before it becomes a listing. A venue's
+// exchange-traded products take a second pass of their own, admitted on every venue that lists them.
 [Service]
 public class EquityMarketDirectoryImporter(
     IEnumerable<IEquityMarketDirectorySource> sources,
+    IEnumerable<IExchangeTradedProductDirectorySource> productSources,
     GleifIdentityClient gleifClient,
     EquityDirectoryIdentityImporter identityImporter,
     EquityDirectorySnapshotManager snapshotManager,
@@ -42,29 +44,87 @@ public class EquityMarketDirectoryImporter(
             ?? throw new InvalidOperationException(
                 $"No directory source serves {market.Code} ({market.DirectorySource ?? "none"})."
             );
+        return await ImportRows(
+            market,
+            source.SourceKey,
+            products: false,
+            token => source.Capture(market, token),
+            (row, firds, token) => source.Resolve(market, row, firds, token),
+            cancellationToken
+        );
+    }
+
+    // Whether the market's venue publishes a list of exchange-traded products a pass reads.
+    public bool HasProductSource(EquityMarket market) =>
+        market != null && productSources.Any(candidate => candidate.Supports(market));
+
+    public async Task<EquityMarketDirectoryImportResult> ImportExchangeTradedProducts(
+        EquityMarket market,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(market);
+        var source =
+            productSources.FirstOrDefault(candidate => candidate.Supports(market))
+            ?? throw new InvalidOperationException(
+                $"No exchange-traded product source serves {market.Code}."
+            );
+        return await ImportRows(
+            market,
+            source.SourceKey,
+            products: true,
+            token => source.CaptureProducts(market, token),
+            (row, firds, token) => source.Resolve(market, row, firds, token),
+            cancellationToken
+        );
+    }
+
+    private async Task<EquityMarketDirectoryImportResult> ImportRows(
+        EquityMarket market,
+        string sourceKey,
+        bool products,
+        Func<CancellationToken, Task<EquityMarketDirectorySnapshot>> capture,
+        Func<
+            EquityMarketDirectoryRow,
+            FirdsInstrumentRecord,
+            CancellationToken,
+            Task<EquityMarketDirectoryProduct>
+        > resolve,
+        CancellationToken cancellationToken
+    )
+    {
         var result = new EquityMarketDirectoryImportResult();
         using (var scope = scopeFactory.CreateScope())
         {
             var runs = scope.ServiceProvider.GetRequiredService<FirdsImportRunRepository>();
-            if (!await runs.HasFullImport(market.FirdsAuthority, cancellationToken))
+            // Funds come from FIRDS's collective-investment files, commodities and notes from its equity files.
+            if (
+                !await runs.HasFullImport(
+                    market.FirdsAuthority,
+                    cancellationToken: cancellationToken
+                )
+                || products
+                    && !await runs.HasFullImport(market.FirdsAuthority, 'C', cancellationToken)
+            )
             {
                 result.Error = "FIRDS universe is not loaded yet; the directory pass waits for it.";
                 return result;
             }
         }
-        var snapshot = await source.Capture(market, cancellationToken);
+        var snapshot = await capture(cancellationToken);
         result.Listings = snapshot.Rows.Count;
         result.Excluded = snapshot.Excluded;
         var snapshotId = await snapshotManager.Reconcile(
             new EquityDirectorySnapshotInput
             {
-                Source = source.SourceKey,
+                Source = sourceKey,
                 EvidenceSource = snapshot.EvidenceSource,
                 SourceRecordKey = snapshot.SourceUrl.AbsoluteUri,
                 PayloadJson = snapshot.PayloadJson,
                 ObservedAt = snapshot.CapturedAt,
                 MarketCountryCode = market.CountryCode,
                 MarketIdentifierCodes = market.MarketIdentifierCodes,
+                ExchangeTradedProducts = products,
                 Listings = snapshot
                     .Rows.Select(row => new EquityDirectoryListingKey(
                         row.Isin,
@@ -85,26 +145,44 @@ public class EquityMarketDirectoryImporter(
             {
                 var records =
                     scope.ServiceProvider.GetRequiredService<FirdsInstrumentRecordRepository>();
-                firds = await records.GetLiveShare(
-                    row.Isin,
-                    market.FirdsAuthority,
-                    market.FirdsVenueCodes,
-                    now,
-                    cancellationToken
-                );
-                // The share's other lines matter only once the relevant venue alone refuses it.
-                if (firds != null && !EquityMarketDirectoryGate.IsHomeShare(market, row, firds))
-                    lines = await records.GetLiveShareLines(row.Isin, now, cancellationToken);
-                if (!EquityMarketDirectoryGate.IsHomeShare(market, row, firds, lines))
+                if (products)
                 {
-                    result.Skipped++;
-                    continue;
+                    firds = await records.GetLiveProduct(
+                        row.Isin,
+                        market.FirdsAuthority,
+                        market.FirdsVenueCodes,
+                        now,
+                        cancellationToken
+                    );
+                    if (!EquityMarketDirectoryGate.IsExchangeTradedProductLine(market, row, firds))
+                    {
+                        result.Skipped++;
+                        continue;
+                    }
+                }
+                else
+                {
+                    firds = await records.GetLiveShare(
+                        row.Isin,
+                        market.FirdsAuthority,
+                        market.FirdsVenueCodes,
+                        now,
+                        cancellationToken
+                    );
+                    // The share's other lines matter only once the relevant venue alone refuses it.
+                    if (firds != null && !EquityMarketDirectoryGate.IsHomeShare(market, row, firds))
+                        lines = await records.GetLiveShareLines(row.Isin, now, cancellationToken);
+                    if (!EquityMarketDirectoryGate.IsHomeShare(market, row, firds, lines))
+                    {
+                        result.Skipped++;
+                        continue;
+                    }
                 }
                 if (
                     await IsCurrent(
                         scope.ServiceProvider,
                         market,
-                        source.SourceKey,
+                        sourceKey,
                         row,
                         firds.Lei,
                         now,
@@ -122,7 +200,7 @@ public class EquityMarketDirectoryImporter(
             attempt.CancelAfter(TimeSpan.FromMinutes(5));
             try
             {
-                var product = await source.Resolve(market, row, firds, attempt.Token);
+                var product = await resolve(row, firds, attempt.Token);
                 var issuer = await gleifClient.GetIssuerForIsin(row.Isin, attempt.Token);
                 var firdsIssuer =
                     issuer.LegalEntityIdentifier == null
@@ -131,13 +209,14 @@ public class EquityMarketDirectoryImporter(
                         : null;
                 var input = CreateInput(
                     market,
-                    source.SourceKey,
+                    sourceKey,
                     row,
                     product,
                     firds,
                     issuer,
                     firdsIssuer,
-                    lines
+                    lines,
+                    products
                 );
                 input.DirectorySnapshotId = snapshotId;
                 await identityImporter.ImportListing(input, attempt.Token);
@@ -169,8 +248,9 @@ public class EquityMarketDirectoryImporter(
             }
         }
         logger.LogInformation(
-            "{Market} directory cycle complete: {Imported} imported, {Current} current, {Skipped} not the market's own share listings, {Failed} unresolved, {Excluded} share lines the source could not carry, {Total} source listings",
+            "{Market} {Kind} directory cycle complete: {Imported} imported, {Current} current, {Skipped} refused by the gate, {Failed} unresolved, {Excluded} lines the source could not carry, {Total} source listings",
             market.Code,
+            products ? "product" : "share",
             result.Imported,
             result.Current,
             result.Skipped,
@@ -249,7 +329,8 @@ public class EquityMarketDirectoryImporter(
         FirdsInstrumentRecord firds,
         GleifIssuerIdentity issuer,
         GleifIssuerIdentity firdsIssuer = null,
-        IReadOnlyCollection<FirdsInstrumentRecord> firdsLines = null
+        IReadOnlyCollection<FirdsInstrumentRecord> firdsLines = null,
+        bool exchangeTradedProduct = false
     )
     {
         ArgumentNullException.ThrowIfNull(market);
@@ -277,7 +358,11 @@ public class EquityMarketDirectoryImporter(
             row.SourceUrl == null
             || product.SourceUrl != row.SourceUrl
             || issuer.RequestedIsin != row.Isin
-            || !EquityMarketDirectoryGate.IsHomeShare(market, row, firds, firdsLines)
+            || (
+                exchangeTradedProduct
+                    ? !EquityMarketDirectoryGate.IsExchangeTradedProductLine(market, row, firds)
+                    : !EquityMarketDirectoryGate.IsHomeShare(market, row, firds, firdsLines)
+            )
         )
             throw new InvalidDataException(
                 "Directory identity sources disagree on the requested security."
@@ -316,6 +401,9 @@ public class EquityMarketDirectoryImporter(
             ExtendedSessionMarketIdentifierCodes = [.. market.ExtendedSessionCodes],
             TradingCurrency = quoted ? currency : null,
             QuoteUnitMultiplier = quoted ? multiplier : null,
+            SecurityType = exchangeTradedProduct
+                ? EquityMarketDirectoryGate.ProductKind(firds.Cfi)
+                : null,
             SourceUrl = product.SourceUrl.AbsoluteUri,
             PayloadJson = JsonSerializer.Serialize(
                 new

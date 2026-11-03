@@ -68,6 +68,10 @@ public class EquityDirectorySnapshotManager(IServiceScopeFactory scopeFactory)
                 && row.IsDirectoryListed
                 && row.MarketCountryCode == input.MarketCountryCode
                 && input.MarketIdentifierCodes.Contains(row.MarketIdentifierCode)
+                && (
+                    row.Security.SecurityType == EquitySecurityKind.ExchangeTradedFund
+                    || row.Security.SecurityType == EquitySecurityKind.ExchangeTradedNote
+                ) == input.ExchangeTradedProducts
             )
             .Include(row => row.Security)
             .ToListAsync(token);
