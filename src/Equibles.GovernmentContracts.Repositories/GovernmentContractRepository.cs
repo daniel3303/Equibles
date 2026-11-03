@@ -9,9 +9,16 @@ public class GovernmentContractRepository : BaseRepository<GovernmentContract>
     public GovernmentContractRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<GovernmentContract> GetByIssuerId(Guid commonStock)
+    // Every reader names the awarding country: amounts are in that country's currency, so one
+    // query never sums US and Canadian dollars together.
+    public IQueryable<GovernmentContract> GetByIssuerId(Guid issuerId, string countryCode)
     {
-        return GetAll().Where(c => c.EquityIssuerId == commonStock);
+        return GetByCountry(countryCode).Where(c => c.EquityIssuerId == issuerId);
+    }
+
+    public IQueryable<GovernmentContract> GetByCountry(string countryCode)
+    {
+        return GetAll().Where(c => c.CountryCode == countryCode);
     }
 
     public IQueryable<GovernmentContract> GetByAwardUniqueKey(string awardUniqueKey)

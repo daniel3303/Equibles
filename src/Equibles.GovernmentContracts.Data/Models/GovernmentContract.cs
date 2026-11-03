@@ -6,19 +6,28 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.GovernmentContracts.Data.Models;
 
 /// <summary>
-/// A federal procurement contract award (from USAspending.gov) that has been
-/// resolved to a public company in our <see cref="Issuer"/> universe.
-/// Awards that do not resolve to a public filer are not persisted.
+/// A federal procurement contract award, from USAspending.gov for the United States or the
+/// Government of Canada's proactive publication of contracts, resolved to a public company in
+/// our <see cref="Issuer"/> universe. Awards that do not resolve to a listed company are not persisted.
 /// </summary>
 [Index(nameof(AwardUniqueKey), IsUnique = true)]
 [Index(nameof(EquityIssuerId), nameof(ActionDate))]
 [Index(nameof(ActionDate))]
+[Index(nameof(CountryCode), nameof(ActionDate))]
 public class GovernmentContract
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid EquityIssuerId { get; set; }
+
+    /// <summary>
+    /// The government that awarded the contract, as an ISO country code: US or CA. It also
+    /// sets the currency of <see cref="Amount"/>, so readers sum and rank one country at a time.
+    /// </summary>
+    [Required]
+    [MaxLength(2)]
+    public string CountryCode { get; set; } = "US";
     public virtual EquityIssuer Issuer { get; set; }
 
     /// <summary>
@@ -47,7 +56,10 @@ public class GovernmentContract
     [MaxLength(256)]
     public string AwardingAgency { get; set; }
 
-    /// <summary>Total award value (current obligated + potential), in US dollars.</summary>
+    /// <summary>
+    /// Total award value in the awarding country's currency: US dollars (current obligated +
+    /// potential) for US awards, Canadian dollars (the contract value including amendments) for CA.
+    /// </summary>
     public decimal Amount { get; set; }
 
     /// <summary>Total outlays disbursed against the award to date, in US dollars.</summary>

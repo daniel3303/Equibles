@@ -10,10 +10,11 @@ public sealed class HistoricalEquityDbFixture : ParadeDbFixture
         "20260913025100_PreserveHoldingObservationIdentity";
     protected override bool IncludeLegacyMappings => true;
 
-    // Added by 20261029100726_AddCashDividendPriceAdjustmentUnservedTime; the reconcile selection
-    // filters on it.
+    // Added by 20261029100726_AddCashDividendPriceAdjustmentUnservedTime (the reconcile selection
+    // filters on it) and by AddGovernmentContractCountry (every contract insert writes it).
     protected override string PostMigrationSql =>
-        "ALTER TABLE \"CashDividend\" ADD COLUMN \"PriceAdjustmentUnservedTime\" timestamp with time zone NULL";
+        "ALTER TABLE \"CashDividend\" ADD COLUMN \"PriceAdjustmentUnservedTime\" timestamp with time zone NULL;"
+        + "ALTER TABLE \"GovernmentContract\" ADD COLUMN \"CountryCode\" character varying(2) NOT NULL DEFAULT 'US'";
 }
 
 [CollectionDefinition(Name)]

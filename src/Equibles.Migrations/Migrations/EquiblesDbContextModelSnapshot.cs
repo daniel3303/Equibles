@@ -2513,6 +2513,11 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -2554,6 +2559,8 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("AwardUniqueKey")
                         .IsUnique();
+
+                    b.HasIndex("CountryCode", "ActionDate");
 
                     b.HasIndex("EquityIssuerId", "ActionDate");
 

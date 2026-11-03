@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
@@ -47,16 +49,22 @@ public class GovernmentContractsTools
         ReadOnly = true
     )]
     [Description(
-        "Get federal government contract awards (from USAspending.gov) won by a specific public company. "
-            + "Shows the award (action) date, recipient named by the government, awarding agency, total value "
-            + "(obligated dollars plus unexercised ceiling — not revenue received), outlays when reported, "
-            + "period-of-performance end date, and description. "
-            + "Coverage: only prime contract awards of $1M or more that resolve to a listed company are "
-            + "included, so sums understate total federal revenue. Useful for gauging a company's reliance "
-            + "on federal spending; use GetTopGovernmentContractors to rank companies market-wide."
+        "Get federal government contract awards won by a specific public company: US federal awards "
+            + "(from USAspending.gov) or Government of Canada contracts (from its proactive publication of "
+            + "contracts over C$10,000). Shows the award (action) date, recipient named by the government, "
+            + "awarding agency or department, total value (US: obligated dollars plus unexercised ceiling; "
+            + "Canada: contract value including amendments, in Canadian dollars; never revenue received), "
+            + "outlays when reported, end date, and description. "
+            + "Coverage: US prime contract awards of $1M or more, and Canadian contracts reported from fiscal "
+            + "2017-2018 (April 2017) whose vendor name exactly matches a company listed on a Canadian exchange, "
+            + "so sums understate government revenue. "
+            + "Use GetTopGovernmentContractors to rank companies market-wide."
     )]
     public Task<string> GetGovernmentContracts(
-        [Description("Stock ticker symbol (e.g., LMT, RTX, BA)")] string ticker,
+        [Description(
+            "Stock ticker symbol (e.g., LMT, RTX, BA), or MIC:TICKER for a Canadian listing (e.g., XTSE:CAE)"
+        )]
+            string ticker,
         [Description(
             "Start date in YYYY-MM-DD format, filtering on the award action date (defaults to 1 year ago)"
         )]
@@ -72,16 +80,28 @@ public class GovernmentContractsTools
         )]
             string agency = null,
         [Description("Number of matching awards to skip before returning rows (default: 0)")]
-            int offset = 0
+            int offset = 0,
+        [Description(
+            "Awarding government: US or CA. Defaults to the country of the listing the symbol names (CA for XTSE:CAE, US for a bare US ticker)"
+        )]
+            string country = null
     )
     {
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) =
-                    await _commonStockRepository.ResolveByTickerIncludingDelisted(ticker);
+                var (stock, venue, stockError) = EquityListingSymbol.TryParse(ticker, out _, out _)
+                    ? await _commonStockRepository.ResolveListing(ticker)
+                    : await ResolveIssuer(ticker);
                 if (stockError != null)
                     return stockError;
+
+                var (countryCode, countryError) = ParseCountry(
+                    country,
+                    venue?.MarketCountryCode ?? stock.Presentation?.Listing.MarketCountryCode
+                );
+                if (countryError != null)
+                    return countryError;
 
                 var (start, end, rangeError) = ParseAwardDateRange(startDate, endDate);
                 if (rangeError != null)
@@ -95,7 +115,7 @@ public class GovernmentContractsTools
                 offset = McpLimit.ClampOffset(offset);
 
                 var query = _contractRepository
-                    .GetByIssuerId((stock).Id)
+                    .GetByIssuerId(stock.Id, countryCode)
                     .Where(c => c.ActionDate >= start && c.ActionDate <= end);
 
                 if (!string.IsNullOrWhiteSpace(agency))
@@ -115,8 +135,9 @@ public class GovernmentContractsTools
                     .Skip(offset)
                     .Take(maxResults)
                     .ToListAsync();
+                var noun = AwardNoun(countryCode);
                 if (awards.Count == 0 && offset > 0)
-                    return $"No results at offset {offset} - only {totalCount} federal contract awards match; lower offset.";
+                    return $"No results at offset {offset} - only {totalCount} {noun} match; lower offset.";
 
                 // USAspending reports outlays on only about a quarter of awards, so a permanent
                 // column would be mostly em-dashes; it renders when this answer actually carries
@@ -125,21 +146,21 @@ public class GovernmentContractsTools
 
                 var table = MarkdownTable.Render(
                     awards,
-                    $"No federal contract awards found for {stock.Presentation.Listing.Ticker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
-                    $"Federal contract awards for {stock.Presentation.Listing.Ticker} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd} "
-                        + $"— {totalCount} awards totaling {FormatUsd(totalValue)}:",
+                    $"No {noun} found for {Symbol(stock, venue)} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
+                    $"{char.ToUpperInvariant(noun[0])}{noun[1..]} for {Symbol(stock, venue)} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd} "
+                        + $"— {totalCount} awards totaling {FormatAmount(totalValue, countryCode)}:",
                     hasOutlays
-                        ? "| Award Date | Recipient | Agency | Type | Total Value (obligated + ceiling) | Outlays | Period End | Award ID | Description |"
-                        : "| Award Date | Recipient | Agency | Type | Total Value (obligated + ceiling) | Period End | Award ID | Description |",
+                        ? $"| Award Date | Recipient | Agency | Type | {ValueHeader(countryCode)} | Outlays | Period End | Award ID | Description |"
+                        : $"| Award Date | Recipient | Agency | Type | {ValueHeader(countryCode)} | Period End | Award ID | Description |",
                     hasOutlays
                         ? "|------------|-----------|--------|------|-----------------------------------|---------|------------|----------|-------------|"
                         : "|------------|-----------|--------|------|-----------------------------------|------------|----------|-------------|",
                     c =>
                         $"| {Format(c.ActionDate)} | {Escape(c.RecipientName)} | {Escape(c.AwardingAgency)} | {AwardTypeLabel(c.AwardType)} "
-                        + $"| {FormatUsd(c.Amount)} "
+                        + $"| {FormatAmount(c.Amount, countryCode)} "
                         + (
                             hasOutlays
-                                ? $"| {(c.TotalOutlays == null ? "—" : FormatUsd(c.TotalOutlays.Value))} "
+                                ? $"| {(c.TotalOutlays == null ? "—" : FormatAmount(c.TotalOutlays.Value, countryCode))} "
                                 : ""
                         )
                         + $"| {Format(c.EndDate)} | {Escape(c.AwardId)} "
@@ -153,11 +174,12 @@ public class GovernmentContractsTools
                     end,
                     hasOutlays,
                     hasRecipient: true,
+                    countryCode,
                     offset: offset
                 );
             },
             "GetGovernmentContracts",
-            $"ticker: {ticker}, agency: {agency}, sortBy: {sortBy}, offset: {offset}"
+            $"ticker: {ticker}, agency: {agency}, sortBy: {sortBy}, offset: {offset}, country: {country}"
         );
     }
 
@@ -167,11 +189,13 @@ public class GovernmentContractsTools
         ReadOnly = true
     )]
     [Description(
-        "Rank public companies by total federal contract dollars awarded over a date range (from "
-            + "USAspending.gov). Sums the total award value (obligated dollars plus unexercised ceiling) of "
-            + "prime contract awards of $1M or more that resolve to a listed company; smaller awards and "
-            + "unlisted recipients are excluded. Answers questions like 'which public companies won the most "
-            + "federal contracts last quarter'. Use GetGovernmentContracts for one company's individual awards."
+        "Rank public companies by total federal contract dollars awarded over a date range, one country "
+            + "at a time: US (default, from USAspending.gov; total award value of prime contract awards of "
+            + "$1M or more) or CA (Government of Canada contracts over C$10,000, contract value including "
+            + "amendments, in Canadian dollars, for vendors whose name exactly matches a company listed on a "
+            + "Canadian exchange). Unlisted recipients are excluded. Answers questions like 'which public "
+            + "companies won the most federal contracts last quarter'. Use GetGovernmentContracts for one "
+            + "company's individual awards."
     )]
     public Task<string> GetTopGovernmentContractors(
         [Description(
@@ -180,7 +204,8 @@ public class GovernmentContractsTools
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to today)")] string endDate = null,
         [Description("Maximum number of companies to return (default: 25, largest first)")]
-            int maxResults = 25
+            int maxResults = 25,
+        [Description("Awarding government: US (default) or CA")] string country = "US"
     )
     {
         return _runner.Execute(
@@ -190,10 +215,14 @@ public class GovernmentContractsTools
                 if (rangeError != null)
                     return rangeError;
 
+                var (countryCode, countryError) = ParseCountry(country, "US");
+                if (countryError != null)
+                    return countryError;
+
                 maxResults = McpLimit.Clamp(maxResults);
 
                 var window = _contractRepository
-                    .GetAll()
+                    .GetByCountry(countryCode)
                     .Where(c => c.ActionDate >= start && c.ActionDate <= end);
 
                 var totalCompanies = await window
@@ -208,11 +237,19 @@ public class GovernmentContractsTools
                         Ticker = c.Issuer.Presentation == null
                             ? null
                             : c.Issuer.Presentation.Listing.Ticker,
+                        Country = c.Issuer.Presentation == null
+                            ? null
+                            : c.Issuer.Presentation.Listing.MarketCountryCode,
+                        Market = c.Issuer.Presentation == null
+                            ? null
+                            : c.Issuer.Presentation.Listing.MarketIdentifierCode,
                         c.Issuer.Name,
                     })
                     .Select(g => new
                     {
                         g.Key.Ticker,
+                        g.Key.Country,
+                        g.Key.Market,
                         g.Key.Name,
                         Total = g.Sum(c => c.Amount),
                         Count = g.Count(),
@@ -224,12 +261,15 @@ public class GovernmentContractsTools
                 var rank = 0;
                 var table = MarkdownTable.Render(
                     ranked,
-                    $"No federal contract awards found between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
-                    $"Top federal contractors ({start:yyyy-MM-dd} to {end:yyyy-MM-dd}):",
-                    "| Rank | Ticker | Company | Total Value (obligated + ceiling) | Awards |",
+                    $"No {AwardNoun(countryCode)} found between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
+                    countryCode == "CA"
+                        ? $"Top Government of Canada contractors ({start:yyyy-MM-dd} to {end:yyyy-MM-dd}):"
+                        : $"Top federal contractors ({start:yyyy-MM-dd} to {end:yyyy-MM-dd}):",
+                    $"| Rank | Ticker | Company | {ValueHeader(countryCode)} | Awards |",
                     "|------|--------|---------|-----------------------------------|--------|",
                     r =>
-                        $"| {++rank} | {Escape(r.Ticker)} | {Escape(r.Name)} | {FormatUsd(r.Total)} | {r.Count} |"
+                        // A company listed only outside the US is named by MIC:TICKER, since its bare ticker can be another US company's.
+                        $"| {++rank} | {Escape(EquityListingSymbol.Display(r.Ticker, r.Country, r.Market))} | {Escape(r.Name)} | {FormatAmount(r.Total, countryCode)} | {r.Count} |"
                 );
 
                 return await AppendFooters(
@@ -238,11 +278,12 @@ public class GovernmentContractsTools
                     totalCompanies,
                     end,
                     hasOutlays: false,
-                    hasRecipient: false
+                    hasRecipient: false,
+                    countryCode
                 );
             },
             "GetTopGovernmentContractors",
-            $"range: {startDate}..{endDate}"
+            $"range: {startDate}..{endDate}, country: {country}"
         );
     }
 
@@ -255,6 +296,7 @@ public class GovernmentContractsTools
         DateOnly rangeEnd,
         bool hasOutlays,
         bool hasRecipient,
+        string countryCode,
         int? offset = null
     )
     {
@@ -272,13 +314,20 @@ public class GovernmentContractsTools
         // Future action dates are upstream glitches, not evidence of coverage — the
         // freshness statement keys on the newest credible (non-future) action date.
         var latestIngested = await _contractRepository
-            .GetAll()
+            .GetByCountry(countryCode)
             .Where(c => c.ActionDate != null && c.ActionDate <= today)
             .MaxAsync(c => c.ActionDate);
 
         sb.AppendLine(
-            "_Coverage: prime federal contract awards of $1M+ matched to listed companies; "
-                + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received"
+            (
+                countryCode == "CA"
+                    ? "_Coverage: Government of Canada contracts over C$10,000 reported from fiscal 2017-2018 (April 2017) whose "
+                        + "vendor name exactly matches a company listed on a Canadian exchange (a subsidiary named differently is not "
+                        + "matched); Contract Value is the "
+                        + "latest reported value including amendments, in Canadian dollars, not revenue received"
+                    : "_Coverage: prime federal contract awards of $1M+ matched to listed companies; "
+                        + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received"
+            )
                 + (
                     hasOutlays
                         ? "; Outlays is what the government has actually disbursed so far"
@@ -384,11 +433,46 @@ public class GovernmentContractsTools
             GovernmentContractAwardType.PurchaseOrder => "Purchase Order",
             GovernmentContractAwardType.DeliveryOrder => "Delivery Order",
             GovernmentContractAwardType.DefinitiveContract => "Definitive Contract",
+            GovernmentContractAwardType.Contract => "Contract",
+            GovernmentContractAwardType.StandingOfferCallUp => "Standing Offer Call-up",
             _ => "Unknown",
         };
 
-    private static string FormatUsd(decimal amount) =>
-        "$" + amount.ToString("N0", CultureInfo.InvariantCulture);
+    // A Canadian amount carries its currency, since the same issuer can hold US awards in US dollars.
+    private static string FormatAmount(decimal amount, string countryCode) =>
+        (countryCode == "CA" ? "C$" : "$") + amount.ToString("N0", CultureInfo.InvariantCulture);
+
+    private static string ValueHeader(string countryCode) =>
+        countryCode == "CA"
+            ? "Contract Value (C$, incl. amendments)"
+            : "Total Value (obligated + ceiling)";
+
+    private static string AwardNoun(string countryCode) =>
+        countryCode == "CA" ? "Government of Canada contracts" : "federal contract awards";
+
+    private static string Symbol(EquityIssuer stock, EquityListing venue) =>
+        venue != null
+            ? $"{venue.MarketIdentifierCode}:{venue.Ticker}"
+            : stock.Presentation?.Listing.Ticker;
+
+    // An explicit country wins; otherwise the listing's own country decides, and anything but Canada reads US awards.
+    private static (string Code, string Error) ParseCountry(string country, string listingCountry)
+    {
+        if (string.IsNullOrWhiteSpace(country))
+            return (listingCountry == "CA" ? "CA" : "US", null);
+        var code = country.Trim().ToUpperInvariant();
+        return code is "US" or "CA"
+            ? (code, null)
+            : (null, McpOutput.InvalidArgument("country", country, "US or CA"));
+    }
+
+    private async Task<(EquityIssuer Stock, EquityListing Venue, string Error)> ResolveIssuer(
+        string ticker
+    )
+    {
+        var (stock, error) = await _commonStockRepository.ResolveIssuerIncludingDelisted(ticker);
+        return (stock, null, error);
+    }
 
     private static string Format(DateOnly? date) =>
         date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—";
