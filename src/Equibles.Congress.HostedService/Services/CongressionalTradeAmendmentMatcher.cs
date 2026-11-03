@@ -5,8 +5,9 @@ namespace Equibles.Congress.HostedService.Services;
 /// <summary>
 /// Finds the earlier filing an amending House PTR corrects. The amendment never names that filing,
 /// so the match must be unique: exactly one earlier filing of the member explains every amended
-/// and deleted row, and each group of rows pairs one-to-one so every pairing removes the same
-/// originals. Anything less leaves the stored trades untouched.
+/// and deleted row, and each group of rows pairs one-to-one, or against twins filing the same
+/// facts, so every pairing removes the same originals. Anything less leaves the stored trades
+/// untouched.
 /// </summary>
 internal static class CongressionalTradeAmendmentMatcher
 {
@@ -40,10 +41,26 @@ internal static class CongressionalTradeAmendmentMatcher
         IReadOnlyList<CongressionalTrade> candidates
     )
     {
-        var outcomes = candidates
+        var filings = candidates
             .GroupBy(trade => trade.SourceId, StringComparer.Ordinal)
-            .Select(filing => Pair(rows, filing.ToList()))
+            .Select(filing => filing.ToList())
             .ToList();
+
+        // An exact reprint names its original more precisely than a one-field correction does, so
+        // a filing whose copies explain every row outranks filings that need a changed field.
+        var exact = Decide(rows, filings, exactOnly: true);
+        return exact.Verdict == CongressionalTradeAmendmentVerdict.NoPredecessor
+            ? Decide(rows, filings, exactOnly: false)
+            : exact;
+    }
+
+    private static AmendmentMatch Decide(
+        IReadOnlyList<CongressionalTradeAmendment> rows,
+        IReadOnlyList<List<CongressionalTrade>> filings,
+        bool exactOnly
+    )
+    {
+        var outcomes = filings.Select(filing => Pair(rows, filing, exactOnly)).ToList();
         var explanations = outcomes
             .Where(outcome => outcome.Outcome == PairOutcome.Explains)
             .Select(outcome => outcome.Pairs)
@@ -59,13 +76,14 @@ internal static class CongressionalTradeAmendmentMatcher
 
     private static (PairOutcome Outcome, IReadOnlyList<AmendmentPair> Pairs) Pair(
         IReadOnlyList<CongressionalTradeAmendment> rows,
-        IReadOnlyList<CongressionalTrade> filing
+        IReadOnlyList<CongressionalTrade> filing,
+        bool exactOnly
     )
     {
         var edges = new List<int>[rows.Count];
         for (var i = 0; i < rows.Count; i++)
         {
-            edges[i] = CandidatesFor(rows[i], filing);
+            edges[i] = CandidatesFor(rows[i], filing, exactOnly);
             if (edges[i].Count == 0)
                 return (PairOutcome.DoesNotExplain, []);
         }
@@ -76,8 +94,21 @@ internal static class CongressionalTradeAmendmentMatcher
         var result = new List<AmendmentPair>();
         foreach (var group in ConnectedGroups(edges))
         {
-            var groupCandidates = group.SelectMany(row => edges[row]).Distinct().Count();
-            if (groupCandidates != group.Count)
+            var groupCandidates = group.SelectMany(row => edges[row]).Distinct().ToList();
+            if (groupCandidates.Count > group.Count && AreTwins(groupCandidates, filing))
+            {
+                // Twins file the same facts, so whichever rows are superseded the stored trades
+                // read the same; row order keeps the choice stable across cycles.
+                var twins = groupCandidates.OrderBy(index => filing[index].SourceRowIndex);
+                result.AddRange(
+                    group
+                        .OrderBy(row => rows[row].SourceRowIndex)
+                        .Zip(twins, (row, twin) => new AmendmentPair(rows[row], filing[twin]))
+                );
+                continue;
+            }
+
+            if (groupCandidates.Count != group.Count)
                 return (PairOutcome.Ambiguous, []);
 
             var assignment = PerfectPairing(group, edges);
@@ -96,7 +127,8 @@ internal static class CongressionalTradeAmendmentMatcher
     // unstored field such as the description changed), else a row with one filed field changed.
     private static List<int> CandidatesFor(
         CongressionalTradeAmendment row,
-        IReadOnlyList<CongressionalTrade> filing
+        IReadOnlyList<CongressionalTrade> filing,
+        bool exactOnly
     )
     {
         var exact = new List<int>();
@@ -110,9 +142,15 @@ internal static class CongressionalTradeAmendmentMatcher
                 oneField.Add(i);
         }
 
-        if (exact.Count > 0 || row.Status == CongressionalTradeFilingStatus.Deleted)
+        if (exact.Count > 0 || exactOnly || row.Status == CongressionalTradeFilingStatus.Deleted)
             return exact;
         return oneField;
+    }
+
+    private static bool AreTwins(List<int> candidates, IReadOnlyList<CongressionalTrade> filing)
+    {
+        var first = Record(filing[candidates[0]], CongressionalTradeFilingStatus.Unstated);
+        return candidates.Skip(1).All(index => DifferingFields(first, filing[index]) == 0);
     }
 
     // The filed ticker is the asset's identity and must agree; each other filed fact counts once.

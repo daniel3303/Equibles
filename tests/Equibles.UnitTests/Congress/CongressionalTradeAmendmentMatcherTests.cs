@@ -239,4 +239,60 @@ public class CongressionalTradeAmendmentMatcherTests
         match.Verdict.Should().Be(CongressionalTradeAmendmentVerdict.Matched);
         match.Pairs.Should().ContainSingle().Which.Superseded.Should().Be(copy);
     }
+
+    [Fact]
+    public void Match_ExactCopyInOneFiling_OutranksAOneFieldMatchInAnother()
+    {
+        // Moulton's 2023 amendment reprints the 2022 sale exactly; a later report holds the same
+        // sale on another date, one changed field away.
+        var reprinted = Trade("20022451", 0, new DateOnly(2022, 9, 16), "ATVI");
+        var laterSale = Trade("20022611", 0, new DateOnly(2023, 3, 14), "ATVI");
+        var amendment = Row(
+            Trade("20022724", 0, new DateOnly(2022, 9, 16), "ATVI"),
+            CongressionalTradeFilingStatus.Amended
+        );
+
+        var match = CongressionalTradeAmendmentMatcher.Match([amendment], [reprinted, laterSale]);
+
+        match.Verdict.Should().Be(CongressionalTradeAmendmentVerdict.Matched);
+        match.Pairs.Should().ContainSingle().Which.Superseded.Should().BeSameAs(reprinted);
+    }
+
+    [Fact]
+    public void Match_AmendmentOfOneOfTwoIdenticalRows_SupersedesTheFirstTwin()
+    {
+        // Pelosi's 2019 report lists the same Visa sale twice; either twin is the one reprinted.
+        var first = Trade("20012288", 1, new DateOnly(2019, 8, 7), "V");
+        var second = Trade("20012288", 2, new DateOnly(2019, 8, 7), "V");
+        var amendment = Row(
+            Trade("20012343", 0, new DateOnly(2019, 8, 7), "V"),
+            CongressionalTradeFilingStatus.Amended
+        );
+
+        var match = CongressionalTradeAmendmentMatcher.Match([amendment], [second, first]);
+
+        match.Verdict.Should().Be(CongressionalTradeAmendmentVerdict.Matched);
+        match.Pairs.Should().ContainSingle().Which.Superseded.Should().BeSameAs(first);
+    }
+
+    [Fact]
+    public void Match_TwoFilingsHoldExactCopies_StaysAmbiguous()
+    {
+        // Blumenauer's deletion reprints a row two reports both carry; picking one would guess.
+        var amendment = Row(
+            Trade("20019618", 4, new DateOnly(2021, 9, 24), "LW"),
+            CongressionalTradeFilingStatus.Deleted
+        );
+
+        var match = CongressionalTradeAmendmentMatcher.Match(
+            [amendment],
+            [
+                Trade("20019580", 4, new DateOnly(2021, 9, 24), "LW"),
+                Trade("20019619", 4, new DateOnly(2021, 9, 24), "LW"),
+            ]
+        );
+
+        match.Verdict.Should().Be(CongressionalTradeAmendmentVerdict.Ambiguous);
+        match.Pairs.Should().BeEmpty();
+    }
 }

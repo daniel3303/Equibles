@@ -276,7 +276,7 @@ public class CongressionalTradeSyncService
         await _filingLedger.RecordProcessed(batch.Kind, recordable, ct, parserVersion);
         await ReportPartiallyReadFilings(batch.Kind, recordable, parserVersion);
         await ReportTickerConflicts(batch.Kind, recordable, outcome, parserVersion);
-        await ReportRowsDatedAfterFiling(batch.Kind, recordable, outcome, parserVersion);
+        LogRowsDatedAfterFiling(batch.Kind, recordable, outcome, parserVersion);
 
         if (
             batch.ArchiveYear == null
@@ -345,7 +345,9 @@ public class CongressionalTradeSyncService
 
     internal const string TickerConflictErrorContext = "CongressTrades.TickerConflict";
 
-    private async Task ReportRowsDatedAfterFiling(
+    // A filer's date typo: retrying cannot change it and nobody can act on it, so it is a
+    // warning in the worker log rather than an Errors row.
+    private void LogRowsDatedAfterFiling(
         CongressionalFilingKind kind,
         IReadOnlyCollection<ProcessedFiling> recorded,
         TradePersistOutcome outcome,
@@ -361,24 +363,19 @@ public class CongressionalTradeSyncService
             )
         )
         {
-            await _errorReporter.Report(
-                ErrorSource.CongressScraper,
-                DatedAfterFilingErrorContext,
-                DescribeRowDatedAfterFiling(row, parserVersion),
-                stackTrace: null
+            _logger.LogWarning(
+                "{FilingKind} {SourceId} row {SourceRowIndex}: transaction date {TransactionDate} "
+                    + "is after the filing date {FilingDate}; the row was not stored and the filing "
+                    + "was recorded at parser version {ParserVersion}",
+                row.FilingKind,
+                row.SourceId,
+                row.SourceRowIndex,
+                row.TransactionDate,
+                row.FilingDate,
+                parserVersion
             );
         }
     }
-
-    internal const string DatedAfterFilingErrorContext = "CongressTrades.RowDatedAfterFiling";
-
-    internal static string DescribeRowDatedAfterFiling(
-        TradeDatedAfterFiling row,
-        int parserVersion
-    ) =>
-        $"{row.FilingKind} {row.SourceId} row {row.SourceRowIndex}: transaction date "
-        + $"{row.TransactionDate:yyyy-MM-dd} is after the filing date {row.FilingDate:yyyy-MM-dd}; "
-        + $"the row was not stored and the filing was recorded at parser version {parserVersion}";
 
     internal static string DescribeTickerConflict(
         TradeTickerConflict conflict,
@@ -474,6 +471,11 @@ public class CongressionalTradeSyncService
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (SenateAccessDeniedException denial)
+        {
+            await SenateAccessGate.Record(denial, _errorReporter, _logger, "Senate PTR fetch");
+            return new DisclosureFetchResult { IsComplete = false };
         }
         catch (Exception ex)
         {

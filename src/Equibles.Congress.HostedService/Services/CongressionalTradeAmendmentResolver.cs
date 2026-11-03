@@ -8,9 +8,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Congress.HostedService.Services;
 
 /// <summary>
-/// Supersedes the rows amending House PTRs correct or withdraw. Runs every cycle over unresolved
-/// amendment rows, so it converges whichever filing was read first; the sync's persist step then
-/// keeps a superseded row from returning when its filing is read again.
+/// Supersedes the rows amending House PTRs correct or withdraw. Runs every cycle over every row
+/// not yet matched, ambiguous ones included, so it converges whichever filing was read first and
+/// picks up matcher improvements; the sync's persist step then keeps a superseded row from
+/// returning when its filing is read again.
 /// </summary>
 [Service]
 public class CongressionalTradeAmendmentResolver
@@ -36,10 +37,7 @@ public class CongressionalTradeAmendmentResolver
     {
         var pending = await _dbContext
             .Set<CongressionalTradeAmendment>()
-            .Where(row =>
-                row.Verdict == CongressionalTradeAmendmentVerdict.Pending
-                || row.Verdict == CongressionalTradeAmendmentVerdict.NoPredecessor
-            )
+            .Where(row => row.Verdict != CongressionalTradeAmendmentVerdict.Matched)
             .ToListAsync(ct);
 
         // Oldest amendment first, so an amendment of an amendment sees the first one resolved.
@@ -103,7 +101,14 @@ public class CongressionalTradeAmendmentResolver
                 return match.Pairs.Count;
 
             case CongressionalTradeAmendmentVerdict.Ambiguous:
-                foreach (var row in rows)
+                // Reported once, when the filing turns ambiguous; later cycles only retry it.
+                var entering = rows.Where(row =>
+                        row.Verdict != CongressionalTradeAmendmentVerdict.Ambiguous
+                    )
+                    .ToList();
+                if (entering.Count == 0)
+                    return 0;
+                foreach (var row in entering)
                 {
                     row.Verdict = CongressionalTradeAmendmentVerdict.Ambiguous;
                     row.ResolvedAt = now;

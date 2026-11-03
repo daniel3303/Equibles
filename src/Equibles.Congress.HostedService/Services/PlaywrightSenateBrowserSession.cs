@@ -18,6 +18,7 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
     private const int BrowserFetchTimeoutMs = 30_000;
 
     private readonly ILogger<PlaywrightSenateBrowserSession> _logger;
+    private readonly SenateAccessGate _accessGate;
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     private IPlaywright _playwright;
@@ -56,9 +57,13 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
         }
         """;
 
-    public PlaywrightSenateBrowserSession(ILogger<PlaywrightSenateBrowserSession> logger)
+    public PlaywrightSenateBrowserSession(
+        ILogger<PlaywrightSenateBrowserSession> logger,
+        SenateAccessGate accessGate
+    )
     {
         _logger = logger;
+        _accessGate = accessGate;
     }
 
     public async Task EnsureAuthenticated(CancellationToken ct)
@@ -71,6 +76,8 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
         {
             if (_authenticated)
                 return;
+
+            await _accessGate.ThrowIfHeld(ct);
 
             _playwright = await Playwright.CreateAsync();
             _browser = await _playwright.Firefox.LaunchAsync(
@@ -88,6 +95,12 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
                 new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 30_000 }
             );
 
+            // Akamai's geo and bot block answers the home page with 403 Access Denied.
+            if (response?.Status == 403)
+                throw new SenateAccessDeniedException(
+                    "Senate eFD denied access: the home page returned HTTP 403",
+                    observed: true
+                );
             if (response?.Status != 200)
                 throw new HttpRequestException(
                     $"Senate eFD home page returned HTTP {response?.Status}"
