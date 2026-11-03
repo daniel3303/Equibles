@@ -108,7 +108,7 @@ public class FirdsUniverseImporter(
                 }
                 // A broken fund set must not stall the share deltas; it records no run, so the next pass retries it.
                 catch (Exception exception)
-                    when (category != 'E' && exception is not OperationCanceledException)
+                    when (category != 'E' && !cancellationToken.IsCancellationRequested)
                 {
                     logger.LogError(
                         exception,
