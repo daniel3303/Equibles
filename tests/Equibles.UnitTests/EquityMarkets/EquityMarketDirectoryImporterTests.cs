@@ -323,6 +323,65 @@ public class EquityMarketDirectoryImporterTests
     }
 
     [Fact]
+    public async Task TheProductPass_AdmitsASubFundWhoseUmbrellaGleifMapsTheIsinTo()
+    {
+        const string umbrella = "549300Q7FFITMZ2PFZ28";
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        await SeedFullImport(options, 'C');
+        await SeedFirds(
+            options,
+            "IE00B5BMR087",
+            mic: "XETA",
+            venue: "XLON",
+            cfi: "CEOGES",
+            authority: "IE"
+        );
+        var harness = Build(
+            options,
+            "xetra-etp",
+            "xetra",
+            [Row("IE00B5BMR087", "SXR8", mic: "XETR")]
+        );
+        harness
+            .Gleif.GetIssuerForIsin("IE00B5BMR087", Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Issuer("IE00B5BMR087", umbrella)));
+        harness
+            .Gleif.GetUmbrellaFundLei(Lei, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(umbrella));
+        harness
+            .Gleif.GetIssuerForLei(Lei, Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new GleifIssuerIdentity
+                    {
+                        RequestedLei = Lei,
+                        LegalEntityIdentifier = Lei,
+                        LegalName = "iShares Core S&P 500 UCITS ETF",
+                        EntityStatus = "ACTIVE",
+                        RegistrationStatus = "ISSUED",
+                    }
+                )
+            );
+
+        var result = await harness.Importer.ImportExchangeTradedProducts(
+            EquityMarketCatalog.TryGet("xetra"),
+            CancellationToken.None
+        );
+
+        (result.Error, result.Imported, result.Failed).Should().Be(((string)null, 1, 0));
+        await harness
+            .Identity.Received(1)
+            .ImportListing(
+                Arg.Is<EquityDirectoryListingInput>(input =>
+                    input.LegalEntityIdentifier == Lei
+                    && input.IssuerName == "iShares Core S&P 500 UCITS ETF"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
     public async Task TheProductPass_WaitsForTheCollectiveInvestmentFiles()
     {
         var options = NewDbOptions();

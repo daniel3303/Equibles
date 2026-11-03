@@ -5,7 +5,7 @@
 - Captured unchanged on 2026-09-12 from `https://api.gleif.org/api/v1/lei-records?filter[isin]=PTALT0AE0002` and the response's related ISIN URL.
 - The issuer response identifies LEI `213800AKSTYRLHY3X497`; all six related ISINs state that exact LEI.
 - `US02209Y1001` is the Altri ASGSY depositary receipt, with underlying ISIN `PTALT0AE0002`; the identifier relationship alone does not establish a receipt ratio or security classification.
-- GLEIF's official API documentation: https://www.gleif.org/en/lei-data/gleif-api.
+- GLEIF's official API documentation: <https://www.gleif.org/en/lei-data/gleif-api>.
 - The client requests related ISINs with `page[size]=200`, which the API honoured live on 2026-09-15; BNP Paribas (`R0MUWSFPU8MPRO8K5P83`) reported 42,020 ISINs that day, the shape behind the 2,000 enumeration bound.
 
 - Captured on 2026-10-17 for `GleifEntityClient`:
@@ -25,3 +25,6 @@
 - Captured unchanged on 2026-10-21 for an entity GLEIF relates no ISIN to:
   - `kyokuyo-lei-record.json` comes from `https://api.gleif.org/api/v1/lei-records/353800PIEETYXIDK6K51`, Kyokuyo Co., Ltd. (株式会社極洋, `RA000412` 0104-01-033225). Its relationships state no `isins` link.
   - `kyokuyo-isins.json` comes from `/api/v1/lei-records/353800PIEETYXIDK6K51/isins?page[size]=200` and states a total of 0 with no rows.
+- Captured unchanged on 2026-11-03 for `GleifIdentityClient.GetUmbrellaFundLei`:
+  - `ishares-sp500-umbrella-fund.json` comes from `https://api.gleif.org/api/v1/lei-records/5493006ESS9BM09FB892/umbrella-fund`. The sub-fund is iShares Core S&P 500 UCITS ETF (FIRDS's issuer LEI for `IE00B5BMR087`); its umbrella is ISHARES VII PUBLIC LIMITED COMPANY (`549300Q7FFITMZ2PFZ28`), the LEI GLEIF's ISIN lookup names for the same ISIN.
+  - `apple-umbrella-fund-404.json` is the 404 body from `/api/v1/lei-records/HWUPKR0MPOU8FGXBT394/umbrella-fund`, which GLEIF returns for an entity with no umbrella.

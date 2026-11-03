@@ -207,6 +207,21 @@ public class EquityMarketDirectoryImporter(
                     && InternationalSecurityIdentifiers.IsValidLei(firds.Lei)
                         ? await gleifClient.GetIssuerForLei(firds.Lei, attempt.Token)
                         : null;
+                // A UCITS sub-fund: GLEIF maps its ISIN to the umbrella company while FIRDS names the fund itself.
+                string umbrella = null;
+                GleifIssuerIdentity subFund = null;
+                if (
+                    products
+                    && firdsIssuer == null
+                    && issuer.LegalEntityIdentifier != null
+                    && InternationalSecurityIdentifiers.IsValidLei(firds.Lei)
+                    && issuer.LegalEntityIdentifier != firds.Lei
+                )
+                {
+                    umbrella = await gleifClient.GetUmbrellaFundLei(firds.Lei, attempt.Token);
+                    if (umbrella == issuer.LegalEntityIdentifier)
+                        subFund = await gleifClient.GetIssuerForLei(firds.Lei, attempt.Token);
+                }
                 var input = CreateInput(
                     market,
                     sourceKey,
@@ -216,7 +231,9 @@ public class EquityMarketDirectoryImporter(
                     issuer,
                     firdsIssuer,
                     lines,
-                    products
+                    products,
+                    subFund,
+                    umbrella
                 );
                 input.DirectorySnapshotId = snapshotId;
                 await identityImporter.ImportListing(input, attempt.Token);
@@ -330,7 +347,9 @@ public class EquityMarketDirectoryImporter(
         GleifIssuerIdentity issuer,
         GleifIssuerIdentity firdsIssuer = null,
         IReadOnlyCollection<FirdsInstrumentRecord> firdsLines = null,
-        bool exchangeTradedProduct = false
+        bool exchangeTradedProduct = false,
+        GleifIssuerIdentity subFund = null,
+        string subFundUmbrella = null
     )
     {
         ArgumentNullException.ThrowIfNull(market);
@@ -353,7 +372,24 @@ public class EquityMarketDirectoryImporter(
             throw new InvalidDataException(
                 "FIRDS issuer recovery requires an exact independently confirmed LEI."
             );
-        var confirmedIssuer = firdsIssuer ?? issuer;
+        // The fund FIRDS names is the issuer only when GLEIF places it under the umbrella its ISIN maps to.
+        if (
+            subFund != null
+            && (
+                !exchangeTradedProduct
+                || firdsIssuer != null
+                || !InternationalSecurityIdentifiers.IsValidLei(firds.Lei)
+                || subFund.RequestedLei != firds.Lei
+                || subFund.LegalEntityIdentifier != firds.Lei
+                || issuer.LegalEntityIdentifier == null
+                || issuer.LegalEntityIdentifier == firds.Lei
+                || subFundUmbrella != issuer.LegalEntityIdentifier
+            )
+        )
+            throw new InvalidDataException(
+                "A sub-fund issuer requires the fund FIRDS names under the umbrella GLEIF maps the ISIN to."
+            );
+        var confirmedIssuer = subFund ?? firdsIssuer ?? issuer;
         if (
             row.SourceUrl == null
             || product.SourceUrl != row.SourceUrl
@@ -393,7 +429,8 @@ public class EquityMarketDirectoryImporter(
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .ToList(),
             LegalEntityIdentifier = confirmedIssuer.LegalEntityIdentifier,
-            RelatedIsins = firdsIssuer == null ? issuer.RelatedIsins : [row.Isin],
+            RelatedIsins =
+                firdsIssuer == null && subFund == null ? issuer.RelatedIsins : [row.Isin],
             Isin = row.Isin,
             Ticker = row.Symbol,
             MarketIdentifierCode = row.MarketIdentifierCode,
@@ -428,6 +465,8 @@ public class EquityMarketDirectoryImporter(
                     },
                     Issuer = issuer,
                     FirdsIssuer = firdsIssuer,
+                    SubFund = subFund,
+                    SubFundUmbrella = subFundUmbrella,
                 }
             ),
         };

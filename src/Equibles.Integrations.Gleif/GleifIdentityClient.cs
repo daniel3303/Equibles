@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Equibles.Core.Identity;
@@ -140,6 +141,55 @@ public class GleifIdentityClient
         {
             throw new InvalidDataException(
                 "GLEIF legal entity response has an invalid structure.",
+                exception
+            );
+        }
+    }
+
+    // The umbrella company a sub-fund belongs to (iShares Core S&P 500 UCITS ETF to iShares VII plc), or null when
+    // GLEIF records none; GLEIF answers 404 both for an entity without an umbrella and for an LEI it does not hold.
+    public virtual async Task<string> GetUmbrellaFundLei(
+        string lei,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!InternationalSecurityIdentifiers.IsValidLei(lei))
+            throw new ArgumentException("A complete LEI is required.", nameof(lei));
+        var source = new Uri(
+            Origin,
+            "/api/v1/lei-records/" + Uri.EscapeDataString(lei) + "/umbrella-fund"
+        );
+        string body;
+        try
+        {
+            body = await Read(source, cancellationToken);
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            var record = json.RootElement.GetProperty("data");
+            var umbrella = Text(record.GetProperty("attributes"), "lei");
+            if (
+                !InternationalSecurityIdentifiers.IsValidLei(umbrella)
+                || Text(record, "id") != umbrella
+                || Text(record, "type") != "lei-records"
+                || umbrella == lei
+            )
+                throw new InvalidDataException(
+                    "GLEIF umbrella-fund response does not name another legal entity."
+                );
+            return umbrella;
+        }
+        catch (Exception exception)
+            when (exception is KeyNotFoundException or InvalidOperationException or JsonException)
+        {
+            throw new InvalidDataException(
+                "GLEIF umbrella-fund response has an invalid structure.",
                 exception
             );
         }
