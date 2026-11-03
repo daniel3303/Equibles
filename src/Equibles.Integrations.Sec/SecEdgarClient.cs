@@ -226,7 +226,9 @@ public class SecEdgarClient : ISecEdgarClient
                 Exchanges = apiResponse.Exchanges ?? [],
                 FiscalYearEnd = apiResponse.FiscalYearEnd,
                 Website = apiResponse.Website,
-                FilesAnnualReports = SecRegistrantFilings.FilesAnnualReports(recentFilings),
+                LatestAnnualReportFiledOn = SecRegistrantFilings.LatestAnnualReportFiledOn(
+                    recentFilings
+                ),
                 PeriodicReportFileNumber = SecRegistrantFilings.PeriodicReportFileNumber(
                     recentFilings
                 ),

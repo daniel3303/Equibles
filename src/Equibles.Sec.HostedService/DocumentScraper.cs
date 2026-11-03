@@ -5,6 +5,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Integrations.Sec;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.BusinessLogic;
@@ -500,10 +501,15 @@ public class DocumentScraper : IDocumentScraper
 
             if (metadata?.FiscalYearEndMonth is { } month)
             {
-                // A filer without annual reports here (a Form D or F-1 filer) states a year end
-                // no report of its confirms, so it fills a blank but never replaces the one its
-                // own annual reports elsewhere recorded.
-                if (metadata.FilesAnnualReports || company.FiscalYearEndMonth is null)
+                // A filer without a current annual report here (a Form D or F-1 filer, or one
+                // that left years ago) states a year end no report of its confirms, so it fills a
+                // blank but never replaces the one its own annual reports elsewhere recorded.
+                if (
+                    SecRegistrantFilings.FilesAnnualReports(
+                        metadata.LatestAnnualReportFiledOn,
+                        DateOnly.FromDateTime(DateTime.UtcNow)
+                    ) || company.FiscalYearEndMonth is null
+                )
                 {
                     await commonStockManager.SetFiscalYearEnd(
                         company,

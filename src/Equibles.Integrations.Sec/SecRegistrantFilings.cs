@@ -25,7 +25,6 @@ public static class SecRegistrantFilings
     [
         "10-K",
         "10-K/A",
-        "10-K405",
         "10-KT",
         "10-KT/A",
         "20-F",
@@ -33,6 +32,13 @@ public static class SecRegistrantFilings
         "40-F",
         "40-F/A",
     ];
+
+    /// <summary>
+    /// How recent a filer's newest annual report must be for it to file annual reports now. An
+    /// annual filer files every year; an older report belongs to a past registration, whose year
+    /// end may have changed since.
+    /// </summary>
+    public static readonly int AnnualReportYears = 2;
 
     private static readonly string[] SuccessorForms = ["8-K12B", "8-K12G3", "8-K15D5"];
 
@@ -49,8 +55,15 @@ public static class SecRegistrantFilings
     public static DateOnly? LatestBdcWithdrawal(IEnumerable<FilingData> filings) =>
         LatestFiled(filings, "N-54C");
 
-    public static bool FilesAnnualReports(IEnumerable<FilingData> filings) =>
-        filings.Any(f => AnnualReportForms.Contains(f.Form));
+    public static DateOnly? LatestAnnualReportFiledOn(IEnumerable<FilingData> filings) =>
+        filings
+            .Where(f => AnnualReportForms.Contains(f.Form) && f.FilingDate != DateOnly.MinValue)
+            .Select(f => (DateOnly?)f.FilingDate)
+            .Max();
+
+    /// <summary>True when the newest annual report was filed within <see cref="AnnualReportYears"/>.</summary>
+    public static bool FilesAnnualReports(DateOnly? latestAnnualReportFiledOn, DateOnly today) =>
+        latestAnnualReportFiledOn is { } filed && filed >= today.AddYears(-AnnualReportYears);
 
     public static string PeriodicReportFileNumber(IEnumerable<FilingData> filings) =>
         filings
