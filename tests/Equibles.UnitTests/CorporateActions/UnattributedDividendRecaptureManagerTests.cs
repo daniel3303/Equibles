@@ -51,12 +51,17 @@ public class UnattributedDividendRecaptureManagerTests
         );
     }
 
-    private static async Task<EquityIssuer> AddIssuer(EquiblesFinancialDbContext db, string ticker)
+    private static async Task<EquityIssuer> AddIssuer(
+        EquiblesFinancialDbContext db,
+        string ticker,
+        string marketCountryCode = "US"
+    )
     {
         EquityIssuer issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
             Ticker: ticker,
-            Name: $"{ticker} Inc."
+            Name: $"{ticker} Inc.",
+            MarketCountryCode: marketCountryCode
         );
         issuer.Presentation.Listing.TradingCurrency = "USD";
         db.Add(issuer);
@@ -147,6 +152,59 @@ public class UnattributedDividendRecaptureManagerTests
 
         result.Should().BeEmpty();
         await yahoo.DidNotReceiveWithAnyArgs().GetChart(default, default, default);
+    }
+
+    [Fact]
+    public async Task RecaptureNext_OnlyTheSameIssuersNearbyPaymentCoversARow()
+    {
+        await using var db = NewDb();
+        var uncovered = await AddIssuer(db, "UNCV");
+        var neighbour = await AddIssuer(db, "NBOR");
+        var abroad = await AddIssuer(db, "ABRD", marketCountryCode: "CA");
+        db.AddRange(
+            Dividend(uncovered, new DateOnly(2025, 3, 3), attributed: false),
+            // Another issuer's payment on the same date, and this issuer's own payments a week
+            // either side, describe other dividends.
+            Dividend(neighbour, new DateOnly(2025, 3, 3), attributed: true),
+            Dividend(uncovered, new DateOnly(2025, 2, 24), attributed: true),
+            Dividend(uncovered, new DateOnly(2025, 3, 10), attributed: true),
+            Dividend(abroad, new DateOnly(2025, 3, 3), attributed: false)
+        );
+        await db.SaveChangesAsync();
+        var yahoo = YahooServing("UNCV");
+
+        var attempted = await NewManager(db, yahoo).RecaptureNext([], 10, CancellationToken.None);
+
+        attempted.Should().Equal(uncovered.Id);
+    }
+
+    [Fact]
+    public async Task RecaptureNext_AClientTimeoutIsOneIssuersFailure()
+    {
+        await using var db = NewDb();
+        var first = await AddIssuer(db, "SLOW");
+        var second = await AddIssuer(db, "NEXT");
+        db.AddRange(
+            Dividend(first, new DateOnly(2025, 3, 3), attributed: false),
+            Dividend(second, new DateOnly(2025, 3, 3), attributed: false)
+        );
+        await db.SaveChangesAsync();
+        var yahoo = YahooServing("NEXT", new DateOnly(2025, 3, 3));
+        // HttpClient reports its own timeout as a TaskCanceledException with no caller cancellation.
+        yahoo
+            .GetChart("SLOW", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns<YahooChartData>(_ => throw new TaskCanceledException("timeout"));
+
+        var attempted = await NewManager(db, yahoo).RecaptureNext([], 10, CancellationToken.None);
+
+        attempted.Should().BeEquivalentTo([first.Id, second.Id]);
+        (
+            await new CashDividendRepository(db)
+                .GetByListing(second.Presentation.EquityListingId)
+                .CountAsync()
+        )
+            .Should()
+            .Be(1);
     }
 
     [Fact]

@@ -80,7 +80,12 @@ public class UnattributedDividendRecaptureManager
                     cancellationToken
                 );
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            // A client timeout is an OperationCanceledException too; it is one issuer's failure.
+            catch (Exception ex)
             {
                 _logger.LogWarning(
                     ex,
@@ -88,6 +93,12 @@ public class UnattributedDividendRecaptureManager
                     issuer.Presentation.Listing.Ticker,
                     issuer.Id
                 );
+            }
+            finally
+            {
+                // A failed save leaves its rows tracked on the shared context, and the next
+                // issuer's save would send them again.
+                _dividendRepository.ClearChangeTracker();
             }
         }
 
