@@ -418,6 +418,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 IssuerName = h.Issuer.Name,
                 PresentationTicker =
                     h.Issuer.Presentation != null ? h.Issuer.Presentation.Listing.Ticker : null,
+                ListedTickerActive =
+                    h.ListedTicker == null
+                    || h.Issuer.Securities.Any(security =>
+                        security.Listings.Any(listing =>
+                            listing.Ticker == h.ListedTicker
+                            && listing.MarketCountryCode == "US"
+                            && listing.Active
+                        )
+                    ),
                 IssuerListed =
                     h.Issuer.Presentation != null
                     && h.Issuer.Presentation.Listing.MarketCountryCode == "US"
@@ -428,9 +437,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     /// <summary>
-    /// One filer's latest Schedule 13D or 13G on each exact listed security it ever disclosed,
-    /// ranked as <see cref="GetSchedule13DGByListing"/> ranks a listing's filers, with its previous
-    /// filing on that security as the prior position. A filer holds at most a few hundred such
+    /// One filer's latest Schedule 13D or 13G on each listed security it ever disclosed, ranked
+    /// as <see cref="GetSchedule13DGByListing"/> ranks a listing's filers, with its previous filing
+    /// on that security as the prior position. A retired class or unit folds into the issuer's
+    /// presentation line: a SPAC's class converts at the merger and the filer's exit amendment
+    /// lands on the successor's common stock, which is the same stake, not a second one. Two
+    /// classes that both trade stay separate securities. A filer holds at most a few hundred such
     /// rows, so they are ranked in memory.
     /// </summary>
     public async Task<List<Schedule13DGPosition>> GetSchedule13DGByHolder(
@@ -441,8 +453,18 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var rows = await GetSchedule13DGHistoryByHolder(holder)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-        return LatestWithPrior(rows, row => (row.EquityIssuerId, row.ListedTicker));
+        return LatestWithPrior(rows, row => (row.EquityIssuerId, SecurityKey(row)));
     }
+
+    // The per-listing read treats a null ListedTicker and the presentation ticker as one security
+    // (a row filed before a class became the presentation line keeps its ticker); a retired class
+    // folds into the presentation line too. Any other active class is its own security.
+    private static string SecurityKey(Schedule13DGPosition row) =>
+        row.ListedTicker == null
+        || string.Equals(row.ListedTicker, row.PresentationTicker, StringComparison.Ordinal)
+        || !row.ListedTickerActive
+            ? null
+            : row.ListedTicker;
 
     /// <summary>
     /// Each filer that ever reported a Schedule 13D or 13G stake at or above the reporting

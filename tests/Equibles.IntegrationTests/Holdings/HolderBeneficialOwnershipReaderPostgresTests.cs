@@ -54,7 +54,27 @@ public class HolderBeneficialOwnershipReaderPostgresTests : ParadeDbMcpTestBase
             Cik: "0000000007"
         );
         DbContext.Add(folded);
+        // A SPAC whose class A converted at the merger: the filer's exit amendment lands on the
+        // successor's common stock, so the retired class folds into the presentation line.
+        var merged = Issuer("MRLN", "Merlin, Inc.", "0000000008", secondary: "BACQ");
+        foreach (
+            var listing in merged
+                .Securities.SelectMany(security => security.Listings)
+                .Where(listing => listing.Ticker == "BACQ")
+        )
+            listing.Active = false;
 
+        // Filed under the presentation ticker before it became the presentation line: one
+        // security with the later row filed under null, so the earlier one is its prior.
+        Schedule(
+            holder,
+            active,
+            new DateOnly(2026, 3, 2),
+            1_200_000,
+            7.1m,
+            "g-act-0",
+            listedTicker: "ACT"
+        );
         Schedule(holder, active, new DateOnly(2026, 6, 8), 1_458_618, 8.6m, "g-act-1");
         // Effective after the event: the stake restates onto today's two-for-one basis.
         DbContext.Add(
@@ -83,6 +103,16 @@ public class HolderBeneficialOwnershipReaderPostgresTests : ParadeDbMcpTestBase
             listedTicker: "HOND"
         );
         Schedule(holder, folded, new DateOnly(2026, 6, 1), 250_000, 5.5m, "g-fold-1");
+        Schedule(
+            holder,
+            merged,
+            new DateOnly(2025, 12, 31),
+            1_725_000,
+            6.9m,
+            "g-bacq-1",
+            listedTicker: "BACQ"
+        );
+        Schedule(holder, merged, new DateOnly(2026, 3, 31), 0, 0m, "g-mrln-1", amendment: true);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -97,16 +127,28 @@ public class HolderBeneficialOwnershipReaderPostgresTests : ParadeDbMcpTestBase
                 ("OLD", Schedule13DGStakeStatus.Unconfirmed),
                 (null, Schedule13DGStakeStatus.SecurityRetired),
                 ("EXT", Schedule13DGStakeStatus.Exited),
+                ("MRLN", Schedule13DGStakeStatus.Exited),
                 ("GONE", Schedule13DGStakeStatus.SecurityRetired),
                 ("LOW", Schedule13DGStakeStatus.BelowThreshold)
             );
 
+        var mergedExit = stakes[5];
+        mergedExit.AccessionNumber.Should().Be("g-mrln-1");
+        mergedExit
+            .ChangeShares.Should()
+            .Be(-1_725_000, "the retired class's stake is the prior of the exit on the successor");
+        mergedExit.PriorEventDate.Should().Be(new DateOnly(2025, 12, 31));
+
         var split = stakes[0];
+        split.AccessionNumber.Should().Be("g-act-1");
         split.Shares.Should().Be(2_917_236);
         split.FiledShares.Should().Be(1_458_618);
         split.PercentOfClass.Should().Be(8.6m);
         split.CurrentTicker.Should().Be("ACT");
-        split.ChangeShares.Should().BeNull();
+        split
+            .ChangeShares.Should()
+            .Be(2_917_236 - 2_400_000, "the row filed under the presentation ticker is its prior");
+        split.PriorEventDate.Should().Be(new DateOnly(2026, 3, 2));
 
         var converted = stakes[1];
         converted.CurrentTicker.Should().Be("IMSR");
@@ -124,7 +166,7 @@ public class HolderBeneficialOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         exit.ChangeShares.Should().Be(-1_500_000);
         exit.PriorEventDate.Should().Be(new DateOnly(2025, 5, 27));
 
-        stakes[5].DelistedOn.Should().Be(new DateOnly(2026, 3, 26));
+        stakes[6].DelistedOn.Should().Be(new DateOnly(2026, 3, 26));
     }
 
     [Fact]

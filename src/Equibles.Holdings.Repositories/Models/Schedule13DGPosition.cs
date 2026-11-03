@@ -44,6 +44,13 @@ public class Schedule13DGPosition
     /// <summary>The issuer's presentation ticker; null when it has no presentation line.</summary>
     public string PresentationTicker { get; set; }
 
+    /// <summary>
+    /// True for the presentation line and for a listed class or unit that still trades in the US.
+    /// False once the filed class was retired (a SPAC unit or class converted at the merger), when
+    /// the filer's later filings land on the presentation line.
+    /// </summary>
+    public bool ListedTickerActive { get; set; }
+
     /// <summary>True when the issuer's presentation line trades in the US today.</summary>
     public bool IssuerListed { get; set; }
 
