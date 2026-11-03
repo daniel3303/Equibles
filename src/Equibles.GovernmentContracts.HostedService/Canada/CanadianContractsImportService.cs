@@ -152,15 +152,14 @@ public class CanadianContractsImportService : IImporter
         CancellationToken cancellationToken
     )
     {
-        var resolved = rows.Select(row =>
-                (Row: row, IssuerId: RecipientResolver.Resolve(row.VendorName, lookup))
+        var resolved = rows.SelectMany(row =>
+                RecipientResolver.Resolve(row.VendorName, lookup) is { } issuerId
+                && row.ContractValue != null
+                && !string.IsNullOrWhiteSpace(row.Department)
+                && row.AwardUniqueKey.Length <= 128
+                    ? [(Row: row, IssuerId: issuerId)]
+                    : Array.Empty<(CanadianContractRow Row, Guid IssuerId)>()
             )
-            .Where(item =>
-                item.IssuerId != null
-                && item.Row.ContractValue != null
-                && !string.IsNullOrWhiteSpace(item.Row.Department)
-            )
-            .Where(item => item.Row.AwardUniqueKey.Length <= 128)
             .ToList();
         // Inside one quarter a department numbers its reports in order, so the highest number is the latest amendment.
         var latest = resolved
@@ -201,7 +200,7 @@ public class CanadianContractsImportService : IImporter
                     CountryCode = CountryCode,
                     AwardType = type ?? GovernmentContractAwardType.Unknown,
                 };
-                Apply(contract, row, issuerId.Value, period, signed);
+                Apply(contract, row, issuerId, period, signed);
                 repository.Add(contract);
                 inserted++;
                 continue;
@@ -218,7 +217,7 @@ public class CanadianContractsImportService : IImporter
             }
             if (type != null)
                 contract.AwardType = type.Value;
-            Apply(contract, row, issuerId.Value, period, signed);
+            Apply(contract, row, issuerId, period, signed);
             updated++;
         }
         await repository.SaveChanges();
