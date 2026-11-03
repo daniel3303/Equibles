@@ -506,7 +506,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
 
         result
             .Should()
-            .Contain("No match for 'zzzznonexistent' in the tracked, curated US and Canadian macro set");
+            .Contain(
+                "No match for 'zzzznonexistent' in the tracked, curated US and Canadian macro set"
+            );
         result.Should().Contain("zzzznonexistent");
         result
             .Should()
