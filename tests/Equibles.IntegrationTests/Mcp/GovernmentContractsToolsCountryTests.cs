@@ -35,8 +35,12 @@ public class GovernmentContractsToolsCountryTests : ParadeDbMcpTestBase
             Name: "Wajax Corporation",
             MarketCountryCode: "CA",
             MarketIdentifierCode: "XTSE",
-            IdentityState: EquityIdentityState.Verified
+            IdentityState: EquityIdentityState.Verified,
+            TradingCurrency: "CAD",
+            QuoteUnitMultiplier: 1m
         );
+        wajax.Presentation.Listing.IdentitySourceUrl =
+            "https://www.tsx.com/listings/listing-with-us/listed-company-directory";
         DbContext.Add(wajax);
         DbContext.AddRange(
             Contract(wajax, "CA:dnd-mdn:W8486-1", "CA", 250_000m, "National Defence"),
