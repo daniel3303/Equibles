@@ -26,6 +26,61 @@ public class EquityMarketDirectorySourceTests
         };
 
     [Fact]
+    public async Task XetraProducts_CapturesTradableFundsAndNotesUnderTheirOwnKey()
+    {
+        var page = await Fixture("EquityMarkets", "Xetra", "tradable-instruments-page.html");
+        var csv = await Fixture(
+            "EquityMarkets",
+            "Xetra",
+            "t7-xetr-allTradableInstruments.sample.csv"
+        );
+        using var http = new HttpClient(new EuronextDirectoryTestHandler([page, csv]));
+        var source = new XetraExchangeTradedProductSource(new XetraInstrumentListClient(http));
+        var market = EquityMarketCatalog.TryGet("xetra");
+        source
+            .SourceKey.Should()
+            .NotBe(market.DirectorySource, "products reconcile apart from shares");
+        source.Supports(market).Should().BeTrue();
+        source.Supports(EquityMarketCatalog.TryGet("euronext-paris")).Should().BeFalse();
+
+        var snapshot = await source.CaptureProducts(market, CancellationToken.None);
+
+        snapshot
+            .Rows.Select(row => row.Symbol)
+            .Should()
+            .BeEquivalentTo(["BGX", "ECDC", "CZX", "21XH", "2BTC"]);
+        snapshot
+            .Rows.Should()
+            .AllSatisfy(row =>
+            {
+                row.MarketIdentifierCode.Should().Be("XETR");
+                row.SourceUrl.Fragment.Should().Be($"#{row.Isin}-XETR");
+            });
+        using var payload = JsonDocument.Parse(snapshot.PayloadJson);
+        payload.RootElement.GetProperty("Products").GetArrayLength().Should().Be(5);
+    }
+
+    [Fact]
+    public async Task XetraProducts_RefusesAFileThatGivesOneSymbolToTwoProducts()
+    {
+        var page = await Fixture("EquityMarkets", "Xetra", "tradable-instruments-page.html");
+        var csv = await Fixture(
+            "EquityMarkets",
+            "Xetra",
+            "t7-xetr-allTradableInstruments.sample.csv"
+        );
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([page, csv.Replace(";ECDC;", ";BGX;")])
+        );
+        var source = new XetraExchangeTradedProductSource(new XetraInstrumentListClient(http));
+
+        var capture = () =>
+            source.CaptureProducts(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
+
+        await capture.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Fact]
     public async Task Xetra_CapturesOnlyTradableSharesUnderAStableRowAddress()
     {
         var page = await Fixture("EquityMarkets", "Xetra", "tradable-instruments-page.html");

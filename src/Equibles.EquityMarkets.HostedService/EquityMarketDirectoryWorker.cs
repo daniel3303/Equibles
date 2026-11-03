@@ -145,6 +145,38 @@ public class EquityMarketDirectoryWorker(
         bool succeeded
     ) => succeeded && requestedNow == requestedBefore;
 
+    // Products run after the market's shares on the same cadence; a failed product pass is logged and never marks the
+    // share pass failed, since the two lists are reconciled apart.
+    private async Task ImportProducts(
+        EquityMarketDirectoryImporter importer,
+        EquityMarket market,
+        CancellationToken stoppingToken
+    )
+    {
+        try
+        {
+            var products = await importer.ImportExchangeTradedProducts(market, stoppingToken);
+            if (products.Error != null)
+                logger.LogWarning(
+                    "{Market} exchange-traded product pass skipped: {Error}",
+                    market.Code,
+                    products.Error
+                );
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "{Market} exchange-traded product refresh failed; retained product listings are unchanged",
+                market.Code
+            );
+        }
+    }
+
     private async Task RunMarket(
         EquityMarket market,
         DateTime? requestedAt,
@@ -159,6 +191,8 @@ public class EquityMarketDirectoryWorker(
             var importer =
                 scope.ServiceProvider.GetRequiredService<EquityMarketDirectoryImporter>();
             result = await importer.Import(market, stoppingToken);
+            if (result.Error == null && importer.HasProductSource(market))
+                await ImportProducts(importer, market, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

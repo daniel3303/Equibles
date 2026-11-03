@@ -93,6 +93,40 @@ public class FirdsRecordReaderTests
     }
 
     [Theory]
+    [InlineData("ESVUFR", "WBDM", true)]
+    [InlineData("CEOGES", "XETA", true)]
+    [InlineData("CEOGES", "BETA", false)]
+    [InlineData("EYAYFT", "XETA", true)]
+    [InlineData("EYADFM", "WBDM", false)]
+    [InlineData("DBFSEB", "XETA", false)]
+    public void Storage_KeepsSharesEverywhereAndProductsOnlyOnCoveredVenues(
+        string cfi,
+        string mic,
+        bool stored
+    ) =>
+        FirdsUniverseImporter
+            .IsStored(
+                new FirdsRecord
+                {
+                    Isin = "IE00B5BMR087",
+                    Cfi = cfi,
+                    Mic = mic,
+                }
+            )
+            .Should()
+            .Be(stored);
+
+    [Theory]
+    [InlineData("FULINS_E_20261101_01of03.zip", 'E')]
+    [InlineData("FULINS_C_20261101_01of01.zip", 'C')]
+    [InlineData("DLTINS_20261101_01of01.zip", null)]
+    public void FileNames_ReadTheFullSetCategory(string fileName, char? category)
+    {
+        FirdsFileNames.TryParse(fileName, out _, out _).Should().BeTrue();
+        FirdsFileNames.FullCategory(fileName).Should().Be(category);
+    }
+
+    [Theory]
     [InlineData("<Id>PTSLB0AM0011</Id>", "<Id>PTSLB0AM0010</Id>")]
     [InlineData("<Issr>BAD</Issr>", "<Issr>213800EDIKU4Z4I1R529</Issr>")]
     [InlineData("<TermntnDt>tomorrow</TermntnDt>", "<TermntnDt>2026-09-11T23:59:59Z</TermntnDt>")]
@@ -157,11 +191,11 @@ public class FirdsRecordReaderTests
     }
 
     [Theory]
-    [InlineData("FULINS_C_20260912_01of01.zip")]
+    [InlineData("FULINS_D_20260912_01of01.zip")]
     [InlineData("FULINS_E_2026091_01of02.zip")]
     [InlineData("DLTINS_20260915.zip")]
     [InlineData(null)]
-    public void OtherFileNames_AreNotEquityFiles(string name)
+    public void OtherFileNames_AreNotRead(string name)
     {
         FirdsFileNames.TryParse(name, out _, out _).Should().BeFalse();
     }

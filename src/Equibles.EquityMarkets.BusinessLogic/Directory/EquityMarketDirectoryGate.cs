@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 
@@ -38,6 +39,30 @@ public static class EquityMarketDirectoryGate
                 || requestedHere
             );
     }
+
+    // An exchange-traded product trades as one security on many venues, each line in its own currency, and an investor
+    // holds one line, so every venue line FIRDS records as a live product on the market is admitted; there is no home.
+    public static bool IsExchangeTradedProductLine(
+        EquityMarket market,
+        EquityMarketDirectoryRow row,
+        FirdsInstrumentRecord firds
+    )
+    {
+        ArgumentNullException.ThrowIfNull(market);
+        ArgumentNullException.ThrowIfNull(row);
+        return firds != null
+            && firds.Isin == row.Isin
+            && market.IsFirdsVenue(firds.Mic)
+            && market.Contains(row.MarketIdentifierCode)
+            && ProductKind(firds.Cfi) != null;
+    }
+
+    // The security kind FIRDS states for a product line, from the CFI alone; null for anything else.
+    public static EquitySecurityKind? ProductKind(string cfi) =>
+        cfi is not { Length: 6 } ? null
+        : cfi.StartsWith("CE", StringComparison.Ordinal) ? EquitySecurityKind.ExchangeTradedFund
+        : cfi.StartsWith("EY", StringComparison.Ordinal) ? EquitySecurityKind.ExchangeTradedNote
+        : null;
 
     // FIRDS can name as relevant venue one the issuer never sought, such as a venue that traded a new or transferred
     // ISIN first. A line sought on this market is then the home, provided every line the issuer sought is on this

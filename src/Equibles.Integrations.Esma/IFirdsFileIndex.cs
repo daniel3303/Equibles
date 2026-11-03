@@ -7,7 +7,8 @@ public interface IFirdsFileIndex
 {
     string Authority { get; }
 
-    // Equity full files and every delta published on or after the date, oldest first.
+    // Equity (CFI E) and collective-investment (CFI C) full files and every delta published on or after the date,
+    // oldest first.
     Task<IReadOnlyList<FirdsFile>> ListEquityFiles(
         DateOnly publishedOnOrAfter,
         CancellationToken cancellationToken = default

@@ -18,22 +18,30 @@ public class FirdsImportRunRepository(EquiblesFinancialDbContext dbContext)
                 cancellationToken
             );
 
+    // Each CFI category ('E', 'C') has its own full sets, named FULINS_{category}_*.
     public Task<DateOnly?> GetLatestFullPublication(
         string authority,
+        char category,
         CancellationToken cancellationToken = default
     ) =>
-        GetAll()
-            .Where(row => row.Authority == authority && row.Kind == FirdsFileKind.Full)
+        FullRuns(authority, category)
             .Select(row => (DateOnly?)row.PublishedOn)
             .MaxAsync(cancellationToken);
 
     public Task<bool> HasFullImport(
         string authority,
+        char category = 'E',
         CancellationToken cancellationToken = default
-    ) =>
-        GetAll()
-            .AnyAsync(
-                row => row.Authority == authority && row.Kind == FirdsFileKind.Full,
-                cancellationToken
+    ) => FullRuns(authority, category).AnyAsync(cancellationToken);
+
+    private IQueryable<FirdsImportRun> FullRuns(string authority, char category)
+    {
+        var prefix = "FULINS_" + category + "_";
+        return GetAll()
+            .Where(row =>
+                row.Authority == authority
+                && row.Kind == FirdsFileKind.Full
+                && row.FileName.StartsWith(prefix)
             );
+    }
 }
