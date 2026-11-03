@@ -33,6 +33,9 @@ public class CompanyMetadata
     /// <summary>EDGAR's state-or-country code for the business address, e.g. "CA" or "L2"; null when SEC records none.</summary>
     public string BusinessStateOrCountry { get; set; }
 
+    /// <summary>Filing date of the newest annual report (10-K, 10-KT, 20-F or 40-F) among the recent filings; null when none is listed.</summary>
+    public DateOnly? LatestAnnualReportFiledOn { get; set; }
+
     /// <summary>The file number EDGAR indexes the newest 10-K or 10-Q under, from the recent filings; null when none is listed.</summary>
     public string PeriodicReportFileNumber { get; set; }
 

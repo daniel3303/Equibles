@@ -68,6 +68,7 @@ public class SecEdgarClientGetCompanyMetadataRegistrantTests
         metadata.BdcElectionFiledOn.Should().Be(new DateOnly(2011, 4, 15));
         metadata.BdcWithdrawalFiledOn.Should().BeNull();
         metadata.PeriodicReportFileNumber.Should().Be("001-36364");
+        metadata.LatestAnnualReportFiledOn.Should().BeNull();
         metadata.BusinessStateOrCountry.Should().Be("TX");
         metadata.HasArchivedFilings.Should().BeFalse();
     }
@@ -78,6 +79,7 @@ public class SecEdgarClientGetCompanyMetadataRegistrantTests
         var metadata = await Client(Oaktree).GetCompanyMetadata("1414932");
 
         metadata.PeriodicReportFileNumber.Should().Be("814-00755");
+        metadata.LatestAnnualReportFiledOn.Should().Be(new DateOnly(2025, 11, 18));
         metadata.BdcElectionFiledOn.Should().BeNull();
         metadata.HasArchivedFilings.Should().BeTrue();
     }
