@@ -49,11 +49,14 @@ public class HolderBeneficialOwnershipReader
             return [];
 
         // The unfiltered issuer read keeps merged and delisted issuers: a SPAC stake stays a stake.
+        // An index manager holds stakes in thousands of issuers, so the securities and listings
+        // load as split queries rather than one cartesian join.
         var issuerIds = positions.Select(p => p.EquityIssuerId).Distinct().ToList();
         var issuers = await _issuerRepository
             .GetAll()
             .Where(issuer => issuerIds.Contains(issuer.Id))
             .AsNoTracking()
+            .AsSplitQuery()
             .ToDictionaryAsync(issuer => issuer.Id, cancellationToken);
         var splitsByIssuer = (
             await _stockSplitRepository

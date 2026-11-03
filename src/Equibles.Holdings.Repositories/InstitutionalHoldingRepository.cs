@@ -442,8 +442,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     /// on that security as the prior position. A retired class or unit folds into the issuer's
     /// presentation line: a SPAC's class converts at the merger and the filer's exit amendment
     /// lands on the successor's common stock, which is the same stake, not a second one. Two
-    /// classes that both trade stay separate securities. A filer holds at most a few hundred such
-    /// rows, so they are ranked in memory.
+    /// classes that both trade stay separate securities. The largest index managers hold a few
+    /// thousand such rows, ranked in memory.
     /// </summary>
     public async Task<List<Schedule13DGPosition>> GetSchedule13DGByHolder(
         InstitutionalHolder holder,
