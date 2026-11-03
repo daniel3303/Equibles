@@ -429,8 +429,12 @@ public class EquityMarketDirectoryImporter(
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .ToList(),
             LegalEntityIdentifier = confirmedIssuer.LegalEntityIdentifier,
+            // A fund issuer's GLEIF ISINs are its sibling funds (an umbrella lists every sub-fund), never this
+            // product's own securities, so a product line claims only its ISIN.
             RelatedIsins =
-                firdsIssuer == null && subFund == null ? issuer.RelatedIsins : [row.Isin],
+                firdsIssuer == null && subFund == null && !exchangeTradedProduct
+                    ? issuer.RelatedIsins
+                    : [row.Isin],
             Isin = row.Isin,
             Ticker = row.Symbol,
             MarketIdentifierCode = row.MarketIdentifierCode,

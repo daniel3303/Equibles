@@ -104,6 +104,26 @@ public class EquityMarketDirectoryImporterSubFundTests
     }
 
     [Fact]
+    public void AProductTheUmbrellaIssuesItself_ClaimsOnlyItsOwnIsin()
+    {
+        var firds = Firds();
+        firds.Lei = UmbrellaLei;
+
+        var input = EquityMarketDirectoryImporter.CreateInput(
+            Xetra,
+            "xetra-etp",
+            Row(),
+            Product(),
+            firds,
+            Umbrella(),
+            exchangeTradedProduct: true
+        );
+
+        input.LegalEntityIdentifier.Should().Be(UmbrellaLei);
+        input.RelatedIsins.Should().Equal(Isin);
+    }
+
+    [Fact]
     public void WithoutTheUmbrellaLink_TheSourcesStillDisagree()
     {
         var input = () => Input(null, null);
