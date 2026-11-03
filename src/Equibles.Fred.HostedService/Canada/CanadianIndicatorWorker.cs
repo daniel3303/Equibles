@@ -13,7 +13,9 @@ namespace Equibles.Fred.HostedService.Canada;
 public class CanadianIndicatorWorker : BaseScraperWorker
 {
     protected override string WorkerName => "Canadian indicators";
-    protected override TimeSpan SleepInterval { get; }
+    private readonly TimeSpan _sleepInterval;
+
+    protected override TimeSpan SleepInterval => _sleepInterval;
     protected override ErrorSource ErrorSource => ErrorSource.FredScraper;
     protected override int ErrorReportThreshold => 3;
 
@@ -25,7 +27,7 @@ public class CanadianIndicatorWorker : BaseScraperWorker
     )
         : base(logger, scopeFactory, errorReporter)
     {
-        SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
+        _sleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
     }
 
     protected override Task DoWork(CancellationToken stoppingToken) =>
