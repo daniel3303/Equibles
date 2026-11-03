@@ -159,7 +159,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .Be(0, "no Stockholm line is in the fixture");
         (
             await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(
-                EsmaFirdsClient.AuthorityCode
+                EsmaFirdsClient.AuthorityCode,
+                'E'
             )
         )
             .Should()
@@ -293,23 +294,61 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
     }
 
     [Fact]
+    public async Task FundAndEquityFullSets_EachRetireOnlyTheirOwnCategory()
+    {
+        var full = Fixture("FULINS_E_sample.xml");
+        var funds = Fund(full);
+        var index = new FakeIndex();
+        index.AddFull(FirstFull, full, EmptyFull(full));
+        index.AddFundFull(FirstFull, funds);
+        await Importer(index).Import(CancellationToken.None);
+        (await Rows()).Single(row => row.Isin == FundIsin).Cfi.Should().Be("CEOGES");
+
+        // A newer equity set never restates fund lines, so it must leave them live.
+        index.AddFull(SecondFull, full, EmptyFull(full));
+        await Importer(index).Import(CancellationToken.None);
+        (await Rows()).Single(row => row.Isin == FundIsin).RemovedAt.Should().BeNull();
+
+        // A newer fund set that no longer states the fund retires it, and only it.
+        index.AddFundFull(SecondFull, EmptyFull(funds));
+        await Importer(index).Import(CancellationToken.None);
+        var rows = await Rows();
+        rows.Single(row => row.Isin == FundIsin).RemovedAt.Should().NotBeNull();
+        rows.Where(row => row.Cfi.StartsWith("ES"))
+            .Should()
+            .OnlyContain(row => row.RemovedAt == null);
+    }
+
+    private const string FundIsin = "IE00B5BMR087";
+
+    // The sample's first record restated as a UCITS ETF line on Xetra, inside a fund full file's header.
+    private static string Fund(string full) =>
+        OnlyFirstRecord(full)
+            .Replace("PTSLB0AM0010", FundIsin)
+            .Replace("ESRTFR", "CEOGES")
+            .Replace("<TradgVnRltdAttrbts><Id>XLIS</Id>", "<TradgVnRltdAttrbts><Id>XETA</Id>")
+            .Replace("FULINS_E_", "FULINS_C_");
+
+    [Fact]
     public async Task RecordedFiles_AreNeverDownloadedAgain()
     {
         var full = Fixture("FULINS_E_sample.xml");
         var index = new FakeIndex();
         index.AddFull(FirstFull, full, EmptyFull(full));
+        index.AddFundFull(FirstFull, Fund(full));
         index.AddDelta(DeltaDate, 1, 1, Fixture("DLTINS_sample.xml"));
         await Importer(index).Import(CancellationToken.None);
-        index.Downloads.Should().HaveCount(3);
+        index.Downloads.Should().HaveCount(4);
 
         await Importer(index).Import(CancellationToken.None);
 
-        index.Downloads.Should().HaveCount(3);
+        // Once both categories hold a full set, a run lists only from the older of the two.
+        index.Downloads.Should().HaveCount(4);
         index
             .ListedSince.Should()
             .Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-14), FirstFull);
-        (await Rows()).Should().HaveCount(10);
-        (await DbContext.Set<FirdsImportRun>().CountAsync()).Should().Be(3);
+        (await Rows()).Should().HaveCount(11);
+        (await DbContext.Set<FirdsImportRun>().CountAsync()).Should().Be(4);
     }
 
     [Fact]
@@ -341,7 +380,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .BeNull();
         (
             await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(
-                EsmaFirdsClient.AuthorityCode
+                EsmaFirdsClient.AuthorityCode,
+                'E'
             )
         )
             .Should()
@@ -362,7 +402,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
 
         (
             await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(
-                EsmaFirdsClient.AuthorityCode
+                EsmaFirdsClient.AuthorityCode,
+                'E'
             )
         )
             .Should()
@@ -493,6 +534,14 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         public void AddPart(DateOnly publishedOn, int part, int of, string xml) =>
             Add(
                 $"FULINS_E_{publishedOn:yyyyMMdd}_{part:00}of{of:00}.zip",
+                FirdsFileType.Full,
+                publishedOn,
+                xml
+            );
+
+        public void AddFundFull(DateOnly publishedOn, string xml) =>
+            Add(
+                $"FULINS_C_{publishedOn:yyyyMMdd}_01of01.zip",
                 FirdsFileType.Full,
                 publishedOn,
                 xml

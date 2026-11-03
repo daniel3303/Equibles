@@ -149,6 +149,10 @@ internal static class YahooListingSource
                 && listing.QuoteUnitMultiplier == target.QuoteUnitMultiplier
         );
 
+    // A venue's exchange-traded fund charts as an ETF; a share, commodity or note as an equity.
+    private static string ChartInstrumentType(PriceSeriesTarget target) =>
+        target.IsExchangeTradedFund ? "ETF" : "EQUITY";
+
     internal static bool MatchesChart(
         PriceSeriesTarget target,
         YahooChartSourceIdentity identity
@@ -156,7 +160,7 @@ internal static class YahooListingSource
         Market(target) is { } market
         && identity != null
         && identity.ExchangeCode == market.YahooExchangeCode
-        && identity.InstrumentType == "EQUITY"
+        && identity.InstrumentType == ChartInstrumentType(target)
         && identity.ExchangeTimeZone == market.TimeZoneId
         && EquityQuotationUnits.Matches(
             identity.Currency,

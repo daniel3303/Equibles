@@ -41,6 +41,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEquityMarketDirectorySource, BmeEquityMarketDirectorySource>();
         services.AddScoped<IEquityMarketDirectorySource, GpwEquityMarketDirectorySource>();
         services.AddScoped<IEquityMarketDirectorySource, LseEquityMarketDirectorySource>();
+        services.AddScoped<
+            IExchangeTradedProductDirectorySource,
+            XetraExchangeTradedProductSource
+        >();
 
         services.AddHostedService<FirdsUniverseWorker>();
         services.AddHostedService<EquityMarketDirectoryWorker>();

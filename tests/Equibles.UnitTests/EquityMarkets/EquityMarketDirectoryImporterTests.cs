@@ -72,7 +72,10 @@ public class EquityMarketDirectoryImporterTests
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
-    private static async Task SeedFullImport(DbContextOptions<EquiblesFinancialDbContext> options)
+    private static async Task SeedFullImport(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        char category = 'E'
+    )
     {
         using var context = NewContext(options);
         context.Add(
@@ -80,7 +83,7 @@ public class EquityMarketDirectoryImporterTests
             {
                 Authority = "ESMA",
                 Kind = FirdsFileKind.Full,
-                FileName = "FULINS_E_20260912_01of01.zip",
+                FileName = $"FULINS_{category}_20260912_01of01.zip",
                 PublishedOn = new DateOnly(2026, 9, 12),
                 ImportedAt = DateTime.UtcNow,
             }
@@ -232,6 +235,7 @@ public class EquityMarketDirectoryImporterTests
         var source = new FakeSource(rows, sourceKey, marketCode);
         var importer = new EquityMarketDirectoryImporter(
             [source],
+            [new FakeProductSource(source)],
             gleif,
             identity,
             snapshots,
@@ -239,6 +243,102 @@ public class EquityMarketDirectoryImporterTests
             Substitute.For<ILogger<EquityMarketDirectoryImporter>>()
         );
         return new Harness(importer, source, identity, snapshots, gleif);
+    }
+
+    [Fact]
+    public async Task TheProductPass_AdmitsEveryLineFirdsRecordsAsAProductOnTheMarketWithItsKind()
+    {
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        await SeedFullImport(options, 'C');
+        await SeedFirds(
+            options,
+            "IE00B5BMR087",
+            mic: "XETA",
+            venue: "XLON",
+            cfi: "CEOGES",
+            authority: "IE"
+        );
+        await SeedFirds(
+            options,
+            "IE0009JOT9U1",
+            mic: "XETA",
+            venue: "XFRA",
+            cfi: "EYAYFT",
+            authority: "IE"
+        );
+        await SeedFirds(
+            options,
+            "DE0007164600",
+            mic: "XETA",
+            venue: "XETA",
+            cfi: "ESVUFR",
+            authority: "DE"
+        );
+        var harness = Build(
+            options,
+            "xetra-etp",
+            "xetra",
+            [
+                Row("IE00B5BMR087", "SXR8", mic: "XETR"),
+                Row("IE0009JOT9U1", "IGLD", mic: "XETR"),
+                Row("DE0007164600", "SAP", mic: "XETR"),
+                Row("IE000UNKNOWN0", "NONE", mic: "XETR"),
+            ]
+        );
+
+        var result = await harness.Importer.ImportExchangeTradedProducts(
+            EquityMarketCatalog.TryGet("xetra"),
+            CancellationToken.None
+        );
+
+        (result.Error, result.Imported, result.Skipped).Should().Be(((string)null, 2, 2));
+        await harness
+            .Snapshots.Received(1)
+            .Reconcile(
+                Arg.Is<EquityDirectorySnapshotInput>(input => input.Source == "xetra-etp"),
+                Arg.Any<CancellationToken>()
+            );
+        await harness
+            .Identity.Received(1)
+            .ImportListing(
+                Arg.Is<EquityDirectoryListingInput>(input =>
+                    input.Ticker == "SXR8"
+                    && input.SecurityType == EquitySecurityKind.ExchangeTradedFund
+                    && input.TradingCurrency == "EUR"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        await harness
+            .Identity.Received(1)
+            .ImportListing(
+                Arg.Is<EquityDirectoryListingInput>(input =>
+                    input.Ticker == "IGLD"
+                    && input.SecurityType == EquitySecurityKind.ExchangeTradedNote
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task TheProductPass_WaitsForTheCollectiveInvestmentFiles()
+    {
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        var harness = Build(
+            options,
+            "xetra-etp",
+            "xetra",
+            [Row("IE00B5BMR087", "SXR8", mic: "XETR")]
+        );
+
+        var result = await harness.Importer.ImportExchangeTradedProducts(
+            EquityMarketCatalog.TryGet("xetra"),
+            CancellationToken.None
+        );
+
+        result.Error.Should().NotBeNull();
+        harness.Source.Captures.Should().Be(0);
     }
 
     [Fact]
@@ -717,6 +817,27 @@ public class EquityMarketDirectoryImporterTests
         var import = () =>
             harness.Importer.Import(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
         await import.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    // The share fake read as a product list, so one fixture serves either pass.
+    internal sealed class FakeProductSource(FakeSource inner)
+        : IExchangeTradedProductDirectorySource
+    {
+        public string SourceKey => inner.SourceKey;
+
+        public bool Supports(EquityMarket market) => inner.Supports(market);
+
+        public Task<EquityMarketDirectorySnapshot> CaptureProducts(
+            EquityMarket market,
+            CancellationToken cancellationToken
+        ) => inner.Capture(market, cancellationToken);
+
+        public Task<EquityMarketDirectoryProduct> Resolve(
+            EquityMarket market,
+            EquityMarketDirectoryRow row,
+            FirdsInstrumentRecord firds,
+            CancellationToken cancellationToken
+        ) => inner.Resolve(market, row, firds, cancellationToken);
     }
 
     internal sealed class FakeSource(

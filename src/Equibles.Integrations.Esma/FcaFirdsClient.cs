@@ -28,7 +28,7 @@ public class FcaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
             var query =
                 "/fca_data_firds_files?q="
                 + Uri.EscapeDataString(
-                    $"((file_type:FULINS AND file_name:FULINS_E*) OR file_type:DLTINS) AND publication_date:[{since} TO *]"
+                    $"((file_type:FULINS AND (file_name:FULINS_E* OR file_name:FULINS_C*)) OR file_type:DLTINS) AND publication_date:[{since} TO *]"
                 )
                 + $"&from={from}&size={PageSize}&sort="
                 + Uri.EscapeDataString("publication_date:asc");

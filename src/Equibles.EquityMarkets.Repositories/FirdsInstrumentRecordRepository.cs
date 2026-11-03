@@ -36,6 +36,25 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
             .ThenBy(row => row.Mic)
             .FirstOrDefaultAsync(cancellationToken);
 
+    // The product check a directory row must pass: a live exchange-traded fund (CFI CE) or commodity/note (CFI EY) line
+    // the market's authority records on one of its venues.
+    public Task<FirdsInstrumentRecord> GetLiveProduct(
+        string isin,
+        string authority,
+        IReadOnlyList<string> venueCodes,
+        DateTime asOf,
+        CancellationToken cancellationToken = default
+    ) =>
+        GetLive(asOf)
+            .Where(row =>
+                (row.Cfi.StartsWith("CE") || row.Cfi.StartsWith("EY"))
+                && row.Authority == authority
+                && row.Isin == isin
+                && venueCodes.Contains(row.Mic)
+            )
+            .OrderBy(row => row.Mic)
+            .FirstOrDefaultAsync(cancellationToken);
+
     // Every live share line FIRDS holds for one ISIN, across registers, for home decisions that weigh its other venues.
     public Task<List<FirdsInstrumentRecord>> GetLiveShareLines(
         string isin,
@@ -145,16 +164,21 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
             )
             .RunAsync(cancellationToken);
 
-    // After a complete full file: every row of the authority the file did not restate is gone.
+    // After a complete full set of one CFI category: every row of that category the set did not restate is gone.
+    // Another category's rows come from its own full set, so they are never swept here.
     public Task<int> MarkRemovedBefore(
         string authority,
+        char category,
         DateTime observedBefore,
         DateTime removedAt,
         CancellationToken cancellationToken = default
-    ) =>
-        GetAll()
+    )
+    {
+        var prefix = category.ToString();
+        return GetAll()
             .Where(row =>
                 row.Authority == authority
+                && row.Cfi.StartsWith(prefix)
                 && row.RemovedAt == null
                 && row.ObservedAt < observedBefore
             )
@@ -162,4 +186,5 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
                 setters => setters.SetProperty(row => row.RemovedAt, removedAt),
                 cancellationToken
             );
+    }
 }
