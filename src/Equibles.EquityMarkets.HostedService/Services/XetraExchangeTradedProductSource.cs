@@ -38,14 +38,14 @@ public class XetraExchangeTradedProductSource(XetraInstrumentListClient client)
             throw new InvalidDataException(
                 "Xetra instrument file names a market outside the catalog."
             );
-        var products = list
+        var lines = list
             .Instruments.Where(row =>
                 ProductTypes.Contains(row.InstrumentType) && row.InstrumentStatus == "Active"
             )
             .ToList();
         // A capture states the whole list or throws; a malformed row never degrades into a shorter list.
         var symbols = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var row in products)
+        foreach (var row in lines)
         {
             if (
                 !InternationalSecurityIdentifiers.IsValidIsin(row.Isin)
@@ -59,6 +59,18 @@ public class XetraExchangeTradedProductSource(XetraInstrumentListClient client)
                 throw new InvalidDataException(
                     "Xetra instrument file gives one product symbol multiple security identities."
                 );
+        }
+        // Xetra trades some products in EUR and USD under one ISIN, and reconcile refuses a repeated (ISIN, MIC), so
+        // each ISIN keeps its line in the market's currency; one with no single such line is left out and counted.
+        var products = new List<XetraInstrument>();
+        var excluded = 0;
+        foreach (var group in lines.GroupBy(row => (row.Isin, row.MarketIdentifierCode)))
+        {
+            var line = VenueCurrencyLine(market, group.ToList());
+            if (line == null)
+                excluded += group.Count();
+            else
+                products.Add(line);
         }
         return new EquityMarketDirectorySnapshot
         {
@@ -74,9 +86,12 @@ public class XetraExchangeTradedProductSource(XetraInstrumentListClient client)
                     list.LastUpdate,
                     list.CapturedAt,
                     Rows = list.Instruments.Count,
-                    Products = products,
+                    Products = lines,
+                    Listed = products.Count,
+                    Excluded = excluded,
                 }
             ),
+            Excluded = excluded,
             Rows = products
                 .Select(row => new EquityMarketDirectoryRow
                 {
@@ -121,6 +136,22 @@ public class XetraExchangeTradedProductSource(XetraInstrumentListClient client)
                 },
             }
         );
+    }
+
+    private static XetraInstrument VenueCurrencyLine(
+        EquityMarket market,
+        List<XetraInstrument> lines
+    )
+    {
+        if (lines.Count == 1)
+            return lines[0];
+        var quoted = lines
+            .Where(row =>
+                EquityQuotationUnits.TryResolve(row.Currency, out var currency, out _)
+                && currency == market.Currency
+            )
+            .ToList();
+        return quoted.Count == 1 ? quoted[0] : null;
     }
 
     // The same stable page-plus-ISIN-and-venue identity the share rows use; the file address rotates daily.
