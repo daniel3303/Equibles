@@ -471,6 +471,32 @@ public class FredToolsTests : ParadeDbMcpTestBase
 
     // ── SearchEconomicIndicators ───────────────────────────────────────
 
+    // A capped search fills with US series before Canadian ones: BOC-V39079 sorts ahead of
+    // FEDFUNDS by id, and would otherwise push a US rate out of a one-row answer.
+    [Fact]
+    public async Task SearchEconomicIndicators_ListsUsSeriesBeforeCanadianOnes()
+    {
+        DbContext
+            .Set<FredSeries>()
+            .Add(
+                new FredSeries
+                {
+                    SeriesId = "BOC-V39079",
+                    Title = "Bank of Canada Target for the Overnight Rate",
+                    Category = FredSeriesCategory.InterestRates,
+                    Units = "Percent",
+                    CountryCode = "CA",
+                    Source = IndicatorSource.BankOfCanada,
+                    SourceKey = "V39079",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchEconomicIndicators("interest rates", maxResults: 1);
+
+        result.Should().Contain("FEDFUNDS").And.NotContain("BOC-V39079");
+    }
+
     [Fact]
     public async Task SearchEconomicIndicators_MatchesBySeriesId_ReturnsResults()
     {

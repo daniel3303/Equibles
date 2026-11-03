@@ -293,8 +293,11 @@ public class FredTools
 
                 var matches = _seriesRepository.Search(query);
                 var total = await matches.CountAsync();
+                // US series list first, so a capped search keeps the rows it returned before
+                // Canadian series joined the set; Canada's follow within the same cap.
                 var series = await matches
-                    .OrderBy(s => s.Category)
+                    .OrderBy(s => s.CountryCode != "US")
+                    .ThenBy(s => s.Category)
                     .ThenBy(s => s.SeriesId)
                     .Take(maxResults)
                     .ToListAsync();
