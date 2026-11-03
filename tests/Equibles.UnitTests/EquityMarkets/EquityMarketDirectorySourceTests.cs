@@ -45,10 +45,16 @@ public class EquityMarketDirectorySourceTests
 
         var snapshot = await source.CaptureProducts(market, CancellationToken.None);
 
+        // 2BTD is the USD line of 2BTC's ISIN: the capture keeps the EUR line, so no ISIN repeats on the venue.
         snapshot
             .Rows.Select(row => row.Symbol)
             .Should()
             .BeEquivalentTo(["BGX", "ECDC", "CZX", "21XH", "2BTC"]);
+        snapshot
+            .Rows.Select(row => (row.Isin, row.MarketIdentifierCode))
+            .Should()
+            .OnlyHaveUniqueItems();
+        snapshot.Excluded.Should().Be(0);
         snapshot
             .Rows.Should()
             .AllSatisfy(row =>
@@ -57,7 +63,36 @@ public class EquityMarketDirectorySourceTests
                 row.SourceUrl.Fragment.Should().Be($"#{row.Isin}-XETR");
             });
         using var payload = JsonDocument.Parse(snapshot.PayloadJson);
-        payload.RootElement.GetProperty("Products").GetArrayLength().Should().Be(5);
+        payload.RootElement.GetProperty("Products").GetArrayLength().Should().Be(6);
+    }
+
+    [Fact]
+    public async Task XetraProducts_LeaveOutAnIsinWithNoSingleLineInTheMarketCurrency()
+    {
+        var page = await Fixture("EquityMarkets", "Xetra", "tradable-instruments-page.html");
+        var csv = await Fixture(
+            "EquityMarkets",
+            "Xetra",
+            "t7-xetr-allTradableInstruments.sample.csv"
+        );
+        var lines = csv.Split('\n');
+        var euroLine = Array.FindIndex(lines, line => line.Contains(";2BTC;"));
+        lines[euroLine] = lines[euroLine].Replace(";EUR;", ";GBP;");
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([page, string.Join('\n', lines)])
+        );
+        var source = new XetraExchangeTradedProductSource(new XetraInstrumentListClient(http));
+
+        var snapshot = await source.CaptureProducts(
+            EquityMarketCatalog.TryGet("xetra"),
+            CancellationToken.None
+        );
+
+        snapshot
+            .Rows.Select(row => row.Symbol)
+            .Should()
+            .BeEquivalentTo(["BGX", "ECDC", "CZX", "21XH"]);
+        snapshot.Excluded.Should().Be(2);
     }
 
     [Fact]
@@ -134,7 +169,7 @@ public class EquityMarketDirectorySourceTests
             .GetString()
             .Should()
             .Contain("/data/t7-xetr-allTradableInstruments.csv");
-        payload.RootElement.GetProperty("Rows").GetInt32().Should().Be(36);
+        payload.RootElement.GetProperty("Rows").GetInt32().Should().Be(37);
         payload.RootElement.GetProperty("Shares").GetArrayLength().Should().Be(30);
     }
 

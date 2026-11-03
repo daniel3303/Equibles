@@ -54,7 +54,7 @@ public class XetraInstrumentListTests
         );
         list.MarketIdentifierCode.Should().Be("XETR");
         list.LastUpdate.Should().Be(new DateOnly(2026, 9, 15));
-        list.Instruments.Should().HaveCount(36);
+        list.Instruments.Should().HaveCount(37);
         list.Instruments.Select(row => row.InstrumentType)
             .Distinct()
             .Should()
@@ -137,7 +137,7 @@ public class XetraInstrumentListTests
         var csv = await Fixture("t7-xetr-allTradableInstruments.sample.csv");
         var list = XetraInstrumentListParser.Read("\uFEFF" + csv);
         list.MarketIdentifierCode.Should().Be("XETR");
-        list.Instruments.Should().HaveCount(36);
+        list.Instruments.Should().HaveCount(37);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class XetraInstrumentListTests
         var handler = new EuronextDirectoryTestHandler([page, csv]);
         using var http = new HttpClient(handler);
         var list = await new XetraInstrumentListClient(http).GetInstruments();
-        list.Instruments.Should().HaveCount(36);
+        list.Instruments.Should().HaveCount(37);
         list.PageUrl.AbsoluteUri.Should()
             .Be(
                 "https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra"

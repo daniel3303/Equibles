@@ -36,3 +36,7 @@ ihs
 # "deriver" — the component that derives holder profiles (CHANGELOG); codespell
 # suggests "derive"/"driver".
 deriver
+
+# "INH" — "Inhaber", the German bearer-share abbreviation in Xetra instrument names
+# (test fixtures); codespell suggests "in".
+inh
