@@ -94,15 +94,30 @@ public class FirdsUniverseImporter(
                 && (latestFull[category] == null || newest.Key > latestFull[category])
             )
             {
-                await ImportFullSet(
-                    index,
-                    runs,
-                    records,
-                    category,
-                    newest.ToList(),
-                    cancellationToken
-                );
-                latestFull[category] = newest.Key;
+                try
+                {
+                    await ImportFullSet(
+                        index,
+                        runs,
+                        records,
+                        category,
+                        newest.ToList(),
+                        cancellationToken
+                    );
+                    latestFull[category] = newest.Key;
+                }
+                // A broken fund set must not stall the share deltas; it records no run, so the next pass retries it.
+                catch (Exception exception)
+                    when (category != 'E' && exception is not OperationCanceledException)
+                {
+                    logger.LogError(
+                        exception,
+                        "{Authority} full {Category} set {PublishedOn} failed; shares keep their deltas",
+                        index.Authority,
+                        category,
+                        newest.Key
+                    );
+                }
             }
         }
         // Shares drive the delta walk, as before; a delta older than a category's full set must not rewind that category.

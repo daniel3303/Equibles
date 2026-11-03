@@ -296,7 +296,9 @@ public class EquityMarketDirectoryImporterTests
         await harness
             .Snapshots.Received(1)
             .Reconcile(
-                Arg.Is<EquityDirectorySnapshotInput>(input => input.Source == "xetra-etp"),
+                Arg.Is<EquityDirectorySnapshotInput>(input =>
+                    input.Source == "xetra-etp" && input.ExchangeTradedProducts
+                ),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -395,6 +397,7 @@ public class EquityMarketDirectoryImporterTests
             .Reconcile(
                 Arg.Is<EquityDirectorySnapshotInput>(input =>
                     input.Source == "euronext"
+                    && !input.ExchangeTradedProducts
                     && input.EvidenceSource == "fake-euronext-directory-v1"
                     && input.SourceRecordKey == FakeSource.DirectoryUrl
                     && input.MarketCountryCode == "FR"

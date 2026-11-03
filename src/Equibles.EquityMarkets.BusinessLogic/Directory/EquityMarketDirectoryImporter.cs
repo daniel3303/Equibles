@@ -124,6 +124,7 @@ public class EquityMarketDirectoryImporter(
                 ObservedAt = snapshot.CapturedAt,
                 MarketCountryCode = market.CountryCode,
                 MarketIdentifierCodes = market.MarketIdentifierCodes,
+                ExchangeTradedProducts = products,
                 Listings = snapshot
                     .Rows.Select(row => new EquityDirectoryListingKey(
                         row.Isin,

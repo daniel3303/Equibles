@@ -319,6 +319,30 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .OnlyContain(row => row.RemovedAt == null);
     }
 
+    [Fact]
+    public async Task ABrokenFundSet_LeavesTheShareDeltasFlowing()
+    {
+        var full = Fixture("FULINS_E_sample.xml");
+        var index = new FakeIndex();
+        index.AddFull(FirstFull, full, EmptyFull(full));
+        index.AddFundFull(FirstFull, "<BizData>truncated");
+        index.AddDelta(DeltaDate, 1, 1, Fixture("DLTINS_sample.xml"));
+
+        await Importer(index).Import(CancellationToken.None);
+
+        (await Rows())
+            .Single(row => row.Isin == "DE0005558696")
+            .TerminationDate.Should()
+            .NotBeNull("the share delta still applies");
+        (
+            await DbContext
+                .Set<FirdsImportRun>()
+                .CountAsync(run => run.FileName.StartsWith("FULINS_C_"))
+        )
+            .Should()
+            .Be(0, "the broken fund set records no run, so the next pass retries it");
+    }
+
     private const string FundIsin = "IE00B5BMR087";
 
     // The sample's first record restated as a UCITS ETF line on Xetra, inside a fund full file's header.
