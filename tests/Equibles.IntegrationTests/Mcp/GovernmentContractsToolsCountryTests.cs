@@ -84,7 +84,12 @@ public class GovernmentContractsToolsCountryTests : ParadeDbMcpTestBase
         var canada = await Sut().GetTopGovernmentContractors(country: "CA");
         var us = await Sut().GetTopGovernmentContractors();
 
-        canada.Should().Contain("Top Government of Canada contractors").And.Contain("C$350,000");
+        // A Toronto-only company is named by MIC:TICKER, which the per-company tool reads back.
+        canada
+            .Should()
+            .Contain("Top Government of Canada contractors")
+            .And.Contain("| XTSE:WJX |")
+            .And.Contain("C$350,000");
         us.Should()
             .Contain("Top federal contractors")
             .And.Contain("$5,000,000")

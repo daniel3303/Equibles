@@ -55,8 +55,9 @@ public class GovernmentContractsTools
             + "awarding agency or department, total value (US: obligated dollars plus unexercised ceiling; "
             + "Canada: contract value including amendments, in Canadian dollars; never revenue received), "
             + "outlays when reported, end date, and description. "
-            + "Coverage: US prime contract awards of $1M or more, and Canadian contracts whose vendor name "
-            + "exactly matches a company listed on a Canadian exchange, so sums understate government revenue. "
+            + "Coverage: US prime contract awards of $1M or more, and Canadian contracts reported from fiscal "
+            + "2017-2018 (April 2017) whose vendor name exactly matches a company listed on a Canadian exchange, "
+            + "so sums understate government revenue. "
             + "Use GetTopGovernmentContractors to rank companies market-wide."
     )]
     public Task<string> GetGovernmentContracts(
@@ -236,11 +237,19 @@ public class GovernmentContractsTools
                         Ticker = c.Issuer.Presentation == null
                             ? null
                             : c.Issuer.Presentation.Listing.Ticker,
+                        Country = c.Issuer.Presentation == null
+                            ? null
+                            : c.Issuer.Presentation.Listing.MarketCountryCode,
+                        Market = c.Issuer.Presentation == null
+                            ? null
+                            : c.Issuer.Presentation.Listing.MarketIdentifierCode,
                         c.Issuer.Name,
                     })
                     .Select(g => new
                     {
                         g.Key.Ticker,
+                        g.Key.Country,
+                        g.Key.Market,
                         g.Key.Name,
                         Total = g.Sum(c => c.Amount),
                         Count = g.Count(),
@@ -259,7 +268,8 @@ public class GovernmentContractsTools
                     $"| Rank | Ticker | Company | {ValueHeader(countryCode)} | Awards |",
                     "|------|--------|---------|-----------------------------------|--------|",
                     r =>
-                        $"| {++rank} | {Escape(r.Ticker)} | {Escape(r.Name)} | {FormatAmount(r.Total, countryCode)} | {r.Count} |"
+                        // A company listed only outside the US is named by MIC:TICKER, since its bare ticker can be another US company's.
+                        $"| {++rank} | {Escape(EquityListingSymbol.Display(r.Ticker, r.Country, r.Market))} | {Escape(r.Name)} | {FormatAmount(r.Total, countryCode)} | {r.Count} |"
                 );
 
                 return await AppendFooters(
@@ -311,8 +321,9 @@ public class GovernmentContractsTools
         sb.AppendLine(
             (
                 countryCode == "CA"
-                    ? "_Coverage: Government of Canada contracts over C$10,000 whose vendor name exactly matches a company "
-                        + "listed on a Canadian exchange (a subsidiary named differently is not matched); Contract Value is the "
+                    ? "_Coverage: Government of Canada contracts over C$10,000 reported from fiscal 2017-2018 (April 2017) whose "
+                        + "vendor name exactly matches a company listed on a Canadian exchange (a subsidiary named differently is not "
+                        + "matched); Contract Value is the "
                         + "latest reported value including amendments, in Canadian dollars, not revenue received"
                     : "_Coverage: prime federal contract awards of $1M+ matched to listed companies; "
                         + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received"

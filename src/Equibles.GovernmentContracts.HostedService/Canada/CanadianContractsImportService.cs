@@ -165,14 +165,21 @@ public class CanadianContractsImportService : IImporter
         // Inside one quarter a department numbers its reports in order, so the highest number is the latest amendment.
         var latest = resolved
             .GroupBy(item => item.Row.AwardUniqueKey, StringComparer.Ordinal)
-            .Select(group => group.MaxBy(item => item.Row.ReferenceSequence))
+            .Select(group =>
+                (
+                    Latest: group.MaxBy(item => item.Row.ReferenceSequence),
+                    Signed: group
+                        .Select(item => OpenCanadaContracts.AwardDate(item.Row.ContractDate, today))
+                        .Min()
+                )
+            )
             .ToList();
         if (latest.Count == 0)
             return (0, 0, 0);
 
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<GovernmentContractRepository>();
-        var keys = latest.Select(item => item.Row.AwardUniqueKey).ToList();
+        var keys = latest.Select(item => item.Latest.Row.AwardUniqueKey).ToList();
         var stored = await repository
             .GetByCountry(CountryCode)
             .Where(contract => keys.Contains(contract.AwardUniqueKey))
@@ -183,7 +190,7 @@ public class CanadianContractsImportService : IImporter
             );
 
         var (inserted, updated) = (0, 0);
-        foreach (var (row, issuerId) in latest)
+        foreach (var ((row, issuerId), signed) in latest)
         {
             var type = AwardType(row.InstrumentType);
             if (!stored.TryGetValue(row.AwardUniqueKey, out var contract))
@@ -194,7 +201,7 @@ public class CanadianContractsImportService : IImporter
                     CountryCode = CountryCode,
                     AwardType = type ?? GovernmentContractAwardType.Unknown,
                 };
-                Apply(contract, row, issuerId.Value, period, today);
+                Apply(contract, row, issuerId.Value, period, signed);
                 repository.Add(contract);
                 inserted++;
                 continue;
@@ -206,11 +213,12 @@ public class CanadianContractsImportService : IImporter
             {
                 if (contract.AwardType == GovernmentContractAwardType.Unknown && type != null)
                     contract.AwardType = type.Value;
+                contract.ActionDate = Earlier(contract.ActionDate, signed);
                 continue;
             }
             if (type != null)
                 contract.AwardType = type.Value;
-            Apply(contract, row, issuerId.Value, period, today);
+            Apply(contract, row, issuerId.Value, period, signed);
             updated++;
         }
         await repository.SaveChanges();
@@ -223,7 +231,7 @@ public class CanadianContractsImportService : IImporter
         CanadianContractRow row,
         Guid issuerId,
         CanadianReportingPeriod period,
-        DateOnly today
+        DateOnly? signed
     )
     {
         contract.EquityIssuerId = issuerId;
@@ -234,8 +242,7 @@ public class CanadianContractsImportService : IImporter
             256
         );
         contract.Amount = row.ContractValue!.Value;
-        contract.ActionDate =
-            OpenCanadaContracts.AwardDate(row.ContractDate, today) ?? contract.ActionDate;
+        contract.ActionDate = Earlier(contract.ActionDate, signed);
         contract.EndDate = OpenCanadaContracts.EndDate(row.DeliveryDate) ?? contract.EndDate;
         contract.LastModifiedDate = period.End;
         contract.Description = string.IsNullOrWhiteSpace(row.Description)
@@ -285,6 +292,10 @@ public class CanadianContractsImportService : IImporter
         state.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await states.SaveChanges();
     }
+
+    // Some departments date an amendment by its own signing, so the earliest date any report states is the award date.
+    private static DateOnly? Earlier(DateOnly? stored, DateOnly? reported) =>
+        reported != null && (stored == null || reported < stored) ? reported : stored;
 
     private static string Clip(string value, int length) =>
         value == null || value.Length <= length ? value : value[..length];

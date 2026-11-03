@@ -81,8 +81,8 @@ public class CanadianContractsImportServiceTests
 
         await service.Import(CancellationToken.None);
 
-        // Eight backlog quarters from fiscal 2004-2005 were read; the recent quarters were too, but the cursor stops at the backlog.
-        ReadCursor(options).Should().Be(new DateOnly(2006, 3, 31));
+        // Eight backlog quarters from fiscal 2017-2018 were read; the recent quarters were too, but the cursor stops at the backlog.
+        ReadCursor(options).Should().Be(new DateOnly(2019, 3, 31));
         service.BacklogRemains.Should().BeTrue();
     }
 
@@ -99,6 +99,65 @@ public class CanadianContractsImportServiceTests
 
         await import.Should().ThrowAsync<InvalidDataException>();
         ReadCursor(options).Should().Be(LastQuarterOfFiscal2025);
+    }
+
+    // National Defence dates an amendment by its own signing: call-up W0046-26-154-0 was let on 2025-11-26 for
+    // C$23,995 (Q3) and restated on 2026-01-16 at C$44,642.70 (Q4). The amended value wins, the award date stays,
+    // whichever quarter is read first.
+    [Fact]
+    public async Task Import_AnAmendmentRestatesTheValueButNeverMovesTheAwardDate()
+    {
+        var options = NewDbOptions();
+        Seed(options, new DateOnly(2025, 12, 31), "Calian Ltd", "CGY", "XTSE");
+        var answers = new Dictionary<string, string>
+        {
+            ["2025-2026-Q3"] = Fixture("open-canada-contracts-calian-dnd-2025-2026-Q3.json"),
+            ["2025-2026-Q4"] = Fixture("open-canada-contracts-calian-dnd-2025-2026-Q4.json"),
+        };
+        var service = Service(options, answers);
+
+        // The cursor sits past Q3, so only Q4 (recent) is read first; then the cursor is rewound and Q3 is read after it.
+        await service.Import(CancellationToken.None);
+        var afterAmendment = Contract(options, "CA:dnd-mdn:W0046-26-154-0");
+        RewindCursor(options, new DateOnly(2025, 9, 30));
+        await service.Import(CancellationToken.None);
+
+        afterAmendment.ActionDate.Should().Be(new DateOnly(2026, 1, 16));
+        Contract(options, "CA:dnd-mdn:W0046-26-154-0")
+            .Should()
+            .BeEquivalentTo(
+                new
+                {
+                    Amount = 44642.70m,
+                    ActionDate = (DateOnly?)new DateOnly(2025, 11, 26),
+                    LastModifiedDate = (DateOnly?)new DateOnly(2026, 3, 31),
+                }
+            );
+    }
+
+    private static GovernmentContract Contract(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        string key
+    )
+    {
+        using var context = NewContext(options);
+        return context
+            .Set<GovernmentContract>()
+            .AsNoTracking()
+            .Single(c => c.AwardUniqueKey == key);
+    }
+
+    private static void RewindCursor(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        DateOnly cursor
+    )
+    {
+        using var context = NewContext(options);
+        context
+            .Set<GovernmentContractsScanState>()
+            .Single(s => s.Name == "canada-contract-periods")
+            .LastCompletedWindowEnd = cursor;
+        context.SaveChanges();
     }
 
     private static Dictionary<string, string> Answers() =>
@@ -123,15 +182,21 @@ public class CanadianContractsImportServiceTests
         );
     }
 
-    private static void Seed(DbContextOptions<EquiblesFinancialDbContext> options, DateOnly? cursor)
+    private static void Seed(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        DateOnly? cursor,
+        string name = "KBL Projects Ltd.",
+        string ticker = "KBL",
+        string market = "XTSX"
+    )
     {
         using var seed = NewContext(options);
         seed.Add(
             Equibles.TestSupport.EquityIssuerSeed.Create(
-                Ticker: "KBL",
-                Name: "KBL Projects Ltd.",
+                Ticker: ticker,
+                Name: name,
                 MarketCountryCode: "CA",
-                MarketIdentifierCode: "XTSX",
+                MarketIdentifierCode: market,
                 IdentityState: EquityIdentityState.Verified
             )
         );

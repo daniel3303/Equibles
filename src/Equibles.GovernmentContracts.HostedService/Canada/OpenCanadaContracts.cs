@@ -9,8 +9,11 @@ namespace Equibles.GovernmentContracts.HostedService.Canada;
 public readonly record struct CanadianReportingPeriod(int FiscalYear, int Quarter)
     : IComparable<CanadianReportingPeriod>
 {
-    /// <summary>The first quarter the publication can hold; departments began proactive disclosure in fiscal 2004-2005.</summary>
-    public static readonly CanadianReportingPeriod First = new(2004, 1);
+    /// <summary>
+    /// The first quarter read. From fiscal 2017-2018 each report states the contract's total including
+    /// amendments; earlier reports state each transaction's own value, and most carry no reporting period.
+    /// </summary>
+    public static readonly CanadianReportingPeriod First = new(2017, 1);
 
     public string Code => $"{FiscalYear}-{FiscalYear + 1}-Q{Quarter}";
 
