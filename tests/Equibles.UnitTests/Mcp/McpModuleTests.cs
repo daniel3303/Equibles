@@ -277,6 +277,7 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetHolderMix");
         toolNames.Should().Contain("GetHolderTypeFlows");
         toolNames.Should().Contain("GetInstitutionSectorAllocation");
+        toolNames.Should().Contain("GetInstitutionBeneficialOwnership");
         toolNames.Should().Contain("GetInstitutionQuarterlyActivity");
         toolNames.Should().Contain("CompareInstitutionPortfolios");
         toolNames.Should().Contain("GetInstitutionConsensusHoldings");
@@ -388,6 +389,7 @@ public class McpModuleToolDiscoveryTests
                     "GetHolderMix",
                     "GetHolderTypeFlows",
                     "GetInstitutionSectorAllocation",
+                    "GetInstitutionBeneficialOwnership",
                     "GetInstitutionQuarterlyActivity",
                     "CompareInstitutionPortfolios",
                     "GetInstitutionConsensusHoldings",

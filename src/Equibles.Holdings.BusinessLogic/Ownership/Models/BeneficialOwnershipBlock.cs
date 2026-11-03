@@ -31,6 +31,9 @@ public sealed class BeneficialOwnershipBlock
     /// <summary>False for a legacy row whose cover page was never read, so no persons are known.</summary>
     public bool HasCoverPage { get; init; }
 
+    /// <summary>Where the stake stands today, by <see cref="Schedule13DGStatus"/>.</summary>
+    public Schedule13DGStakeStatus Status { get; init; }
+
     public IReadOnlyList<BeneficialOwnershipPerson> Persons { get; init; } = [];
 
     /// <summary>

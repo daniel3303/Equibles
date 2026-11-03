@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **70 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **71 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -344,7 +344,7 @@ Build first: a plain `dotnet run` restores and prints build output on stdout, wh
 
 ## Tools
 
-This self-hosted build exposes 70 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 71 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
@@ -367,6 +367,7 @@ This self-hosted build exposes 70 tools over MCP. The hosted server at `https://
 - GetInstitutionStyleHistory — a filer's measured style, turnover and horizon bands quarter by quarter
 - GetInstitutionSectorAllocation — allocation by sector
 - GetInstitutionQuarterlyActivity — initiated/increased/reduced/exited vs prior quarter
+- GetInstitutionBeneficialOwnership — an institution's Schedule 13D and 13G stakes, each with its dates and a status (current, unconfirmed, below 5%, exited, security retired)
 - CompareInstitutionPortfolios — portfolio overlap between two institutions
 - GetInstitutionConsensusHoldings — consensus portfolio of 2–25 institutions
 

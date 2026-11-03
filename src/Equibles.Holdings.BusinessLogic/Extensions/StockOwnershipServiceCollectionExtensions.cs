@@ -32,6 +32,7 @@ public static class StockOwnershipServiceCollectionExtensions
         services.TryAddScoped<IHolderRollupReader, HolderRollupReader>();
         services.TryAddScoped<StockOwnershipReader>();
         services.TryAddScoped<StockBeneficialOwnershipReader>();
+        services.TryAddScoped<HolderBeneficialOwnershipReader>();
         services.AddMemoryCache();
         return services;
     }

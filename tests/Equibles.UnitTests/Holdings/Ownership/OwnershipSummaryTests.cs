@@ -33,6 +33,20 @@ public class OwnershipSummaryTests
     }
 
     [Fact]
+    public void Unconfirmed13G_StillCountsInThe13DGOnlyLine()
+    {
+        // Silence is not a sale: an unamended 13G keeps its block in the summary.
+        var old = Schedule13G("200", 1_400, Today.AddMonths(-30));
+        var recent = Schedule13D("300", 600, new DateOnly(2026, 8, 1));
+
+        var summary = Summarize([old, recent]);
+
+        old.Has(StockHolderRowFlags.Unconfirmed).Should().BeTrue();
+        summary.Schedule13DGOnly.Shares.Should().Be(2_000);
+        summary.Schedule13DGOnly.Holders.Should().Be(2);
+    }
+
+    [Fact]
     public void PredecessorBlockNotSummed_ItsSuccessors13FReportsHoldItsShares()
     {
         // A 13G filed before its filer's 13F reports moved to a new CIK sits inside the

@@ -464,6 +464,7 @@ public class StockOwnershipTools
                     + $"{RuleText(block.Rules)}: {McpFormat.WholeNumber(block.Shares)} shares"
                     + $"{(block.PercentOfClass is { } percent ? $", {McpFormat.Invariant(percent, "0.##")}% of class" : "")}{change}"
                     + $"{(block.SplitUnresolved ? " (as filed: a split since cannot be attributed)" : "")}"
+                    + $"; status: {StatusText(block.Status, block.EventDate, null)}"
             );
             if (block.Purpose != null)
             {
@@ -498,7 +499,7 @@ public class StockOwnershipTools
         }
         result.AppendLine();
         result.AppendLine(
-            "_Reporting persons are not additive: each states its own beneficial ownership of the same block, so the filing's block is the lead person's amount. A 13D or 13G stays in force until the filer amends it, so an old event date can still be current._"
+            "_Reporting persons are not additive: each states its own beneficial ownership of the same block, so the filing's block is the lead person's amount. A 13D or 13G stays in force until the filer amends it, so an old event date can still be current: a block with no filing in 24 months reads unconfirmed, never sold; one amended below 5% ended the filer's duty to amend, not necessarily the holding._"
         );
         result.Append(McpOutput.PagedTruncationNote(page.Count, total, offset));
         return result.ToString().TrimEnd();
@@ -544,6 +545,8 @@ public class StockOwnershipTools
             notes.Add("carried, not yet filed for the newest quarter");
         if (row.Has(StockHolderRowFlags.Stale))
             notes.Add("stale");
+        if (row.Has(StockHolderRowFlags.Unconfirmed))
+            notes.Add($"unconfirmed, last confirmed {FormatDate(row.AsOf)}");
         if (row.Has(StockHolderRowFlags.SplitUnresolved))
             notes.Add("as filed, split since unattributed");
         if (row.Has(StockHolderRowFlags.IssuerWide))
@@ -605,10 +608,28 @@ public class StockOwnershipTools
             _ => "—",
         };
 
-    private static string FormLabel(FilingType type, bool amendment) =>
+    internal static string FormLabel(FilingType type, bool amendment) =>
         (type == FilingType.Schedule13D ? "SC 13D" : "SC 13G") + (amendment ? "/A" : "");
 
-    private static string RuleText(Schedule13GRules rules)
+    /// <summary>A stake's status as the tools word it, dated where the date carries the meaning.</summary>
+    internal static string StatusText(
+        Schedule13DGStakeStatus status,
+        DateOnly eventDate,
+        DateOnly? delistedOn
+    ) =>
+        status switch
+        {
+            Schedule13DGStakeStatus.Unconfirmed =>
+                $"unconfirmed, last confirmed {FormatDate(eventDate)}",
+            Schedule13DGStakeStatus.BelowThreshold => $"below 5% since {FormatDate(eventDate)}",
+            Schedule13DGStakeStatus.Exited => $"exited {FormatDate(eventDate)}",
+            Schedule13DGStakeStatus.SecurityRetired => delistedOn is { } date
+                ? $"security delisted {FormatDate(date)}"
+                : "security delisted",
+            _ => "current",
+        };
+
+    internal static string RuleText(Schedule13GRules rules)
     {
         var parts = new List<string>();
         if (rules.HasFlag(Schedule13GRules.QualifiedInstitution))
