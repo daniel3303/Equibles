@@ -84,9 +84,16 @@ public class FredReleaseCalendarImportService : IImporter
         using (var scope = _scopeFactory.CreateScope())
         {
             var seriesRepo = scope.ServiceProvider.GetRequiredService<FredSeriesRepository>();
+            // The calendar covers US releases: a series from another publisher has no FRED release
+            // to ask for (FRED would refuse its id and end the cycle), and a Canadian series on FRED
+            // belongs to an OECD or BIS release, not the US calendar.
             unlinkedSeries = await seriesRepo
                 .GetAll()
-                .Where(s => s.FredReleaseId == null)
+                .Where(s =>
+                    s.FredReleaseId == null
+                    && s.Source == IndicatorSource.Fred
+                    && s.CountryCode == "US"
+                )
                 .ToListAsync(cancellationToken);
         }
 

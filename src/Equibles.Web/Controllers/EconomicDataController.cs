@@ -93,6 +93,13 @@ public class EconomicDataController : BaseController
             Frequency = ExpandFrequency(series.Frequency),
             Units = series.Units,
             SeasonalAdjustment = series.SeasonalAdjustment,
+            SourceName = series.Source switch
+            {
+                IndicatorSource.BankOfCanada => "Bank of Canada",
+                IndicatorSource.StatisticsCanada => "Statistics Canada",
+                _ => "FRED",
+            },
+            SourceUrl = series.SourceUrl ?? $"https://fred.stlouisfed.org/series/{series.SeriesId}",
             Observations = observations,
         };
 
@@ -116,7 +123,7 @@ public class EconomicDataController : BaseController
 
         ViewData["Title"] = $"{series.SeriesId} — {series.Title}";
         ViewData["Description"] =
-            $"{series.Title} ({series.SeriesId}) — {series.Units}. FRED economic data.";
+            $"{series.Title} ({series.SeriesId}) — {series.Units}. {viewModel.SourceName} economic data.";
         return View(viewModel);
     }
 

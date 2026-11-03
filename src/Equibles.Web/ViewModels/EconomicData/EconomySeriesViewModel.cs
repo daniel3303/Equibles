@@ -12,6 +12,11 @@ public class EconomySeriesViewModel : StatsViewModel
     public string Frequency { get; set; }
     public string Units { get; set; }
     public string SeasonalAdjustment { get; set; }
+
+    // The publisher's name and page for the series, linked from the page as its original source.
+    public string SourceName { get; set; } = "FRED";
+
+    public string SourceUrl { get; set; }
     public List<ObservationItem> Observations { get; set; } = [];
 
     public decimal? LatestValue { get; set; }

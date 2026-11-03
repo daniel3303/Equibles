@@ -176,4 +176,30 @@ public class CuratedSeriesRegistryTests
     {
         CuratedSeriesRegistry.Series.Should().BeAssignableTo<IReadOnlyList<CuratedSeries>>();
     }
+
+    // A series outside FRED carries its publisher's key and page, a prefix naming that publisher,
+    // and an upper-case id, since the series page looks ids up upper-cased.
+    [Fact]
+    public void SeriesOutsideFred_NameTheirPublisherAndPage()
+    {
+        var outside = CuratedSeriesRegistry
+            .Series.Where(s => s.Source != IndicatorSource.Fred)
+            .ToList();
+
+        outside.Should().NotBeEmpty();
+        outside
+            .Should()
+            .AllSatisfy(s =>
+            {
+                s.SeriesId.Should()
+                    .StartWith(s.Source == IndicatorSource.BankOfCanada ? "BOC-" : "STATCAN-");
+                s.SeriesId.Should().Be(s.SeriesId.ToUpperInvariant());
+                s.CountryCode.Should().Be("CA");
+                s.SourceKey.Should().NotBeNullOrWhiteSpace();
+                s.Title.Should().Contain("Canad");
+                s.Units.Should().NotBeNullOrWhiteSpace();
+                s.Frequency.Should().NotBeNullOrWhiteSpace();
+                s.SourceUrl.Should().StartWith("https://www");
+            });
+    }
 }

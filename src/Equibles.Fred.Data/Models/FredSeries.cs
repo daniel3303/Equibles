@@ -5,6 +5,7 @@ namespace Equibles.Fred.Data.Models;
 
 [Index(nameof(SeriesId), IsUnique = true)]
 [Index(nameof(Category))]
+[Index(nameof(CountryCode))]
 public class FredSeries
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -18,6 +19,21 @@ public class FredSeries
     public string Title { get; set; }
 
     public FredSeriesCategory Category { get; set; }
+
+    // The economy the series measures, ISO 3166 alpha-2. US-wide readings never mix in another country's series.
+    [Required]
+    [MaxLength(2)]
+    public string CountryCode { get; set; } = "US";
+
+    public IndicatorSource Source { get; set; } = IndicatorSource.Fred;
+
+    // The publisher's own id when it is not FRED: a Valet series name or a Statistics Canada vector id.
+    [MaxLength(64)]
+    public string SourceKey { get; set; }
+
+    // The publisher's page for the series; FRED's is derived from the id.
+    [MaxLength(256)]
+    public string SourceUrl { get; set; }
 
     [MaxLength(32)]
     public string Frequency { get; set; }

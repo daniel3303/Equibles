@@ -340,6 +340,49 @@ public class FredToolsTests : ParadeDbMcpTestBase
         result.Should().NotContain("CPIAUCSL");
     }
 
+    // A snapshot reads one country: Canada's policy rate never appears among US conditions, and
+    // country=CA reads only Canadian series, each naming its publisher.
+    [Fact]
+    public async Task GetLatestEconomicIndicators_ReadsOneCountryAtATime()
+    {
+        var policyRate = new FredSeries
+        {
+            SeriesId = "BOC-V39079",
+            Title = "Bank of Canada Target for the Overnight Rate",
+            Category = FredSeriesCategory.InterestRates,
+            Frequency = "D",
+            Units = "Percent",
+            CountryCode = "CA",
+            Source = IndicatorSource.BankOfCanada,
+            SourceKey = "V39079",
+        };
+        DbContext.Set<FredSeries>().Add(policyRate);
+        DbContext
+            .Set<FredObservation>()
+            .Add(
+                new FredObservation
+                {
+                    FredSeriesId = policyRate.Id,
+                    Date = new DateOnly(2026, 10, 30),
+                    Value = 2.50m,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var us = await Sut().GetLatestEconomicIndicators();
+        var canada = await Sut().GetLatestEconomicIndicators(country: "ca");
+        var history = await Sut().GetEconomicIndicator("BOC-V39079", "2026-10-01", "2026-10-31");
+
+        us.Should().Contain("FEDFUNDS").And.NotContain("BOC-V39079");
+        canada
+            .Should()
+            .Contain("Latest Economic Indicators (CA):")
+            .And.Contain("BOC-V39079")
+            .And.NotContain("FEDFUNDS");
+        history.Should().Contain("Country: CA | Source: Bank of Canada");
+        (await Sut().GetLatestEconomicIndicators(country: "XX")).Should().Contain("country");
+    }
+
     [Fact]
     public async Task GetLatestEconomicIndicators_EmptyDatabase_ReturnsNoSeriesMessage()
     {
@@ -428,6 +471,32 @@ public class FredToolsTests : ParadeDbMcpTestBase
 
     // ── SearchEconomicIndicators ───────────────────────────────────────
 
+    // A capped search fills with US series before Canadian ones: BOC-V39079 sorts ahead of
+    // FEDFUNDS by id, and would otherwise push a US rate out of a one-row answer.
+    [Fact]
+    public async Task SearchEconomicIndicators_ListsUsSeriesBeforeCanadianOnes()
+    {
+        DbContext
+            .Set<FredSeries>()
+            .Add(
+                new FredSeries
+                {
+                    SeriesId = "BOC-V39079",
+                    Title = "Bank of Canada Target for the Overnight Rate",
+                    Category = FredSeriesCategory.InterestRates,
+                    Units = "Percent",
+                    CountryCode = "CA",
+                    Source = IndicatorSource.BankOfCanada,
+                    SourceKey = "V39079",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchEconomicIndicators("interest rates", maxResults: 1);
+
+        result.Should().Contain("FEDFUNDS").And.NotContain("BOC-V39079");
+    }
+
     [Fact]
     public async Task SearchEconomicIndicators_MatchesBySeriesId_ReturnsResults()
     {
@@ -463,7 +532,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
 
         result
             .Should()
-            .Contain("No match for 'zzzznonexistent' in the tracked, curated ~40-series");
+            .Contain(
+                "No match for 'zzzznonexistent' in the tracked, curated US and Canadian macro set"
+            );
         result.Should().Contain("zzzznonexistent");
         result
             .Should()
