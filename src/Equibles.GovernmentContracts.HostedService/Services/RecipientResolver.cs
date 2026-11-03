@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Microsoft.EntityFrameworkCore;
@@ -34,7 +35,43 @@ public class RecipientResolver
             .Where(s => s.Name != null)
             .Select(s => new { s.Id, s.Name })
             .ToListAsync(cancellationToken);
+        return ToLookup(stocks.Select(stock => (stock.Id, stock.Name)));
+    }
 
+    /// <summary>
+    /// The same exact normalised-name lookup over issuers with an active, verified listing on a
+    /// Canadian exchange, for Government of Canada contracts. Canada publishes no parent
+    /// registry, so a subsidiary's own name never reaches its listed parent.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, Guid>> BuildCanadianLookup(
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        EquityIssuerRepository repository =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        var issuers = await repository
+            .GetAll()
+            .Where(issuer =>
+                issuer.Name != null
+                && issuer.Securities.Any(security =>
+                    security.Listings.Any(listing =>
+                        listing.Active
+                        && listing.MarketCountryCode == "CA"
+                        && listing.IdentityState == EquityIdentityState.Verified
+                    )
+                )
+            )
+            .Select(issuer => new { issuer.Id, issuer.Name })
+            .ToListAsync(cancellationToken);
+        return ToLookup(issuers.Select(issuer => (issuer.Id, issuer.Name)));
+    }
+
+    // Names that normalise to the same key for more than one issuer are dropped, so a wrong link is never asserted.
+    private static IReadOnlyDictionary<string, Guid> ToLookup(
+        IEnumerable<(Guid Id, string Name)> stocks
+    )
+    {
         var lookup = new Dictionary<string, Guid>(StringComparer.Ordinal);
         var ambiguous = new HashSet<string>(StringComparer.Ordinal);
 

@@ -36,7 +36,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **European Listings** | ESMA/FCA FIRDS + exchange directories | ✅ | ✅ | Verified share listings on Euronext (Paris, Amsterdam, Brussels, Dublin, Oslo, Milan, Lisbon), Xetra, Nasdaq Stockholm, Helsinki and Copenhagen (main market and First North), BME, GPW and the London Stock Exchange (main market and AIM), keyed by ISIN and venue, with daily prices in the listing's own currency; every market with a directory adapter runs automatically; the price, dividend, financial-statement and fund-holding MCP tools accept them as `MIC:TICKER` (`XPAR:AIR`; see `docs/equity-identity.md`) |
 | **Futures Positioning** | CFTC | ✅ | ✅ | Commitments of Traders (COT) data for 30+ futures contracts |
 | **Market Indicators** | CBOE | ✅ | ✅ | VIX volatility index (1990+) and put/call ratios by category |
-| **Government Contracts** | USAspending.gov | ✅ | ✅ | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
+| **Government Contracts** | USAspending.gov, open.canada.ca | ✅ | ✅ | US federal contract awards to public companies (amounts, awarding agencies, dates, NAICS/PSC codes) and Government of Canada contracts over C$10,000 to companies listed in Canada |
 | **FDA Catalysts** | FDA.gov | ✅ | ✅ | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
 | **Earnings Call Transcripts** | Company webcasts | — | ✅ | Full quarterly-call transcripts with speaker attribution, searchable alongside filings |
 | **Earnings Call Audio** | Company webcasts | — | ✅ | The recorded call itself, playable and aligned to the transcript |
@@ -94,7 +94,7 @@ This starts:
 | **db** | 5432 | ParadeDB (PostgreSQL + pgvector + pg_search) |
 | **web** | 8080 | Web portal for browsing data |
 | **mcp** | 8081 | MCP server for AI assistants |
-| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Bank of Canada, Statistics Canada, Yahoo, CFTC, CBOE, USAspending, FDA, FIRDS, European exchange directories) |
+| **worker** | — | Scrapers (SEC, FINRA, Congress, FRED, Bank of Canada, Statistics Canada, Yahoo, CFTC, CBOE, USAspending, open.canada.ca contracts, FDA, FIRDS, European exchange directories) |
 
 Data scraping starts automatically. SEC filings, holdings, insider trades, and congressional trades will begin populating within minutes.
 
@@ -226,7 +226,7 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Stock Prices** — Daily OHLCV history with adjusted close, latest close across one or more tickers, and on-demand technical indicators (EMA, Stochastic Oscillator, Average True Range, On-Balance Volume, Bollinger Bands)
 - **Futures Positioning** — COT positioning data, latest snapshot across all contracts, contract search
 - **Market Indicators** — VIX historical data, put/call ratios by type (equity, index, total, VIX, ETP)
-- **Government Contracts** — Federal contract awards won by a ticker (awarding agency, amount, period dates) and a ranking of the top public-company contractors by total federal dollars over a date range (USAspending.gov)
+- **Government Contracts** — Federal contract awards won by a ticker (awarding agency, amount, period dates) and a ranking of the top public-company contractors by total federal dollars over a date range, for the US (USAspending.gov) or Canada (open.canada.ca proactive publication of contracts, in Canadian dollars)
 - **FDA Catalysts** — Scheduled FDA advisory-committee (AdComm) meetings over a date range — the regulatory catalyst dates that move biotech and pharma stocks (FDA.gov)
 
 ### Output Format (GCF, opt-in)
@@ -450,7 +450,7 @@ This self-hosted build exposes 70 tools over MCP. The hosted server at `https://
 - GetOnBalanceVolume — on-balance volume (OBV)
 - GetBollingerBands — Bollinger Bands
 
-**Government contracts (USAspending)**
+**Government contracts (USAspending, open.canada.ca)**
 
 - GetGovernmentContracts — federal contract awards for a company
 - GetTopGovernmentContractors — largest public-company contractors

@@ -23,4 +23,12 @@ public enum GovernmentContractAwardType
 
     [Display(Name = "Definitive Contract")]
     DefinitiveContract = 4,
+
+    /// <summary>A Government of Canada contract (instrument type C).</summary>
+    [Display(Name = "Contract")]
+    Contract = 5,
+
+    /// <summary>A Government of Canada call-up against a standing offer or supply arrangement (SOSA).</summary>
+    [Display(Name = "Standing Offer Call-up")]
+    StandingOfferCallUp = 6,
 }

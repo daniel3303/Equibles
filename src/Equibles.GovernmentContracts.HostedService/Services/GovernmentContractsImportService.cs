@@ -33,6 +33,10 @@ public class GovernmentContractsImportService : IImporter
     // Single well-known row that persists the forward award scan's resume point.
     private const string ScanStateName = "award-scan";
 
+    // This import reads and writes US awards only; Canadian awards have their own lane and must
+    // never move the US resume point or count as US history.
+    private const string UsCountryCode = "US";
+
     // Version of the recipient-matching rules (normaliser + parent fallback). Unmatched
     // awards are dropped, not stored, so a matching improvement is invisible to history
     // until the range is re-walked: bump this when matching can newly resolve recipients it
@@ -674,7 +678,7 @@ public class GovernmentContractsImportService : IImporter
             // current without ever re-walking it. Open the row as a version-0 reset.
             var contractRepository =
                 scope.ServiceProvider.GetRequiredService<GovernmentContractRepository>();
-            if (!await contractRepository.GetAll().AnyAsync(cancellationToken))
+            if (!await contractRepository.GetByCountry(UsCountryCode).AnyAsync(cancellationToken))
                 return;
 
             state = new GovernmentContractsScanState { Name = ScanStateName };
@@ -728,7 +732,7 @@ public class GovernmentContractsImportService : IImporter
         var repository = scope.ServiceProvider.GetRequiredService<GovernmentContractRepository>();
         return (
             await repository
-                .GetAll()
+                .GetByCountry(UsCountryCode)
                 .Where(c => keyList.Contains(c.AwardUniqueKey))
                 .Select(c => c.AwardUniqueKey)
                 .ToListAsync(cancellationToken)
@@ -746,7 +750,7 @@ public class GovernmentContractsImportService : IImporter
         // otherwise push the resume point past today and freeze the import forever (this
         // happened in prod when period-of-performance starts were stored as ActionDate).
         var latest = await repository
-            .GetAll()
+            .GetByCountry(UsCountryCode)
             .Where(c => c.ActionDate != null && c.ActionDate <= today)
             .MaxAsync(c => c.ActionDate, cancellationToken);
 
