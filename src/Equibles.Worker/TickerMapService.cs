@@ -182,11 +182,9 @@ public class TickerMapService
     }
 
     /// <summary>
-    /// Maps each current filer's other active, directory-listed US line (a second share class, a
-    /// preferred, a warrant) to its exact listing, for FINRA feeds that report every line under
-    /// its own symbol. Callers match these keys by exact or dotted spelling only: no authoritative
-    /// security type tells the lines apart, and a compressed preferred spelling can be another
-    /// company's symbol. A ticker already claimed, or held by any other active US line, is dropped.
+    /// The other directory-listed US lines of current filers, per
+    /// <see cref="SecondaryListingClaims"/>; <paramref name="claimedTickers"/> are the keys the
+    /// caller's map already holds.
     /// </summary>
     public async Task<Dictionary<string, EquityListingReference>> BuildSecondaryNativeListed(
         ICollection<string> claimedTickers,
@@ -195,73 +193,14 @@ public class TickerMapService
         StringComparer comparer = null
     )
     {
-        comparer ??= StringComparer.OrdinalIgnoreCase;
         using var scope = _scopeFactory.CreateScope();
-        var issuerRepository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-        var listingRepository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
-        var presentations = await issuerRepository
-            .GetCurrentUsDirectory()
-            .Where(issuer => issuer.Presentation.Listing.Active)
-            .Select(issuer => new
-            {
-                issuer.Id,
-                issuer.Presentation.EquityListingId,
-                issuer.Presentation.Listing.Ticker,
-            })
-            .ToDictionaryAsync(issuer => issuer.Id, cancellationToken);
-        var activeUsLines = await listingRepository
-            .GetActiveUsListings()
-            .Where(listing => listing.Ticker != null && listing.Ticker != "")
-            .Select(listing => new
-            {
-                listing.Id,
-                listing.Security.EquityIssuerId,
-                listing.Ticker,
-                listing.IsDirectoryListed,
-                listing.IsReferenceListed,
-            })
-            .ToListAsync(cancellationToken);
-        var delisted = (
-            await issuerRepository
-                .GetDelistedListings()
-                .Select(listing => new { listing.EquityIssuerId, listing.ListedTicker })
-                .ToListAsync(cancellationToken)
-        )
-            .Select(listing => new ListedSecurityKey(
-                listing.EquityIssuerId,
-                TickerNormalizer.NormalizeDashListed(listing.ListedTicker)
-            ))
-            .ToHashSet();
-        var linesPerTicker = activeUsLines
-            .GroupBy(line => line.Ticker, comparer)
-            .ToDictionary(group => group.Key, group => group.Count(), comparer);
-        var requested = tickersToSync?.Count > 0 ? tickersToSync.ToHashSet(comparer) : null;
-        return activeUsLines
-            .Where(line =>
-                line.IsDirectoryListed
-                && !line.IsReferenceListed
-                && presentations.TryGetValue(line.EquityIssuerId, out var presentation)
-                && line.Id != presentation.EquityListingId
-                // A dotted or dashed spelling of the presentation ticker is that same line.
-                && !string.Equals(
-                    TickerNormalizer.NormalizeDashListed(line.Ticker),
-                    TickerNormalizer.NormalizeDashListed(presentation.Ticker),
-                    StringComparison.OrdinalIgnoreCase
-                )
-                && linesPerTicker[line.Ticker] == 1
-                && !claimedTickers.Contains(line.Ticker)
-                && (requested == null || requested.Contains(line.Ticker))
-                && !delisted.Contains(
-                    new ListedSecurityKey(
-                        line.EquityIssuerId,
-                        TickerNormalizer.NormalizeDashListed(line.Ticker)
-                    )
-                )
-            )
-            .ToDictionary(
-                line => line.Ticker,
-                line => new EquityListingReference(line.Id, line.EquityIssuerId, line.Ticker),
-                comparer
-            );
+        return await SecondaryListingClaims.Build(
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>(),
+            scope.ServiceProvider.GetRequiredService<EquityListingRepository>(),
+            claimedTickers,
+            tickersToSync,
+            comparer ?? StringComparer.OrdinalIgnoreCase,
+            cancellationToken
+        );
     }
 }

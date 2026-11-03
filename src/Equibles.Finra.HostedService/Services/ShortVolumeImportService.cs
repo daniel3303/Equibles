@@ -91,13 +91,6 @@ public class ShortVolumeImportService
             cancellationToken,
             StringComparer.Ordinal
         );
-        if (tickerMap.Count == 0)
-        {
-            _logger.LogInformation(
-                "No common stocks resolved for FINRA daily short-volume import; leaving partitions retryable"
-            );
-            return;
-        }
         // The daily files spell every line exactly, so secondary lines need no symbol bridge.
         foreach (
             var (ticker, listing) in await _tickerMapService.BuildSecondaryNativeListed(
@@ -108,6 +101,13 @@ public class ShortVolumeImportService
             )
         )
             tickerMap.TryAdd(ticker, listing);
+        if (tickerMap.Count == 0)
+        {
+            _logger.LogInformation(
+                "No common stocks resolved for FINRA daily short-volume import; leaving partitions retryable"
+            );
+            return;
+        }
 
         var scopeKey = FinraImportScope.ResolveListingImportScope(
             tickerMap,

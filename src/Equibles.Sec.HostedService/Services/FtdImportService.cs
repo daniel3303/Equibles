@@ -2299,6 +2299,13 @@ public class FtdImportService
         Dictionary<string, Guid> tickerMap
     ) => BuildStrippedTickerAliases(tickerMap.Keys);
 
+    // Secondary lines get no separator-stripped spelling: a stripped preferred ("INNPF" for
+    // INN-PF) can be another company's symbol in the same file.
+    internal static Dictionary<string, string> BuildListedStrippedAliases(
+        IEnumerable<string> tickers,
+        IReadOnlySet<string> exactOnlyTickers
+    ) => BuildStrippedTickerAliases(tickers.Where(ticker => !exactOnlyTickers.Contains(ticker)));
+
     private static Dictionary<string, string> BuildStrippedTickerAliases(
         IEnumerable<string> tickers
     )
@@ -2385,9 +2392,7 @@ public class FtdImportService
             .ToDictionary(group => group.Key, group => group.Single().Id);
         var grouped = new Dictionary<(Guid ListingId, DateOnly Date), FailToDeliver>();
 
-        var strippedAliases = BuildStrippedTickerAliases(
-            tickerMap.Keys.Where(ticker => !exactOnlyTickers.Contains(ticker))
-        );
+        var strippedAliases = BuildListedStrippedAliases(tickerMap.Keys, exactOnlyTickers);
         foreach (var record in records)
         {
             if (

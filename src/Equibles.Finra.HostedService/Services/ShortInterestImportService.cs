@@ -53,11 +53,6 @@ public class ShortInterestImportService
             cancellationToken,
             StringComparer.Ordinal
         );
-        if (tickerMap.Count == 0)
-        {
-            _logger.LogInformation("No stocks to track for short interest import");
-            return;
-        }
         var secondaryListings = await _tickerMapService.BuildSecondaryNativeListed(
             tickerMap.Keys,
             _workerOptions.TickersToSync,
@@ -66,6 +61,11 @@ public class ShortInterestImportService
         );
         foreach (var (ticker, listing) in secondaryListings)
             tickerMap.TryAdd(ticker, listing);
+        if (tickerMap.Count == 0)
+        {
+            _logger.LogInformation("No stocks to track for short interest import");
+            return;
+        }
 
         var trackedListings = tickerMap.Values.Select(row => row.EquityListingId).ToHashSet();
         var reverseMap = tickerMap

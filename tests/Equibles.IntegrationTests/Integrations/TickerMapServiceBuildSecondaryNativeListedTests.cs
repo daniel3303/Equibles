@@ -87,6 +87,8 @@ public class TickerMapServiceBuildSecondaryNativeListedTests : IDisposable
     {
         var trust = CreateIssuer("VB", "Vanguard Index Funds");
         Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(trust, ["VOO"]);
+        // Also directory-listed, so only the reference rule keeps it out of this map.
+        Line(trust, "VOO").IsDirectoryListed = true;
         // A stored line the exchange directory no longer lists carries no claim.
         UsEquityDirectory.GetOrAddListing(trust, "VBOLD");
         await Seed(trust);
@@ -114,6 +116,28 @@ public class TickerMapServiceBuildSecondaryNativeListedTests : IDisposable
 
         result.Should().BeEmpty();
         claimed["CLASH"].Should().Be(new ListedSecurityKey(holder.Id, "CLASH"));
+    }
+
+    [Fact]
+    public async Task NeverTakesATickerTheCallerAlreadyClaimed()
+    {
+        // The primary map claims reference tickers whatever their trading state, so an inactive
+        // reference line still owns its symbol against another filer's active line.
+        var trust = CreateIssuer("TRST", "Reference Trust");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(trust, ["XREF"]);
+        Line(trust, "XREF").Active = false;
+        var other = CreateIssuer("OTHR", "Other Corp", ["XREF"]);
+        await Seed(trust, other);
+
+        var claimed = await _service.BuildListed(null, CancellationToken.None);
+        var result = await _service.BuildSecondaryNativeListed(
+            claimed.Keys,
+            null,
+            CancellationToken.None
+        );
+
+        claimed["XREF"].Should().Be(new ListedSecurityKey(trust.Id, "XREF"));
+        result.Should().BeEmpty();
     }
 
     [Fact]
