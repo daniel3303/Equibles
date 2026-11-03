@@ -33,6 +33,25 @@ public class CashDividendRepository : BaseRepository<CashDividend>
         return query.OrderByDescending(d => d.ExDate).ThenByDescending(d => d.Id);
     }
 
+    /// <summary>
+    /// Issuer-only rows from captures that predate listing attribution with no attributed row on
+    /// the same issuer within <paramref name="toleranceDays"/> of the ex-date: listing-keyed reads
+    /// never serve these payments.
+    /// </summary>
+    public IQueryable<CashDividend> GetUnattributedWithoutListingRow(int toleranceDays)
+    {
+        var listingRows = GetAll().Where(row => row.EquityListingId != null);
+        return GetAll()
+            .Where(row => row.EquityListingId == null)
+            .Where(row =>
+                !listingRows.Any(attributed =>
+                    attributed.EquityIssuerId == row.EquityIssuerId
+                    && attributed.ExDate >= row.ExDate.AddDays(-toleranceDays)
+                    && attributed.ExDate <= row.ExDate.AddDays(toleranceDays)
+                )
+            );
+    }
+
     public IQueryable<CashDividend> GetPendingPriceAdjustment()
     {
         return GetAll()
