@@ -10,8 +10,8 @@ public readonly record struct CanadianReportingPeriod(int FiscalYear, int Quarte
     : IComparable<CanadianReportingPeriod>
 {
     /// <summary>
-    /// The first quarter read. From fiscal 2017-2018 each report states the contract's total including
-    /// amendments; earlier reports state each transaction's own value, and most carry no reporting period.
+    /// The first quarter read. From fiscal 2017-2018 every report states the contract's total including
+    /// amendments; most earlier history carries no reporting period and states each transaction's own value.
     /// </summary>
     public static readonly CanadianReportingPeriod First = new(2017, 1);
 
