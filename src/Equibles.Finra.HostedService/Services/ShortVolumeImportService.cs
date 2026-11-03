@@ -98,6 +98,16 @@ public class ShortVolumeImportService
             );
             return;
         }
+        // The daily files spell every line exactly, so secondary lines need no symbol bridge.
+        foreach (
+            var (ticker, listing) in await _tickerMapService.BuildSecondaryNativeListed(
+                tickerMap.Keys,
+                _workerOptions.TickersToSync,
+                cancellationToken,
+                StringComparer.Ordinal
+            )
+        )
+            tickerMap.TryAdd(ticker, listing);
 
         var scopeKey = FinraImportScope.ResolveListingImportScope(
             tickerMap,

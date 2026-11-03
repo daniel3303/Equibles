@@ -58,6 +58,14 @@ public class ShortInterestImportService
             _logger.LogInformation("No stocks to track for short interest import");
             return;
         }
+        var secondaryListings = await _tickerMapService.BuildSecondaryNativeListed(
+            tickerMap.Keys,
+            _workerOptions.TickersToSync,
+            cancellationToken,
+            StringComparer.Ordinal
+        );
+        foreach (var (ticker, listing) in secondaryListings)
+            tickerMap.TryAdd(ticker, listing);
 
         var trackedListings = tickerMap.Values.Select(row => row.EquityListingId).ToHashSet();
         var reverseMap = tickerMap
@@ -73,7 +81,8 @@ public class ShortInterestImportService
         // stocks on the next cycle.
         var compressedIndex = FinraClassShareSymbols.BuildCompressedIndex(
             tickerMap,
-            StringComparer.Ordinal
+            StringComparer.Ordinal,
+            secondaryListings
         );
 
         HashSet<DateOnly> knownDates;

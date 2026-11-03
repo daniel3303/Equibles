@@ -24,18 +24,20 @@ public static class FinraClassShareSymbols
     /// API: every stored dash ticker contributes its dash-removed spelling (<c>BRK-B</c> →
     /// <c>BRKB</c>). A compressed spelling that is itself a stored ticker, or that two dash
     /// tickers collide on, resolves to NOTHING — the identity is then ambiguous and absent
-    /// beats wrong.
+    /// beats wrong. A ticker in <paramref name="exactOnly"/> gets no compressed spelling but
+    /// still blocks one that equals it.
     /// </summary>
     public static Dictionary<string, T> BuildCompressedIndex<T>(
         IReadOnlyDictionary<string, T> tickerMap,
-        StringComparer comparer
+        StringComparer comparer,
+        IReadOnlyDictionary<string, T> exactOnly = null
     )
     {
         var index = new Dictionary<string, T>(comparer);
         var ambiguous = new HashSet<string>(comparer);
         foreach (var (ticker, stockId) in tickerMap)
         {
-            if (!ticker.Contains('-'))
+            if (!ticker.Contains('-') || exactOnly?.ContainsKey(ticker) == true)
                 continue;
             var compressed = ticker.Replace("-", "");
             if (compressed.Length == 0 || tickerMap.ContainsKey(compressed))
