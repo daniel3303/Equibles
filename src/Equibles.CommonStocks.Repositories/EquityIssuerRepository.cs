@@ -119,25 +119,33 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
         if (candidates.Count == 0)
             return new Dictionary<Guid, EquityVenuePresentation>();
         var ciks = candidates.Select(candidate => candidate.Cik).Distinct().ToList();
+        var tickers = candidates
+            .Select(candidate => TickerNormalizer.NormalizeIdentity(candidate.UsTicker))
+            .Where(ticker => ticker != null)
+            .Distinct()
+            .ToList();
         var since = newest.Value.AddDays(-ExchangeListingGraceDays);
-        var exchangeListed = (
-            await observations
-                .Where(observation =>
-                    ciks.Contains(observation.Cik)
-                    && observation.Exchange != SecTickerDirectoryObservation.OverTheCounter
-                    && observation.LastObservedOn >= since
-                )
-                .Select(observation => new { observation.Cik, observation.Ticker })
-                .ToListAsync(cancellationToken)
-        )
-            .Select(observation => (observation.Cik, observation.Ticker))
-            .ToHashSet();
+        var exchangeRows = await observations
+            .Where(observation =>
+                observation.Exchange != SecTickerDirectoryObservation.OverTheCounter
+                && observation.LastObservedOn >= since
+                && (ciks.Contains(observation.Cik) || tickers.Contains(observation.Ticker))
+            )
+            .Select(observation => new { observation.Cik, observation.Ticker })
+            .ToListAsync(cancellationToken);
+        // Any exchange row keeps the US page: one for another of the filer's tickers (SEC can list the OTC symbol first
+        // and the NYSE one second), or one for the US ticker under a CIK the issuer does not store.
+        var listedCiks = exchangeRows.Select(row => row.Cik).ToHashSet(StringComparer.Ordinal);
+        var listedTickers = exchangeRows
+            .Select(row => row.Ticker)
+            .ToHashSet(StringComparer.Ordinal);
         // The listing of the US line's own share class comes first; MIC and ticker only break ties, so the answer never
         // moves with a day's trading.
         return candidates
             .Where(candidate =>
-                !exchangeListed.Contains(
-                    (candidate.Cik, TickerNormalizer.NormalizeIdentity(candidate.UsTicker))
+                !listedCiks.Contains(candidate.Cik)
+                && !listedTickers.Contains(
+                    TickerNormalizer.NormalizeIdentity(candidate.UsTicker) ?? ""
                 )
             )
             .GroupBy(candidate => candidate.IssuerId)

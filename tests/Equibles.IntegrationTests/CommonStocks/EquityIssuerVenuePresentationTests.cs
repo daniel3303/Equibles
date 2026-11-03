@@ -72,6 +72,22 @@ public class EquityIssuerVenuePresentationTests : ParadeDbMcpTestBase
         presented.Keys.Should().BeEquivalentTo([moved.Id]);
     }
 
+    // SEC can list a filer's OTC symbol first and its NYSE symbol second; any exchange row for the filer keeps its US page,
+    // as does an exchange row for its US ticker under another CIK.
+    [Fact]
+    public async Task AnExchangeRowForAnotherTickerOrCikKeepsTheUsPage()
+    {
+        var sibling = Canadian("SIBLF", "1009", "SIBL");
+        var otherCik = Canadian("OCIKF", "1010", "OCIK");
+        await Seed(sibling, otherCik);
+        Observe("1009", "SIBLF", "OTC", Newest, Newest);
+        Observe("1009", "SIBL", "NYSE", Newest, Newest);
+        Observe("2010", "OCIKF", "Nasdaq", Newest, Newest);
+        await DbContext.SaveChangesAsync();
+
+        (await Presentations()).Should().BeEmpty();
+    }
+
     // The ledger stores SEC's tickers in their identity form, so a class suffix still matches.
     [Fact]
     public async Task AClassTickerMatchesTheDirectorysIdentityForm()
