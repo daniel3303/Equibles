@@ -93,9 +93,18 @@ public class OffExchangeVolumeImportService
             cancellationToken,
             StringComparer.Ordinal
         );
+        var secondaryListings = await _tickerMapService.BuildSecondaryNativeListed(
+            tickerMap.Keys,
+            _workerOptions.TickersToSync,
+            cancellationToken,
+            StringComparer.Ordinal
+        );
+        foreach (var (ticker, listing) in secondaryListings)
+            tickerMap.TryAdd(ticker, listing);
         var compressedIndex = FinraClassShareSymbols.BuildCompressedIndex(
             tickerMap,
-            StringComparer.Ordinal
+            StringComparer.Ordinal,
+            secondaryListings
         );
         var scopeKey = FinraImportScope.ResolveListingImportScope(
             tickerMap,

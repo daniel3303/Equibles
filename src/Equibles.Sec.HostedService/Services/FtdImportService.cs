@@ -95,12 +95,13 @@ public class FtdImportService
             _logger.LogInformation("Seeded or updated {Count} CUSIPs from FTD data", cusipsSeeded);
         }
 
-        var listedTickerMap = await BuildListedTickerMap(cancellationToken);
+        var (listedTickerMap, exactOnlyTickers) = await BuildListedTickerMap(cancellationToken);
         await ImportNewRecords(
             importFiles,
             importStartDate,
             replayRecords,
             listedTickerMap,
+            exactOnlyTickers,
             cancellationToken
         );
     }
@@ -186,6 +187,7 @@ public class FtdImportService
         DateOnly importStartDate,
         Dictionary<string, List<FtdRecord>> replayRecords,
         Dictionary<string, ListedSecurityKey> tickerMap,
+        HashSet<string> exactOnlyTickers,
         CancellationToken cancellationToken
     )
     {
@@ -209,7 +211,12 @@ public class FtdImportService
 
             try
             {
-                var imported = await ImportRecords(newRecords, tickerMap, cancellationToken);
+                var imported = await ImportRecords(
+                    newRecords,
+                    tickerMap,
+                    exactOnlyTickers,
+                    cancellationToken
+                );
                 _logger.LogInformation("FTD {File}: imported {Count} records", fileName, imported);
             }
             catch (OperationCanceledException)
@@ -610,7 +617,7 @@ public class FtdImportService
         if (fileNames.Count == 0)
             return false;
 
-        var tickerMap = await BuildListedTickerMap(cancellationToken);
+        var (tickerMap, exactOnlyTickers) = await BuildListedTickerMap(cancellationToken);
         if (tickerMap.Count == 0)
             return false;
 
@@ -621,7 +628,7 @@ public class FtdImportService
             try
             {
                 var records = await DownloadAndParse(fileName, cancellationToken);
-                await ImportRecords(records, tickerMap, cancellationToken);
+                await ImportRecords(records, tickerMap, exactOnlyTickers, cancellationToken);
                 lastCompletedFile = fileName;
             }
             catch (HttpRequestException ex)
@@ -1300,7 +1307,10 @@ public class FtdImportService
     // V3 deliberately replays the archive once: V2 required every listing to share the
     // filer's primary six-digit CUSIP prefix, which is false for separate ETF fund series.
     internal const string ListedCusipSweepCursorName = "Ftd.ListedCusipSweepV3";
-    private const string ListedRecordSweepCursorName = "Ftd.ListedRecordSweepV1";
+
+    // V2 replays the archive once more for secondary directory lines (second share classes,
+    // preferreds), which the listed map first admitted after V1 completed.
+    private const string ListedRecordSweepCursorName = "Ftd.ListedRecordSweepV2";
 
     // Twelve fortnightly files ≈ six months per bounded cycle. The worker requests a
     // short continuation while a full batch remains, yielding between bursts instead of
@@ -2289,6 +2299,13 @@ public class FtdImportService
         Dictionary<string, Guid> tickerMap
     ) => BuildStrippedTickerAliases(tickerMap.Keys);
 
+    // Secondary lines get no separator-stripped spelling: a stripped preferred ("INNPF" for
+    // INN-PF) can be another company's symbol in the same file.
+    internal static Dictionary<string, string> BuildListedStrippedAliases(
+        IEnumerable<string> tickers,
+        IReadOnlySet<string> exactOnlyTickers
+    ) => BuildStrippedTickerAliases(tickers.Where(ticker => !exactOnlyTickers.Contains(ticker)));
+
     private static Dictionary<string, string> BuildStrippedTickerAliases(
         IEnumerable<string> tickers
     )
@@ -2348,6 +2365,7 @@ public class FtdImportService
     private async Task<int> ImportRecords(
         List<FtdRecord> records,
         Dictionary<string, ListedSecurityKey> tickerMap,
+        HashSet<string> exactOnlyTickers,
         CancellationToken cancellationToken
     )
     {
@@ -2374,7 +2392,7 @@ public class FtdImportService
             .ToDictionary(group => group.Key, group => group.Single().Id);
         var grouped = new Dictionary<(Guid ListingId, DateOnly Date), FailToDeliver>();
 
-        var strippedAliases = BuildStrippedTickerAliases(tickerMap.Keys);
+        var strippedAliases = BuildListedStrippedAliases(tickerMap.Keys, exactOnlyTickers);
         foreach (var record in records)
         {
             if (
@@ -2446,13 +2464,27 @@ public class FtdImportService
         return await tickerMapService.Build(_workerOptions.TickersToSync, cancellationToken);
     }
 
-    private async Task<Dictionary<string, ListedSecurityKey>> BuildListedTickerMap(
-        CancellationToken cancellationToken
-    )
+    // Secondary lines (a second share class, a preferred) match their exact symbol only: a
+    // separator-stripped preferred spelling can be another company's symbol in the same file.
+    private async Task<(
+        Dictionary<string, ListedSecurityKey> Map,
+        HashSet<string> ExactOnly
+    )> BuildListedTickerMap(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var tickerMapService = scope.ServiceProvider.GetRequiredService<TickerMapService>();
-        return await tickerMapService.BuildListed(_workerOptions.TickersToSync, cancellationToken);
+        var map = await tickerMapService.BuildListed(
+            _workerOptions.TickersToSync,
+            cancellationToken
+        );
+        var secondary = await tickerMapService.BuildSecondaryNativeListed(
+            map.Keys,
+            _workerOptions.TickersToSync,
+            cancellationToken
+        );
+        foreach (var (ticker, listing) in secondary)
+            map.TryAdd(ticker, new ListedSecurityKey(listing.EquityIssuerId, listing.ListedTicker));
+        return (map, secondary.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
     }
 
     private async Task<List<FtdRecord>> DownloadAndParse(

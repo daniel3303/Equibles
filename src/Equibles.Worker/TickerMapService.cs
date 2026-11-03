@@ -180,4 +180,27 @@ public class TickerMapService
             comparer ?? StringComparer.OrdinalIgnoreCase
         );
     }
+
+    /// <summary>
+    /// The other directory-listed US lines of current filers, per
+    /// <see cref="SecondaryListingClaims"/>; <paramref name="claimedTickers"/> are the keys the
+    /// caller's map already holds.
+    /// </summary>
+    public async Task<Dictionary<string, EquityListingReference>> BuildSecondaryNativeListed(
+        ICollection<string> claimedTickers,
+        List<string> tickersToSync,
+        CancellationToken cancellationToken,
+        StringComparer comparer = null
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        return await SecondaryListingClaims.Build(
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>(),
+            scope.ServiceProvider.GetRequiredService<EquityListingRepository>(),
+            claimedTickers,
+            tickersToSync,
+            comparer ?? StringComparer.OrdinalIgnoreCase,
+            cancellationToken
+        );
+    }
 }

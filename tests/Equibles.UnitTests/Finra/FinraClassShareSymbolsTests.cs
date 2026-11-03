@@ -22,6 +22,41 @@ public class FinraClassShareSymbolsTests
     }
 
     [Fact]
+    public void BuildCompressedIndex_ExactOnlyTickerGetsNoCompressedSpelling()
+    {
+        var brkB = Guid.NewGuid();
+        var preferred = Guid.NewGuid();
+        var tickerMap = new Dictionary<string, Guid>(StringComparer.Ordinal)
+        {
+            ["BRK-B"] = brkB,
+            // A secondary preferred: "INNPF" is another company's symbol in the same feed.
+            ["INN-PF"] = preferred,
+        };
+        var exactOnly = new Dictionary<string, Guid>(StringComparer.Ordinal)
+        {
+            ["INN-PF"] = preferred,
+        };
+
+        var index = FinraClassShareSymbols.BuildCompressedIndex(
+            tickerMap,
+            StringComparer.Ordinal,
+            exactOnly
+        );
+
+        index
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new KeyValuePair<string, Guid>("BRKB", brkB));
+        FinraClassShareSymbols
+            .TryResolve(tickerMap, index, "INN-PF", out var exact)
+            .Should()
+            .BeTrue();
+        exact.Should().Be(preferred);
+        FinraClassShareSymbols.TryResolve(tickerMap, index, "INNPF", out _).Should().BeFalse();
+    }
+
+    [Fact]
     public void BuildCompressedIndex_IndexesDashTickers_AndDropsAmbiguity()
     {
         var brkB = Guid.NewGuid();

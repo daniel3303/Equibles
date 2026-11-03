@@ -91,6 +91,16 @@ public class ShortVolumeImportService
             cancellationToken,
             StringComparer.Ordinal
         );
+        // The daily files spell every line exactly, so secondary lines need no symbol bridge.
+        foreach (
+            var (ticker, listing) in await _tickerMapService.BuildSecondaryNativeListed(
+                tickerMap.Keys,
+                _workerOptions.TickersToSync,
+                cancellationToken,
+                StringComparer.Ordinal
+            )
+        )
+            tickerMap.TryAdd(ticker, listing);
         if (tickerMap.Count == 0)
         {
             _logger.LogInformation(
