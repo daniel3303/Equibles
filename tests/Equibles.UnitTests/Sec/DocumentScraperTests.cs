@@ -766,6 +766,43 @@ public class DocumentScraperTests
         persisted.FiscalYearEndDay.Should().Be(28);
     }
 
+    [Theory]
+    [InlineData(false, 12, 31)]
+    [InlineData(true, 2, 28)]
+    public async Task ScrapeDocuments_RecordedFiscalYearEnd_IsReplacedOnlyByAnAnnualFiler(
+        bool filesAnnualReports,
+        int month,
+        int day
+    )
+    {
+        // A Form D filer's EDGAR record states a year end its Canadian annual statements
+        // contradict; only a filer with annual reports here replaces the recorded one.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        EquityIssuer company = SeedCompany(dbContext, ticker: "AGX", cik: "0001482436");
+        company.FiscalYearEndMonth = 12;
+        company.FiscalYearEndDay = 31;
+        await dbContext.SaveChangesAsync();
+        harness
+            .SecEdgarClient.GetCompanyMetadata("0001482436")
+            .Returns(
+                new CompanyMetadata
+                {
+                    FiscalYearEnd = "0228",
+                    FilesAnnualReports = filesAnnualReports,
+                }
+            );
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .AsNoTracking()
+            .SingleAsync(c => c.Id == company.Id);
+        persisted.FiscalYearEndMonth.Should().Be(month);
+        persisted.FiscalYearEndDay.Should().Be(day);
+    }
+
     [Fact]
     public async Task ScrapeDocuments_UnclassifiedFilerWithArchives_ReadsTheArchivedElectionOnce()
     {

@@ -4,8 +4,9 @@ namespace Equibles.Integrations.Sec;
 
 /// <summary>
 /// Registrant facts read from a filer's EDGAR filing index rather than from any document: its
-/// business development company election (Form N-54A) and withdrawal (Form N-54C), the file
-/// number EDGAR indexes its periodic reports under, and its newest successor-issuer report.
+/// business development company election (Form N-54A) and withdrawal (Form N-54C), whether it
+/// files annual reports, the file number EDGAR indexes its periodic reports under, and its newest
+/// successor-issuer report.
 /// </summary>
 public static class SecRegistrantFilings
 {
@@ -17,6 +18,20 @@ public static class SecRegistrantFilings
         "10-KT/A",
         "10-Q",
         "10-Q/A",
+    ];
+
+    // The annual reports whose cover states the fiscal year they close.
+    private static readonly string[] AnnualReportForms =
+    [
+        "10-K",
+        "10-K/A",
+        "10-K405",
+        "10-KT",
+        "10-KT/A",
+        "20-F",
+        "20-F/A",
+        "40-F",
+        "40-F/A",
     ];
 
     private static readonly string[] SuccessorForms = ["8-K12B", "8-K12G3", "8-K15D5"];
@@ -33,6 +48,9 @@ public static class SecRegistrantFilings
 
     public static DateOnly? LatestBdcWithdrawal(IEnumerable<FilingData> filings) =>
         LatestFiled(filings, "N-54C");
+
+    public static bool FilesAnnualReports(IEnumerable<FilingData> filings) =>
+        filings.Any(f => AnnualReportForms.Contains(f.Form));
 
     public static string PeriodicReportFileNumber(IEnumerable<FilingData> filings) =>
         filings

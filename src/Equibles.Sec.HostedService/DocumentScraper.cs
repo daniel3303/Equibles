@@ -500,11 +500,17 @@ public class DocumentScraper : IDocumentScraper
 
             if (metadata?.FiscalYearEndMonth is { } month)
             {
-                await commonStockManager.SetFiscalYearEnd(
-                    company,
-                    month,
-                    metadata.FiscalYearEndDay
-                );
+                // A filer without annual reports here (a Form D or F-1 filer) states a year end
+                // no report of its confirms, so it fills a blank but never replaces the one its
+                // own annual reports elsewhere recorded.
+                if (metadata.FilesAnnualReports || company.FiscalYearEndMonth is null)
+                {
+                    await commonStockManager.SetFiscalYearEnd(
+                        company,
+                        month,
+                        metadata.FiscalYearEndDay
+                    );
+                }
                 return;
             }
 
