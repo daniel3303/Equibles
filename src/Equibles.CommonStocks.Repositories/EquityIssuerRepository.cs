@@ -57,8 +57,8 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
 
     /// <summary>
     /// Companies that show the public a venue listing instead of their US presentation line: within
-    /// <see cref="ExchangeListingGraceDays"/> of its newest capture, SEC's ticker directory has not listed that line on an
-    /// exchange (it is quoted over the counter, or no longer listed), and the company holds a verified listing on its home
+    /// <see cref="ExchangeListingGraceDays"/> of its newest capture, SEC's ticker directory has listed neither the filer nor
+    /// that line's ticker on an exchange (it is quoted over the counter, or no longer listed), and the company holds a verified listing on its home
     /// market (the venue security's ISIN country, or Canadian incorporation where Canadian venues state no ISIN). The window
     /// is anchored on the directory's newest capture, so a stalled capture freezes the answer, and an empty directory proves
     /// nothing, so every company then keeps its US page. Computed, never stored: lanes keep reading the US presentation line.
