@@ -32,3 +32,7 @@ currenty
 # construction follows (doc comment in ShortSqueezeScoreManager). codespell
 # suggests "HIS".
 ihs
+
+# "deriver" — the component that derives holder profiles (CHANGELOG); codespell
+# suggests "derive"/"driver".
+deriver

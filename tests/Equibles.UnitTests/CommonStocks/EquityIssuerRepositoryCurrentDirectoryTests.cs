@@ -55,13 +55,22 @@ public class EquityIssuerRepositoryCurrentDirectoryTests
             QuoteUnitMultiplier: 1m
         );
 
+    // A verified Xetra line of an exchange-traded fund: a listed product, never a company in the directory.
+    private static EquityIssuer Fund(string ticker)
+    {
+        var issuer = Venue(ticker, EquityIdentityState.Verified, country: "DE", mic: "XETR");
+        issuer.Presentation.Listing.Security.SecurityType = EquitySecurityKind.ExchangeTradedFund;
+        return issuer;
+    }
+
     private sealed record Seeded(
         EquityIssuer UsActive,
         EquityIssuer UsDelisted,
         EquityIssuer VerifiedParis,
         EquityIssuer VerifiedParisInactive,
         EquityIssuer LegacyParis,
-        EquityIssuer NoPresentation
+        EquityIssuer NoPresentation,
+        EquityIssuer VerifiedXetraFund
     );
 
     private static async Task<Seeded> Seed(DbContextOptions<EquiblesFinancialDbContext> options)
@@ -72,7 +81,8 @@ public class EquityIssuerRepositoryCurrentDirectoryTests
             Venue("AIR", EquityIdentityState.Verified),
             Venue("GONE", EquityIdentityState.Verified, active: false),
             Venue("OLD", EquityIdentityState.Legacy),
-            new EquityIssuer { Name = "Shell company" }
+            new EquityIssuer { Name = "Shell company" },
+            Fund("SXR8")
         );
         using var ctx = NewContext(options);
         ctx.Set<EquityIssuer>()
@@ -82,7 +92,8 @@ public class EquityIssuerRepositoryCurrentDirectoryTests
                 seeded.VerifiedParis,
                 seeded.VerifiedParisInactive,
                 seeded.LegacyParis,
-                seeded.NoPresentation
+                seeded.NoPresentation,
+                seeded.VerifiedXetraFund
             );
         await ctx.SaveChangesAsync();
         return seeded;
@@ -135,6 +146,9 @@ public class EquityIssuerRepositoryCurrentDirectoryTests
             .BeNull();
         (await repository.GetCurrentDirectoryIssuer(seeded.LegacyParis.Id)).Should().BeNull();
         (await repository.GetCurrentDirectoryIssuer(seeded.NoPresentation.Id)).Should().BeNull();
+        (await repository.GetCurrentDirectoryIssuer(seeded.VerifiedXetraFund.Id))
+            .Should()
+            .BeNull("an exchange-traded fund is a listed product, not a company");
         (await repository.GetCurrentUsDirectoryIssuer(seeded.VerifiedParis.Id))
             .Should()
             .BeNull("the US directory stays US-only");
@@ -160,6 +174,7 @@ public class EquityIssuerRepositoryCurrentDirectoryTests
                 seeded.VerifiedParisInactive,
                 seeded.LegacyParis,
                 seeded.NoPresentation,
+                seeded.VerifiedXetraFund,
             }
         )
             EquityIssuerRepository

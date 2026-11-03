@@ -28,7 +28,9 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
 
     /// <summary>
     /// The live stock directory across every market: an issuer whose presentation listing is
-    /// active and is either a US listing or a venue listing a directory adapter verified.
+    /// active and is either a US listing or a venue listing a directory adapter verified. An
+    /// exchange-traded fund or note is a listed product, not a company, so company lanes and
+    /// stock surfaces never read one; its listings still price through the venue claims.
     /// </summary>
     public virtual IQueryable<EquityIssuer> GetCurrentDirectory() =>
         GetAll()
@@ -39,6 +41,10 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
                     issuer.Presentation.Listing.MarketCountryCode == "US"
                     || issuer.Presentation.Listing.IdentityState == EquityIdentityState.Verified
                 )
+                && issuer.Presentation.Listing.Security.SecurityType
+                    != EquitySecurityKind.ExchangeTradedFund
+                && issuer.Presentation.Listing.Security.SecurityType
+                    != EquitySecurityKind.ExchangeTradedNote
             );
 
     public virtual IQueryable<EquityIssuer> GetCurrentDirectoryByIds(IEnumerable<Guid> ids) =>
@@ -56,7 +62,12 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
         && (
             listing.MarketCountryCode == "US"
             || listing.IdentityState == EquityIdentityState.Verified
-        );
+        )
+        && listing.Security
+            is not {
+                SecurityType: EquitySecurityKind.ExchangeTradedFund
+                    or EquitySecurityKind.ExchangeTradedNote
+            };
 
     public IQueryable<EquityIssuerSourceIdentifier> GetSourceIdentifiers() =>
         DbContext.Set<EquityIssuerSourceIdentifier>();
