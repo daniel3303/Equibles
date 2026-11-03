@@ -1,5 +1,7 @@
 using System.Data;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories.Models;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -46,6 +48,126 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
                 && issuer.Presentation.Listing.Security.SecurityType
                     != EquitySecurityKind.ExchangeTradedNote
             );
+
+    /// <summary>
+    /// Days a US line counts as exchange-listed after SEC's ticker directory last listed it on an exchange; a capture
+    /// that drops a listed row for a day must not move the company's page.
+    /// </summary>
+    public const int ExchangeListingGraceDays = 7;
+
+    /// <summary>
+    /// Companies that show the public a venue listing instead of their US presentation line: within
+    /// <see cref="ExchangeListingGraceDays"/> of its newest capture, SEC's ticker directory has listed neither the filer nor
+    /// that line's ticker on an exchange (it is quoted over the counter, or no longer listed), and the company holds a verified listing on its home
+    /// market (the venue security's ISIN country, or Canadian incorporation where Canadian venues state no ISIN). The window
+    /// is anchored on the directory's newest capture, so a stalled capture freezes the answer, and an empty directory proves
+    /// nothing, so every company then keeps its US page. Computed, never stored: lanes keep reading the US presentation line.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, EquityVenuePresentation>> GetVenuePresentations(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var observations = DbContext.Set<SecTickerDirectoryObservation>().AsNoTracking();
+        var newest = await observations.MaxAsync(
+            observation => (DateOnly?)observation.LastObservedOn,
+            cancellationToken
+        );
+        if (newest == null)
+            return new Dictionary<Guid, EquityVenuePresentation>();
+        var canadaCodes = EdgarStateCodes.CanadaCodes.ToArray();
+        var candidates = await GetAll()
+            .AsNoTracking()
+            .Where(issuer =>
+                issuer.Cik != null
+                && issuer.Presentation != null
+                && issuer.Presentation.Listing.MarketCountryCode == "US"
+                && issuer.Presentation.Listing.Active
+                && issuer.Presentation.Listing.Security.SecurityType
+                    != EquitySecurityKind.ExchangeTradedFund
+                && issuer.Presentation.Listing.Security.SecurityType
+                    != EquitySecurityKind.ExchangeTradedNote
+            )
+            .SelectMany(issuer =>
+                issuer
+                    .Securities.SelectMany(security => security.Listings)
+                    .Where(listing =>
+                        listing.MarketCountryCode != "US"
+                        && listing.Active
+                        && listing.IsDirectoryListed
+                        && listing.IdentityState == EquityIdentityState.Verified
+                        && (
+                            listing.Security.Isin != null
+                                ? listing.Security.Isin.Substring(0, 2) == listing.MarketCountryCode
+                                : listing.MarketCountryCode == "CA"
+                                    && canadaCodes.Contains(issuer.StateOfIncorporation)
+                        )
+                    )
+                    .Select(listing => new
+                    {
+                        IssuerId = issuer.Id,
+                        issuer.Cik,
+                        UsTicker = issuer.Presentation.Listing.Ticker,
+                        SameSecurity = listing.EquitySecurityId
+                            == issuer.Presentation.Listing.EquitySecurityId,
+                        ListingId = listing.Id,
+                        listing.MarketIdentifierCode,
+                        listing.MarketCountryCode,
+                        listing.Ticker,
+                    })
+            )
+            .ToListAsync(cancellationToken);
+        if (candidates.Count == 0)
+            return new Dictionary<Guid, EquityVenuePresentation>();
+        var ciks = candidates.Select(candidate => candidate.Cik).Distinct().ToList();
+        var tickers = candidates
+            .Select(candidate => TickerNormalizer.NormalizeIdentity(candidate.UsTicker))
+            .Where(ticker => ticker != null)
+            .Distinct()
+            .ToList();
+        var since = newest.Value.AddDays(-ExchangeListingGraceDays);
+        var exchangeRows = await observations
+            .Where(observation =>
+                observation.Exchange != SecTickerDirectoryObservation.OverTheCounter
+                && observation.LastObservedOn >= since
+                && (ciks.Contains(observation.Cik) || tickers.Contains(observation.Ticker))
+            )
+            .Select(observation => new { observation.Cik, observation.Ticker })
+            .ToListAsync(cancellationToken);
+        // Any exchange row keeps the US page: one for another of the filer's tickers (SEC can list the OTC symbol first
+        // and the NYSE one second), or one for the US ticker under a CIK the issuer does not store.
+        var listedCiks = exchangeRows.Select(row => row.Cik).ToHashSet(StringComparer.Ordinal);
+        var listedTickers = exchangeRows
+            .Select(row => row.Ticker)
+            .ToHashSet(StringComparer.Ordinal);
+        // The listing of the US line's own share class comes first; MIC and ticker only break ties, so the answer never
+        // moves with a day's trading.
+        return candidates
+            .Where(candidate =>
+                !listedCiks.Contains(candidate.Cik)
+                && !listedTickers.Contains(
+                    TickerNormalizer.NormalizeIdentity(candidate.UsTicker) ?? ""
+                )
+            )
+            .GroupBy(candidate => candidate.IssuerId)
+            .Select(group =>
+                group
+                    .OrderByDescending(candidate => candidate.SameSecurity)
+                    .ThenBy(candidate => candidate.MarketIdentifierCode, StringComparer.Ordinal)
+                    .ThenBy(candidate => candidate.Ticker, StringComparer.Ordinal)
+                    .First()
+            )
+            .ToDictionary(
+                candidate => candidate.IssuerId,
+                candidate => new EquityVenuePresentation(
+                    candidate.IssuerId,
+                    candidate.ListingId,
+                    candidate.MarketIdentifierCode,
+                    candidate.MarketCountryCode,
+                    candidate.Ticker,
+                    candidate.UsTicker
+                )
+            );
+    }
 
     public virtual IQueryable<EquityIssuer> GetCurrentDirectoryByIds(IEnumerable<Guid> ids) =>
         GetCurrentDirectory().Where(issuer => ids.Contains(issuer.Id));
