@@ -381,6 +381,12 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
             .Should()
             .Contain("| Non-US | 2026-09-01 | — | — | — |")
             .And.Contain("5.2% of voting rights as filed, no share count");
+
+        // A percentage of one class is no share of the voting rights, so the note says which it is.
+        notification.Flags |= StockHolderRowFlags.PercentOfClass;
+        (await tools.GetAllHolders("NVDA", source: "nonus"))
+            .Should()
+            .Contain("5.2% of the class as filed, no share count");
     }
 
     private sealed class StubLane(params StockHolderRow[] rows) : IHolderSourceContributor

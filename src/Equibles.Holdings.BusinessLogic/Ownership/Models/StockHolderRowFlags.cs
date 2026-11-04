@@ -29,4 +29,10 @@ public enum StockHolderRowFlags
     /// labelled with its last confirmed date.
     /// </summary>
     Unconfirmed = 1 << 4,
+
+    /// <summary>
+    /// A non-US notification's percentage is of one class of shares, not of the issuer's voting
+    /// rights; the two differ for an issuer with several classes.
+    /// </summary>
+    PercentOfClass = 1 << 5,
 }

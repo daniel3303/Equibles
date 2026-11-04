@@ -539,7 +539,7 @@ public class StockOwnershipTools
         var percentOnly = StockOwnershipPrecedence.StatesOnlyAPercentage(row);
         if (percentOnly)
             notes.Add(
-                $"{McpFormat.Invariant(row.FiledPercentOfClass!.Value, "0.##")}% of voting rights as filed, no share count"
+                $"{McpFormat.Invariant(row.FiledPercentOfClass!.Value, "0.##")}% {StockOwnershipPrecedence.PercentMeasure(row)} as filed, no share count"
             );
         if (row.Carried)
             notes.Add("carried, not yet filed for the newest quarter");
