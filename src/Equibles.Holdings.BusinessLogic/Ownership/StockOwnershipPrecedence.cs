@@ -55,7 +55,7 @@ public static class StockOwnershipPrecedence
             row.ParentRowKey = null;
             row.Covering13FCik = null;
             row.Children.Clear();
-            // A non-US notification may state only a percentage of voting rights, never a count.
+            // A non-US notification may state only a percentage, never a count.
             if (row.Shares <= 0 && !StatesOnlyAPercentage(row))
                 row.Flags |= StockHolderRowFlags.Stale;
             if (
@@ -244,9 +244,13 @@ public static class StockOwnershipPrecedence
         }
     }
 
-    /// <summary>A non-US notification stating a percentage of voting rights and no share count.</summary>
+    /// <summary>A non-US notification stating a percentage and no share count.</summary>
     public static bool StatesOnlyAPercentage(StockHolderRow row) =>
         row.Source == StockHolderSource.NonUs && row.Shares <= 0 && row.FiledPercentOfClass is > 0;
+
+    /// <summary>What a percentage-only row's figure is a share of, as a sentence words it.</summary>
+    public static string PercentMeasure(StockHolderRow row) =>
+        row.Has(StockHolderRowFlags.PercentOfClass) ? "of the class" : "of voting rights";
 
     private static bool IsSchedule(StockHolderSource source) =>
         source is StockHolderSource.Schedule13D or StockHolderSource.Schedule13G;
