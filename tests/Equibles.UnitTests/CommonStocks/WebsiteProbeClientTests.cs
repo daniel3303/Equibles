@@ -34,6 +34,58 @@ public class WebsiteProbeClientTests
         await stealth.Received().FetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("https://acme.com")]
+    [InlineData("https://acme.com/")]
+    [InlineData("not a url")]
+    public void Alternatives_ABareStatedAddress_HasNone(string stored) =>
+        WebsiteProbeClient.Alternatives(stored).Should().BeEmpty();
+
+    [Fact]
+    public void Alternatives_ARetiredPath_TriesItsSiteRootFirst() =>
+        WebsiteProbeClient
+            .Alternatives("https://www.acme.com/investors")
+            .Should()
+            .Equal("https://www.acme.com", "https://acme.com");
+
+    [Fact]
+    public void Alternatives_NoStatedScheme_LeavesPlainHttpToValidate() =>
+        WebsiteProbeClient.Alternatives("acme.co.in").Should().BeEmpty();
+
+    [Theory]
+    [InlineData(StealthFetchStatus.PageUnavailable, WebsiteLiveness.Dead)]
+    [InlineData(StealthFetchStatus.HostRefused, WebsiteLiveness.Unknown)]
+    [InlineData(StealthFetchStatus.SidecarUnavailable, WebsiteLiveness.Unknown)]
+    [InlineData(StealthFetchStatus.Rendered, WebsiteLiveness.Alive)]
+    public async Task CheckLiveness_ASiteFailingAPlainRequest_FollowsTheSidecar(
+        StealthFetchStatus status,
+        WebsiteLiveness expected
+    )
+    {
+        var stealth = Substitute.For<IStealthBrowserClient>();
+        stealth.IsEnabled.Returns(true);
+        stealth
+            .TryFetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new StealthFetchResult(status, null));
+        var client = new WebsiteProbeClient(
+            new HttpClient(new RefusingHandler()),
+            stealth,
+            NullLogger<WebsiteProbeClient>.Instance
+        );
+
+        (await client.CheckLiveness("https://acme.com", CancellationToken.None))
+            .Should()
+            .Be(expected);
+    }
+
+    private sealed class RefusingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.Forbidden));
+    }
+
     // Fails the test if plain HTTP is used — proves the sidecar path never falls through to the
     // HttpClient when a sidecar is configured.
     private sealed class ThrowingHandler : HttpMessageHandler

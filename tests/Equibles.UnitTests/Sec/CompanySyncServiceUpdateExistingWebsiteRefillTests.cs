@@ -3,6 +3,7 @@ using System.Reflection;
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.HostedService.Services;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
@@ -220,6 +221,32 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
             .FirstAsync(s => s.Cik == _cik);
         updated.Website.Should().BeNull();
         updated.WebsiteCheckedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SiteClearedAsDead_IsNotRefilledUnvalidated_AndStaysWithDiscovery()
+    {
+        var (db, stock) = await SeedStock(null);
+        stock.WebsiteLivenessCheckedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        using var _ = db;
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyMetadata(_cik)
+            .Returns(new CompanyMetadata { Website = "https://gone.example.com" });
+
+        await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
+
+        await edgar.DidNotReceive().GetCompanyMetadata(Arg.Any<string>());
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
+        updated.Website.Should().BeNull();
+        WebsiteDiscoveryService
+            .PendingDiscovery(DateTime.UtcNow)
+            .Compile()(updated)
+            .Should()
+            .BeTrue();
     }
 
     [Fact]

@@ -18,6 +18,18 @@ public class WebsiteDiscoveryOptions : ScraperOptions
     public int RecheckBatchSize { get; set; } = 500;
 
     /// <summary>
+    /// Maximum number of stored websites probed for liveness per cycle. The default paces the
+    /// directory through one sweep inside <see cref="LivenessCheckDays"/> at four cycles a day.
+    /// </summary>
+    public int LivenessBatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// Days between liveness probes of one stored website: a company site is taken down or moved
+    /// without notice, and a stored address otherwise stays on its pages indefinitely.
+    /// </summary>
+    public int LivenessCheckDays { get; set; } = 90;
+
+    /// <summary>
     /// Days to wait before re-attempting a stock whose last discovery attempt found
     /// no website in any source. Definitive misses are stamped on the stock, so
     /// persistent misses back off for this window; transient source errors are not

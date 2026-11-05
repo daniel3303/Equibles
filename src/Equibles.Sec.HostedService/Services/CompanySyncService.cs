@@ -381,12 +381,18 @@ public class CompanySyncService : ICompanySyncService
         // companies, and rows that captured that blank must stay eligible for a refill —
         // but only re-ask EDGAR once per recheck interval, not once per 15s cycle.
         // A shared-platform profile stored earlier counts as missing too, so the refill replaces it or
-        // clears it for the other discovery sources.
+        // clears it for the other discovery sources. A site the liveness probe cleared stays with
+        // discovery, which validates a candidate: EDGAR would hand the same dead address back raw.
+        var clearedAsDead =
+            string.IsNullOrEmpty(existingStock.Website)
+            && existingStock.WebsiteLivenessCheckedAt != null;
         var missingWebsite =
-            (
+            !clearedAsDead
+            && (
                 string.IsNullOrEmpty(existingStock.Website)
                 || IssuerWebsitePolicy.IsSharedPlatform(existingStock.Website)
-            ) && ShouldAttemptWebsiteFetch(secCompany.Cik);
+            )
+            && ShouldAttemptWebsiteFetch(secCompany.Cik);
         var directoryChanged =
             existingStock.Presentation?.Listing?.Active != true
             || existingStock.Presentation.Listing.DelistedOn != null
