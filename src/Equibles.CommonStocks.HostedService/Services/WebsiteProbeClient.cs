@@ -141,8 +141,8 @@ public class WebsiteProbeClient
 
     /// <summary>
     /// Addresses to try when a stored one reads dead, nearest first: its site root, since a retired
-    /// page on a live site loses only its path, then the same site without "www." or over plain
-    /// HTTP when the stored address never stated a scheme.
+    /// page on a live site loses only its path, then the same site without "www.". A plain-HTTP
+    /// form stays with <see cref="Validate"/>, the one probe that checks where it landed.
     /// </summary>
     public static IReadOnlyList<string> Alternatives(string stored)
     {
@@ -150,9 +150,8 @@ public class WebsiteProbeClient
         if (normalized == null)
             return [];
 
-        var uri = new Uri(normalized);
-        var root = uri.GetLeftPart(UriPartial.Authority);
-        return new[] { root, WithoutWww(root), PlainHttp(stored, root) }
+        var root = new Uri(normalized).GetLeftPart(UriPartial.Authority);
+        return new[] { root, WithoutWww(root) }
             .Where(address => address != null && address != normalized.TrimEnd('/'))
             .Distinct()
             .ToList();

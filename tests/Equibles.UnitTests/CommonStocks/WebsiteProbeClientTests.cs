@@ -49,8 +49,8 @@ public class WebsiteProbeClientTests
             .Equal("https://www.acme.com", "https://acme.com");
 
     [Fact]
-    public void Alternatives_NoStatedScheme_TriesPlainHttp() =>
-        WebsiteProbeClient.Alternatives("acme.co.in").Should().Equal("http://acme.co.in");
+    public void Alternatives_NoStatedScheme_LeavesPlainHttpToValidate() =>
+        WebsiteProbeClient.Alternatives("acme.co.in").Should().BeEmpty();
 
     [Theory]
     [InlineData(StealthFetchStatus.PageUnavailable, WebsiteLiveness.Dead)]
