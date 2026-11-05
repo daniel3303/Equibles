@@ -470,7 +470,8 @@ public class WebsiteDiscoveryService : IImporter
 
         issuer.Website = null;
         issuer.WebsiteCheckedAt = null;
-        issuer.WebsiteLivenessCheckedAt = null;
+        // Left stamped so the EDGAR refill can tell this site was proven dead and not restore it.
+        issuer.WebsiteLivenessCheckedAt = DateTime.UtcNow;
         issuer.WebsiteRecheckProbeFailedAt = null;
         await repo.SaveChanges();
         _logger.LogInformation(
@@ -658,6 +659,7 @@ public class WebsiteDiscoveryService : IImporter
 
         stock.Website = website;
         stock.WebsiteCheckedAt = DateTime.UtcNow;
+        stock.WebsiteLivenessCheckedAt = DateTime.UtcNow;
         stock.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
         stock.WebsiteRecheckProbeFailedAt = null;
         await repo.SaveChanges();

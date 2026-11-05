@@ -625,11 +625,37 @@ public class WebsiteDiscoveryServiceTests
         var reloaded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
         reloaded.Website.Should().BeNull();
         reloaded.WebsiteRecheckProbeFailedAt.Should().BeNull();
+        reloaded.WebsiteLivenessCheckedAt.Should().NotBeNull();
         WebsiteDiscoveryService
             .PendingDiscovery(DateTime.UtcNow)
             .Compile()(reloaded)
             .Should()
             .BeTrue();
+    }
+
+    [Fact]
+    public async Task Discovery_FillingAClearedSite_StampsItsLiveness()
+    {
+        var options = NewDbOptions();
+        EquityIssuer stock = await SeedStock(options, "AAA");
+        DateTime clearedAt = DateTime.UtcNow.AddDays(-5);
+        using (var seed = NewContext(options))
+        {
+            var row = await seed.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+            row.WebsiteLivenessCheckedAt = clearedAt;
+            await seed.SaveChangesAsync();
+        }
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, new() { ["AAA"] = "https://www.new-home.example.com" })]
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        var reloaded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+        reloaded.Website.Should().Be("https://www.new-home.example.com");
+        reloaded.WebsiteLivenessCheckedAt.Should().BeAfter(clearedAt);
     }
 
     [Fact]
