@@ -78,6 +78,87 @@ public class WebsiteProbeClient
     }
 
     /// <summary>
+    /// Whether a stored website still answers. A plain request settles most sites without a render.
+    /// Only the sidecar can call a site dead: without it a bot wall reads like a dead host, and a
+    /// timed-out render says nothing about the page.
+    /// </summary>
+    public async Task<WebsiteLiveness> CheckLiveness(
+        string stored,
+        CancellationToken cancellationToken
+    )
+    {
+        var url = Normalize(stored);
+        if (url == null)
+            return WebsiteLiveness.Dead;
+        if (await ProbePlain(url, ownSite: false, cancellationToken))
+            return WebsiteLiveness.Alive;
+        if (!_stealthClient.IsEnabled)
+            return WebsiteLiveness.Unknown;
+
+        try
+        {
+            var render = await _stealthClient.TryFetchHtml(url, cancellationToken);
+            return render.Status switch
+            {
+                StealthFetchStatus.Rendered => WebsiteLiveness.Alive,
+                StealthFetchStatus.PageUnavailable => WebsiteLiveness.Dead,
+                // A refusal is the host answering: a lapsed certificate or a bot wall is not a dead site.
+                _ => WebsiteLiveness.Unknown,
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Website liveness render failed for {Url}", url);
+            return WebsiteLiveness.Unknown;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="url"/> renders through the sidecar right now. The control for
+    /// reading a dead site: a sidecar that cannot render a live page has no verdict to give.
+    /// </summary>
+    public async Task<bool> Renders(string url, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var render = await _stealthClient.TryFetchHtml(url, cancellationToken);
+            return render.Status == StealthFetchStatus.Rendered;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Website control render failed for {Url}", url);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Addresses to try when a stored one reads dead, nearest first: its site root, since a retired
+    /// page on a live site loses only its path, then the same site without "www." or over plain
+    /// HTTP when the stored address never stated a scheme.
+    /// </summary>
+    public static IReadOnlyList<string> Alternatives(string stored)
+    {
+        var normalized = Normalize(stored);
+        if (normalized == null)
+            return [];
+
+        var uri = new Uri(normalized);
+        var root = uri.GetLeftPart(UriPartial.Authority);
+        return new[] { root, WithoutWww(root), PlainHttp(stored, root) }
+            .Where(address => address != null && address != normalized.TrimEnd('/'))
+            .Distinct()
+            .ToList();
+    }
+
+    /// <summary>
     /// The plain-HTTP form of <paramref name="normalizedUrl"/> when its https scheme was assumed
     /// by <see cref="Normalize"/> rather than stated in <paramref name="candidate"/>, or null.
     /// </summary>

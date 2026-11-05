@@ -48,6 +48,12 @@ public class EquityIssuer
     /// is re-checked once more a day later, since a probe that could not run reads as a dead site.
     /// </summary>
     public DateTime? WebsiteRecheckProbeFailedAt { get; set; }
+
+    /// <summary>
+    /// When the stored website was last probed for liveness. Kept apart from
+    /// <see cref="WebsiteCheckedAt"/>, which IR discovery reads as a new website to act on.
+    /// </summary>
+    public DateTime? WebsiteLivenessCheckedAt { get; set; }
     public int? FiscalYearEndMonth { get; set; }
     public int? FiscalYearEndDay { get; set; }
 

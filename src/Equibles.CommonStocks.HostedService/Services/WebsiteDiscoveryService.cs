@@ -23,7 +23,8 @@ namespace Equibles.CommonStocks.HostedService.Services;
 /// come from the registered <see cref="IWebsiteSource"/> implementations, consulted in priority
 /// order so each source only sees the issuers every more-authoritative source left unfilled;
 /// the first candidate that survives a reachability probe wins. A stored website judged under
-/// older rules is re-checked once (<see cref="WebsiteDiscoveryVersion"/>). Upstream of IR discovery:
+/// older rules is re-checked once (<see cref="WebsiteDiscoveryVersion"/>), and every stored website
+/// is probed periodically so a dead one leaves the company's pages. Upstream of IR discovery:
 /// issuers without a website can never get an IR page, news, events, or call artefacts.
 /// </summary>
 [Service]
@@ -38,6 +39,7 @@ public class WebsiteDiscoveryService : IImporter
     private readonly IBus _bus;
 
     private static readonly TimeSpan RecheckProbeRetryDelay = TimeSpan.FromDays(1);
+    private const int ControlRenders = 3;
 
     public WebsiteDiscoveryService(
         IServiceScopeFactory scopeFactory,
@@ -76,6 +78,7 @@ public class WebsiteDiscoveryService : IImporter
 
         var morePending = await DiscoverPending(cancellationToken);
         await RecheckBatch(cancellationToken);
+        await CheckStoredWebsites(cancellationToken);
         return morePending;
     }
 
@@ -286,6 +289,197 @@ public class WebsiteDiscoveryService : IImporter
         );
     }
 
+    /// <summary>
+    /// Probes one batch of stored websites, longest unprobed first. A site that reads dead gets a
+    /// day's grace, then falls back to its nearest address that answers; one with none is cleared,
+    /// which lets discovery look for its replacement on the next cycle.
+    /// </summary>
+    private async Task CheckStoredWebsites(CancellationToken cancellationToken)
+    {
+        var batch = await LoadLivenessCandidates(cancellationToken);
+        if (batch.Count == 0)
+            return;
+
+        var readings = new ConcurrentBag<(WebsiteSourceStock Stock, WebsiteLiveness Reading)>();
+        await Parallel.ForEachAsync(
+            batch,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Max(1, _options.ProbeConcurrency),
+                CancellationToken = cancellationToken,
+            },
+            async (stock, ct) =>
+                readings.Add((stock, await _probeClient.CheckLiveness(stock.Website, ct)))
+        );
+
+        var dead = readings.Count(r => r.Reading == WebsiteLiveness.Dead);
+        var answered = readings
+            .Where(r => r.Reading == WebsiteLiveness.Alive)
+            .Select(r => r.Stock.Website);
+        var deadReadingsCount =
+            dead == 0 || await SidecarRendersLiveSites(answered, cancellationToken);
+
+        foreach (var (stock, reading) in readings)
+        {
+            if (reading != WebsiteLiveness.Dead)
+                await MarkLivenessChecked(stock);
+            else if (deadReadingsCount && !await DeferDeadWebsite(stock))
+                await SettleDeadWebsite(stock, cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Website liveness complete. {Dead} of {Count} stored websites read dead",
+            dead,
+            batch.Count
+        );
+    }
+
+    // Dead readings say nothing while the sidecar cannot reach the web. The controls are sites
+    // known to be up rather than the rows being judged, so a run of dead sites never reads as an
+    // outage, and an outage never reads as a run of dead sites.
+    private async Task<bool> SidecarRendersLiveSites(
+        IEnumerable<string> answered,
+        CancellationToken cancellationToken
+    )
+    {
+        var known = await LoadControlWebsites(cancellationToken);
+        foreach (var control in answered.Concat(known).Distinct().Take(ControlRenders))
+        {
+            if (await _probeClient.Renders(control, cancellationToken))
+                return true;
+        }
+
+        _logger.LogWarning(
+            "Website liveness set aside its dead readings: no control site rendered"
+        );
+        return false;
+    }
+
+    private async Task<List<string>> LoadControlWebsites(CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+
+        return await repo.GetCurrentDirectory()
+            .Where(s =>
+                s.Website != null
+                && s.WebsiteLivenessCheckedAt != null
+                && s.WebsiteRecheckProbeFailedAt == null
+            )
+            .OrderByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
+            .Take(ControlRenders)
+            .Select(s => s.Website)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<WebsiteSourceStock>> LoadLivenessCandidates(
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+
+        var now = DateTime.UtcNow;
+        var candidates = repo.GetCurrentDirectory()
+            .Where(
+                PendingLivenessCheck(
+                    WebsiteDiscoveryVersion.Current,
+                    now.AddDays(-_options.LivenessCheckDays),
+                    now - RecheckProbeRetryDelay
+                )
+            )
+            .OrderBy(s => s.WebsiteLivenessCheckedAt != null)
+            .ThenBy(s => s.WebsiteLivenessCheckedAt)
+            .ThenByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
+            .ThenBy(s => s.Presentation.Listing.MarketIdentifierCode ?? "")
+            .ThenBy(s => s.Presentation.Listing.Ticker)
+            .Take(_options.LivenessBatchSize);
+        return await ToStoredWebsites(candidates, cancellationToken);
+    }
+
+    // True when this is the first dead reading, which only starts the day's grace: a site can be
+    // down for an hour, and the second reading is what acts on it.
+    private async Task<bool> DeferDeadWebsite(WebsiteSourceStock stock)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+
+        EquityIssuer issuer = await repo.GetCurrentDirectoryIssuer(stock.Id);
+        if (issuer == null || issuer.Website != stock.Website)
+            return true;
+        if (issuer.WebsiteRecheckProbeFailedAt != null)
+            return false;
+
+        issuer.WebsiteRecheckProbeFailedAt = DateTime.UtcNow;
+        await repo.SaveChanges();
+        return true;
+    }
+
+    // Only a conclusive reading of every alternative clears the website: one that could not be
+    // read leaves the address standing until the next sweep.
+    private async Task SettleDeadWebsite(
+        WebsiteSourceStock stock,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var alternative in WebsiteProbeClient.Alternatives(stock.Website))
+        {
+            var reading = await _probeClient.CheckLiveness(alternative, cancellationToken);
+            if (reading == WebsiteLiveness.Alive)
+            {
+                await Replace(stock, alternative, "its own site");
+                return;
+            }
+            if (reading == WebsiteLiveness.Unknown)
+            {
+                await MarkLivenessChecked(stock);
+                return;
+            }
+        }
+
+        await ClearDeadWebsite(stock);
+    }
+
+    private async Task MarkLivenessChecked(WebsiteSourceStock stock)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+
+        EquityIssuer issuer = await repo.GetCurrentDirectoryIssuer(stock.Id);
+        if (issuer == null || issuer.Website != stock.Website)
+            return;
+
+        issuer.WebsiteLivenessCheckedAt = DateTime.UtcNow;
+        issuer.WebsiteRecheckProbeFailedAt = null;
+        await repo.SaveChanges();
+    }
+
+    private async Task ClearDeadWebsite(WebsiteSourceStock stock)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+
+        EquityIssuer issuer = await repo.GetCurrentDirectoryIssuer(stock.Id);
+        if (issuer == null || issuer.Website != stock.Website)
+            return;
+
+        issuer.Website = null;
+        issuer.WebsiteCheckedAt = null;
+        issuer.WebsiteLivenessCheckedAt = null;
+        issuer.WebsiteRecheckProbeFailedAt = null;
+        await repo.SaveChanges();
+        _logger.LogInformation(
+            "Website liveness cleared dead website {Website} for {Symbol}",
+            stock.Website,
+            stock.Symbol
+        );
+    }
+
     private async Task<List<WebsiteSourceStock>> LoadRecheckCandidates(
         CancellationToken cancellationToken
     )
@@ -294,7 +488,7 @@ public class WebsiteDiscoveryService : IImporter
         EquityIssuerRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
-        var rows = await repo.GetCurrentDirectory()
+        var candidates = repo.GetCurrentDirectory()
             .Where(
                 PendingRecheck(
                     WebsiteDiscoveryVersion.Current,
@@ -304,7 +498,16 @@ public class WebsiteDiscoveryService : IImporter
             .OrderByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
             .ThenBy(s => s.Presentation.Listing.MarketIdentifierCode ?? "")
             .ThenBy(s => s.Presentation.Listing.Ticker)
-            .Take(_options.RecheckBatchSize)
+            .Take(_options.RecheckBatchSize);
+        return await ToStoredWebsites(candidates, cancellationToken);
+    }
+
+    private static async Task<List<WebsiteSourceStock>> ToStoredWebsites(
+        IQueryable<EquityIssuer> candidates,
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = await candidates
             .Select(s => new
             {
                 s.Id,
@@ -346,6 +549,7 @@ public class WebsiteDiscoveryService : IImporter
         issuer.Website = website;
         issuer.WebsiteCheckedAt = DateTime.UtcNow;
         issuer.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
+        issuer.WebsiteLivenessCheckedAt = DateTime.UtcNow;
         issuer.WebsiteRecheckProbeFailedAt = null;
         await repo.SaveChanges();
         _logger.LogInformation(
@@ -505,6 +709,28 @@ public class WebsiteDiscoveryService : IImporter
         return s =>
             (s.Website == null || s.Website == "")
             && (s.WebsiteCheckedAt == null || s.WebsiteCheckedAt < cutoff);
+    }
+
+    /// <summary>
+    /// Stocks whose stored website is due a liveness probe: judged under the current rules, not
+    /// probed since <paramref name="checkedBefore"/>, and not inside the grace a dead reading
+    /// started, which ends at <paramref name="probeFailedBefore"/>.
+    /// </summary>
+    public static Expression<Func<EquityIssuer, bool>> PendingLivenessCheck(
+        int currentVersion,
+        DateTime checkedBefore,
+        DateTime probeFailedBefore
+    )
+    {
+        return s =>
+            s.Website != null
+            && s.Website != ""
+            && s.WebsiteDiscoveryVersion >= currentVersion
+            && (s.WebsiteLivenessCheckedAt == null || s.WebsiteLivenessCheckedAt < checkedBefore)
+            && (
+                s.WebsiteRecheckProbeFailedAt == null
+                || s.WebsiteRecheckProbeFailedAt < probeFailedBefore
+            );
     }
 
     /// <summary>

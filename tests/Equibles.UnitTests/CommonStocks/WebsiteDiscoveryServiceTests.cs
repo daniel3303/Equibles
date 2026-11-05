@@ -65,11 +65,13 @@ public class WebsiteDiscoveryServiceTests
         int? batchSize = null,
         IBus bus = null,
         IServiceScopeFactory errorScopes = null,
-        int? recheckBatchSize = null
+        int? recheckBatchSize = null,
+        IStealthBrowserClient sidecar = null
     )
     {
-        var stealth = Substitute.For<IStealthBrowserClient>();
-        stealth.IsEnabled.Returns(false);
+        var stealth = sidecar ?? Substitute.For<IStealthBrowserClient>();
+        if (sidecar == null)
+            stealth.IsEnabled.Returns(false);
         var probe = new WebsiteProbeClient(
             new HttpClient(new FixedStatusHandler(probeStatus)),
             stealth,
@@ -482,6 +484,304 @@ public class WebsiteDiscoveryServiceTests
         reloaded.Website.Should().Be("https://amazon.com");
         reloaded.WebsiteDiscoveryVersion.Should().Be(WebsiteDiscoveryVersion.Current);
         reloaded.WebsiteRecheckProbeFailedAt.Should().BeNull();
+    }
+
+    private const string ControlSite = "https://control.example.com";
+
+    // Renders the control site and the named addresses; everything else gets the verdict.
+    private static IStealthBrowserClient Sidecar(
+        StealthFetchResult verdict,
+        params string[] rendering
+    )
+    {
+        var sidecar = Substitute.For<IStealthBrowserClient>();
+        sidecar.IsEnabled.Returns(true);
+        sidecar
+            .TryFetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+                call.Arg<string>() == ControlSite || rendering.Contains(call.Arg<string>())
+                    ? StealthFetchResult.Rendered("<html></html>")
+                    : verdict
+            );
+        return sidecar;
+    }
+
+    private static async Task SeedControlSite(DbContextOptions<EquiblesFinancialDbContext> options)
+    {
+        EquityIssuer control = await SeedStock(
+            options,
+            "CTRL",
+            website: ControlSite,
+            checkedAt: Long,
+            marketCap: 1_000_000
+        );
+        using var ctx = NewContext(options);
+        var seeded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == control.Id);
+        seeded.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
+        seeded.WebsiteLivenessCheckedAt = DateTime.UtcNow;
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task<EquityIssuer> SeedStoredWebsite(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        string website,
+        DateTime? firstDeadReading = null,
+        string ticker = "AAA"
+    )
+    {
+        EquityIssuer stock = await SeedStock(options, ticker, website: website, checkedAt: Long);
+        using var ctx = NewContext(options);
+        var seeded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+        seeded.WebsiteDiscoveryVersion = WebsiteDiscoveryVersion.Current;
+        seeded.WebsiteRecheckProbeFailedAt = firstDeadReading;
+        await ctx.SaveChangesAsync();
+        return seeded;
+    }
+
+    private static readonly DateTime Long = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void Liveness_CandidateQuery_TranslatesOnPostgres()
+    {
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
+            .UseNpgsql("Host=localhost;Database=translation")
+            .Options;
+        using var ctx = new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
+        );
+
+        var sql = ctx.Set<EquityIssuer>()
+            .Where(
+                WebsiteDiscoveryService.PendingLivenessCheck(1, DateTime.UtcNow, DateTime.UtcNow)
+            )
+            .OrderBy(s => s.WebsiteLivenessCheckedAt != null)
+            .ThenBy(s => s.WebsiteLivenessCheckedAt)
+            .ToQueryString();
+
+        sql.Should().Contain("WebsiteLivenessCheckedAt");
+    }
+
+    [Fact]
+    public async Task Liveness_AnsweringSite_IsStamped_WithoutReopeningIrDiscovery()
+    {
+        var options = NewDbOptions();
+        EquityIssuer stock = await SeedStoredWebsite(options, "https://aaa.com");
+
+        await BuildSut(options, [new StubSource(1, [])]).Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        var reloaded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+        reloaded.WebsiteLivenessCheckedAt.Should().NotBeNull();
+        reloaded.WebsiteCheckedAt.Should().Be(Long);
+    }
+
+    [Fact]
+    public async Task Liveness_FirstDeadReading_KeepsTheWebsite_AndWaitsADay()
+    {
+        var options = NewDbOptions();
+        await SeedControlSite(options);
+        EquityIssuer stock = await SeedStoredWebsite(options, "https://gone.example.com");
+        var sidecar = Sidecar(StealthFetchResult.PageUnavailable);
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, [])],
+            HttpStatusCode.NotFound,
+            sidecar: sidecar
+        );
+
+        await sut.Import(CancellationToken.None);
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        var reloaded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+        reloaded.Website.Should().Be("https://gone.example.com");
+        reloaded.WebsiteRecheckProbeFailedAt.Should().NotBeNull();
+        await sidecar
+            .Received(1)
+            .TryFetchHtml("https://gone.example.com", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Liveness_SecondDeadReading_ClearsTheWebsite_SoDiscoverySeeksAnother()
+    {
+        var options = NewDbOptions();
+        await SeedControlSite(options);
+        EquityIssuer stock = await SeedStoredWebsite(
+            options,
+            "https://gone.example.com",
+            firstDeadReading: DateTime.UtcNow.AddDays(-2)
+        );
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, [])],
+            HttpStatusCode.NotFound,
+            sidecar: Sidecar(StealthFetchResult.PageUnavailable)
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        var reloaded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+        reloaded.Website.Should().BeNull();
+        reloaded.WebsiteRecheckProbeFailedAt.Should().BeNull();
+        WebsiteDiscoveryService
+            .PendingDiscovery(DateTime.UtcNow)
+            .Compile()(reloaded)
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public async Task Liveness_RetiredPathOnALiveSite_FallsBackToTheSiteRoot_AndCascades()
+    {
+        var options = NewDbOptions();
+        await SeedControlSite(options);
+        EquityIssuer stock = await SeedStoredWebsite(
+            options,
+            "https://aaa.com/investors",
+            firstDeadReading: DateTime.UtcNow.AddDays(-2)
+        );
+        var bus = Substitute.For<IBus>();
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, [])],
+            HttpStatusCode.NotFound,
+            bus: bus,
+            sidecar: Sidecar(StealthFetchResult.PageUnavailable, "https://aaa.com")
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        (await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id))
+            .Website.Should()
+            .Be("https://aaa.com");
+        await bus.Received(1).Publish(Arg.Any<StockWebsiteDiscovered>());
+    }
+
+    [Fact]
+    public async Task Liveness_ARetiredPathWhoseRootCannotBeRead_KeepsTheWebsite()
+    {
+        var options = NewDbOptions();
+        await SeedControlSite(options);
+        EquityIssuer stock = await SeedStoredWebsite(
+            options,
+            "https://aaa.com/investors",
+            firstDeadReading: DateTime.UtcNow.AddDays(-2)
+        );
+        var sidecar = Sidecar(StealthFetchResult.PageUnavailable);
+        sidecar
+            .TryFetchHtml("https://aaa.com", Arg.Any<CancellationToken>())
+            .Returns(StealthFetchResult.SidecarUnavailable);
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, [])],
+            HttpStatusCode.NotFound,
+            sidecar: sidecar
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        (await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id))
+            .Website.Should()
+            .Be("https://aaa.com/investors");
+    }
+
+    [Fact]
+    public async Task Liveness_RenderTimeout_IsNoEvidenceAgainstTheSite()
+    {
+        var options = NewDbOptions();
+        EquityIssuer stock = await SeedStoredWebsite(
+            options,
+            "https://slow.example.com",
+            firstDeadReading: DateTime.UtcNow.AddDays(-2)
+        );
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, [])],
+            HttpStatusCode.ServiceUnavailable,
+            sidecar: Sidecar(StealthFetchResult.SidecarUnavailable)
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        var reloaded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+        reloaded.Website.Should().Be("https://slow.example.com");
+        reloaded.WebsiteRecheckProbeFailedAt.Should().BeNull();
+        reloaded.WebsiteLivenessCheckedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Liveness_AWholeBatchOfDeadSites_StillSettles()
+    {
+        var options = NewDbOptions();
+        await SeedControlSite(options);
+        var firstReading = DateTime.UtcNow.AddDays(-2);
+        for (var i = 0; i < 12; i++)
+            await SeedStoredWebsite(options, $"https://site{i}.example.com", firstReading, $"T{i}");
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, [])],
+            HttpStatusCode.NotFound,
+            sidecar: Sidecar(StealthFetchResult.PageUnavailable)
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        (await ctx.Set<EquityIssuer>().CountAsync(s => s.Website != null)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Liveness_WhileNoControlSiteRenders_SetsItsDeadReadingsAside()
+    {
+        var options = NewDbOptions();
+        await SeedControlSite(options);
+        EquityIssuer stock = await SeedStoredWebsite(
+            options,
+            "https://site.example.com",
+            firstDeadReading: DateTime.UtcNow.AddDays(-2)
+        );
+        var sidecar = Substitute.For<IStealthBrowserClient>();
+        sidecar.IsEnabled.Returns(true);
+        sidecar
+            .TryFetchHtml(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(StealthFetchResult.PageUnavailable);
+        var sut = BuildSut(
+            options,
+            [new StubSource(1, [])],
+            HttpStatusCode.NotFound,
+            sidecar: sidecar
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        var reloaded = await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id);
+        reloaded.Website.Should().Be("https://site.example.com");
+        reloaded.WebsiteRecheckProbeFailedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Liveness_WithoutASidecar_NeverClearsAWebsite()
+    {
+        var options = NewDbOptions();
+        EquityIssuer stock = await SeedStoredWebsite(
+            options,
+            "https://walled.example.com",
+            firstDeadReading: DateTime.UtcNow.AddDays(-2)
+        );
+
+        await BuildSut(options, [new StubSource(1, [])], HttpStatusCode.Forbidden)
+            .Import(CancellationToken.None);
+
+        using var ctx = NewContext(options);
+        (await ctx.Set<EquityIssuer>().SingleAsync(s => s.Id == stock.Id))
+            .Website.Should()
+            .Be("https://walled.example.com");
     }
 
     [Fact]
