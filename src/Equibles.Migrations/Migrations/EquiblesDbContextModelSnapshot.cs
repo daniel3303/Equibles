@@ -1510,6 +1510,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<DateOnly>("ExDate")
                         .HasColumnType("date");
 
+                    b.Property<DateOnly?>("PaymentDate")
+                        .HasColumnType("date");
+
                     b.Property<decimal?>("PriceAdjustmentAppliedAmountPerShare")
                         .HasColumnType("numeric");
 
@@ -1518,6 +1521,9 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<DateTime?>("PriceAdjustmentUnservedTime")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("RecordDate")
+                        .HasColumnType("date");
 
                     b.Property<string>("Source")
                         .IsRequired()
