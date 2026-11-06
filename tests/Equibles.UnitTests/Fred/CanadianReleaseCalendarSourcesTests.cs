@@ -115,6 +115,35 @@ public class CanadianReleaseCalendarSourcesTests
         read.Should().Throw<InvalidDataException>();
     }
 
+    // The import replaces stored dates with this reading, so a page that changed under one row or one table is refused,
+    // never read without them.
+    [Theory]
+    [InlineData("<td>December", "<td class=\"next\">December")]
+    [InlineData("Schedule for 2027", "Dates for 2027")]
+    public void BankOfCanada_AChangedRowOrTableRefusesThePage(string original, string changed)
+    {
+        var read = () =>
+            CanadianReleaseCalendarSources.ParseBankOfCanada(
+                Fixture("boc-key-interest-rate-2026-11-06.html").Replace(original, changed),
+                Today
+            );
+
+        read.Should().Throw<InvalidDataException>();
+    }
+
+    [Fact]
+    public void BankOfCanada_ATableBodyAttributeKeepsEachYearInItsOwnTable()
+    {
+        var html = Fixture("boc-key-interest-rate-2026-11-06.html");
+
+        var dates = CanadianReleaseCalendarSources.ParseBankOfCanada(
+            html.Replace("<tbody>", "<tbody class=\"schedule\">"),
+            Today
+        );
+
+        dates.Should().Equal(CanadianReleaseCalendarSources.ParseBankOfCanada(html, Today));
+    }
+
     [Theory]
     [InlineData("Consumer Price Index", FredReleaseImportance.High)]
     [InlineData("Interest rate announcement", FredReleaseImportance.High)]

@@ -411,7 +411,21 @@ public class FredTools
                     .Where(d => d.FredRelease.Importance >= minTier);
                 if (!string.IsNullOrWhiteSpace(country))
                 {
+                    // Like minImportance: "Canada" must surface, not read as a factual "no releases".
                     var countryCode = country.Trim().ToUpperInvariant();
+                    var countries = await _releaseDateRepository
+                        .GetAll()
+                        .Select(d => d.FredRelease.CountryCode)
+                        .Distinct()
+                        .ToListAsync();
+                    if (countryCode != "US" && !countries.Contains(countryCode))
+                    {
+                        return McpOutput.InvalidArgument(
+                            "country",
+                            country,
+                            string.Join(", ", countries.Order(StringComparer.Ordinal))
+                        );
+                    }
                     inRange = inRange.Where(d => d.FredRelease.CountryCode == countryCode);
                 }
 

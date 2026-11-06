@@ -173,6 +173,16 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetEconomicCalendar_UnknownCountry_IsRefusedNotAnEmptyCalendar()
+    {
+        var result = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", country: "Canada");
+
+        result.Should().Contain("country");
+        result.Should().Contain("US");
+        result.Should().NotContain("No economic releases");
+    }
+
+    [Fact]
     public async Task GetEconomicCalendar_MinImportanceHigh_DropsLowerTiers()
     {
         var result = await Sut()

@@ -113,18 +113,24 @@ public static partial class CanadianReleaseCalendarSources
             );
     }
 
-    // The key-rate page tables one schedule per year: a date, then the publications of that day.
+    // The key-rate page tables one schedule per year: a date, then the publications of that day. The import replaces
+    // stored dates with this reading, so a caption or row of another shape refuses the page instead of dropping out.
     public static IReadOnlyList<CanadianReleaseDate> ParseBankOfCanada(string html, DateOnly from)
     {
         var dates = new List<CanadianReleaseDate>();
         var tables = ScheduleTable().Matches(html);
+        if (tables.Count != TableCaption().Count(html))
+            throw new InvalidDataException(
+                "The Bank of Canada's page captions a table it does not state as a year's schedule."
+            );
         foreach (Match table in tables)
         {
             var year = table.Groups["year"].Value;
-            var rows = ScheduleRow().Matches(table.Groups["rows"].Value);
-            if (rows.Count < MinimumDecisionsPerYear)
+            var body = table.Groups["rows"].Value;
+            var rows = ScheduleRow().Matches(body);
+            if (rows.Count < MinimumDecisionsPerYear || rows.Count != TableRow().Count(body))
                 throw new InvalidDataException(
-                    $"The Bank of Canada's {year} schedule states only {rows.Count} dates."
+                    $"The Bank of Canada's {year} schedule states {TableRow().Count(body)} rows, {rows.Count} of them a date and its publications."
                 );
             foreach (Match row in rows)
             {
@@ -169,10 +175,16 @@ public static partial class CanadianReleaseCalendarSources
         WebUtility.HtmlDecode(cell).Replace('\u00A0', ' ').Trim();
 
     [GeneratedRegex(
-        @"<caption[^>]*>\s*Schedule for (?<year>\d{4})\s*</caption>.*?<tbody>(?<rows>.*?)</tbody>",
+        @"<caption[^>]*>\s*Schedule for (?<year>\d{4})\s*</caption>(?:(?!</table>).)*?<tbody[^>]*>(?<rows>.*?)</tbody>",
         RegexOptions.Singleline
     )]
     private static partial Regex ScheduleTable();
+
+    [GeneratedRegex(@"<caption\b")]
+    private static partial Regex TableCaption();
+
+    [GeneratedRegex(@"<tr\b")]
+    private static partial Regex TableRow();
 
     [GeneratedRegex(
         @"<tr>\s*<td>(?<date>[^<]+)</td>\s*<td>(?<publications>.*?)</td>\s*</tr>",
