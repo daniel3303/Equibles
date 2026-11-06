@@ -157,14 +157,17 @@ public class FredReleaseCalendarImportService : IImporter
         using (var scope = _scopeFactory.CreateScope())
         {
             var releaseRepo = scope.ServiceProvider.GetRequiredService<FredReleaseRepository>();
-            var releases = await releaseRepo.GetAll().ToListAsync(cancellationToken);
+            var releases = await releaseRepo
+                .GetAll()
+                .Where(r => r.Source == IndicatorSource.Fred)
+                .ToListAsync(cancellationToken);
 
             // Re-stamp importance from the curated map every cycle so editing the map
             // heals releases that were stored before their entry existed (or changed).
             var restamped = 0;
             foreach (var release in releases)
             {
-                var importance = CuratedReleaseImportanceRegistry.Resolve(release.ReleaseId);
+                var importance = CuratedReleaseImportanceRegistry.Resolve(release.ReleaseId!.Value);
                 if (release.Importance == importance)
                     continue;
                 release.Importance = importance;
@@ -179,7 +182,7 @@ public class FredReleaseCalendarImportService : IImporter
                 );
             }
 
-            trackedReleases = releases.ToDictionary(r => r.ReleaseId, r => r.Id);
+            trackedReleases = releases.ToDictionary(r => r.ReleaseId!.Value, r => r.Id);
         }
 
         if (trackedReleases.Count == 0)

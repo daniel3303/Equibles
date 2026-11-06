@@ -113,13 +113,13 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
     {
         var result = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30");
 
-        result.Should().Contain("| 2026-06-05 | Employment Situation | High | UNRATE |");
+        result.Should().Contain("| 2026-06-05 | US | Employment Situation |  | High | UNRATE |");
         result
             .Should()
-            .Contain("| 2026-06-11 | Consumer Price Index | High | CPIAUCSL, CPILFESL |");
+            .Contain("| 2026-06-11 | US | Consumer Price Index |  | High | CPIAUCSL, CPILFESL |");
         result
             .Should()
-            .Contain("| 2026-06-11 | Secured Overnight Financing Rate Data | Low | SOFR |");
+            .Contain("| 2026-06-11 | US | Secured Overnight Financing Rate Data |  | Low | SOFR |");
         result.Should().NotContain("2026-08-12");
 
         // Chronological: the employment print comes before the CPI print.
@@ -135,6 +135,51 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
             .BeLessThan(
                 result.IndexOf("Secured Overnight Financing Rate Data", StringComparison.Ordinal)
             );
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_EveryMarketByDefault_CountryNarrows()
+    {
+        var release = new FredRelease
+        {
+            CountryCode = "CA",
+            Source = IndicatorSource.StatisticsCanada,
+            SourceKey = "Labour Force Survey",
+            Name = "Labour Force Survey",
+            Importance = FredReleaseImportance.High,
+        };
+        DbContext.Set<FredRelease>().Add(release);
+        DbContext
+            .Set<FredReleaseDate>()
+            .Add(
+                new FredReleaseDate
+                {
+                    FredReleaseId = release.Id,
+                    Date = new(2026, 6, 5),
+                    ReferencePeriod = "May 2026",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var everyMarket = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30");
+        var canada = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", country: "ca");
+
+        everyMarket
+            .Should()
+            .Contain("| 2026-06-05 | CA | Labour Force Survey | May 2026 | High |  |");
+        everyMarket.Should().Contain("Employment Situation");
+        canada.Should().Contain("Labour Force Survey");
+        canada.Should().NotContain("Employment Situation");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_UnknownCountry_IsRefusedNotAnEmptyCalendar()
+    {
+        var result = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", country: "Canada");
+
+        result.Should().Contain("country");
+        result.Should().Contain("US");
+        result.Should().NotContain("No economic releases");
     }
 
     [Fact]

@@ -69,6 +69,27 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
             );
     }
 
+    // FRED knows no such release: asking would fail, and re-stamping would reset its curated tier to Low.
+    [Fact]
+    public async Task Import_ACanadianRelease_IsLeftToItsOwnImporter()
+    {
+        var bank = new FredRelease
+        {
+            CountryCode = "CA",
+            Source = IndicatorSource.BankOfCanada,
+            SourceKey = "Interest rate announcement",
+            Name = "Interest rate announcement",
+            Importance = FredReleaseImportance.High,
+        };
+        _releaseRepo.Add(bank);
+        await _releaseRepo.SaveChanges();
+
+        await _sut.Import(CancellationToken.None);
+
+        bank.Importance.Should().Be(FredReleaseImportance.High);
+        await _fredClient.DidNotReceive().GetReleaseDates(Arg.Any<int>(), Arg.Any<DateOnly?>());
+    }
+
     [Fact]
     public async Task Import_TwoSeriesSharingARelease_CreatesOneReleaseAndKeepsOnlyTrackedDates()
     {

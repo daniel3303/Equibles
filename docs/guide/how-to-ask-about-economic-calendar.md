@@ -1,11 +1,11 @@
 # Ask your AI assistant about the economic release calendar
 
-Equibles tracks when US macro data is published — CPI, the Employment Situation, GDP, and the other indicators it follows — and exposes that calendar through the MCP server, so you can ask your AI assistant what's coming up and what already printed. This calendar is available to AI assistants only; the web portal's Economy page shows the historical *values*, not the schedule.
+Equibles tracks when US and Canadian macro data is published — CPI, the Employment Situation, GDP, the Bank of Canada's rate decisions, and the other indicators it follows — and exposes that calendar through the MCP server, so you can ask your AI assistant what's coming up and what already printed. This calendar is available to AI assistants only; the web portal's Economy page shows the historical *values*, not the schedule.
 
 ## Before you start
 
 - Connect an AI assistant to the MCP server first — see [Connect an AI assistant](tutorial-connect-ai-assistant.md).
-- The calendar is built from FRED, so you need a FRED API key set and the worker run at least once — see [Add a FRED API key](how-to-set-up-fred-api-key.md).
+- The US calendar is built from FRED, so you need a FRED API key set and the worker run at least once; the Canadian calendar needs no key — see [Add a FRED API key](how-to-set-up-fred-api-key.md).
 
 ## Ask what's on the calendar
 
