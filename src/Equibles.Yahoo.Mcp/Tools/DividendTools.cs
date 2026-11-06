@@ -89,17 +89,32 @@ public class DividendTools
                         : $"No cash-dividend records are stored for {EquityListingSymbol.Display(listing)}.";
                 }
 
+                // Record and payment dates are stated only where the capturing source declares them,
+                // so the columns appear only when a shown row carries one.
+                var dated = dividends.Any(dividend =>
+                    dividend.RecordDate.HasValue || dividend.PaymentDate.HasValue
+                );
                 var result = MarkdownTable.Start(
                     $"Declared cash dividends for {label}, newest first:",
-                    "Ex-Date | Amount Per Share",
-                    "--------|-----------------"
+                    dated
+                        ? "Ex-Date | Record Date | Payment Date | Amount Per Share"
+                        : "Ex-Date | Amount Per Share",
+                    dated
+                        ? "--------|-------------|--------------|-----------------"
+                        : "--------|-----------------"
                 );
                 result.AppendRows(
                     dividends,
                     dividend =>
-                        venue
-                            ? $"{McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd")} | {McpFormat.Price(dividend.AmountPerShare)} {dividend.Currency}"
-                            : $"{McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd")} | ${McpFormat.Price(dividend.AmountPerShare)}"
+                    {
+                        var amount = venue
+                            ? $"{McpFormat.Price(dividend.AmountPerShare)} {dividend.Currency}"
+                            : $"${McpFormat.Price(dividend.AmountPerShare)}";
+                        var exDate = McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd");
+                        return dated
+                            ? $"{exDate} | {Day(dividend.RecordDate)} | {Day(dividend.PaymentDate)} | {amount}"
+                            : $"{exDate} | {amount}";
+                    }
                 );
 
                 var pagingNote = McpOutput.PagedTruncationNote(dividends.Count, total, offset);
@@ -115,6 +130,9 @@ public class DividendTools
             $"ticker: {ticker}"
         );
     }
+
+    private static string Day(DateOnly? date) =>
+        date.HasValue ? McpFormat.Invariant(date.Value, "yyyy-MM-dd") : "";
 
     // A bare ticker is the exact US listing; MIC:TICKER, or a provider suffix once the US lookup
     // misses, is one venue listing.

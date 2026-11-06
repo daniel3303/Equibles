@@ -9,5 +9,9 @@ public class CapturedDividend
     public DateOnly ExDate { get; set; }
     public decimal AmountPerShare { get; set; }
     public string Currency { get; set; }
+
+    // Stated only by a source that carries the declaration (an exchange's record); null means unstated.
+    public DateOnly? RecordDate { get; set; }
+    public DateOnly? PaymentDate { get; set; }
     public CashDividendSource Source { get; set; }
 }

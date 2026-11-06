@@ -31,6 +31,15 @@ public class CashDividend
 
     public decimal AmountPerShare { get; set; }
 
+    /// <summary>
+    /// The record and payment dates the issuer declared, where the capturing source states them
+    /// (an exchange's dividend record does; a price feed's adjustment history does not). Null is
+    /// unstated, never "none".
+    /// </summary>
+    public DateOnly? RecordDate { get; set; }
+
+    public DateOnly? PaymentDate { get; set; }
+
     public CashDividendSource Source { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;

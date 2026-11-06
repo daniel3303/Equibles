@@ -181,6 +181,8 @@ public class CashDividendCaptureManager
                         Currency = dividend.Currency,
                         ExDate = dividend.ExDate,
                         AmountPerShare = dividend.AmountPerShare,
+                        RecordDate = dividend.RecordDate,
+                        PaymentDate = dividend.PaymentDate,
                         Source = dividend.Source,
                     }
                 );
@@ -193,8 +195,13 @@ public class CashDividendCaptureManager
             {
                 var amountChanged = match.AmountPerShare != dividend.AmountPerShare;
                 var sourceChanged = match.Source != dividend.Source;
+                var datesChanged = ApplyDeclaredDates(match, dividend, replace: true);
                 if (!amountChanged && !sourceChanged)
+                {
+                    if (datesChanged)
+                        changes++;
                     continue;
+                }
 
                 if (amountChanged)
                 {
@@ -209,6 +216,13 @@ public class CashDividendCaptureManager
                 match.Source = dividend.Source;
                 changes++;
             }
+            else if (
+                match.Currency == dividend.Currency
+                && ApplyDeclaredDates(match, dividend, replace: false)
+            )
+            {
+                changes++;
+            }
         }
 
         if (changes > 0)
@@ -216,6 +230,35 @@ public class CashDividendCaptureManager
 
         await transaction.CommitAsync(cancellationToken);
         return changes;
+    }
+
+    // A stated record or payment date replaces the stored one from a source that may supersede the row
+    // and fills an empty one from any other source; an unstated date never clears a stored one, since a
+    // source that states amounts alone would otherwise erase what the exchange declared.
+    private static bool ApplyDeclaredDates(
+        CashDividend match,
+        CapturedDividend dividend,
+        bool replace
+    )
+    {
+        var changed = false;
+        if (
+            dividend.RecordDate.HasValue
+            && (replace ? match.RecordDate != dividend.RecordDate : match.RecordDate == null)
+        )
+        {
+            match.RecordDate = dividend.RecordDate;
+            changed = true;
+        }
+        if (
+            dividend.PaymentDate.HasValue
+            && (replace ? match.PaymentDate != dividend.PaymentDate : match.PaymentDate == null)
+        )
+        {
+            match.PaymentDate = dividend.PaymentDate;
+            changed = true;
+        }
+        return changed;
     }
 
     // A current U.S. listing trades in dollars; an explicitly USD payment on that exact listing records
@@ -287,6 +330,15 @@ public class CashDividendCaptureManager
             AmountPerShare = dividends.Sum(dividend => dividend.AmountPerShare),
             Source = sources[0],
             Currency = dividends.First().Currency,
+            RecordDate = SharedDate(dividends.Select(dividend => dividend.RecordDate)),
+            PaymentDate = SharedDate(dividends.Select(dividend => dividend.PaymentDate)),
         };
+    }
+
+    // Components summed into one payment keep a date only when every stated one agrees.
+    private static DateOnly? SharedDate(IEnumerable<DateOnly?> dates)
+    {
+        var stated = dates.Where(date => date.HasValue).Distinct().ToList();
+        return stated.Count == 1 ? stated[0] : null;
     }
 }

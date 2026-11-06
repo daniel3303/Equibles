@@ -209,6 +209,79 @@ public class CashDividendCaptureManagerTests
         stored[0].PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
+    // The exchange's record states the record and payment dates; a restated date follows it without
+    // touching the amount's reconciliation markers, and a source stating no dates keeps the stored ones.
+    [Fact]
+    public async Task Capture_DeclaredDates_AreStoredRestatedAndKeptThroughAnUndatedRestatement()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = await AddStock(db);
+        var exDate = new DateOnly(2026, 11, 13);
+        var declared = Dividend(exDate, 0.97m, CashDividendSource.External);
+        declared.RecordDate = exDate;
+        declared.PaymentDate = new DateOnly(2026, 12, 1);
+
+        await NewManager(db).Capture(stock.Id, stock.Presentation.Listing.Ticker, [declared]);
+        var stored = await db.Set<CashDividend>().SingleAsync();
+        stored.RecordDate.Should().Be(exDate);
+        stored.PaymentDate.Should().Be(new DateOnly(2026, 12, 1));
+        stored.PriceAdjustmentAppliedAmountPerShare = stored.AmountPerShare;
+        var appliedAt = DateTime.UtcNow;
+        stored.PriceAdjustmentAppliedTime = appliedAt;
+        await db.SaveChangesAsync();
+
+        declared.PaymentDate = new DateOnly(2026, 12, 2);
+        var changes = await NewManager(db)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, [declared]);
+
+        changes.Should().Be(1);
+        stored = await db.Set<CashDividend>().SingleAsync();
+        stored.PaymentDate.Should().Be(new DateOnly(2026, 12, 2));
+        stored.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.97m);
+        stored.PriceAdjustmentAppliedTime.Should().Be(appliedAt);
+
+        changes = await NewManager(db)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, [Dividend(exDate, 0.97m)]);
+
+        changes.Should().Be(1);
+        stored = await db.Set<CashDividend>().SingleAsync();
+        stored.Source.Should().Be(CashDividendSource.Yahoo);
+        stored.RecordDate.Should().Be(exDate);
+        stored.PaymentDate.Should().Be(new DateOnly(2026, 12, 2));
+    }
+
+    // A source that cannot supersede the row still fills dates the row lacks, and only those.
+    [Fact]
+    public async Task Capture_LowerPrioritySource_FillsOnlyEmptyDeclaredDates()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = await AddStock(db);
+        var exDate = new DateOnly(2026, 11, 13);
+        await NewManager(db)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, [Dividend(exDate, 0.97m)]);
+        var declared = Dividend(exDate, 0.95m, CashDividendSource.External);
+        declared.RecordDate = exDate;
+        declared.PaymentDate = new DateOnly(2026, 12, 1);
+
+        var changes = await NewManager(db)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, [declared]);
+
+        changes.Should().Be(1);
+        var stored = await db.Set<CashDividend>().SingleAsync();
+        stored.AmountPerShare.Should().Be(0.97m);
+        stored.Source.Should().Be(CashDividendSource.Yahoo);
+        stored.RecordDate.Should().Be(exDate);
+        stored.PaymentDate.Should().Be(new DateOnly(2026, 12, 1));
+
+        declared.PaymentDate = new DateOnly(2026, 12, 2);
+        changes = await NewManager(db)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, [declared]);
+
+        changes.Should().Be(0);
+        stored = await db.Set<CashDividend>().SingleAsync();
+        stored.PaymentDate.Should().Be(new DateOnly(2026, 12, 1));
+    }
+
     [Fact]
     public async Task Capture_HigherPrioritySource_ReplacesAmountAndSource()
     {
