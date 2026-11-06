@@ -78,9 +78,7 @@ public class CanadianReleaseCalendarImportServiceTests : IDisposable
 
         await _sut.Import(CancellationToken.None);
 
-        var release = await _releaseRepo
-            .GetAll()
-            .SingleAsync(CancellationToken.None);
+        var release = await _releaseRepo.GetAll().SingleAsync(CancellationToken.None);
         release
             .Should()
             .Match<FredRelease>(r =>
@@ -99,15 +97,14 @@ public class CanadianReleaseCalendarImportServiceTests : IDisposable
     public async Task Import_AMovedDateReplacesTheUpcomingOneAndAPastDateStays()
     {
         var past = Today.AddDays(-20);
-        _statCan = Schedule(("Retail trade", Today.AddDays(5), "September 2026"));
+        var first = new DateOnly(Today.Year + 1, 3, 10);
+        _statCan = Schedule(("Retail trade", first, "September 2026"));
         await _sut.Import(CancellationToken.None);
-        var release = await _releaseRepo
-            .GetAll()
-            .SingleAsync(CancellationToken.None);
+        var release = await _releaseRepo.GetAll().SingleAsync(CancellationToken.None);
         _dateRepo.Add(new FredReleaseDate { FredReleaseId = release.Id, Date = past });
         await _dateRepo.SaveChanges();
 
-        var moved = Today.AddDays(6);
+        var moved = first.AddDays(1);
         _statCan = Schedule(("Retail trade", moved, "September 2026"));
         await _sut.Import(CancellationToken.None);
 
@@ -131,6 +128,26 @@ public class CanadianReleaseCalendarImportServiceTests : IDisposable
 
         var stored = await _dateRepo.GetAll().SingleAsync(CancellationToken.None);
         stored.Date.Should().Be(date);
+    }
+
+    // A page that lost one year's table parses cleanly, so the import itself keeps what that year had stored.
+    [Fact]
+    public async Task Import_ASourceThatLostAYearKeepsThatYearsDates()
+    {
+        var nearer = new DateOnly(Today.Year + 1, 6, 1);
+        var further = new DateOnly(Today.Year + 2, 6, 1);
+        _statCan = Schedule(("Retail trade", nearer, "April"), ("Retail trade", further, "April"));
+        await _sut.Import(CancellationToken.None);
+
+        _statCan = Schedule(("Retail trade", nearer, "April"));
+        await _sut.Import(CancellationToken.None);
+
+        var dates = await _dateRepo
+            .GetAll()
+            .OrderBy(d => d.Date)
+            .Select(d => d.Date)
+            .ToListAsync(CancellationToken.None);
+        dates.Should().Equal(nearer, further);
     }
 
     private static string Schedule(params (string Title, DateOnly Date, string Period)[] rows) =>

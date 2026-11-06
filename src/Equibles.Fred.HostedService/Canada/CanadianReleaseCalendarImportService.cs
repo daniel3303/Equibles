@@ -107,6 +107,19 @@ public class CanadianReleaseCalendarImportService : IImporter
             .GetAll()
             .Where(release => release.Source == source)
             .ToDictionaryAsync(release => release.SourceKey, cancellationToken);
+        var ids = releases.Values.Select(release => release.Id).ToList();
+        var stored = await dateRepo
+            .GetAll()
+            .Where(date => ids.Contains(date.FredReleaseId) && date.Date >= today)
+            .ToListAsync(cancellationToken);
+        // A source that lost a whole year still reads cleanly, and these dates replace the stored ones, so a read must
+        // state every year it would replace. Last year's dates are not upcoming, so the new year passes this.
+        var yearsRead = dates.Select(date => date.Date.Year).ToHashSet();
+        if (stored.FirstOrDefault(date => !yearsRead.Contains(date.Date.Year)) is { } unstated)
+            throw new InvalidDataException(
+                $"The {source} release calendar states no {unstated.Date.Year} dates, though some are stored."
+            );
+
         foreach (var name in dates.Select(date => date.Name).Distinct())
         {
             if (!releases.TryGetValue(name, out var release))
@@ -127,11 +140,6 @@ public class CanadianReleaseCalendarImportService : IImporter
         }
         await releaseRepo.SaveChanges();
 
-        var ids = releases.Values.Select(release => release.Id).ToList();
-        var stored = await dateRepo
-            .GetAll()
-            .Where(date => ids.Contains(date.FredReleaseId) && date.Date >= today)
-            .ToListAsync(cancellationToken);
         var read = dates.ToDictionary(date => (releases[date.Name].Id, date.Date));
         foreach (var date in stored)
         {
