@@ -342,7 +342,7 @@ public class FredTools
         ReadOnly = true
     )]
     [Description(
-        "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US macro data releases, with the FRED series each release updates and an importance tier per release (High = the tier-1 scheduled market movers: CPI, PPI, Employment Situation, GDP, PCE, retail sales; Medium = other genuine scheduled prints; Low = daily rate/market levels like SOFR or VIX). FOMC meetings are NOT included — FRED's release feed has no real FOMC meeting dates; use the Federal Reserve's published meeting calendar for those. Defaults to the next 30 days. Use minImportance=high to see only the market movers, and GetEconomicIndicator to fetch a series' data after it prints."
+        "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US and Canadian macro data releases, each row naming its market, with the FRED series each release updates and an importance tier per release (High = the tier-1 scheduled market movers: CPI, PPI, Employment Situation, GDP, PCE, retail sales; Medium = other genuine scheduled prints; Low = daily rate/market levels like SOFR or VIX). FOMC meetings are NOT included — FRED's release feed has no real FOMC meeting dates; use the Federal Reserve's published meeting calendar for those. Defaults to the next 30 days. Use minImportance=high to see only the market movers, and GetEconomicIndicator to fetch a series' data after it prints."
     )]
     public Task<string> GetEconomicCalendar(
         [Description("Start date in YYYY-MM-DD format (defaults to today, UTC)")]
@@ -356,7 +356,9 @@ public class FredTools
         [Description(
             "Maximum number of release dates to return (default: 100, max: 500, chronological)"
         )]
-            int maxResults = 100
+            int maxResults = 100,
+        [Description("Market country code, US or CA (defaults to every market)")]
+            string country = null
     )
     {
         return _runner.Execute(
@@ -407,6 +409,11 @@ public class FredTools
                 var inRange = _releaseDateRepository
                     .GetInRange(start, end)
                     .Where(d => d.FredRelease.Importance >= minTier);
+                if (!string.IsNullOrWhiteSpace(country))
+                {
+                    var countryCode = country.Trim().ToUpperInvariant();
+                    inRange = inRange.Where(d => d.FredRelease.CountryCode == countryCode);
+                }
 
                 var total = await inRange.CountAsync();
 
@@ -418,7 +425,9 @@ public class FredTools
                     .Select(d => new
                     {
                         d.Date,
+                        d.FredRelease.CountryCode,
                         ReleaseName = d.FredRelease.Name,
+                        d.ReferencePeriod,
                         d.FredRelease.Importance,
                         Series = d
                             .FredRelease.Series.OrderBy(s => s.SeriesId)
@@ -440,10 +449,10 @@ public class FredTools
                     entries,
                     $"No economic releases between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     title,
-                    "| Date | Release | Importance | Series Updated |",
-                    "|------|---------|------------|----------------|",
+                    "| Date | Market | Release | Period | Importance | Series Updated |",
+                    "|------|--------|---------|--------|------------|----------------|",
                     e =>
-                        $"| {e.Date:yyyy-MM-dd} | {e.ReleaseName} | {e.Importance} | {string.Join(", ", e.Series)} |"
+                        $"| {e.Date:yyyy-MM-dd} | {e.CountryCode} | {e.ReleaseName} | {e.ReferencePeriod} | {e.Importance} | {string.Join(", ", e.Series)} |"
                 );
 
                 if (truncated)
@@ -457,7 +466,7 @@ public class FredTools
                 return table;
             },
             "GetEconomicCalendar",
-            $"startDate: {startDate}, endDate: {endDate}, minImportance: {minImportance}"
+            $"startDate: {startDate}, endDate: {endDate}, minImportance: {minImportance}, country: {country}"
         );
     }
 

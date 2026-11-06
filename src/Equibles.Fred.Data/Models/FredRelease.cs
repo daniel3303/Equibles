@@ -4,12 +4,24 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Fred.Data.Models;
 
 [Index(nameof(ReleaseId), IsUnique = true)]
+[Index(nameof(Source), nameof(SourceKey), IsUnique = true)]
+[Index(nameof(CountryCode))]
 public class FredRelease
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    // FRED's numeric release id (e.g. 10 = "Consumer Price Index").
-    public int ReleaseId { get; set; }
+    // FRED's numeric release id (e.g. 10 = "Consumer Price Index"); null for another publisher's release.
+    public int? ReleaseId { get; set; }
+
+    [Required]
+    [MaxLength(2)]
+    public string CountryCode { get; set; } = "US";
+
+    public IndicatorSource Source { get; set; } = IndicatorSource.Fred;
+
+    // The name a publisher other than FRED states the release by.
+    [MaxLength(256)]
+    public string SourceKey { get; set; }
 
     [Required]
     [MaxLength(256)]

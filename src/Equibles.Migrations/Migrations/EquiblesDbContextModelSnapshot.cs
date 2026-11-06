@@ -2365,6 +2365,11 @@ namespace Equibles.Migrations.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -2383,12 +2388,24 @@ namespace Equibles.Migrations.Migrations
                     b.Property<bool>("PressRelease")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("ReleaseId")
+                    b.Property<int?>("ReleaseId")
                         .HasColumnType("integer");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CountryCode");
+
                     b.HasIndex("ReleaseId")
+                        .IsUnique();
+
+                    b.HasIndex("Source", "SourceKey")
                         .IsUnique();
 
                     b.ToTable("FredRelease");
@@ -2408,6 +2425,10 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<Guid>("FredReleaseId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ReferencePeriod")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.HasKey("Id");
 

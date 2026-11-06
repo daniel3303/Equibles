@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace Equibles.Fred.HostedService.Canada;
 
-// Reads the Bank of Canada's and Statistics Canada's curated series on the FRED lane's cadence.
+// Reads the Bank of Canada's and Statistics Canada's curated series and release dates on the FRED lane's cadence.
 // Neither publisher needs a key, so it runs whether or not a FRED key is configured.
 public class CanadianIndicatorWorker : BaseScraperWorker
 {
@@ -30,6 +30,10 @@ public class CanadianIndicatorWorker : BaseScraperWorker
         _sleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
     }
 
-    protected override Task DoWork(CancellationToken stoppingToken) =>
-        RunImport<CanadianIndicatorImportService>(stoppingToken);
+    protected override async Task DoWork(CancellationToken stoppingToken)
+    {
+        await RunImport<CanadianIndicatorImportService>(stoppingToken);
+        // After the series exist, so a first run can link them to their releases.
+        await RunImport<CanadianReleaseCalendarImportService>(stoppingToken);
+    }
 }

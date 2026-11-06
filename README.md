@@ -408,7 +408,7 @@ This self-hosted build exposes 71 tools over MCP. The hosted server at `https://
 - GetEconomicIndicator — a curated US or Canadian series
 - GetLatestEconomicIndicators — latest values by category for one country (US or CA)
 - SearchEconomicIndicators — strict-first tokenized curated-series search with standard macro aliases
-- GetEconomicCalendar — US macro release calendar
+- GetEconomicCalendar — US and Canadian macro release calendar
 
 **Futures (CFTC COT)**
 
