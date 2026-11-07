@@ -281,13 +281,17 @@ public class StockSplitCaptureMovedDateTests
     {
         var (context, stock) = await SeedIssuer();
         await using var _ = context;
-        context.Add(Stored(stock, RecordDate, Utc(2026, 8, 6), source: StockSplitSource.Yahoo));
+        // Far enough from the report to sit outside the cross-source same-event window too.
+        var otherSourcesDate = ExDate.AddDays(-(SplitEvents.CrossSourceSameEventWindowDays + 1));
+        context.Add(
+            Stored(stock, otherSourcesDate, Utc(2026, 7, 10), source: StockSplitSource.Yahoo)
+        );
         await context.SaveChangesAsync();
 
-        await Report(NewManager(context), stock, new DateOnly(2026, 7, 24), Reported(ExDate));
+        await Report(NewManager(context), stock, new DateOnly(2026, 7, 1), Reported(ExDate));
 
         context.ChangeTracker.Clear();
-        (await context.Set<StockSplit>().AnyAsync(row => row.EffectiveDate == RecordDate))
+        (await context.Set<StockSplit>().AnyAsync(row => row.EffectiveDate == otherSourcesDate))
             .Should()
             .BeTrue();
     }

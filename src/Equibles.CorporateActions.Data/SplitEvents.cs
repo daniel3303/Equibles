@@ -12,6 +12,13 @@ public static class SplitEvents
     // execution date); a real repeat of one ratio sits a month apart. The collapse migration carries the literal.
     public const int SameEventWindowDays = 10;
 
+    // Two sources can date one sizable split further apart than SameEventWindowDays (a chart
+    // provider's stale announced date beside the feed's executed date, three weeks on), and a
+    // company never repeats a 3:2 within this many days. A near-unity ratio is excluded because
+    // scheduled monthly 101:100 repeats are real events; the collapse migration carries both literals.
+    public const int CrossSourceSameEventWindowDays = 45;
+    public const decimal MinimumCrossSourceRatioShift = 0.25m;
+
     // Relative half-width within which two figures sit on one share basis: wide enough for a
     // revised close or ordinary share-count drift between filings, far below any split ratio.
     public const decimal SameBasisTolerance = 0.01m;
@@ -61,6 +68,30 @@ public static class SplitEvents
         && numerator * revisedDenominator != revisedNumerator * denominator
         && Math.Sign(numerator - denominator) != 0
         && Math.Sign(numerator - denominator) == Math.Sign(revisedNumerator - revisedDenominator);
+
+    /// <summary>
+    /// Whether a stored row and a captured observation of the same ratio on one listing describe
+    /// one event: within <see cref="SameEventWindowDays"/> always, and within
+    /// <see cref="CrossSourceSameEventWindowDays"/> when they come from different sources and the
+    /// ratio moves the share count by at least <see cref="MinimumCrossSourceRatioShift"/>.
+    /// </summary>
+    public static bool IsSameEvent(
+        DateOnly date,
+        StockSplitSource source,
+        DateOnly otherDate,
+        StockSplitSource otherSource,
+        decimal numerator,
+        decimal denominator
+    )
+    {
+        var daysApart = Math.Abs(date.DayNumber - otherDate.DayNumber);
+        if (daysApart <= SameEventWindowDays)
+            return true;
+        return source != otherSource
+            && daysApart <= CrossSourceSameEventWindowDays
+            && denominator > 0m
+            && Math.Abs(numerator / denominator - 1m) >= MinimumCrossSourceRatioShift;
+    }
 
     /// <summary>The row's ratio, or null when an arm is not positive and it cannot describe a split.</summary>
     public static decimal? Ratio(StockSplit split) =>

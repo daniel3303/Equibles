@@ -272,7 +272,10 @@ public class StockSplitCaptureManager
     // One stored row per event: the highest-precedence source owns the date, and among equal
     // sources the later date wins because the earlier one is the announcement (Jan 1 is never
     // a trading day, the split moved to Jan 2). That order is a fixed point, so re-serving the
-    // same two events writes nothing and never flaps the price-adjustment marker.
+    // same two events writes nothing and never flaps the price-adjustment marker. Another source's
+    // row of a sizable ratio is the same event over the wider cross-source window too (RUSHA's
+    // 3:2 charted on 11 August beside the feed's 1 September), so a stale lower-source date can
+    // never stand beside the executed one.
     private bool CollapseSameEvent(
         List<StockSplit> existing,
         EquityListing listing,
@@ -285,8 +288,14 @@ public class StockSplitCaptureManager
                 action.EquityListingId == listing.Id
                 && action.Numerator == split.Numerator
                 && action.Denominator == split.Denominator
-                && Math.Abs(action.EffectiveDate.DayNumber - split.EffectiveDate.DayNumber)
-                    <= SplitEvents.SameEventWindowDays
+                && SplitEvents.IsSameEvent(
+                    action.EffectiveDate,
+                    action.Source,
+                    split.EffectiveDate,
+                    split.Source,
+                    split.Numerator,
+                    split.Denominator
+                )
             )
             .OrderByDescending(action => action.Source)
             .ThenByDescending(action => action.EffectiveDate)
