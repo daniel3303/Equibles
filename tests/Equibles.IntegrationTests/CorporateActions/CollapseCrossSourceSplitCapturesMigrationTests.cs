@@ -116,6 +116,32 @@ public class CollapseCrossSourceSplitCapturesMigrationTests(ParadeDbFixture fixt
                 StockSplitSource.Yahoo
             ),
             ["legacy"] = Row(null, "RUSHA", new DateOnly(2026, 8, 11), StockSplitSource.Yahoo),
+            // Rows with a non-positive arm describe no ratio: the gate must neither divide by
+            // them nor merge them, whatever the planner evaluates first.
+            ["zeroDenominator"] = Row(
+                primary,
+                "RUSHA",
+                new DateOnly(2021, 6, 1),
+                StockSplitSource.Yahoo,
+                numerator: 3m,
+                denominator: 0m
+            ),
+            ["zeroNumerator"] = Row(
+                primary,
+                "RUSHA",
+                new DateOnly(2020, 6, 1),
+                StockSplitSource.Yahoo,
+                numerator: 0m,
+                denominator: 2m
+            ),
+            ["zeroNumeratorFeed"] = Row(
+                primary,
+                "RUSHA",
+                new DateOnly(2020, 6, 11),
+                StockSplitSource.External,
+                numerator: 0m,
+                denominator: 2m
+            ),
         };
         context.AddRange(rows.Values);
         await context.SaveChangesAsync();
@@ -139,6 +165,9 @@ public class CollapseCrossSourceSplitCapturesMigrationTests(ParadeDbFixture fixt
             "far2",
             "siblingCharted",
             "legacy",
+            "zeroDenominator",
+            "zeroNumerator",
+            "zeroNumeratorFeed",
         };
         survivors.Should().BeEquivalentTo(expected.Select(key => rows[key].Id));
         var kept = await context
@@ -160,7 +189,7 @@ public class CollapseCrossSourceSplitCapturesMigrationTests(ParadeDbFixture fixt
                 $"abs(survivor.\"EffectiveDate\" - duplicate.\"EffectiveDate\") <= {SplitEvents.CrossSourceSameEventWindowDays}"
             )
             .And.Contain(
-                $"abs(duplicate.\"Numerator\" / duplicate.\"Denominator\" - 1) >= {SplitEvents.MinimumCrossSourceRatioShift.ToString(CultureInfo.InvariantCulture)}"
+                $"abs(duplicate.\"Numerator\" / duplicate.\"Denominator\" - 1) END >= {SplitEvents.MinimumCrossSourceRatioShift.ToString(CultureInfo.InvariantCulture)}"
             );
     }
 

@@ -24,8 +24,8 @@ namespace Equibles.Migrations.Migrations
 
                 DELETE FROM "StockSplit" duplicate
                 WHERE duplicate."EquityListingId" IS NOT NULL
-                  AND duplicate."Denominator" > 0
-                  AND abs(duplicate."Numerator" / duplicate."Denominator" - 1) >= 0.25
+                  AND CASE WHEN duplicate."Numerator" > 0 AND duplicate."Denominator" > 0
+                        THEN abs(duplicate."Numerator" / duplicate."Denominator" - 1) END >= 0.25
                   AND EXISTS (
                     SELECT 1 FROM "StockSplit" survivor
                     WHERE survivor."Id" <> duplicate."Id"
