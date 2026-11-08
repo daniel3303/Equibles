@@ -29,6 +29,15 @@ public class FredObservationRepository : BaseRepository<FredObservation>
         return GetAll().Where(o => o.FredSeriesId == series.Id).LatestValue(o => o.Date);
     }
 
+    public IQueryable<DateOnly> GetEarliestDate(FredSeries series)
+    {
+        return GetAll()
+            .Where(o => o.FredSeriesId == series.Id)
+            .Select(o => o.Date)
+            .OrderBy(date => date)
+            .Take(1);
+    }
+
     public IQueryable<FredObservation> GetLatestPerSeries()
     {
         return GetAll()

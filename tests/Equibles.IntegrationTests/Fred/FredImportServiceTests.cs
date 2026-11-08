@@ -271,6 +271,90 @@ public class FredImportServiceTests : IDisposable
         dbObs.Should().Contain(o => o.Date == new DateOnly(2024, 1, 2));
     }
 
+    [Fact]
+    public async Task Import_RevisedObservation_RewritesTheStoredValue()
+    {
+        SetupApiForAllOtherSeriesEmpty();
+
+        var existingSeries = new FredSeries
+        {
+            SeriesId = "PCEPILFE",
+            Title = "PCE excluding food and energy",
+            Category = FredSeriesCategory.Inflation,
+            Frequency = "M",
+            Units = "Index",
+            SeasonalAdjustment = "SA",
+        };
+        _dbContext.Set<FredSeries>().Add(existingSeries);
+        _dbContext
+            .Set<FredObservation>()
+            .Add(
+                new FredObservation
+                {
+                    FredSeriesId = existingSeries.Id,
+                    Date = new DateOnly(2026, 7, 1),
+                    Value = 130.658m,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        // The BEA annual update restated July; the API now states the revised vintage.
+        _fredClient
+            .GetObservations("PCEPILFE", Arg.Any<DateOnly?>())
+            .Returns(
+                Task.FromResult(
+                    CreateObservationRecords(("2026-07-01", "130.148"), ("2026-08-01", "130.489"))
+                )
+            );
+
+        await _sut.Import(CancellationToken.None);
+
+        var series = await _seriesRepo.GetBySeriesId("PCEPILFE").FirstOrDefaultAsync();
+        var dbObs = _obsRepo.GetBySeries(series!).OrderBy(o => o.Date).ToList();
+        dbObs.Should().HaveCount(2);
+        dbObs[0].Value.Should().Be(130.148m);
+        dbObs[1].Value.Should().Be(130.489m);
+    }
+
+    [Fact]
+    public async Task Import_ExistingSeries_ReReadsTheRevisionWindowBehindTheLatestObservation()
+    {
+        SetupApiForAllOtherSeriesEmpty();
+
+        var existingSeries = new FredSeries
+        {
+            SeriesId = "FEDFUNDS",
+            Title = "Federal Funds Effective Rate",
+            Category = FredSeriesCategory.InterestRates,
+            Frequency = "M",
+            Units = "Percent",
+            SeasonalAdjustment = "NSA",
+        };
+        _dbContext.Set<FredSeries>().Add(existingSeries);
+        _dbContext
+            .Set<FredObservation>()
+            .Add(
+                new FredObservation
+                {
+                    FredSeriesId = existingSeries.Id,
+                    Date = new DateOnly(2024, 6, 1),
+                    Value = 5.33m,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        await _sut.Import(CancellationToken.None);
+
+        await _fredClient
+            .Received(1)
+            .GetObservations(
+                "FEDFUNDS",
+                new DateOnly(2024, 6, 1).AddYears(-FredImportService.RevisionLookbackYears)
+            );
+    }
+
     // ── Import: handles empty API response ───────────────────────────
 
     [Fact]
@@ -458,82 +542,6 @@ public class FredImportServiceTests : IDisposable
     }
 
     // ── Import: series already up to date ────────────────────────────
-
-    [Fact]
-    public async Task Import_SeriesUpToDate_SkipsFetchingObservations()
-    {
-        SetupApiForAllOtherSeriesEmpty();
-
-        // Pre-seed series with an observation dated today (so startDate > today)
-        var existingSeries = new FredSeries
-        {
-            SeriesId = "FEDFUNDS",
-            Title = "Federal Funds Effective Rate",
-            Category = FredSeriesCategory.InterestRates,
-            Frequency = "M",
-            Units = "Percent",
-            SeasonalAdjustment = "NSA",
-        };
-        _dbContext.Set<FredSeries>().Add(existingSeries);
-        _dbContext
-            .Set<FredObservation>()
-            .Add(
-                new FredObservation
-                {
-                    FredSeriesId = existingSeries.Id,
-                    Date = DateOnly.FromDateTime(DateTime.UtcNow),
-                    Value = 5.33m,
-                }
-            );
-        await _dbContext.SaveChangesAsync();
-        _dbContext.ChangeTracker.Clear();
-
-        await _sut.Import(CancellationToken.None);
-
-        // GetObservations should not have been called for FEDFUNDS
-        await _fredClient.DidNotReceive().GetObservations("FEDFUNDS", Arg.Any<DateOnly?>());
-    }
-
-    // ── Import: observation start date determined by latest in DB ────
-
-    [Fact]
-    public async Task Import_ExistingObservations_FetchesFromDayAfterLatest()
-    {
-        SetupApiForAllOtherSeriesEmpty();
-
-        var existingSeries = new FredSeries
-        {
-            SeriesId = "FEDFUNDS",
-            Title = "Federal Funds Effective Rate",
-            Category = FredSeriesCategory.InterestRates,
-            Frequency = "M",
-            Units = "Percent",
-            SeasonalAdjustment = "NSA",
-        };
-        _dbContext.Set<FredSeries>().Add(existingSeries);
-        _dbContext
-            .Set<FredObservation>()
-            .Add(
-                new FredObservation
-                {
-                    FredSeriesId = existingSeries.Id,
-                    Date = new DateOnly(2024, 6, 1),
-                    Value = 5.33m,
-                }
-            );
-        await _dbContext.SaveChangesAsync();
-        _dbContext.ChangeTracker.Clear();
-
-        var observations = CreateObservationRecords(("2024-06-02", "5.34"));
-        _fredClient
-            .GetObservations("FEDFUNDS", Arg.Any<DateOnly?>())
-            .Returns(Task.FromResult(observations));
-
-        await _sut.Import(CancellationToken.None);
-
-        // Verify it called GetObservations with startDate = 2024-06-02 (day after latest)
-        await _fredClient.Received().GetObservations("FEDFUNDS", new DateOnly(2024, 6, 2));
-    }
 
     // ── Import: decimal precision preserved ──────────────────────────
 

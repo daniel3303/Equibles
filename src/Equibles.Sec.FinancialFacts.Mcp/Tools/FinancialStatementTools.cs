@@ -569,10 +569,15 @@ public class FinancialStatementTools
     )
     {
         var statementName = statementType.NameForHumans().ToLowerInvariant();
+        // A period ending after its filing date is a schedule disclosure (expected amortization
+        // tagged years ahead), which the importer now rejects; rows stored before that rule
+        // must not become the default "latest" period either.
+        var noFiledDate = default(DateOnly);
         var availablePeriods = await _financialFactRepository
             .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 availabilityConceptIds.Contains(f.FinancialConceptId)
+                && (f.FiledDate == noFiledDate || f.PeriodEnd <= f.FiledDate)
                 && (
                     f.PeriodType != FactPeriodType.Duration
                     || f.PeriodEnd >= f.PeriodStart

@@ -89,6 +89,26 @@ public class FredTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
+                // Stored history starts where the import began (2020 for most series), not
+                // where FRED's does; a range that reaches further back must say it was cut, or
+                // a short table reads as the complete answer.
+                var earliestStored = await _observationRepository
+                    .GetEarliestDate(series)
+                    .FirstOrDefaultAsync();
+                var coverageNote =
+                    earliestStored != default && start < earliestStored
+                        ? Environment.NewLine
+                            + $"_Stored coverage for {series.SeriesId} begins {earliestStored:yyyy-MM-dd}"
+                            + (
+                                series.ObservationStart is { } seriesStart
+                                && seriesStart < earliestStored
+                                    ? $" (the series itself starts {seriesStart:yyyy-MM-dd})"
+                                    : ""
+                            )
+                            + "; the requested range starts earlier and was cut to the stored data._"
+                            + Environment.NewLine
+                        : "";
+
                 var rangeQuery = _observationRepository.GetBySeries(series, start, end);
                 var total = await rangeQuery.CountAsync();
                 var observations = await rangeQuery
@@ -128,7 +148,7 @@ public class FredTools
                         + Environment.NewLine;
                 }
 
-                return table;
+                return table + coverageNote;
             },
             "GetEconomicIndicator",
             $"seriesId: {seriesId}"

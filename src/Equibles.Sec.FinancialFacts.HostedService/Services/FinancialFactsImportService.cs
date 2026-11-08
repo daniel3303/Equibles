@@ -37,7 +37,7 @@ public class FinancialFactsImportService
     // Bump whenever parsing, fiscal identity, or quality filtering changes existing rows. The
     // per-company checkpoint forces a full Company Facts replay without racing the old worker
     // during an additive migration rollout.
-    internal const int CurrentImporterVersion = 6;
+    internal const int CurrentImporterVersion = 7;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;

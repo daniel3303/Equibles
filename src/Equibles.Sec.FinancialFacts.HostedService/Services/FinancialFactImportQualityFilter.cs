@@ -20,6 +20,9 @@ namespace Equibles.Sec.FinancialFacts.HostedService.Services;
 /// (FY2025: +41,799,000,000 against the 10-K's -41,799,000), which the scale rule cannot catch
 /// because it requires the candidate and the quarter sum to share a sign. Anything a periodic
 /// report already states for the exact same period adds nothing, so rank decides.
+/// Two further rules need no rank: a period ending after its filing date is a schedule, not a
+/// report, and a filing whose restatements are a scale factor off two agreeing earlier filings
+/// is refused whole for that series (<see cref="MisscaledAccessions" />).
 /// </remarks>
 internal static class FinancialFactImportQualityFilter
 {
@@ -39,6 +42,10 @@ internal static class FinancialFactImportQualityFilter
 
     private static readonly decimal[] SuspectScaleFactors = [1_000m, 1_000_000m];
 
+    // A filing's value for a period two or more earlier filings agree on is the reference the
+    // filing is judged against; one earlier filing alone could itself be the mis-scaled one.
+    private const int MinimumCorroboratingAccessions = 2;
+
     internal static FilterResult Apply(
         IReadOnlyCollection<FinancialFact> facts,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIds
@@ -46,6 +53,15 @@ internal static class FinancialFactImportQualityFilter
     {
         var rejected = new HashSet<FinancialFact>();
         var aliasFamilies = BuildAliasFamilies(conceptIds);
+
+        // A period that ends after its own filing date is a schedule or forecast disclosure
+        // (CleanSpark's 2023 10-K tags expected amortization through FY2028), never a reported
+        // period; left in, it becomes the "latest" period of every statement reader.
+        foreach (var fact in facts)
+        {
+            if (fact.FiledDate != default && fact.PeriodEnd > fact.FiledDate)
+                rejected.Add(fact);
+        }
 
         foreach (
             var series in facts.GroupBy(f =>
@@ -63,6 +79,12 @@ internal static class FinancialFactImportQualityFilter
             {
                 if (HasCorroboratedScaleError(candidate, rows))
                     rejected.Add(candidate);
+            }
+
+            foreach (var accession in MisscaledAccessions(rows))
+            {
+                foreach (var fact in rows.Where(f => f.AccessionNumber == accession))
+                    rejected.Add(fact);
             }
         }
 
@@ -235,6 +257,97 @@ internal static class FinancialFactImportQualityFilter
             }
         }
 
+        return false;
+    }
+
+    // Accessions whose every restatement of a period that other filings agree on is a thousand-fold
+    // (or million-fold) off that agreed value, where the agreeing filings outnumber those stating
+    // the accession's own value. FinVolution's FY2025 20-F tagged Revenues in thousands of CNY: it
+    // restated FY2023 and FY2024 at 1/1000 of the figures its two earlier 20-Fs share, and its
+    // FY2025 figure, which only it states, carries the same error. The whole filing is refused for
+    // the series rather than rescaled; a missing value is never estimated. One agreeing period, a
+    // difference that is not a scale factor, or a tie between the two camps keeps the filing: a tie
+    // cannot say which camp is mis-scaled, and refusing both would delete the series.
+    private static IEnumerable<string> MisscaledAccessions(IReadOnlyList<FinancialFact> series)
+    {
+        if (series.Count == 0 || !LooksLikeCurrency(series[0].Unit))
+            yield break;
+
+        var byPeriod = series
+            .Where(f => f.Value != 0)
+            .GroupBy(f => (f.PeriodType, f.PeriodStart, f.PeriodEnd))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var accession in series.Select(f => f.AccessionNumber).Distinct())
+        {
+            var scaledMisses = 0;
+            var consistent = false;
+            foreach (var fact in series.Where(f => f.AccessionNumber == accession && f.Value != 0))
+            {
+                var period = byPeriod[(fact.PeriodType, fact.PeriodStart, fact.PeriodEnd)];
+                var others = period.Where(f => f.AccessionNumber != accession).ToList();
+                var reference = CorroboratedValue(others);
+                if (reference == null)
+                    continue;
+
+                if (ApproximatelyEqual(fact.Value, reference.Value.Value))
+                {
+                    consistent = true;
+                    break;
+                }
+
+                var ownSupport = Support(period, fact.Value);
+                if (
+                    IsSuspectScaleOf(fact.Value, reference.Value.Value)
+                    && reference.Value.Support > ownSupport
+                )
+                    scaledMisses++;
+                else
+                {
+                    consistent = true;
+                    break;
+                }
+            }
+
+            if (!consistent && scaledMisses > 0)
+                yield return accession;
+        }
+    }
+
+    // The value stated by the most distinct accessions, when at least two agree on it.
+    private static (decimal Value, int Support)? CorroboratedValue(
+        IReadOnlyList<FinancialFact> others
+    )
+    {
+        (decimal Value, int Support)? best = null;
+        foreach (var fact in others)
+        {
+            var support = Support(others, fact.Value);
+            if (best == null || support > best.Value.Support)
+                best = (fact.Value, support);
+        }
+        return best is { Support: >= MinimumCorroboratingAccessions } ? best : null;
+    }
+
+    private static int Support(IReadOnlyList<FinancialFact> facts, decimal value) =>
+        facts
+            .Where(f => ApproximatelyEqual(f.Value, value))
+            .Select(f => f.AccessionNumber)
+            .Distinct()
+            .Count();
+
+    private static bool IsSuspectScaleOf(decimal value, decimal reference)
+    {
+        if (Math.Sign(value) != Math.Sign(reference))
+            return false;
+        foreach (var factor in SuspectScaleFactors)
+        {
+            if (
+                ApproximatelyEqual(value / factor, reference)
+                || ApproximatelyEqual(value, reference / factor)
+            )
+                return true;
+        }
         return false;
     }
 

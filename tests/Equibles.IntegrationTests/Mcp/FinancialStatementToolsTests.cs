@@ -132,6 +132,51 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             .Contain("_Line items the filer did not report for this period are omitted._");
     }
 
+    [Fact]
+    public async Task GetFinancialStatement_PeriodEndingAfterItsFilingDate_IsNeverTheDefaultPeriod()
+    {
+        EquityIssuer stock = Apple();
+        var amortization = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "AmortizationOfIntangibleAssets",
+            Label = "Amortization of Intangibles",
+        };
+        DbContext.Set<EquityIssuer>().Add(stock);
+        DbContext.Set<FinancialConcept>().Add(amortization);
+        // One 10-K reports FY2023 and tags its expected amortization through FY2028.
+        foreach (var fiscalYear in new[] { 2023, 2028 })
+        {
+            DbContext
+                .Set<FinancialFact>()
+                .Add(
+                    new FinancialFact
+                    {
+                        Id = Guid.NewGuid(),
+                        EquityIssuerId = stock.Id,
+                        FinancialConceptId = amortization.Id,
+                        Unit = "USD",
+                        PeriodType = FactPeriodType.Duration,
+                        PeriodStart = new DateOnly(fiscalYear - 1, 10, 1),
+                        PeriodEnd = new DateOnly(fiscalYear, 9, 30),
+                        Value = 7_000m,
+                        FiscalYear = fiscalYear,
+                        FiscalPeriod = SecFiscalPeriod.FullYear,
+                        Form = DocumentType.TenK,
+                        FiledDate = new DateOnly(2023, 12, 1),
+                        AccessionNumber = "0000827876-23-000045",
+                    }
+                );
+        }
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialStatement("AAPL", statement: "income");
+
+        result.Should().Contain("Income Statement for AAPL (Apple Inc.) — FY2023 FY:");
+        result.Should().NotContain("FY2028");
+    }
+
     private async Task SeedRevenue(
         EquityIssuer stock,
         FinancialConcept concept,

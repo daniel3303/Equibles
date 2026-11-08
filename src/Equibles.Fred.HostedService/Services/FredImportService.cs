@@ -21,6 +21,10 @@ public class FredImportService : IImporter
 {
     private const int InsertBatchSize = 1000;
 
+    // How far behind the latest stored observation each cycle re-reads for revisions; BEA's
+    // annual updates restate up to five years of PCE and GDP.
+    public const int RevisionLookbackYears = 5;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<FredImportService> _logger;
     private readonly IFredClient _fredClient;
@@ -102,6 +106,16 @@ public class FredImportService : IImporter
                 .FirstOrDefaultAsync(cancellationToken);
 
             startDate = SyncDateResolver.Resolve(latestDate, _workerOptions);
+            // FRED revises history: a monthly PCE release restates the preceding months and the
+            // annual update reaches back years, so a stored series is re-read over a trailing
+            // window and changed values rewritten. Appending from the latest date alone froze the
+            // first vintage of every observation.
+            if (latestDate != default && latestDate != DateOnly.MaxValue)
+            {
+                var revisionWindowStart = latestDate.AddYears(-RevisionLookbackYears);
+                if (revisionWindowStart < startDate)
+                    startDate = revisionWindowStart;
+            }
 
             _logger.LogDebug(
                 "FRED series {SeriesId}: latest stored={LatestDate}, startDate={StartDate}",
@@ -149,50 +163,62 @@ public class FredImportService : IImporter
         var minApiDate = parsedRecords.Min(p => p.Date);
         var maxApiDate = parsedRecords.Max(p => p.Date);
 
-        HashSet<DateOnly> existingDates;
+        var observations = new List<FredObservation>();
+        var skipped = 0;
+        var revised = 0;
+        var latestObservationDate = DateOnly.MinValue;
+
         using (var scope = _scopeFactory.CreateScope())
         {
             var obsRepo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
-            existingDates = (
+            var existing = (
                 await obsRepo
                     .GetBySeries(series, minApiDate, maxApiDate)
-                    .Select(o => o.Date)
                     .ToListAsync(cancellationToken)
-            ).ToHashSet();
-        }
+            )
+                .GroupBy(o => o.Date)
+                .ToDictionary(g => g.Key, g => g.First());
 
-        _logger.LogDebug(
-            "FRED series {SeriesId}: API returned {ApiCount} observations ({MinDate} to {MaxDate}), {ExistingCount} already in DB",
-            curated.SeriesId,
-            records.Count,
-            minApiDate,
-            maxApiDate,
-            existingDates.Count
-        );
+            _logger.LogDebug(
+                "FRED series {SeriesId}: API returned {ApiCount} observations ({MinDate} to {MaxDate}), {ExistingCount} already in DB",
+                curated.SeriesId,
+                records.Count,
+                minApiDate,
+                maxApiDate,
+                existing.Count
+            );
 
-        var observations = new List<FredObservation>();
-        var skipped = 0;
-        var latestObservationDate = DateOnly.MinValue;
-
-        foreach (var (record, date) in parsedRecords)
-        {
-            if (date > latestObservationDate)
-                latestObservationDate = date;
-
-            if (existingDates.Contains(date))
+            foreach (var (record, date) in parsedRecords)
             {
-                skipped++;
-                continue;
+                if (date > latestObservationDate)
+                    latestObservationDate = date;
+
+                var value = ParseFredValue(record.Value);
+                if (existing.TryGetValue(date, out var stored))
+                {
+                    if (stored.Value == value)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    stored.Value = value;
+                    revised++;
+                    continue;
+                }
+
+                observations.Add(
+                    new FredObservation
+                    {
+                        FredSeriesId = series.Id,
+                        Date = date,
+                        Value = value,
+                    }
+                );
             }
 
-            observations.Add(
-                new FredObservation
-                {
-                    FredSeriesId = series.Id,
-                    Date = date,
-                    Value = ParseFredValue(record.Value),
-                }
-            );
+            if (revised > 0)
+                await obsRepo.SaveChanges();
         }
 
         var totalInserted = await BatchPersister.Persist<
@@ -205,16 +231,17 @@ public class FredImportService : IImporter
         if (skipped > 0)
         {
             _logger.LogDebug(
-                "FRED series {SeriesId}: skipped {Skipped} existing observations",
+                "FRED series {SeriesId}: skipped {Skipped} unchanged observations",
                 curated.SeriesId,
                 skipped
             );
         }
 
         _logger.LogInformation(
-            "Imported {Count} observations for FRED series {SeriesId}",
+            "Imported {Count} observations for FRED series {SeriesId} ({Revised} revised)",
             totalInserted,
-            curated.SeriesId
+            curated.SeriesId,
+            revised
         );
     }
 
