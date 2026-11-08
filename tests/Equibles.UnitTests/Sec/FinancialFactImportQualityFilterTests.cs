@@ -465,6 +465,86 @@ public class FinancialFactImportQualityFilterTests
     }
 
     [Fact]
+    public void Apply_TwoFilingsAgainstTwoScaledFilings_KeepsEveryRow()
+    {
+        var fy2023 = (new DateOnly(2023, 1, 1), new DateOnly(2023, 12, 31));
+        var fy2024 = (new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31));
+        var facts = new[]
+        {
+            Fact(
+                fy2023.Item1,
+                fy2023.Item2,
+                12_000_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2025, 4, 1),
+                "a"
+            ),
+            Fact(
+                fy2024.Item1,
+                fy2024.Item2,
+                13_000_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2025, 4, 1),
+                "a"
+            ),
+            Fact(
+                fy2023.Item1,
+                fy2023.Item2,
+                12_000_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2026, 4, 1),
+                "b"
+            ),
+            Fact(
+                fy2024.Item1,
+                fy2024.Item2,
+                13_000_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2026, 4, 1),
+                "b"
+            ),
+            Fact(
+                fy2023.Item1,
+                fy2023.Item2,
+                12_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2027, 4, 1),
+                "c"
+            ),
+            Fact(
+                fy2024.Item1,
+                fy2024.Item2,
+                13_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2027, 4, 1),
+                "c"
+            ),
+            Fact(
+                fy2023.Item1,
+                fy2023.Item2,
+                12_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2028, 4, 1),
+                "d"
+            ),
+            Fact(
+                fy2024.Item1,
+                fy2024.Item2,
+                13_000_000m,
+                DocumentType.TwentyF,
+                new DateOnly(2028, 4, 1),
+                "d"
+            ),
+        };
+
+        // Two filings per camp: nothing says which camp is mis-scaled, so refusing either would
+        // delete the series on replay.
+        var result = FinancialFactImportQualityFilter.Apply(facts, ConceptIds);
+
+        result.Rejected.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Apply_OrdinaryRestatementOfAnAgreedPeriod_KeepsTheFiling()
     {
         var period = (new DateOnly(2023, 1, 1), new DateOnly(2023, 12, 31));

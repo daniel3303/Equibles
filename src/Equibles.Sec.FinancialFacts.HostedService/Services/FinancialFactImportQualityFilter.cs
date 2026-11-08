@@ -260,13 +260,14 @@ internal static class FinancialFactImportQualityFilter
         return false;
     }
 
-    // Accessions whose every restatement of a period that at least two other filings agree on
-    // is a thousand-fold (or million-fold) off that agreed value. FinVolution's FY2025 20-F
-    // tagged Revenues in thousands of CNY: it restated FY2023 and FY2024 at 1/1000 of the
-    // figures its two earlier 20-Fs share, and its FY2025 figure, which only it states, carries
-    // the same error. The whole filing is refused for the series rather than rescaled; a
-    // missing value is never estimated. One agreeing period, or a difference that is not a
-    // scale factor, is an ordinary restatement and keeps the filing.
+    // Accessions whose every restatement of a period that other filings agree on is a thousand-fold
+    // (or million-fold) off that agreed value, where the agreeing filings outnumber those stating
+    // the accession's own value. FinVolution's FY2025 20-F tagged Revenues in thousands of CNY: it
+    // restated FY2023 and FY2024 at 1/1000 of the figures its two earlier 20-Fs share, and its
+    // FY2025 figure, which only it states, carries the same error. The whole filing is refused for
+    // the series rather than rescaled; a missing value is never estimated. One agreeing period, a
+    // difference that is not a scale factor, or a tie between the two camps keeps the filing: a tie
+    // cannot say which camp is mis-scaled, and refusing both would delete the series.
     private static IEnumerable<string> MisscaledAccessions(IReadOnlyList<FinancialFact> series)
     {
         if (series.Count == 0 || !LooksLikeCurrency(series[0].Unit))
@@ -283,20 +284,23 @@ internal static class FinancialFactImportQualityFilter
             var consistent = false;
             foreach (var fact in series.Where(f => f.AccessionNumber == accession && f.Value != 0))
             {
-                var others = byPeriod[(fact.PeriodType, fact.PeriodStart, fact.PeriodEnd)]
-                    .Where(f => f.AccessionNumber != accession)
-                    .ToList();
+                var period = byPeriod[(fact.PeriodType, fact.PeriodStart, fact.PeriodEnd)];
+                var others = period.Where(f => f.AccessionNumber != accession).ToList();
                 var reference = CorroboratedValue(others);
                 if (reference == null)
                     continue;
 
-                if (ApproximatelyEqual(fact.Value, reference.Value))
+                if (ApproximatelyEqual(fact.Value, reference.Value.Value))
                 {
                     consistent = true;
                     break;
                 }
 
-                if (IsSuspectScaleOf(fact.Value, reference.Value))
+                var ownSupport = Support(period, fact.Value);
+                if (
+                    IsSuspectScaleOf(fact.Value, reference.Value.Value)
+                    && reference.Value.Support > ownSupport
+                )
                     scaledMisses++;
                 else
                 {
@@ -311,25 +315,26 @@ internal static class FinancialFactImportQualityFilter
     }
 
     // The value stated by the most distinct accessions, when at least two agree on it.
-    private static decimal? CorroboratedValue(IReadOnlyList<FinancialFact> others)
+    private static (decimal Value, int Support)? CorroboratedValue(
+        IReadOnlyList<FinancialFact> others
+    )
     {
-        decimal? best = null;
-        var bestSupport = 0;
+        (decimal Value, int Support)? best = null;
         foreach (var fact in others)
         {
-            var support = others
-                .Where(o => ApproximatelyEqual(o.Value, fact.Value))
-                .Select(o => o.AccessionNumber)
-                .Distinct()
-                .Count();
-            if (support > bestSupport)
-            {
-                bestSupport = support;
-                best = fact.Value;
-            }
+            var support = Support(others, fact.Value);
+            if (best == null || support > best.Value.Support)
+                best = (fact.Value, support);
         }
-        return bestSupport >= MinimumCorroboratingAccessions ? best : null;
+        return best is { Support: >= MinimumCorroboratingAccessions } ? best : null;
     }
+
+    private static int Support(IReadOnlyList<FinancialFact> facts, decimal value) =>
+        facts
+            .Where(f => ApproximatelyEqual(f.Value, value))
+            .Select(f => f.AccessionNumber)
+            .Distinct()
+            .Count();
 
     private static bool IsSuspectScaleOf(decimal value, decimal reference)
     {
