@@ -177,6 +177,22 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetEconomicIndicator_RangeStartingBeforeStoredCoverage_SaysWhereCoverageBegins()
+    {
+        _fedFundsSeries.ObservationStart = new DateOnly(1954, 7, 1);
+        await DbContext.SaveChangesAsync();
+
+        var cut = await Sut().GetEconomicIndicator("FEDFUNDS", "2019-07-01", "2025-03-31");
+        var inside = await Sut().GetEconomicIndicator("FEDFUNDS", "2025-01-01", "2025-03-31");
+
+        cut.Should()
+            .Contain(
+                "Stored coverage for FEDFUNDS begins 2025-01-01 (the series itself starts 1954-07-01); the requested range starts earlier"
+            );
+        inside.Should().NotContain("Stored coverage");
+    }
+
+    [Fact]
     public async Task GetEconomicIndicator_MaxResultsLimit_ReturnsOnlyRequestedCount()
     {
         var result = await Sut()
