@@ -1012,9 +1012,13 @@ public class YahooPriceImportService
     // holiday, so a healthy stock can never fall out of the set just because the market was shut.
     private const int ActivelyTradedWindowDays = 10;
 
+    // One dormant listing is offered after every this many actively-traded ones, so the stale tail
+    // of the rotation is reached inside a cycle instead of queueing behind the whole active group.
+    private const int DormantPerActive = 4;
+
     // Orders the crawl: current listings before historical recovery targets; inside each
-    // partition, actively-traded stocks lead stalest-first and long-dormant or never-synced stocks
-    // follow stalest-first.
+    // partition, actively-traded stocks lead stalest-first and the dormant tail is interleaved
+    // behind them, newest-dormant first.
     //
     // Plain stalest-first is the obvious order and it was actively harmful. Sorting the whole
     // universe by last stored date puts the stocks that will never return data — delisted tickers,
@@ -1028,6 +1032,16 @@ public class YahooPriceImportService
     // was guarding against. The dormant tail still runs every cycle, just second — and once the
     // working set is current it costs nearly nothing to walk (the settled-trading-day gate skips an
     // up-to-date stock without any Yahoo call), so the tail gets almost the entire cycle anyway.
+    //
+    // That last sentence is the assumption that fails on a slow host. A pass over ~8k listings can
+    // run longer than the interval between restarts, and every cycle rebuilds this order from the
+    // top, so a host that restarts mid-pass never reaches the tail at all. Measured in production:
+    // DSGX — US, active, directory-listed, one claim, correct presentation — sat frozen at its
+    // 2026-10-02 bar for 33 days with zero crawl attempts in the worker log over its whole
+    // lifetime, while dates older than two weeks held 99.4-100% coverage. The stock had not stopped
+    // trading; it had stopped being reached. So the tail is interleaved one per four active
+    // listings, the way YahooCatalogPriceQueue already interleaves CurrentPerBackfill, which puts
+    // it inside the first couple of minutes of a pass instead of behind days of work.
     private async Task<List<PriceSeriesTarget>> OrderByCrawlPriority(
         List<PriceSeriesTarget> targets,
         CancellationToken cancellationToken
@@ -1053,7 +1067,7 @@ public class YahooPriceImportService
     {
         var activeSince = today.AddDays(-ActivelyTradedWindowDays);
 
-        return targets
+        var ranked = targets
             .Select(target => new
             {
                 Target = target,
@@ -1061,15 +1075,65 @@ public class YahooPriceImportService
                     ? lastDate
                     : DateOnly.MinValue,
             })
-            // Current listings lead every historical recovery target. Within each partition,
-            // false (0) sorts before true (1), so the actively-traded group leads.
-            .OrderBy(x => x.Target.IsHistorical)
-            .ThenBy(x => x.LastDate < activeSince)
-            .ThenBy(x => x.LastDate)
-            .ThenBy(x => x.Target.Ticker, StringComparer.Ordinal)
-            .ThenBy(x => x.Target.EquityListingId)
-            .Select(x => x.Target)
             .ToList();
+
+        var ordered = new List<PriceSeriesTarget>(ranked.Count);
+        // Current listings lead every historical recovery target. Within each partition the
+        // actively-traded group keeps stalest-first, where catching up the furthest behind is the
+        // point, and the dormant group is interleaved behind it.
+        foreach (var partition in ranked.GroupBy(x => x.Target.IsHistorical).OrderBy(g => g.Key))
+        {
+            var active = partition
+                .Where(x => x.LastDate >= activeSince)
+                .OrderBy(x => x.LastDate)
+                .ThenBy(x => x.Target.Ticker, StringComparer.Ordinal)
+                .ThenBy(x => x.Target.EquityListingId)
+                .Select(x => x.Target)
+                .ToList();
+            var dormant = partition
+                .Where(x => x.LastDate < activeSince)
+                // Never-synced listings have no bar for anyone to miss and are already claimed by
+                // the backfill lane, so they stay in front of the tail rather than losing to it.
+                .OrderBy(x => x.LastDate == DateOnly.MinValue ? 0 : 1)
+                // Then newest-first: the oldest members stopped trading years ago, while the
+                // newest went quiet this month and are the ones a reader notices missing. Ordering
+                // the tail stalest-first put a listing that stopped last month behind every
+                // long-dead symbol.
+                .ThenByDescending(x => x.LastDate)
+                .ThenBy(x => x.Target.Ticker, StringComparer.Ordinal)
+                .ThenBy(x => x.Target.EquityListingId)
+                .Select(x => x.Target)
+                .ToList();
+
+            InterleaveDormant(active, dormant, ordered);
+        }
+
+        return ordered;
+    }
+
+    // One dormant target per DormantPerActive actively-traded ones. Ordering the dormant tail last
+    // meant a listing that stopped trading was only reached once every active listing had been
+    // walked; because each cycle rebuilds this order from the top, a listing that was never
+    // refreshed never left that tail. With no dormant targets the order is unchanged.
+    private static void InterleaveDormant(
+        IReadOnlyList<PriceSeriesTarget> active,
+        IReadOnlyList<PriceSeriesTarget> dormant,
+        List<PriceSeriesTarget> destination
+    )
+    {
+        var activeIndex = 0;
+        var dormantIndex = 0;
+        while (activeIndex < active.Count || dormantIndex < dormant.Count)
+        {
+            for (
+                var emitted = 0;
+                emitted < DormantPerActive && activeIndex < active.Count;
+                emitted++
+            )
+                destination.Add(active[activeIndex++]);
+            if (dormantIndex < dormant.Count)
+                destination.Add(dormant[dormantIndex++]);
+        }
     }
 
     // Re-syncs the full price history of every exact listed series with an effective, unreconciled
