@@ -770,7 +770,7 @@ public class InstitutionalHoldingsTools
             "_The legacy Total Shares column sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows; it is aggregate reported 13F exposure rather than pure share ownership._"
         );
         result.AppendLine(
-            "_Filers counts every 13F filer reporting any position in the issuer, including filers holding only options on it, so it can exceed the number of filers holding the listing's shares._"
+            "_The Institutions column counts every 13F filer reporting any position in the issuer, including filers holding only options on it, so it can exceed the number of filers holding the listing's shares._"
         );
         result.AppendLine(PublishedValueCaveat);
 
