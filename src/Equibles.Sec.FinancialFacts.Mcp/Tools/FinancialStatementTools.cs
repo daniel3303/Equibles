@@ -305,6 +305,48 @@ public class FinancialStatementTools
             facts,
             selectedPeriod
         );
+        // A cash flow statement is its cash flow lines. An issuer whose facts hold only an income
+        // statement and a balance sheet still fills this template's Net Income line, and that
+        // lone row read as the whole statement.
+        if (statementType == FinancialStatementType.CashFlow)
+        {
+            var ownLines = statementLines.Where(line => line.Alias != NetIncomeAlias).ToList();
+            var statesOwnLine = ownLines.Any(line =>
+                StatementLineFacts
+                    .PickConceptFact(
+                        line,
+                        conceptIdByKey,
+                        latestByConcept,
+                        operatingCostsClaimant,
+                        derivedOperatingIncomeRounding
+                    )
+                    .Fact != null
+            );
+            if (!statesOwnLine)
+            {
+                var ownConceptIds = ownLines
+                    .SelectMany(line => line.Concepts)
+                    .Where(concept => conceptIdByKey.ContainsKey((concept.Taxonomy, concept.Tag)))
+                    .Select(concept => conceptIdByKey[(concept.Taxonomy, concept.Tag)])
+                    .ToHashSet();
+                return (
+                    null,
+                    allEvidence.Any(fact => ownConceptIds.Contains(fact.FinancialConceptId))
+                        ? EmptyPeriodMessage(
+                            stock,
+                            statementType,
+                            selectedYear,
+                            selectedPeriod,
+                            allEvidence
+                        )
+                        : $"No cash flow figures are held for {EquityListingSymbol.Display(stock)} "
+                            + $"for FY{selectedYear} {selectedPeriod.NameForHumans()}: its facts for "
+                            + "that year state no operating, investing or financing cash flow line. "
+                            + "Use statement 'income' or 'balance' for the figures held."
+                );
+            }
+        }
+
         var splitSensitive = statementLines.Any(line =>
         {
             var (reportedConcept, fact) = StatementLineFacts.PickConceptFact(
@@ -376,6 +418,8 @@ public class FinancialStatementTools
             : $"No {statementName} line items were reported by {EquityListingSymbol.Display(stock)} "
                 + $"for {label}.";
     }
+
+    private const string NetIncomeAlias = "net-income";
 
     private static string SkippedPeriodNote(
         FinancialStatementType statementType,

@@ -143,6 +143,80 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
         result.Should().NotContain("is newer but");
     }
 
+    // Happy Belly Food Group's first quarter of 2026 as its facts stood on 2026-11-09: revenue and
+    // net loss from the income statement, no cash flow line. The cash flow template's Net Income
+    // row then rendered alone, as if it were the statement.
+    [Fact]
+    public async Task CashFlow_FactsHoldingOnlyNetIncome_SayNoCashFlowFiguresAreHeld()
+    {
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "HBFG",
+            Name: "Happy Belly Food Group Inc.",
+            Cik: "0000000778"
+        );
+        var profit = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.IfrsFull,
+            Tag = "ProfitLoss",
+            Label = "Profit (loss)",
+        };
+        var revenue = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.IfrsFull,
+            Tag = "Revenue",
+            Label = "Revenue",
+        };
+        var interim = (DocumentType.SixK, new DateOnly(2026, 5, 12), "interim-2026-q1");
+        DbContext.Set<EquityIssuer>().Add(issuer);
+        DbContext.Set<FinancialConcept>().AddRange(profit, revenue);
+        DbContext
+            .Set<FinancialFact>()
+            .AddRange(
+                Fact(
+                    issuer,
+                    profit,
+                    2026,
+                    SecFiscalPeriod.Q1,
+                    new(2026, 1, 1),
+                    new(2026, 3, 31),
+                    -4_678_613m,
+                    interim,
+                    "CAD"
+                ),
+                Fact(
+                    issuer,
+                    revenue,
+                    2026,
+                    SecFiscalPeriod.Q1,
+                    new(2026, 1, 1),
+                    new(2026, 3, 31),
+                    5_963_090m,
+                    interim,
+                    "CAD"
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var cashFlow = await Sut().GetFinancialStatement("HBFG", statement: "cashflow");
+        var income = await Sut().GetFinancialStatement("HBFG", statement: "income");
+
+        cashFlow
+            .Should()
+            .Be(
+                "No cash flow figures are held for HBFG for FY2026 Q1: its facts for that year state "
+                    + "no operating, investing or financing cash flow line. Use statement 'income' or "
+                    + "'balance' for the figures held."
+            );
+        income
+            .Should()
+            .Contain("| Net Income |")
+            .And.Contain("4,678,613")
+            .And.Contain("— FY2026 Q1:");
+    }
+
     // A period-only request may take an older year's quarter, and says which newer one it passed over.
     [Fact]
     public async Task PeriodOnlyRequest_FallsBackToTheNewestYearWhoseQuarterRenders()
