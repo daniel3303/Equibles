@@ -136,6 +136,31 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     }
 
     [Fact]
+    public async Task GetInsiderTransactions_Row_ShowsFilingDateBesideTransactionDate()
+    {
+        await using var db = NewDb();
+        EquityIssuer stock = NewStock();
+        var owner = NewOwner();
+        db.AddRange(stock, owner);
+        var transaction = NewTransaction(
+            stock,
+            owner,
+            TransactionCode.Purchase,
+            AcquiredDisposed.Acquired,
+            "acc-1",
+            transactionDate: new DateOnly(2024, 3, 14)
+        );
+        transaction.FilingDate = new DateOnly(2024, 3, 19);
+        db.Add(transaction);
+        await db.SaveChangesAsync();
+
+        var output = await Sut(db).GetInsiderTransactions("AAPL");
+
+        output.Should().Contain("| Date | Filed | Insider |");
+        output.Should().Contain("| 2024-03-14 | 2024-03-19 | John Doe |");
+    }
+
+    [Fact]
     public async Task GetInsiderTransactions_TaxPaymentRow_RendersTaxPaymentNotSell()
     {
         await using var db = NewDb();

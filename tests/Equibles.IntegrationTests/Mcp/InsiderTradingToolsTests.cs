@@ -417,7 +417,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         result
             .Should()
             .Contain(
-                "| Date | Insider | Role | Type | Shares | Price | Value | Owned After | Security | Ownership | 10b5-1 |"
+                "| Date | Filed | Insider | Role | Type | Shares | Price | Value | Owned After | Security | Ownership | 10b5-1 |"
             );
     }
 
