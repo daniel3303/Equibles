@@ -69,6 +69,22 @@ public class EquityDailyStockPriceRepositoryQueryTranslationTests
         sql.Should().Contain("\"MarketCountryCode\" = 'US'");
     }
 
+    // The restatement pass reads every presented pair each cycle: the newest traded close must
+    // reach SQL as one ordered LIMIT 1 lookup per listing, never a grouping of the price table.
+    [Fact]
+    public void GetPresentedCapitalizations_ReadsTheNewestTradedCloseAsALimitedLookup()
+    {
+        using var ctx = CreateContext();
+        var sql = new EquityDailyStockPriceRepository(ctx)
+            .GetPresentedCapitalizations()
+            .ToQueryString();
+
+        sql.Should().Contain("\"EquityIssuerPresentation\"");
+        sql.Should().Contain("\"Volume\" > 0");
+        sql.Should().Contain("ORDER BY").And.Contain("LIMIT 1");
+        sql.Should().NotContain("GROUP BY");
+    }
+
     // The issuer-wide join could not use the (listing, date) index order, so PostgreSQL read
     // every bar and sorted before any LIMIT; the listing id from the loaded graph must reach SQL
     // as a plain column filter with no security join.
