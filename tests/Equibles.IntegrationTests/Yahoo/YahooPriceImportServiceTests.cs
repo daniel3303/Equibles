@@ -2406,6 +2406,39 @@ public class YahooPriceImportServiceTests : IDisposable
         updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(5_000_000);
     }
 
+    // The feed states its cap at its live price; stored beside our settled close it would read
+    // as a cap for a different price, so the stored figure is the count times the stored close.
+    [Fact]
+    public async Task Import_KeyStatisticsAtALivePriceInsideTheLastBar_StoresTheCapOnTheStoredClose()
+    {
+        EquityIssuer stock = CreateStock("LIV", "Live Price Co.");
+        await SeedStocks(stock);
+        var lastSession = UsMarketCalendar.PreviousTradingDay(
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+        await SeedPrices(CreatePrice(stock, lastSession, 150m));
+        _yahooClient
+            .GetChart("LIV", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetKeyStatistics("LIV")
+            .Returns(
+                new KeyStatistics
+                {
+                    SharesOutstanding = 10_000_000,
+                    MarketCapitalization = 10_000_000 * 151d,
+                }
+            );
+
+        await AttributeFixtureActions();
+        await _service.Import(CancellationToken.None);
+
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "LIV");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(10_000_000 * 150d);
+    }
+
     [Fact]
     public async Task Import_KeyStatisticsMarketCapDiffers_UpdatesStockMarketCapitalization()
     {

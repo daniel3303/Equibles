@@ -3590,6 +3590,27 @@ public class YahooPriceImportService
             stats.MarketCapitalization,
             currentPrice
         );
+        // The feed states its cap at its own live price; end on the stored close like the
+        // restatement pass, or every enrichment would move the cap off the close shown beside it.
+        if (marketCap > 0)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var from = today.AddDays(-MarketCapitalizationBasis.SnapshotLookbackDays);
+            var bars = await scope
+                .ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>()
+                .GetTradedByListing(stock.Presentation.EquityListingId)
+                .Where(price => price.Date >= from)
+                .Select(price => new TradedBar(price.Date, price.Low, price.High, price.Close))
+                .ToListAsync(cancellationToken);
+            marketCap =
+                MarketCapitalizationBasis.OnNewestClose(
+                    stock.Presentation.Listing.Security.SharesOutstanding,
+                    marketCap,
+                    stock.Presentation.Listing.QuoteUnitMultiplier,
+                    today,
+                    bars
+                ) ?? marketCap;
+        }
         if (marketCap != 0 && stock.Presentation.Listing.Security.MarketCapitalization != marketCap)
         {
             stock.Presentation.Listing.Security.MarketCapitalization = marketCap;

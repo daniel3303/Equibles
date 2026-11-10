@@ -221,4 +221,34 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
                     .FirstOrDefault(),
             });
     }
+
+    /// <summary>
+    /// Every presented listing that stores a share count and market cap, with its newest traded
+    /// close read as one indexed newest-row lookup per listing.
+    /// </summary>
+    public IQueryable<PresentedCapitalization> GetPresentedCapitalizations()
+    {
+        var series = GetAllSeries();
+        return DbContext
+            .Set<EquityListing>()
+            .Where(listing =>
+                listing.Presentation != null
+                && listing.Security.SharesOutstanding > 0
+                && listing.Security.MarketCapitalization > 0
+            )
+            .Select(listing => new PresentedCapitalization
+            {
+                EquityListingId = listing.Id,
+                EquityIssuerId = listing.Security.EquityIssuerId,
+                SharesOutstanding = listing.Security.SharesOutstanding,
+                MarketCapitalization = listing.Security.MarketCapitalization,
+                QuoteUnitMultiplier = listing.QuoteUnitMultiplier,
+                SnapshotTime = listing.YahooEnrichmentAttemptedAt,
+                NewestTradedClose = series
+                    .Where(price => price.EquityListingId == listing.Id && price.Volume > 0)
+                    .OrderByDescending(price => price.Date)
+                    .Select(price => (decimal?)price.Close)
+                    .FirstOrDefault(),
+            });
+    }
 }
