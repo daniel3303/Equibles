@@ -16,6 +16,7 @@ namespace Equibles.Yahoo.HostedService.Services;
 public class MarketCapitalizationRestatementService(
     EquityDailyStockPriceRepository prices,
     EquityListingRepository listings,
+    EquitySecurityRepository securities,
     StockSplitRepository splits,
     IEnumerable<IVenueCapitalizationOwner> venueOwners,
     ILogger<MarketCapitalizationRestatementService> logger
@@ -106,14 +107,17 @@ public class MarketCapitalizationRestatementService(
                 .Select(split => new { split.EquityIssuerId, split.EffectiveDate })
                 .ToListAsync(cancellationToken)
         ).ToLookup(split => split.EquityIssuerId, split => split.EffectiveDate);
-        var tracked = await listings
+        // Read again, untracked: an enrichment may have rewritten a pair since the sweep's read,
+        // and the write below is conditional on the pair read here.
+        var current = await listings
             .GetAll()
+            .AsNoTracking()
             .Include(listing => listing.Security)
             .Where(listing => listingIds.Contains(listing.Id) && listing.Presentation != null)
             .ToListAsync(cancellationToken);
 
         var restated = 0;
-        foreach (var listing in tracked)
+        foreach (var listing in current)
         {
             if (listing.YahooEnrichmentAttemptedAt is not { } snapshotTime)
                 continue;
@@ -140,8 +144,6 @@ public class MarketCapitalizationRestatementService(
             )
                 continue;
 
-            // Read from the tracked row, not the earlier projection: an enrichment may have
-            // rewritten the pair since.
             var target = MarketCapitalizationBasis.OnNewestClose(
                 security.SharesOutstanding,
                 security.MarketCapitalization,
@@ -154,11 +156,17 @@ public class MarketCapitalizationRestatementService(
             if (await IsVenueOwned(security, cancellationToken))
                 continue;
 
-            security.MarketCapitalization = value;
-            restated++;
+            if (
+                await securities.ReplaceMarketCapitalization(
+                    security.Id,
+                    security.SharesOutstanding,
+                    security.MarketCapitalization,
+                    value,
+                    cancellationToken
+                )
+            )
+                restated++;
         }
-        if (restated > 0)
-            await listings.SaveChanges();
         return restated;
     }
 

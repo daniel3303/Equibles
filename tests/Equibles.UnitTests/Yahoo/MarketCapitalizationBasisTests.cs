@@ -115,6 +115,59 @@ public class MarketCapitalizationBasisTests
             .BeApproximately(166_404_266 * 1.47, 0.5);
     }
 
+    /// <summary>
+    /// A session's bar is storable only on the next UTC date, so the feed can be read at Monday's
+    /// price while Friday's bar is the newest stored. The pair then sits on Friday's close, and
+    /// Monday's bar, dated before the snapshot, must still carry it forward.
+    /// </summary>
+    [Fact]
+    public void A_bar_stored_late_for_a_session_before_the_snapshot_still_carries_the_pair()
+    {
+        var snapshot = new DateOnly(2026, 11, 10);
+        TradedBar friday = new(new DateOnly(2026, 11, 6), 100m, 106m, 100.5m);
+        TradedBar monday = new(new DateOnly(2026, 11, 9), 102m, 105m, 104m);
+
+        var onFriday = MarketCapitalizationBasis.OnNewestClose(
+            1_000_000,
+            104_000_000,
+            null,
+            snapshot,
+            [friday]
+        );
+        onFriday.Should().BeApproximately(100_500_000, 0.5);
+
+        MarketCapitalizationBasis
+            .OnNewestClose(1_000_000, onFriday.Value, null, snapshot, [friday, monday])
+            .Should()
+            .BeApproximately(104_000_000, 0.5);
+    }
+
+    /// <summary>
+    /// A two-for-one split's first bar can be stored before the split is recorded, while the
+    /// stored count is still the pre-split one: the pair stands rather than halve.
+    /// </summary>
+    [Theory]
+    [InlineData(0.755)] // halved
+    [InlineData(3.02)] // a one-for-two consolidation
+    public void A_session_that_moved_as_a_split_would_is_never_restated_across(double close)
+    {
+        TradedBar[] bars =
+        [
+            .. HappyBellyBars[..3],
+            new(
+                new DateOnly(2026, 11, 9),
+                (decimal)close * 0.98m,
+                (decimal)close * 1.02m,
+                (decimal)close
+            ),
+        ];
+
+        MarketCapitalizationBasis
+            .OnNewestClose(HappyBellyShares, HappyBellyCap, null, HappyBellySnapshot, bars)
+            .Should()
+            .BeNull();
+    }
+
     /// <summary>A London line quotes pence while its cap is in pounds.</summary>
     [Fact]
     public void A_quoted_unit_multiplier_converts_the_close_to_major_units()

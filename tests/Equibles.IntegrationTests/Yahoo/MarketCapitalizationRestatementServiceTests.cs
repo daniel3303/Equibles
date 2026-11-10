@@ -38,6 +38,7 @@ public class MarketCapitalizationRestatementServiceTests : IDisposable
         new(
             new EquityDailyStockPriceRepository(_dbContext),
             new EquityListingRepository(_dbContext),
+            new EquitySecurityRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             owners,
             Substitute.For<ILogger<MarketCapitalizationRestatementService>>()
@@ -153,6 +154,63 @@ public class MarketCapitalizationRestatementServiceTests : IDisposable
         owner.Owns(Arg.Any<EquitySecurity>(), Arg.Any<CancellationToken>()).Returns(true);
 
         (await Service(owner).Restate(CancellationToken.None)).Should().Be(0);
+
+        StoredCap(stock).Should().Be(166_404_266 * 1.51);
+    }
+
+    /// <summary>
+    /// The pass computes from a pair it read earlier. An enrichment that stores a new share count
+    /// and cap in between must win: the old count times the close is no longer this security's cap.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceMarketCapitalization_PairRewrittenSinceItWasRead_WritesNothing()
+    {
+        var stock = await SeedStaleCap("RACE");
+        var security = stock.Presentation.Listing.Security;
+        var repository = new EquitySecurityRepository(_dbContext);
+        var readShares = security.SharesOutstanding;
+        var readCap = security.MarketCapitalization;
+        security.SharesOutstanding = 200_000_000;
+        security.MarketCapitalization = 200_000_000 * 1.47;
+        await _dbContext.SaveChangesAsync();
+
+        (
+            await repository.ReplaceMarketCapitalization(
+                security.Id,
+                readShares,
+                readCap,
+                readShares * 1.47
+            )
+        )
+            .Should()
+            .BeFalse();
+        StoredCap(stock).Should().Be(200_000_000 * 1.47);
+
+        (
+            await repository.ReplaceMarketCapitalization(
+                security.Id,
+                200_000_000,
+                200_000_000 * 1.47,
+                200_000_000 * 1.50
+            )
+        )
+            .Should()
+            .BeTrue();
+        StoredCap(stock).Should().Be(200_000_000 * 1.50);
+    }
+
+    /// <summary>
+    /// A venue bar can be stored a day before its split is recorded. The halved close then meets
+    /// a pre-split count, and the cap stands until the feed states the pair again.
+    /// </summary>
+    [Fact]
+    public async Task Restate_NewestCloseHalvedWithNoSplitRecorded_StandsAsStored()
+    {
+        var stock = await SeedStaleCap("SPLT");
+        _dbContext.Add(Bar(stock.Presentation.Listing, Today, 0.72m, 0.76m, 0.735m));
+        await _dbContext.SaveChangesAsync();
+
+        (await Service().Restate(CancellationToken.None)).Should().Be(0);
 
         StoredCap(stock).Should().Be(166_404_266 * 1.51);
     }
