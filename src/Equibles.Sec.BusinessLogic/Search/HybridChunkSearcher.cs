@@ -502,8 +502,8 @@ public class HybridChunkSearcher
     // order — one chatty filer must not fill the whole result set. Chunks without a
     // ticker pass the cap untouched (they cannot flood by company).
     //
-    // SINGLE-ENUMERATION ONLY: the cap closes over a mutable per-ticker counter, so a
-    // second enumeration of the same returned value would see spent counters and drop
+    // SINGLE-ENUMERATION ONLY: the cap and the repeated-passage filter close over mutable
+    // state, so a second enumeration of the same returned value would see it spent and drop
     // everything. Every caller consumes it exactly once via .Take(...).ToList().
     private static IEnumerable<Chunk> ApplyPoolControls(
         IEnumerable<Chunk> chunks,
@@ -522,6 +522,17 @@ public class HybridChunkSearcher
 
         if (documentTypes is { Count: > 1 })
             chunks = chunks.Where(chunk => documentTypes.Contains(chunk.DocumentType));
+
+        // A combined filing is stored once per co-registrant, so a market-wide search met the
+        // same passage once per company and one filing filled the result set; the best-ranked
+        // copy stands for the rest.
+        var passages = new HashSet<(DateTime, DocumentType, int, string)>();
+        chunks = chunks.Where(chunk =>
+            string.IsNullOrEmpty(chunk.Content)
+            || passages.Add(
+                (chunk.ReportingDate, chunk.DocumentType, chunk.StartLineNumber, chunk.Content)
+            )
+        );
 
         if (maxResultsPerCompany <= 0)
             return chunks;
