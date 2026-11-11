@@ -177,8 +177,10 @@ public class HybridChunkSearcher
         var bm25Limit = maxResults;
         if (semanticActive)
             bm25Limit = Math.Max(bm25Limit, _options.CandidatePoolSize);
-        if (maxResultsPerCompany > 0 || IsMarketWide(ticker, documentId))
+        if (maxResultsPerCompany > 0)
             bm25Limit = Math.Max(bm25Limit, maxResults * PerCompanyOverFetchFactor);
+        if (IsMarketWide(ticker, documentId))
+            bm25Limit = Math.Max(bm25Limit, MarketWidePool(maxResults));
 
         // A ticker or a document id bounds the PostgreSQL full-text degrade below, so both scopes
         // get the shorter first-pass budget and both get the fallback. A document-scoped search
@@ -476,9 +478,11 @@ public class HybridChunkSearcher
     )
     {
         var limit =
-            maxResultsPerCompany > 0 || IsMarketWide(ticker, documentId)
+            maxResultsPerCompany > 0
                 ? Math.Max(maxResults, maxResults * PerCompanyOverFetchFactor)
                 : maxResults;
+        if (IsMarketWide(ticker, documentId))
+            limit = Math.Max(limit, MarketWidePool(maxResults));
         var chunks = await _chunkRepository.PhraseSearch(
             phrase,
             limit,
@@ -575,6 +579,11 @@ public class HybridChunkSearcher
     // Neither a company nor a document bounds the search, so co-registrant copies can meet in it.
     private static bool IsMarketWide(string ticker, Guid? documentId) =>
         string.IsNullOrWhiteSpace(ticker) && !documentId.HasValue;
+
+    // Each passage of a combined filing takes one row per co-registrant, so a market-wide pool
+    // is as deep as the semantic arm's: a pool sized to the request would hold little but copies.
+    private int MarketWidePool(int maxResults) =>
+        Math.Max(maxResults * PerCompanyOverFetchFactor, _options.CandidatePoolSize);
 
     // Produces a semantic ranking of chunk ids, swallowing any embedding-server failure into an
     // empty list so retrieval degrades to BM25 rather than erroring. The corpus arm wins over

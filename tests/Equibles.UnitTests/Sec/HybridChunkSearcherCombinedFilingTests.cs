@@ -17,20 +17,26 @@ public class HybridChunkSearcherCombinedFilingTests
     private static readonly DateTime Filed = new(2026, 11, 2, 0, 0, 0, DateTimeKind.Utc);
     private static readonly string[] CoRegistrants = ["ELC", "EMP", "ENJ", "ETI-P", "EAI", "ETR"];
 
+    // Six passages of six copies each are thirty-six rows: a pool a few times the request holds
+    // five of them, and the sixth passage never arrives.
     [Fact]
-    public async Task MarketWideSearch_ReturnsAPassageOfACombinedFilingOnce_AndStillFillsTheResult()
+    public async Task MarketWideSearch_ReturnsEachPassageOfACombinedFilingOnce_AndStillFillsTheResult()
     {
-        var copies = Copies("third quarter earnings of $2.28 per share");
-        var nextPassage = Passage("EAI", 231, "the company affirmed its guidance range");
-        var otherCompany = Passage("DUK", 183, "third quarter earnings of $1.81 per share");
-        var repository = new RankedChunkRepository([.. copies, nextPassage, otherCompany]);
+        var passages = Enumerable
+            .Range(0, 6)
+            .Select(index =>
+                CoRegistrants
+                    .Select(ticker =>
+                        Passage(ticker, 100 + index, $"third quarter earnings, part {index}")
+                    )
+                    .ToList()
+            )
+            .ToList();
+        var repository = new RankedChunkRepository(passages.SelectMany(copies => copies).ToList());
 
-        var results = await NewSearcher(repository).Search("third quarter earnings per share", 3);
+        var results = await NewSearcher(repository).Search("third quarter earnings", 6);
 
-        Assert.Equal(
-            [copies[0].Id, nextPassage.Id, otherCompany.Id],
-            results.Select(chunk => chunk.Id)
-        );
+        Assert.Equal(passages.Select(copies => copies[0].Id), results.Select(chunk => chunk.Id));
     }
 
     // The any-word top-up asks whether the first pass filled the request; six copies of one
