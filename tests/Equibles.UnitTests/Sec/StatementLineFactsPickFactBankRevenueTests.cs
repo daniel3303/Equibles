@@ -70,17 +70,31 @@ public class StatementLineFactsPickFactBankRevenueTests
     }
 
     [Fact]
-    public void PickConceptFact_RevenuesIsTheHeadline_KeepsRevenues()
+    public void PickConceptFact_RevenuesIsABroaderLine_KeepsRevenues()
     {
         var (concept, fact) = Pick(
             "revenue",
-            ("Revenues", Quarter(1_100m)),
+            ("Revenues", Quarter(1_480m)),
             ("InterestIncomeExpenseNet", Quarter(677m)),
             ("NoninterestIncome", Quarter(460m))
         );
 
-        fact.Value.Should().Be(1_100_000_000m);
+        fact.Value.Should().Be(1_480_000_000m);
         concept.Tag.Should().Be("Revenues");
+    }
+
+    // US Bancorp Q2 2026: a taxable-equivalent 7,712 tagged Revenues beside 4,361 + 3,325.
+    [Fact]
+    public void PickConceptFact_RevenuesIsTheTaxableEquivalentTotal_ReadsTheBankSum()
+    {
+        var (_, fact) = Pick(
+            "revenue",
+            ("Revenues", Quarter(7_712m)),
+            ("InterestIncomeExpenseNet", Quarter(4_361m)),
+            ("NoninterestIncome", Quarter(3_325m))
+        );
+
+        fact.Value.Should().Be(7_686_000_000m);
     }
 
     [Fact]

@@ -8,8 +8,9 @@ namespace Equibles.UnitTests.Sec;
 /// <summary>
 /// The revenue alias folds in a bank's net interest plus noninterest income. Figures are Zions'
 /// filings in millions: its Revenues tag is a fee slice (Q2 2026: 182 against 677 + 460), so the
-/// sum outranks it; a headline within a tenth of the sum keeps every period; a period only one
-/// component states keeps revenue; a bank with no revenue tag reads the sum.
+/// sum outranks it; a line equal to the sum, or more than a tenth above it, keeps every period; a
+/// line that states the sum on another basis gives way to it; a period only one component states
+/// keeps revenue; a bank with no revenue tag reads the sum.
 /// </summary>
 public class BankTopLineFoldTests
 {
@@ -126,17 +127,67 @@ public class BankTopLineFoldTests
     }
 
     [Fact]
-    public void Fold_RevenuesIsTheHeadline_KeepsRevenues()
+    public void Fold_RevenuesEqualsTheSum_KeepsTheFilersOwnFacts()
     {
-        // A bank whose Revenues total sits within a tenth of the sum reports its own top line.
+        var (facts, _) = BankTopLine.Fold(
+            [Q1(Revenues, 849m), Q2(Revenues, 1_137m)],
+            [Q1(NetInterest, 662m), Q2(NetInterest, 677m)],
+            [Q1(Noninterest, 187m), Q2(Noninterest, 460m)],
+            RevenuePriority
+        );
+
+        facts.Should().OnlyContain(fact => fact.FinancialConceptId == Revenues);
+    }
+
+    [Fact]
+    public void Fold_RevenuesIsABroaderLine_KeepsRevenues()
+    {
+        // Revenue before interest expense sits well above net interest plus noninterest income.
+        var picked = PickMillions(
+            [Q1(Revenues, 1_150m), Q2(Revenues, 1_480m)],
+            [Q1(NetInterest, 662m), Q2(NetInterest, 677m)],
+            [Q1(Noninterest, 187m), Q2(Noninterest, 460m)]
+        );
+
+        picked[SecFiscalPeriod.Q1].Should().Be(1_150m);
+        picked[SecFiscalPeriod.Q2].Should().Be(1_480m);
+    }
+
+    [Fact]
+    public void Fold_RevenuesIsTheTaxableEquivalentTotal_EveryPeriodReadsTheBankSum()
+    {
+        // US Bancorp tags its taxable-equivalent total net revenue as Revenues, about half a
+        // percent above the GAAP components beside it (FY2025: 28,656 against 16,649 + 11,891).
+        var picked = PickMillions(
+            [Q1(Revenues, 7_288m), Q2(Revenues, 7_712m), Year(Revenues, 28_656m)],
+            [Q1(NetInterest, 4_263m), Q2(NetInterest, 4_361m), Year(NetInterest, 16_649m)],
+            [Q1(Noninterest, 2_997m), Q2(Noninterest, 3_325m), Year(Noninterest, 11_891m)]
+        );
+
+        picked
+            .Should()
+            .BeEquivalentTo(
+                new Dictionary<SecFiscalPeriod, decimal>
+                {
+                    [SecFiscalPeriod.Q1] = 7_260m,
+                    [SecFiscalPeriod.Q2] = 7_686m,
+                    [SecFiscalPeriod.FullYear] = 28_540m,
+                }
+            );
+    }
+
+    [Fact]
+    public void Fold_RevenuesLeavesALineOutOfTheSum_EveryPeriodReadsTheBankSum()
+    {
+        // A total stated after the credit-loss provision sits a few percent under the sum.
         var picked = PickMillions(
             [Q1(Revenues, 840m), Q2(Revenues, 1_100m)],
             [Q1(NetInterest, 662m), Q2(NetInterest, 677m)],
             [Q1(Noninterest, 187m), Q2(Noninterest, 460m)]
         );
 
-        picked[SecFiscalPeriod.Q1].Should().Be(840m);
-        picked[SecFiscalPeriod.Q2].Should().Be(1_100m);
+        picked[SecFiscalPeriod.Q1].Should().Be(849m);
+        picked[SecFiscalPeriod.Q2].Should().Be(1_137m);
     }
 
     [Fact]
@@ -169,23 +220,23 @@ public class BankTopLineFoldTests
     [Fact]
     public void Fold_HeadlineYear_IsNeverFilledFromTheSum()
     {
-        // A year that reports its own headline keeps one measure, so a quarter it leaves untagged
-        // stays empty rather than reading the other measure.
+        // A year that reports its own broader line keeps one measure, so a quarter it leaves
+        // untagged stays empty rather than reading the other measure.
         var picked = PickMillions(
-            [Q2(Revenues, 1_100m)],
+            [Q2(Revenues, 1_480m)],
             [Q1(NetInterest, 662m), Q2(NetInterest, 677m)],
             [Q1(Noninterest, 187m), Q2(Noninterest, 460m)]
         );
 
         picked.Should().NotContainKey(SecFiscalPeriod.Q1);
-        picked[SecFiscalPeriod.Q2].Should().Be(1_100m);
+        picked[SecFiscalPeriod.Q2].Should().Be(1_480m);
     }
 
     [Fact]
     public void Fold_YearWithoutRevenue_FillsFromTheSum()
     {
         var (facts, priority) = BankTopLine.Fold(
-            [Year(Revenues, 3_300m)],
+            [Year(Revenues, 4_400m)],
             [Year(NetInterest, 2_627m), Q1(NetInterest, 662m)],
             [Year(Noninterest, 758m), Q1(Noninterest, 187m)],
             RevenuePriority
@@ -194,7 +245,7 @@ public class BankTopLineFoldTests
         facts
             .Select(f => (f.FiscalYear, f.Value / 1_000_000m))
             .Should()
-            .BeEquivalentTo(new[] { (2025, 3_300m), (2026, 849m) });
+            .BeEquivalentTo(new[] { (2025, 4_400m), (2026, 849m) });
     }
 
     [Fact]
@@ -215,14 +266,14 @@ public class BankTopLineFoldTests
     [Fact]
     public void Fold_ContractTagIsTheNewestSlice_TheHeadlineDecides()
     {
-        // A fee-only contract tag beside the Revenues headline is never the line being tested.
+        // A fee-only contract tag beside the broader Revenues line is never the line being tested.
         var picked = PickMillions(
-            [Q2(Revenues, 1_100m), Q2(ContractRevenue, 182m)],
+            [Q2(Revenues, 1_480m), Q2(ContractRevenue, 182m)],
             [Q2(NetInterest, 677m)],
             [Q2(Noninterest, 460m)]
         );
 
-        picked[SecFiscalPeriod.Q2].Should().Be(1_100m);
+        picked[SecFiscalPeriod.Q2].Should().Be(1_480m);
     }
 
     [Fact]

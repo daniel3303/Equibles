@@ -6,8 +6,10 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// <summary>
 /// A bank's top line is net interest income plus noninterest income. Its <c>Revenues</c> tag can be
 /// one slice of that (Zions FY2026 Q2: Revenues 182M against 677M net interest income plus 460M
-/// noninterest income), and many banks tag no revenue concept at all, so the sum stands in for the
-/// revenue alias wherever revenue is missing or clearly partial.
+/// noninterest income) or the same top line on another basis (US Bancorp FY2025: a
+/// taxable-equivalent 28,656M against 16,649M plus 11,891M), and many banks tag no revenue concept
+/// at all, so the sum stands in for the revenue alias wherever revenue is missing, partial or
+/// restated; a line more than a tenth above the sum is a broader one the filer states and is kept.
 /// </summary>
 public static class BankTopLine
 {
@@ -21,8 +23,9 @@ public static class BankTopLine
     /// </summary>
     public static readonly Guid ConceptId = new("b4a1e7c2-3f5d-4e86-9a0b-6c2d8e1f7a53");
 
-    // A reported top line within a tenth of the bank sum is the filer's own headline.
-    private const decimal PartialTopLineMargin = 0.1m;
+    // A reported line more than a tenth above the bank sum is a broader line, such as revenue
+    // before interest expense; below that it is a slice of the sum or the sum on another basis.
+    private const decimal BroaderLineMargin = 0.1m;
 
     /// <summary>
     /// True when <paramref name="concepts"/> is the revenue alias (or one of its synonyms, which
@@ -34,11 +37,12 @@ public static class BankTopLine
 
     /// <summary>
     /// The revenue alias's facts with the bank sum folded in, and the pick priority that goes with
-    /// them. A sum pairs the two components one filing states for one exact period. When the sum
-    /// exceeds the newest revenue period by more than a tenth, revenue is a partial line and the
-    /// sums replace it in every fiscal year they reach; otherwise they only fill fiscal years with
-    /// no revenue. Each fiscal year keeps one measure, so a derived fourth quarter (the year less
-    /// its first three quarters) never subtracts one measure from the other.
+    /// them. A sum pairs the two components one filing states for one exact period. When the newest
+    /// revenue period differs from the sum without being a broader line, revenue is a slice of the
+    /// top line or states it on another basis, and the sums replace it in every fiscal year they
+    /// reach; otherwise they only fill fiscal years with no revenue. Each fiscal year keeps one
+    /// measure, so a derived fourth quarter (the year less its first three quarters) never subtracts
+    /// one measure from the other.
     /// </summary>
     public static (List<FinancialFact> Facts, Dictionary<Guid, int> Priority) Fold(
         IReadOnlyCollection<FinancialFact> revenue,
@@ -53,7 +57,7 @@ public static class BankTopLine
             return ([.. revenue], priority);
 
         priority[ConceptId] = int.MaxValue;
-        if (IsPartialAtNewest(revenue, sums, revenuePriority))
+        if (SumIsTopLineAtNewest(revenue, sums, revenuePriority))
         {
             var sumYears = sums.Select(f => f.FiscalYear).ToHashSet();
             return ([.. revenue.Where(f => !sumYears.Contains(f.FiscalYear)), .. sums], priority);
@@ -67,7 +71,7 @@ public static class BankTopLine
 
     /// <summary>
     /// One period's top line, for a statement that shows a single period: the bank sum where the
-    /// period has no revenue or its revenue is more than a tenth below the sum, else the revenue.
+    /// period has no revenue or its revenue is a slice or another basis of the sum, else the revenue.
     /// The components may come from different filings, as each statement line takes its own latest
     /// restatement; a derived component makes the sum derived.
     /// </summary>
@@ -91,7 +95,7 @@ public static class BankTopLine
             return revenue;
         if (revenue == null)
             return sum;
-        return SamePeriod(revenue, sum) && IsPartial(revenue, sum) ? sum : revenue;
+        return SamePeriod(revenue, sum) && SumIsTopLine(revenue, sum) ? sum : revenue;
     }
 
     private static List<FinancialFact> Sums(
@@ -117,7 +121,7 @@ public static class BankTopLine
 
     // The newest revenue period as the alias reads it: the latest period end, its shortest span
     // (the discrete quarter beside the year-to-date), then the preferred tag and latest filing.
-    private static bool IsPartialAtNewest(
+    private static bool SumIsTopLineAtNewest(
         IReadOnlyCollection<FinancialFact> revenue,
         IReadOnlyCollection<FinancialFact> sums,
         IReadOnlyDictionary<Guid, int> revenuePriority
@@ -138,7 +142,7 @@ public static class BankTopLine
             .OrderByDescending(s => s.FiledDate)
             .ThenByDescending(s => s.AccessionNumber, StringComparer.Ordinal)
             .FirstOrDefault();
-        return sum != null && IsPartial(newest, sum);
+        return sum != null && SumIsTopLine(newest, sum);
     }
 
     // A negative or zero sum is no top line; a copy keeps EF-tracked components untouched.
@@ -170,8 +174,10 @@ public static class BankTopLine
         return sum;
     }
 
-    private static bool IsPartial(FinancialFact direct, FinancialFact topLine) =>
-        topLine.Value - direct.Value > Math.Abs(direct.Value) * PartialTopLineMargin;
+    // An equal line is the sum itself and keeps its own tag and filing.
+    private static bool SumIsTopLine(FinancialFact direct, FinancialFact topLine) =>
+        direct.Value != topLine.Value
+        && direct.Value - topLine.Value <= Math.Abs(topLine.Value) * BroaderLineMargin;
 
     private static bool SamePeriod(FinancialFact left, FinancialFact right) =>
         left.PeriodStart == right.PeriodStart
