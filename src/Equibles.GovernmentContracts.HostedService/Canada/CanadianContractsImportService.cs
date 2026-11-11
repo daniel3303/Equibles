@@ -35,6 +35,12 @@ public class CanadianContractsImportService : IImporter
 
     private static readonly TimeSpan PagePause = TimeSpan.FromMilliseconds(250);
 
+    // The portal's gateway times out on a share of requests for hours at a stretch and a cycle reads
+    // some eighty pages, so a page that fails that way is asked again before the cycle is given up.
+    internal const int PageAttempts = 4;
+
+    internal TimeSpan PageRetryPause { get; set; } = TimeSpan.FromSeconds(20);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpClientFactory _clients;
     private readonly RecipientResolver _resolver;
@@ -128,19 +134,52 @@ public class CanadianContractsImportService : IImporter
         var rows = new List<CanadianContractRow>();
         for (var offset = 0; ; offset += OpenCanadaContracts.PageSize)
         {
-            using var response = await client.GetAsync(
-                OpenCanadaContracts.PageAddress(period, offset),
-                cancellationToken
-            );
-            response.EnsureSuccessStatusCode();
             var page = OpenCanadaContracts.ParsePage(
-                await response.Content.ReadAsStringAsync(cancellationToken)
+                await ReadPage(
+                    client,
+                    OpenCanadaContracts.PageAddress(period, offset),
+                    cancellationToken
+                )
             );
             rows.AddRange(page);
             // A short page is the last one; the reported total can be an estimate, so it is never the stop signal.
             if (page.Count < OpenCanadaContracts.PageSize)
                 return rows;
             await Task.Delay(PagePause, _timeProvider, cancellationToken);
+        }
+    }
+
+    // A server error, a dropped connection or a timed-out request is retried with a growing pause; any
+    // other answer, and the last attempt's failure, is the page's result.
+    private async Task<string> ReadPage(
+        HttpClient client,
+        string address,
+        CancellationToken cancellationToken
+    )
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var last = attempt == PageAttempts;
+            try
+            {
+                using var response = await client.GetAsync(address, cancellationToken);
+                if ((int)response.StatusCode < 500 || last)
+                {
+                    response.EnsureSuccessStatusCode();
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            catch (Exception exception)
+                when (!last
+                    && !cancellationToken.IsCancellationRequested
+                    && exception
+                        is HttpRequestException { StatusCode: null }
+                            or TaskCanceledException
+                )
+            {
+                _logger.LogDebug(exception, "Canadian contracts page failed in transit; retrying");
+            }
+            await Task.Delay(PageRetryPause * attempt, _timeProvider, cancellationToken);
         }
     }
 
