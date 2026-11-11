@@ -101,6 +101,32 @@ public class CanadianContractsImportServiceTests
         ReadCursor(options).Should().Be(LastQuarterOfFiscal2025);
     }
 
+    // The portal answers 504 on a share of pages for hours at a stretch; a page that fails that way is asked
+    // again, and only a gateway that never recovers ends the cycle.
+    [Fact]
+    public async Task Import_AGatewayTimeoutOnAPageIsRetriedBeforeTheCycleIsGivenUp()
+    {
+        var options = NewDbOptions();
+        Seed(options, LastQuarterOfFiscal2025);
+        var flaky = new FlakyHandler(new QuarterHandler(Answers()), failures: 2);
+        var service = Service(options, flaky);
+
+        await service.Import(CancellationToken.None);
+
+        using var context = NewContext(options);
+        context.Set<GovernmentContract>().Should().HaveCount(2);
+        ReadCursor(options).Should().Be(new DateOnly(2026, 12, 31));
+
+        var down = Service(
+            NewSeeded(),
+            new FlakyHandler(new QuarterHandler(Answers()), int.MaxValue)
+        );
+        var import = () => down.Import(CancellationToken.None);
+        (await import.Should().ThrowAsync<HttpRequestException>())
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.GatewayTimeout);
+    }
+
     // National Defence dates an amendment by its own signing: call-up W0046-26-154-0 was let on 2025-11-26 for
     // C$23,995 (Q3) and restated on 2026-01-16 at C$44,642.70 (Q4). The amended value wins, the award date stays,
     // whichever quarter is read first.
@@ -170,16 +196,31 @@ public class CanadianContractsImportServiceTests
     private static CanadianContractsImportService Service(
         DbContextOptions<EquiblesFinancialDbContext> options,
         Dictionary<string, string> answers
+    ) => Service(options, new QuarterHandler(answers));
+
+    private static CanadianContractsImportService Service(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        HttpMessageHandler handler
     )
     {
         var scopes = ScopeFactory(options);
         return new CanadianContractsImportService(
             scopes,
-            new Clients(new QuarterHandler(answers)),
+            new Clients(handler),
             new RecipientResolver(scopes),
             new FixedClock(Now),
             NullLogger<CanadianContractsImportService>.Instance
-        );
+        )
+        {
+            PageRetryPause = TimeSpan.Zero,
+        };
+    }
+
+    private static DbContextOptions<EquiblesFinancialDbContext> NewSeeded()
+    {
+        var options = NewDbOptions();
+        Seed(options, LastQuarterOfFiscal2025);
+        return options;
     }
 
     private static void Seed(
@@ -281,6 +322,21 @@ public class CanadianContractsImportServiceTests
                 new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) }
             );
         }
+    }
+
+    // Answers 504 to the first requests it sees, then hands every later one to the recorded answers.
+    private sealed class FlakyHandler(HttpMessageHandler inner, int failures)
+        : DelegatingHandler(inner)
+    {
+        private int _seen;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) =>
+            _seen++ < failures
+                ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.GatewayTimeout))
+                : base.SendAsync(request, cancellationToken);
     }
 
     private sealed class Clients(HttpMessageHandler handler) : IHttpClientFactory
