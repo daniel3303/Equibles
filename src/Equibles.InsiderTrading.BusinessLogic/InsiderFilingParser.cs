@@ -301,6 +301,22 @@ public static class InsiderFilingParser
     }
 
     /// <summary>
+    /// The CIKs of an ownership document's reporting owners, leading zeros dropped. A company
+    /// among them reported its own holding in the issuer the document names.
+    /// </summary>
+    public static IReadOnlyList<string> GetReportingOwnerCiks(XElement root) =>
+        (root?.Elements("reportingOwner") ?? [])
+            .Select(owner =>
+                owner
+                    .Element("reportingOwnerId")
+                    ?.Element("rptOwnerCik")
+                    ?.Value?.Trim()
+                    .TrimStart('0')
+            )
+            .Where(cik => !string.IsNullOrEmpty(cik))
+            .ToList();
+
+    /// <summary>
     /// The trading symbol an ownership filing states for <paramref name="issuerCik"/>, or null
     /// when the document is not that issuer's (a filing in a reporting owner's feed) or states none.
     /// </summary>

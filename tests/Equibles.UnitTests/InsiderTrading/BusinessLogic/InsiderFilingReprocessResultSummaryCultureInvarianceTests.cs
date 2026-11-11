@@ -42,6 +42,8 @@ public class InsiderFilingReprocessResultSummaryCultureInvarianceTests
             Repaired = 7890,
             DatesCorrected = 6789,
             Rule10b5Stamped = 4321,
+            Reattributed = 1357,
+            ForeignIssuerRowsRemoved = 2468,
             Failed = 2345,
         };
 
@@ -55,7 +57,8 @@ public class InsiderFilingReprocessResultSummaryCultureInvarianceTests
                 .Be(
                     "Reprocessed 1,234/5,678 filings (9,012 fetched, 3,456 rows reclassified, "
                         + "7,890 prices repaired, 6,789 dates corrected, 4,321 10b5-1 flags stamped, "
-                        + "2,345 failed).",
+                        + "1,357 rows moved to their issuer, "
+                        + "2,468 rows of an issuer outside the directory removed, 2,345 failed).",
                     "log helpers in this repo are culture-invariant (cf. BaseScraperWorker.FormatInterval, "
                         + "FactMarkdown.Value); a non-invariant group separator forks operator log output by host locale"
                 );

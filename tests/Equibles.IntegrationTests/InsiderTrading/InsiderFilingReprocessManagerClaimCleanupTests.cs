@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
@@ -84,6 +85,7 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
             new InsiderFilingRepository(runContext),
             new EquityDailyStockPriceRepository(runContext),
             new StockSplitRepository(runContext),
+            new EquityIssuerRepository(runContext),
             new InsiderTransactionPriceValidator(),
             Substitute.For<ISecEdgarClient>(),
             Substitute.For<IFileManager>(),
@@ -165,6 +167,7 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
             new InsiderFilingRepository(runContext),
             new EquityDailyStockPriceRepository(runContext),
             new StockSplitRepository(runContext),
+            new EquityIssuerRepository(runContext),
             new InsiderTransactionPriceValidator(),
             Substitute.For<ISecEdgarClient>(),
             InsiderReprocessTestSupport.NewFileManager(),

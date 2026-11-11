@@ -32,11 +32,17 @@ public class InsiderFilingReprocessResult
     /// null).</summary>
     public int Rule10b5Stamped { get; set; }
 
+    /// <summary>Rows moved to the issuer their ownership document names.</summary>
+    public int Reattributed { get; set; }
+
+    /// <summary>Rows removed because their document names an issuer outside the directory.</summary>
+    public int ForeignIssuerRowsRemoved { get; set; }
+
     /// <summary>Filings that could not be fetched or parsed this run.</summary>
     public int Failed { get; set; }
 
     public string Summary =>
         FormattableString.Invariant(
-            $"Reprocessed {Processed:N0}/{Total:N0} filings ({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, {Repaired:N0} prices repaired, {DatesCorrected:N0} dates corrected, {Rule10b5Stamped:N0} 10b5-1 flags stamped, {Failed:N0} failed)."
+            $"Reprocessed {Processed:N0}/{Total:N0} filings ({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, {Repaired:N0} prices repaired, {DatesCorrected:N0} dates corrected, {Rule10b5Stamped:N0} 10b5-1 flags stamped, {Reattributed:N0} rows moved to their issuer, {ForeignIssuerRowsRemoved:N0} rows of an issuer outside the directory removed, {Failed:N0} failed)."
         );
 }
