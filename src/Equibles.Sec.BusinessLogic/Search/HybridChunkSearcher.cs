@@ -148,7 +148,8 @@ public class HybridChunkSearcher
 
         // When the semantic arm is live, BM25 returns a deeper pool so RRF has more to reorder;
         // otherwise it returns exactly what the caller asked for. A per-company cap also deepens
-        // the pool: capping discards surplus hits, and the pool must still fill maxResults.
+        // the pool: capping discards surplus hits, and the pool must still fill maxResults. So does
+        // a market-wide search, whose repeated passages of a combined filing are discarded.
         var semanticActive =
             _options.Enabled
             && _options.VectorSource != VectorSource.Off
@@ -176,7 +177,7 @@ public class HybridChunkSearcher
         var bm25Limit = maxResults;
         if (semanticActive)
             bm25Limit = Math.Max(bm25Limit, _options.CandidatePoolSize);
-        if (maxResultsPerCompany > 0)
+        if (maxResultsPerCompany > 0 || IsMarketWide(ticker, documentId))
             bm25Limit = Math.Max(bm25Limit, maxResults * PerCompanyOverFetchFactor);
 
         // A ticker or a document id bounds the PostgreSQL full-text degrade below, so both scopes
@@ -263,7 +264,11 @@ public class HybridChunkSearcher
         // excludes every on-point chunk. When the conjunctive pass can't fill the request,
         // top up from a disjunctive (any-token) pass — conjunctive hits keep their rank and
         // the broader hits only append after them, so precise matches never lose position.
-        if (!scopedFallbackAnswered && disjunctiveFallback && bm25.Count < maxResults)
+        if (
+            !scopedFallbackAnswered
+            && disjunctiveFallback
+            && bm25.Select(PassageOf).Distinct().Count() < maxResults
+        )
         {
             try
             {
@@ -471,7 +476,7 @@ public class HybridChunkSearcher
     )
     {
         var limit =
-            maxResultsPerCompany > 0
+            maxResultsPerCompany > 0 || IsMarketWide(ticker, documentId)
                 ? Math.Max(maxResults, maxResults * PerCompanyOverFetchFactor)
                 : maxResults;
         var chunks = await _chunkRepository.PhraseSearch(
@@ -525,30 +530,51 @@ public class HybridChunkSearcher
 
         // A combined filing is stored once per co-registrant, so a market-wide search met the
         // same passage once per company and one filing filled the result set; the best-ranked
-        // copy stands for the rest.
-        var passages = new HashSet<(DateTime, DocumentType, int, string)>();
-        chunks = chunks.Where(chunk =>
-            string.IsNullOrEmpty(chunk.Content)
-            || passages.Add(
-                (chunk.ReportingDate, chunk.DocumentType, chunk.StartLineNumber, chunk.Content)
-            )
-        );
-
-        if (maxResultsPerCompany <= 0)
-            return chunks;
-
+        // copy stands for the rest. A copy the cap turns away leaves the passage unseen, so
+        // another registrant's copy can still stand for it.
+        var passages = new HashSet<Passage>();
         var perTicker = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         return chunks.Where(chunk =>
         {
-            if (chunk.Ticker == null)
-                return true;
-            var count = perTicker.GetValueOrDefault(chunk.Ticker);
-            if (count >= maxResultsPerCompany)
+            var passage = PassageOf(chunk);
+            if (passages.Contains(passage))
                 return false;
-            perTicker[chunk.Ticker] = count + 1;
+            if (maxResultsPerCompany > 0 && chunk.Ticker != null)
+            {
+                var count = perTicker.GetValueOrDefault(chunk.Ticker);
+                if (count >= maxResultsPerCompany)
+                    return false;
+                perTicker[chunk.Ticker] = count + 1;
+            }
+            passages.Add(passage);
             return true;
         });
     }
+
+    // What makes two chunks the same passage of one filing: its date, form, start line and text.
+    // A chunk without text is only ever itself.
+    private readonly record struct Passage(
+        Guid ChunkId,
+        DateTime ReportingDate,
+        DocumentType DocumentType,
+        int StartLineNumber,
+        string Content
+    );
+
+    private static Passage PassageOf(Chunk chunk) =>
+        string.IsNullOrEmpty(chunk.Content)
+            ? new Passage(chunk.Id, default, null, 0, null)
+            : new Passage(
+                Guid.Empty,
+                chunk.ReportingDate,
+                chunk.DocumentType,
+                chunk.StartLineNumber,
+                chunk.Content
+            );
+
+    // Neither a company nor a document bounds the search, so co-registrant copies can meet in it.
+    private static bool IsMarketWide(string ticker, Guid? documentId) =>
+        string.IsNullOrWhiteSpace(ticker) && !documentId.HasValue;
 
     // Produces a semantic ranking of chunk ids, swallowing any embedding-server failure into an
     // empty list so retrieval degrades to BM25 rather than erroring. The corpus arm wins over
