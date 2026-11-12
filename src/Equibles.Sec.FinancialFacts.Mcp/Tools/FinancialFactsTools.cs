@@ -160,7 +160,8 @@ public class FinancialFactsTools
                         facts,
                         bankComponents.NetInterestIncome,
                         bankComponents.NoninterestIncome,
-                        conceptPriority
+                        conceptPriority,
+                        bankComponents.InterestExpense
                     );
                 }
                 // The operating-expenses and total-costs lines continue through a filer's
@@ -366,7 +367,8 @@ public class FinancialFactsTools
                     ? await ResolveBankTopLineComponentIds()
                     : (
                         NetInterestIncome: new HashSet<Guid>(),
-                        NoninterestIncome: new HashSet<Guid>()
+                        NoninterestIncome: new HashSet<Guid>(),
+                        InterestExpense: new HashSet<Guid>()
                     );
                 // The cost lines continue through operating costs per issuer
                 // (OperatingCostsContinuation); gross profit loads what proves a mis-tag.
@@ -381,6 +383,7 @@ public class FinancialFactsTools
                 var loadedConceptIds = conceptPriority
                     .Keys.Concat(bankComponentIds.NetInterestIncome)
                     .Concat(bankComponentIds.NoninterestIncome)
+                    .Concat(bankComponentIds.InterestExpense)
                     .Concat(operatingCosts.Ids)
                     .Concat(grossProfitComponents.SelectMany(c => c.Ids))
                     .ToList();
@@ -442,7 +445,13 @@ public class FinancialFactsTools
                                     )
                                 )
                                 .ToList(),
-                            conceptPriority
+                            conceptPriority,
+                            // One period shows none of the filer's history, so its interest
+                            // expense is what proves revenue before interest expense.
+                            g.Where(f =>
+                                    bankComponentIds.InterestExpense.Contains(f.FinancialConceptId)
+                                )
+                                .ToList()
                         );
                         (candidates, priority) = OperatingCostsContinuation.Fold(
                             claimableAlias,
@@ -1020,11 +1029,16 @@ public class FinancialFactsTools
     // its revenue line is missing or partial (BankTopLine).
     private async Task<(
         List<FinancialFact> NetInterestIncome,
-        List<FinancialFact> NoninterestIncome
+        List<FinancialFact> NoninterestIncome,
+        List<FinancialFact> InterestExpense
     )> LoadBankTopLineComponents(IQueryable<FinancialFact> issuerFacts)
     {
-        var (netInterestIds, noninterestIds) = await ResolveBankTopLineComponentIds();
-        var componentIds = netInterestIds.Concat(noninterestIds).ToList();
+        var (netInterestIds, noninterestIds, interestExpenseIds) =
+            await ResolveBankTopLineComponentIds();
+        var componentIds = netInterestIds
+            .Concat(noninterestIds)
+            .Concat(interestExpenseIds)
+            .ToList();
         var facts =
             componentIds.Count == 0
                 ? []
@@ -1033,20 +1047,31 @@ public class FinancialFactsTools
                     .ToListAsync();
         return (
             facts.Where(f => netInterestIds.Contains(f.FinancialConceptId)).ToList(),
-            facts.Where(f => noninterestIds.Contains(f.FinancialConceptId)).ToList()
+            facts.Where(f => noninterestIds.Contains(f.FinancialConceptId)).ToList(),
+            facts.Where(f => interestExpenseIds.Contains(f.FinancialConceptId)).ToList()
         );
     }
 
     private async Task<(
         HashSet<Guid> NetInterestIncome,
-        HashSet<Guid> NoninterestIncome
+        HashSet<Guid> NoninterestIncome,
+        HashSet<Guid> InterestExpense
     )> ResolveBankTopLineComponentIds()
     {
         FinancialConceptAliases.TryResolve(BankTopLine.NetInterestIncomeAlias, out var netInterest);
         FinancialConceptAliases.TryResolve(BankTopLine.NoninterestIncomeAlias, out var noninterest);
+        FinancialConceptAliases.TryResolve(
+            BankTopLine.InterestExpenseAlias,
+            out var interestExpense
+        );
         var (netInterestPriority, _) = await ResolveConcepts(netInterest);
         var (noninterestPriority, _) = await ResolveConcepts(noninterest);
-        return ([.. netInterestPriority.Keys], [.. noninterestPriority.Keys]);
+        var (interestExpensePriority, _) = await ResolveConcepts(interestExpense);
+        return (
+            [.. netInterestPriority.Keys],
+            [.. noninterestPriority.Keys],
+            [.. interestExpensePriority.Keys]
+        );
     }
 
     // The alias's ingested concepts: their pick priority, and the variant each was reported
