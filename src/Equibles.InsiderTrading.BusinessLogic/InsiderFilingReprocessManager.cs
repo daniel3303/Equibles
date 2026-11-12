@@ -618,7 +618,8 @@ public class InsiderFilingReprocessManager
     // showing a subsidiary's Klaviyo warrant exercises as its insider trades). The document names
     // the issuer: the rows move to it, or go when the directory does not hold it. Amendment pairing
     // is the import's: where the issuer already holds the filing's amendment or original, the rows
-    // go and the import reads the filing again under the issuer. False when they went.
+    // stay with the holder, since beside their counterpart the trade would be listed twice. False
+    // when they went.
     private async Task<bool> KeepUnderTheIssuerNamed(
         XElement root,
         List<InsiderTransaction> rows,
@@ -658,16 +659,15 @@ public class InsiderFilingReprocessManager
 
         if (await PairsAtTheIssuer(root, rows, accession, named))
         {
-            _transactionRepository.Delete(rows);
-            result.ReturnedToImport += rows.Count;
+            result.HeldForPairing += rows.Count;
             _logger.LogInformation(
-                "Insider reprocess: {AccessionNumber} removed {RowCount} rows held under reporting owner {HolderCik}; issuer {IssuerCik} holds its amendment or original, so the import reads it again there",
+                "Insider reprocess: {AccessionNumber} left {RowCount} rows under reporting owner {HolderCik}; issuer {IssuerCik} holds the amendment or original they pair with",
                 accession,
                 rows.Count,
                 holder.Cik,
                 issuerCik
             );
-            return false;
+            return true;
         }
 
         foreach (var row in rows)
@@ -689,6 +689,7 @@ public class InsiderFilingReprocessManager
     // Pairing was scoped to the holder when these rows were stored, so an amendment and its
     // original taken by different companies never met; moved beside its counterpart the trade
     // would be listed twice. A pair the amendment already claims is settled and moves as it is.
+    // A batch saves once, so rows it has already moved are read from the change tracker.
     private async Task<bool> PairsAtTheIssuer(
         XElement root,
         List<InsiderTransaction> rows,
@@ -709,19 +710,29 @@ public class InsiderFilingReprocessManager
             .Where(claim => claim != null)
             .Distinct()
             .ToList();
-        return await _transactionRepository
-            .GetPairingCounterparts(
-                new InsiderOwner { Id = rows[0].InsiderOwnerId },
-                named.Id,
-                InsiderFilingParser.ParseOwnershipForm(form),
-                rows[0].FilingDate,
-                originalFilingDate,
-                InsiderAmendmentPairing.OriginalDateShiftToleranceDays
-            )
-            .IgnoreQueryFilters()
-            .AnyAsync(row =>
-                row.AccessionNumber != accession && !claimed.Contains(row.AccessionNumber)
-            );
+        var counterpart = InsiderTransactionRepository.PairingCounterpart(
+            rows[0].InsiderOwnerId,
+            named.Id,
+            InsiderFilingParser.ParseOwnershipForm(form),
+            rows[0].FilingDate,
+            originalFilingDate,
+            InsiderAmendmentPairing.OriginalDateShiftToleranceDays
+        );
+        var movedInThisBatch = _dbContext
+            .ChangeTracker.Entries<InsiderTransaction>()
+            .Where(entry => entry.State != EntityState.Deleted)
+            .Select(entry => entry.Entity)
+            .AsQueryable()
+            .Where(counterpart)
+            .Any(row => row.AccessionNumber != accession && !claimed.Contains(row.AccessionNumber));
+        return movedInThisBatch
+            || await _transactionRepository
+                .GetAll()
+                .IgnoreQueryFilters()
+                .Where(counterpart)
+                .AnyAsync(row =>
+                    row.AccessionNumber != accession && !claimed.Contains(row.AccessionNumber)
+                );
     }
 
     private static bool HasCik(EquityIssuer issuer, string cik) =>

@@ -39,16 +39,16 @@ public class InsiderFilingReprocessResult
     public int ForeignIssuerRowsRemoved { get; set; }
 
     /// <summary>
-    /// Rows removed so the import reads their filing again under the issuer it names, where an
-    /// amendment or the original it restates waits to be paired with it.
+    /// Rows left under the reporting owner because the issuer their document names already holds
+    /// the amendment or original they pair with; moved there the trade would be listed twice.
     /// </summary>
-    public int ReturnedToImport { get; set; }
+    public int HeldForPairing { get; set; }
 
     /// <summary>Filings that could not be fetched or parsed this run.</summary>
     public int Failed { get; set; }
 
     public string Summary =>
         FormattableString.Invariant(
-            $"Reprocessed {Processed:N0}/{Total:N0} filings ({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, {Repaired:N0} prices repaired, {DatesCorrected:N0} dates corrected, {Rule10b5Stamped:N0} 10b5-1 flags stamped, {Reattributed:N0} rows moved to their issuer, {ForeignIssuerRowsRemoved:N0} rows of an issuer outside the directory removed, {ReturnedToImport:N0} rows returned to the import, {Failed:N0} failed)."
+            $"Reprocessed {Processed:N0}/{Total:N0} filings ({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, {Repaired:N0} prices repaired, {DatesCorrected:N0} dates corrected, {Rule10b5Stamped:N0} 10b5-1 flags stamped, {Reattributed:N0} rows moved to their issuer, {ForeignIssuerRowsRemoved:N0} rows of an issuer outside the directory removed, {HeldForPairing:N0} rows held for amendment pairing, {Failed:N0} failed)."
         );
 }

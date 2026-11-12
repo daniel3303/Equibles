@@ -44,7 +44,7 @@ public class InsiderFilingReprocessResultSummaryCultureInvarianceTests
             Rule10b5Stamped = 4321,
             Reattributed = 1357,
             ForeignIssuerRowsRemoved = 2468,
-            ReturnedToImport = 3579,
+            HeldForPairing = 3579,
             Failed = 2345,
         };
 
@@ -60,7 +60,7 @@ public class InsiderFilingReprocessResultSummaryCultureInvarianceTests
                         + "7,890 prices repaired, 6,789 dates corrected, 4,321 10b5-1 flags stamped, "
                         + "1,357 rows moved to their issuer, "
                         + "2,468 rows of an issuer outside the directory removed, "
-                        + "3,579 rows returned to the import, 2,345 failed).",
+                        + "3,579 rows held for amendment pairing, 2,345 failed).",
                     "log helpers in this repo are culture-invariant (cf. BaseScraperWorker.FormatInterval, "
                         + "FactMarkdown.Value); a non-invariant group separator forks operator log output by host locale"
                 );

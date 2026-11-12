@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.InsiderTrading.Data.Extensions;
@@ -233,11 +234,8 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     }
 
     /// <summary>
-    /// Rows at this owner+company that amendment pairing weighs against a filing arriving there:
-    /// for an original, the unresolved amendments whose original date falls in the indexing-shift
-    /// window before <paramref name="filingDate"/>; for an amendment, the originals filed in that
-    /// window after <paramref name="originalFilingDate"/> and the other amendments of the same
-    /// original. A row of a still-unresolved family counts, as it may prove the same family.
+    /// Rows at this owner+company that amendment pairing weighs against a filing arriving there
+    /// (<see cref="PairingCounterpart"/>).
     /// </summary>
     public IQueryable<InsiderTransaction> GetPairingCounterparts(
         InsiderOwner owner,
@@ -246,11 +244,41 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
         DateOnly filingDate,
         DateOnly? originalFilingDate,
         int dateShiftToleranceDays
+    ) =>
+        GetAll()
+            .Where(
+                PairingCounterpart(
+                    owner.Id,
+                    commonStockId,
+                    filingForm,
+                    filingDate,
+                    originalFilingDate,
+                    dateShiftToleranceDays
+                )
+            );
+
+    /// <summary>
+    /// What amendment pairing weighs against a filing arriving at an owner+company: for an
+    /// original, the unresolved amendments whose original date falls in the indexing-shift window
+    /// before <paramref name="filingDate"/>; for an amendment, the originals filed in that window
+    /// after <paramref name="originalFilingDate"/> and the other amendments of the same original.
+    /// A row of a still-unresolved family counts, as it may prove the same family. One expression,
+    /// so stored rows and rows a batch has changed but not saved are judged alike.
+    /// </summary>
+    public static Expression<Func<InsiderTransaction, bool>> PairingCounterpart(
+        Guid ownerId,
+        Guid commonStockId,
+        InsiderOwnershipForm filingForm,
+        DateOnly filingDate,
+        DateOnly? originalFilingDate,
+        int dateShiftToleranceDays
     )
     {
-        var sections = GetAll()
-            .Where(t =>
-                t.InsiderOwnerId == owner.Id
+        if (originalFilingDate is not { } originalDate)
+        {
+            var windowStart = filingDate.AddDays(-dateShiftToleranceDays);
+            return t =>
+                t.InsiderOwnerId == ownerId
                 && t.EquityIssuerId == commonStockId
                 && (t.FilingForm == filingForm || t.FilingForm == InsiderOwnershipForm.Unknown)
                 && t.TransactionCode != TransactionCode.IngestMarker
@@ -259,24 +287,28 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
                     && t.SecurityTitle == "No Securities Owned"
                     && t.Shares == 0
                 )
-            );
-        if (originalFilingDate is not { } originalDate)
-        {
-            var windowStart = filingDate.AddDays(-dateShiftToleranceDays);
-            return sections.Where(t =>
-                t.IsAmendment
+                && t.IsAmendment
                 && t.SupersededAccessionNumber == null
                 && t.OriginalFilingDate != null
                 && t.OriginalFilingDate >= windowStart
-                && t.OriginalFilingDate <= filingDate
-            );
+                && t.OriginalFilingDate <= filingDate;
         }
 
         var windowEnd = originalDate.AddDays(dateShiftToleranceDays);
-        return sections.Where(t =>
-            (t.IsAmendment && t.OriginalFilingDate == originalDate)
-            || (!t.IsAmendment && t.FilingDate >= originalDate && t.FilingDate <= windowEnd)
-        );
+        return t =>
+            t.InsiderOwnerId == ownerId
+            && t.EquityIssuerId == commonStockId
+            && (t.FilingForm == filingForm || t.FilingForm == InsiderOwnershipForm.Unknown)
+            && t.TransactionCode != TransactionCode.IngestMarker
+            && !(
+                t.TransactionCode == TransactionCode.Other
+                && t.SecurityTitle == "No Securities Owned"
+                && t.Shares == 0
+            )
+            && (
+                (t.IsAmendment && t.OriginalFilingDate == originalDate)
+                || (!t.IsAmendment && t.FilingDate >= originalDate && t.FilingDate <= windowEnd)
+            );
     }
 
     public IQueryable<InsiderTransaction> GetByAccessionNumber(string accessionNumber)

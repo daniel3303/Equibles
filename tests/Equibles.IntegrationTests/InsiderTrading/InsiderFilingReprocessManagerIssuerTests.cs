@@ -66,10 +66,9 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
     }
 
     // The issuer's feed took the amendment while the holder's took the original, so the two were
-    // never paired. Moved beside it the trade would be listed twice; the import pairs them when it
-    // reads the original again under the issuer.
+    // never paired. Moved beside it the trade would be listed twice, so the original stays.
     [Fact]
-    public async Task Run_IssuerAlreadyHoldsTheUnpairedAmendment_RemovesTheRowsForTheImportToPair()
+    public async Task Run_IssuerAlreadyHoldsTheUnpairedAmendment_LeavesTheRowsWithTheHolder()
     {
         var holder = Issuer("SHOP", "Shopify Inc.", HolderCik);
         var issuer = Issuer("KVYO", "Klaviyo, Inc.", IssuerCik);
@@ -78,10 +77,35 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
 
         var result = await Run();
 
-        result.ReturnedToImport.Should().Be(1);
+        result.HeldForPairing.Should().Be(1);
         result.Reattributed.Should().Be(0);
-        var row = await DbContext.Set<InsiderTransaction>().AsNoTracking().SingleAsync();
-        row.AccessionNumber.Should().Be("0001993562-26-000009");
+        var original = await DbContext
+            .Set<InsiderTransaction>()
+            .AsNoTracking()
+            .SingleAsync(row => row.AccessionNumber == Accession);
+        original.EquityIssuerId.Should().Be(holder.Id);
+        original.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
+    }
+
+    // A batch saves once: the original it has just moved to the issuer is not stored there yet when
+    // its unpaired amendment, held by the same company, is judged.
+    [Fact]
+    public async Task Run_OriginalMovedEarlierInTheBatch_LeavesItsUnpairedAmendmentWithTheHolder()
+    {
+        var holder = Issuer("SHOP", "Shopify Inc.", HolderCik);
+        var issuer = Issuer("KVYO", "Klaviyo, Inc.", IssuerCik);
+        await Seed(holder, Document(IssuerCik, "1993562", HolderCik), issuer);
+        await AddUnpairedAmendmentAtHolder(holder, "0001993562-26-000009");
+
+        var result = await Run();
+
+        result.Reattributed.Should().Be(1);
+        result.HeldForPairing.Should().Be(1);
+        var rows = await DbContext.Set<InsiderTransaction>().AsNoTracking().ToListAsync();
+        rows.Single(row => row.AccessionNumber == Accession).EquityIssuerId.Should().Be(issuer.Id);
+        rows.Single(row => row.AccessionNumber == "0001993562-26-000009")
+            .EquityIssuerId.Should()
+            .Be(holder.Id);
     }
 
     // An amendment of another filing of the same owner pairs with nothing here.
@@ -96,7 +120,7 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
         var result = await Run();
 
         result.Reattributed.Should().Be(1);
-        result.ReturnedToImport.Should().Be(0);
+        result.HeldForPairing.Should().Be(0);
         (
             await DbContext
                 .Set<InsiderTransaction>()
@@ -134,8 +158,19 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
         );
 
     private static string Document(string issuerCik, params string[] reportingOwnerCiks) =>
+        Document(issuerCik, amends: null, reportingOwnerCiks);
+
+    private static string Document(
+        string issuerCik,
+        DateOnly? amends,
+        params string[] reportingOwnerCiks
+    ) =>
         "<ownershipDocument>"
-        + "<documentType>4</documentType>"
+        + (
+            amends is { } original
+                ? $"<documentType>4/A</documentType><dateOfOriginalSubmission>{original:yyyy-MM-dd}</dateOfOriginalSubmission>"
+                : "<documentType>4</documentType>"
+        )
         + "<periodOfReport>2026-04-28</periodOfReport>"
         + $"<issuer><issuerCik>{issuerCik.PadLeft(10, '0')}</issuerCik></issuer>"
         + string.Concat(
@@ -222,6 +257,58 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
                 Content = new File
                 {
                     Name = Accession,
+                    Extension = "gz",
+                    ContentType = "application/gzip",
+                    FileContent = new FileContent { Bytes = GzipCompressor.Compress(rawBytes) },
+                },
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+    }
+
+    // A Form 4/A of the seeded filing that the holder also took, never paired with it.
+    private async Task AddUnpairedAmendmentAtHolder(EquityIssuer holder, string accession)
+    {
+        var ownerId = await DbContext.Set<InsiderOwner>().Select(owner => owner.Id).SingleAsync();
+        var rawBytes = Encoding.UTF8.GetBytes(
+            Document(IssuerCik, amends: FilingDate, "1993562", HolderCik)
+        );
+        DbContext.Add(
+            new InsiderTransaction
+            {
+                Id = Guid.NewGuid(),
+                EquityIssuerId = holder.Id,
+                InsiderOwnerId = ownerId,
+                AccessionNumber = accession,
+                TransactionOrder = 0,
+                FilingDate = FilingDate.AddDays(2),
+                TransactionDate = TradeDate,
+                TransactionCode = TransactionCode.Sale,
+                Shares = 344381,
+                PricePerShare = ReportedPrice,
+                ReportedPricePerShare = ReportedPrice,
+                IsPriceValid = false,
+                AcquiredDisposed = AcquiredDisposed.Disposed,
+                SharesOwnedAfter = 16973108,
+                OwnershipNature = OwnershipNature.Direct,
+                SecurityTitle = "Series B Common Stock",
+                SecurityKind = InsiderSecurityKind.NonDerivative,
+                FilingForm = InsiderOwnershipForm.Form4,
+                IsAmendment = true,
+                OriginalFilingDate = FilingDate,
+                ParserVersion = 14,
+            }
+        );
+        DbContext.Add(
+            new InsiderFiling
+            {
+                AccessionNumber = accession,
+                CaptureStatus = InsiderFilingCaptureStatus.Captured,
+                UncompressedSize = rawBytes.Length,
+                Content = new File
+                {
+                    Name = accession,
                     Extension = "gz",
                     ContentType = "application/gzip",
                     FileContent = new FileContent { Bytes = GzipCompressor.Compress(rawBytes) },
