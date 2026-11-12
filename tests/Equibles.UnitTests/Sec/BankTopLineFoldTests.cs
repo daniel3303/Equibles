@@ -170,6 +170,23 @@ public class BankTopLineFoldTests
     }
 
     [Fact]
+    public void Fold_OnePeriodAboveTheSumByItsInterestExpense_KeepsRevenues()
+    {
+        // A comparison loads one period: Raymond James's quarter ended 2020-12-31 alone, 1.7%
+        // above 165 + 2,057 by exactly its 38 of interest expense.
+        var interestExpense = Guid.NewGuid();
+        var (facts, priority) = BankTopLine.Fold(
+            [Q2(Revenues, 2_260m)],
+            [Q2(NetInterest, 165m)],
+            [Q2(Noninterest, 2_057m)],
+            RevenuePriority,
+            [Q2(interestExpense, 38m)]
+        );
+
+        FinancialFactSeriesShaper.PickBestFact(facts, priority).Value.Should().Be(2_260_000_000m);
+    }
+
+    [Fact]
     public void Fold_RevenuesIsTheTaxableEquivalentTotal_EveryPeriodReadsTheBankSum()
     {
         // US Bancorp tags its taxable-equivalent total net revenue as Revenues, about half a

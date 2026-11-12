@@ -50,7 +50,9 @@ public static class BankTopLine
     /// top line or states it on another basis, and the sums replace it in every fiscal year they
     /// reach; otherwise they only fill fiscal years with no revenue. A line above the sum is another
     /// basis only while none of its periods sits further above than that margin, so one filer keeps
-    /// one basis through low and high rates. Each fiscal year keeps one
+    /// one basis through low and high rates; a caller holding a slice of the filer's history passes
+    /// <paramref name="interestExpense"/>, which proves revenue before interest expense in the
+    /// newest period alone. Each fiscal year keeps one
     /// measure, so a derived fourth quarter (the year less its first three quarters) never subtracts
     /// one measure from the other.
     /// </summary>
@@ -58,7 +60,8 @@ public static class BankTopLine
         IReadOnlyCollection<FinancialFact> revenue,
         IReadOnlyCollection<FinancialFact> netInterestIncome,
         IReadOnlyCollection<FinancialFact> noninterestIncome,
-        IReadOnlyDictionary<Guid, int> revenuePriority
+        IReadOnlyDictionary<Guid, int> revenuePriority,
+        IReadOnlyCollection<FinancialFact> interestExpense = null
     )
     {
         var priority = new Dictionary<Guid, int>(revenuePriority);
@@ -67,7 +70,7 @@ public static class BankTopLine
             return ([.. revenue], priority);
 
         priority[ConceptId] = int.MaxValue;
-        if (SumIsTopLineAtNewest(revenue, sums, revenuePriority))
+        if (SumIsTopLineAtNewest(revenue, sums, revenuePriority, interestExpense ?? []))
         {
             var sumYears = sums.Select(f => f.FiscalYear).ToHashSet();
             return ([.. revenue.Where(f => !sumYears.Contains(f.FiscalYear)), .. sums], priority);
@@ -141,7 +144,8 @@ public static class BankTopLine
     private static bool SumIsTopLineAtNewest(
         IReadOnlyCollection<FinancialFact> revenue,
         IReadOnlyCollection<FinancialFact> sums,
-        IReadOnlyDictionary<Guid, int> revenuePriority
+        IReadOnlyDictionary<Guid, int> revenuePriority,
+        IReadOnlyCollection<FinancialFact> interestExpense
     )
     {
         var newest = revenue
@@ -156,7 +160,12 @@ public static class BankTopLine
             return false;
 
         var sum = SumFor(newest, sums);
-        if (sum == null || !SumIsTopLine(newest, sum))
+        var newestInterestExpense = interestExpense
+            .Where(f => IsConsolidatedDuration(f) && SamePeriod(f, newest))
+            .OrderByDescending(f => f.FiledDate)
+            .ThenByDescending(f => f.AccessionNumber, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (sum == null || !SumIsTopLine(newest, sum, newestInterestExpense))
             return false;
         return newest.Value < sum.Value
             || !revenue
