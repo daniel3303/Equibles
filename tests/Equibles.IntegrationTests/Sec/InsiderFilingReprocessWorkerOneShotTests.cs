@@ -1,5 +1,6 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
@@ -43,6 +44,7 @@ public class InsiderFilingReprocessWorkerOneShotTests : ParadeDbMcpTestBase
         services.AddScoped<InsiderFilingRepository>();
         services.AddScoped<EquityDailyStockPriceRepository>();
         services.AddScoped<StockSplitRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<BackfillStateRepository>();
         services.AddScoped<InsiderMisrepairedPriceSweep>();
         services.AddScoped<InsiderFilingReprocessManager>();

@@ -46,9 +46,11 @@ public class InsiderTransaction
     /// prices on ordinary-share rows are restated to per-ordinary; v12 records the reporting
     /// owner's relationship boxes on each row; v13 records each row's filed nature of ownership
     /// and its footnote ids, so an insider's indirect vehicles keep separate balances; v14 adds the
-    /// footnote ids on the row's reported balance, where some filers name the vehicle.
+    /// footnote ids on the row's reported balance, where some filers name the vehicle; v15 moves
+    /// rows a company took from a filing where it is the reporting owner to the issuer that
+    /// filing names.
     /// </summary>
-    public const int CurrentParserVersion = 14;
+    public const int CurrentParserVersion = 15;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

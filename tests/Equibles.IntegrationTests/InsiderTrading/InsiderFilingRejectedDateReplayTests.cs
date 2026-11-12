@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
@@ -98,6 +99,7 @@ public class InsiderFilingRejectedDateReplayTests(ParadeDbFixture fixture)
             new InsiderFilingRepository(DbContext),
             new EquityDailyStockPriceRepository(DbContext),
             new StockSplitRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new InsiderTransactionPriceValidator(),
             edgar,
             InsiderReprocessTestSupport.NewFileManager(),

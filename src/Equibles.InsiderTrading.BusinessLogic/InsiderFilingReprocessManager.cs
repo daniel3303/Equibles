@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
@@ -51,6 +52,7 @@ public class InsiderFilingReprocessManager
     private readonly InsiderFilingRepository _filingRepository;
     private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly StockSplitRepository _stockSplitRepository;
+    private readonly EquityIssuerRepository _issuerRepository;
     private readonly InsiderTransactionPriceValidator _validator;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly IFileManager _fileManager;
@@ -62,6 +64,7 @@ public class InsiderFilingReprocessManager
         InsiderFilingRepository filingRepository,
         EquityDailyStockPriceRepository dailyStockPriceRepository,
         StockSplitRepository stockSplitRepository,
+        EquityIssuerRepository issuerRepository,
         InsiderTransactionPriceValidator validator,
         ISecEdgarClient secEdgarClient,
         IFileManager fileManager,
@@ -73,6 +76,7 @@ public class InsiderFilingReprocessManager
         _filingRepository = filingRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
         _stockSplitRepository = stockSplitRepository;
+        _issuerRepository = issuerRepository;
         _validator = validator;
         _secEdgarClient = secEdgarClient;
         _fileManager = fileManager;
@@ -414,6 +418,8 @@ public class InsiderFilingReprocessManager
         var root = await GetOwnershipRoot(accession, rows, result);
         if (root == null)
             return;
+        if (!await KeepUnderTheIssuerNamed(root, rows, accession, result))
+            return;
 
         var first = rows[0];
         var filing = new FilingData
@@ -606,6 +612,136 @@ public class InsiderFilingReprocessManager
             row.ParserVersion = InsiderTransaction.CurrentParserVersion;
         }
     }
+
+    // EDGAR lists a filing under every company it names, so before the import checked the issuer a
+    // company that reported its own stake in another issuer took that issuer's rows (Shopify
+    // showing a subsidiary's Klaviyo warrant exercises as its insider trades). The document names
+    // the issuer: the rows move to it, or go when the directory does not hold it. Amendment pairing
+    // is the import's: where the issuer already holds the filing's amendment or original, the rows
+    // stay with the holder, since beside their counterpart the trade would be listed twice. False
+    // when they went.
+    private async Task<bool> KeepUnderTheIssuerNamed(
+        XElement root,
+        List<InsiderTransaction> rows,
+        string accession,
+        InsiderFilingReprocessResult result
+    )
+    {
+        var issuerCik = InsiderFilingParser.GetIssuerCik(root);
+        // Pre-XML filings name no issuer and stay with the feed that surfaced them.
+        if (string.IsNullOrEmpty(issuerCik))
+            return true;
+
+        var holder = rows[0].Issuer;
+        if (holder == null || HasCik(holder, issuerCik))
+            return true;
+        // Proof of the mechanism, not just a difference: an issuer merged into its successor
+        // keeps rows whose documents name the retired CIK, and those must never move or go.
+        if (!InsiderFilingParser.GetReportingOwnerCiks(root).Any(cik => HasCik(holder, cik)))
+            return true;
+
+        var named =
+            await _issuerRepository.GetByAnyCik(issuerCik)
+            ?? await _issuerRepository.GetByAnyCik(issuerCik.PadLeft(10, '0'));
+        if (named == null)
+        {
+            _transactionRepository.Delete(rows);
+            result.ForeignIssuerRowsRemoved += rows.Count;
+            _logger.LogInformation(
+                "Insider reprocess: {AccessionNumber} removed {RowCount} rows held under reporting owner {HolderCik}; issuer {IssuerCik} is outside the directory",
+                accession,
+                rows.Count,
+                holder.Cik,
+                issuerCik
+            );
+            return false;
+        }
+
+        if (await PairsAtTheIssuer(root, rows, accession, named))
+        {
+            result.HeldForPairing += rows.Count;
+            _logger.LogInformation(
+                "Insider reprocess: {AccessionNumber} left {RowCount} rows under reporting owner {HolderCik}; issuer {IssuerCik} holds the amendment or original they pair with",
+                accession,
+                rows.Count,
+                holder.Cik,
+                issuerCik
+            );
+            return true;
+        }
+
+        foreach (var row in rows)
+        {
+            row.EquityIssuerId = named.Id;
+            row.Issuer = named;
+        }
+        result.Reattributed += rows.Count;
+        _logger.LogInformation(
+            "Insider reprocess: {AccessionNumber} moved {RowCount} rows from reporting owner {HolderCik} to issuer {IssuerCik}",
+            accession,
+            rows.Count,
+            holder.Cik,
+            issuerCik
+        );
+        return true;
+    }
+
+    // Pairing was scoped to the holder when these rows were stored, so an amendment and its
+    // original taken by different companies never met; moved beside its counterpart the trade
+    // would be listed twice. A pair the amendment already claims is settled and moves as it is.
+    // A batch saves once, so rows it has already moved are read from the change tracker.
+    private async Task<bool> PairsAtTheIssuer(
+        XElement root,
+        List<InsiderTransaction> rows,
+        string accession,
+        EquityIssuer named
+    )
+    {
+        var form = root.Element("documentType")?.Value?.Trim();
+        var isAmendment = form?.Contains("/A", StringComparison.OrdinalIgnoreCase) == true;
+        var originalFilingDate = isAmendment
+            ? InsiderFilingParser.ParseDateOfOriginalSubmission(root)
+            : null;
+        // An amendment that states no original date pairs with nothing.
+        if (isAmendment && originalFilingDate == null)
+            return false;
+
+        var claimed = rows.Select(row => row.SupersededAccessionNumber)
+            .Where(claim => claim != null)
+            .Distinct()
+            .ToList();
+        var counterpart = InsiderTransactionRepository.PairingCounterpart(
+            rows[0].InsiderOwnerId,
+            named.Id,
+            InsiderFilingParser.ParseOwnershipForm(form),
+            rows[0].FilingDate,
+            originalFilingDate,
+            InsiderAmendmentPairing.OriginalDateShiftToleranceDays
+        );
+        var movedInThisBatch = _dbContext
+            .ChangeTracker.Entries<InsiderTransaction>()
+            .Where(entry => entry.State != EntityState.Deleted)
+            .Select(entry => entry.Entity)
+            .AsQueryable()
+            .Where(counterpart)
+            .Any(row => row.AccessionNumber != accession && !claimed.Contains(row.AccessionNumber));
+        return movedInThisBatch
+            || await _transactionRepository
+                .GetAll()
+                .IgnoreQueryFilters()
+                .Where(counterpart)
+                .AnyAsync(row =>
+                    row.AccessionNumber != accession && !claimed.Contains(row.AccessionNumber)
+                );
+    }
+
+    private static bool HasCik(EquityIssuer issuer, string cik) =>
+        new[] { issuer.Cik }
+            .Concat(issuer.SecondaryCiks ?? [])
+            .Any(own =>
+                !string.IsNullOrEmpty(own)
+                && string.Equals(own.TrimStart('0'), cik, StringComparison.Ordinal)
+            );
 
     private static bool IsLegacyEmptyParseMarker(InsiderTransaction row)
     {
