@@ -32,6 +32,7 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
     private const string IssuerCik = "1835830";
     private const decimal ReportedPrice = 31.5m;
     private static readonly DateOnly TradeDate = new(2026, 4, 28);
+    private static readonly DateOnly FilingDate = new(2026, 4, 29);
 
     public InsiderFilingReprocessManagerIssuerTests(ParadeDbFixture fixture)
         : base(fixture) { }
@@ -62,6 +63,48 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
 
         result.ForeignIssuerRowsRemoved.Should().Be(1);
         (await DbContext.Set<InsiderTransaction>().AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    // The issuer's feed took the amendment while the holder's took the original, so the two were
+    // never paired. Moved beside it the trade would be listed twice; the import pairs them when it
+    // reads the original again under the issuer.
+    [Fact]
+    public async Task Run_IssuerAlreadyHoldsTheUnpairedAmendment_RemovesTheRowsForTheImportToPair()
+    {
+        var holder = Issuer("SHOP", "Shopify Inc.", HolderCik);
+        var issuer = Issuer("KVYO", "Klaviyo, Inc.", IssuerCik);
+        await Seed(holder, Document(IssuerCik, "1993562", HolderCik), issuer);
+        await AddAtIssuer(issuer, "0001993562-26-000009", amendsFilingOf: FilingDate);
+
+        var result = await Run();
+
+        result.ReturnedToImport.Should().Be(1);
+        result.Reattributed.Should().Be(0);
+        var row = await DbContext.Set<InsiderTransaction>().AsNoTracking().SingleAsync();
+        row.AccessionNumber.Should().Be("0001993562-26-000009");
+    }
+
+    // An amendment of another filing of the same owner pairs with nothing here.
+    [Fact]
+    public async Task Run_IssuerHoldsAnAmendmentOfAnotherFiling_MovesTheRows()
+    {
+        var holder = Issuer("SHOP", "Shopify Inc.", HolderCik);
+        var issuer = Issuer("KVYO", "Klaviyo, Inc.", IssuerCik);
+        await Seed(holder, Document(IssuerCik, "1993562", HolderCik), issuer);
+        await AddAtIssuer(issuer, "0001993562-26-000009", amendsFilingOf: FilingDate.AddDays(-30));
+
+        var result = await Run();
+
+        result.Reattributed.Should().Be(1);
+        result.ReturnedToImport.Should().Be(0);
+        (
+            await DbContext
+                .Set<InsiderTransaction>()
+                .AsNoTracking()
+                .CountAsync(row => row.EquityIssuerId == issuer.Id)
+        )
+            .Should()
+            .Be(2);
     }
 
     // An issuer merged into its successor keeps rows whose documents name the retired CIK; the
@@ -155,7 +198,7 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
                 InsiderOwnerId = owner.Id,
                 AccessionNumber = Accession,
                 TransactionOrder = 0,
-                FilingDate = new DateOnly(2026, 4, 29),
+                FilingDate = FilingDate,
                 TransactionDate = TradeDate,
                 TransactionCode = TransactionCode.Sale,
                 Shares = 344381,
@@ -183,6 +226,40 @@ public class InsiderFilingReprocessManagerIssuerTests : ParadeDbMcpTestBase
                     ContentType = "application/gzip",
                     FileContent = new FileContent { Bytes = GzipCompressor.Compress(rawBytes) },
                 },
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+    }
+
+    // A current-version Form 4/A the issuer's own feed stored, not yet paired with an original.
+    private async Task AddAtIssuer(EquityIssuer issuer, string accession, DateOnly amendsFilingOf)
+    {
+        var ownerId = await DbContext.Set<InsiderOwner>().Select(owner => owner.Id).SingleAsync();
+        DbContext.Add(
+            new InsiderTransaction
+            {
+                Id = Guid.NewGuid(),
+                EquityIssuerId = issuer.Id,
+                InsiderOwnerId = ownerId,
+                AccessionNumber = accession,
+                TransactionOrder = 0,
+                FilingDate = FilingDate.AddDays(2),
+                TransactionDate = TradeDate,
+                TransactionCode = TransactionCode.Sale,
+                Shares = 344381,
+                PricePerShare = ReportedPrice,
+                ReportedPricePerShare = ReportedPrice,
+                IsPriceValid = true,
+                AcquiredDisposed = AcquiredDisposed.Disposed,
+                SharesOwnedAfter = 16973108,
+                OwnershipNature = OwnershipNature.Direct,
+                SecurityTitle = "Series B Common Stock",
+                SecurityKind = InsiderSecurityKind.NonDerivative,
+                FilingForm = InsiderOwnershipForm.Form4,
+                IsAmendment = true,
+                OriginalFilingDate = amendsFilingOf,
+                ParserVersion = InsiderTransaction.CurrentParserVersion,
             }
         );
         await DbContext.SaveChangesAsync();

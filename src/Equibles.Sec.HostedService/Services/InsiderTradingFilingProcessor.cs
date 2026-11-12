@@ -392,7 +392,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     // EDGAR indexes an after-17:30 submission on the next business day, so the feed
     // FilingDate of an original can trail the amendment's filer-entered
     // dateOfOriginalSubmission by a weekend (+ a holiday).
-    private const int OriginalDateShiftToleranceDays = 4;
+    private const int OriginalDateShiftToleranceDays =
+        InsiderAmendmentPairing.OriginalDateShiftToleranceDays;
 
     // Removes the sections of an incoming original that an already-ingested
     // amendment restated. The amendment either explicitly claimed this accession

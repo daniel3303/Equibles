@@ -616,7 +616,9 @@ public class InsiderFilingReprocessManager
     // EDGAR lists a filing under every company it names, so before the import checked the issuer a
     // company that reported its own stake in another issuer took that issuer's rows (Shopify
     // showing a subsidiary's Klaviyo warrant exercises as its insider trades). The document names
-    // the issuer: the rows move to it, or go when the directory does not hold it. False when they went.
+    // the issuer: the rows move to it, or go when the directory does not hold it. Amendment pairing
+    // is the import's: where the issuer already holds the filing's amendment or original, the rows
+    // go and the import reads the filing again under the issuer. False when they went.
     private async Task<bool> KeepUnderTheIssuerNamed(
         XElement root,
         List<InsiderTransaction> rows,
@@ -654,6 +656,20 @@ public class InsiderFilingReprocessManager
             return false;
         }
 
+        if (await PairsAtTheIssuer(root, rows, accession, named))
+        {
+            _transactionRepository.Delete(rows);
+            result.ReturnedToImport += rows.Count;
+            _logger.LogInformation(
+                "Insider reprocess: {AccessionNumber} removed {RowCount} rows held under reporting owner {HolderCik}; issuer {IssuerCik} holds its amendment or original, so the import reads it again there",
+                accession,
+                rows.Count,
+                holder.Cik,
+                issuerCik
+            );
+            return false;
+        }
+
         foreach (var row in rows)
         {
             row.EquityIssuerId = named.Id;
@@ -668,6 +684,44 @@ public class InsiderFilingReprocessManager
             issuerCik
         );
         return true;
+    }
+
+    // Pairing was scoped to the holder when these rows were stored, so an amendment and its
+    // original taken by different companies never met; moved beside its counterpart the trade
+    // would be listed twice. A pair the amendment already claims is settled and moves as it is.
+    private async Task<bool> PairsAtTheIssuer(
+        XElement root,
+        List<InsiderTransaction> rows,
+        string accession,
+        EquityIssuer named
+    )
+    {
+        var form = root.Element("documentType")?.Value?.Trim();
+        var isAmendment = form?.Contains("/A", StringComparison.OrdinalIgnoreCase) == true;
+        var originalFilingDate = isAmendment
+            ? InsiderFilingParser.ParseDateOfOriginalSubmission(root)
+            : null;
+        // An amendment that states no original date pairs with nothing.
+        if (isAmendment && originalFilingDate == null)
+            return false;
+
+        var claimed = rows.Select(row => row.SupersededAccessionNumber)
+            .Where(claim => claim != null)
+            .Distinct()
+            .ToList();
+        return await _transactionRepository
+            .GetPairingCounterparts(
+                new InsiderOwner { Id = rows[0].InsiderOwnerId },
+                named.Id,
+                InsiderFilingParser.ParseOwnershipForm(form),
+                rows[0].FilingDate,
+                originalFilingDate,
+                InsiderAmendmentPairing.OriginalDateShiftToleranceDays
+            )
+            .IgnoreQueryFilters()
+            .AnyAsync(row =>
+                row.AccessionNumber != accession && !claimed.Contains(row.AccessionNumber)
+            );
     }
 
     private static bool HasCik(EquityIssuer issuer, string cik) =>
