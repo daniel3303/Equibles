@@ -379,7 +379,8 @@ public static class StatementLineFacts
         var topLine = BankTopLine.PickForPeriod(
             picked.Fact,
             PickAliasFact(BankTopLine.NetInterestIncomeAlias, conceptIdByKey, factByConceptId),
-            PickAliasFact(BankTopLine.NoninterestIncomeAlias, conceptIdByKey, factByConceptId)
+            PickAliasFact(BankTopLine.NoninterestIncomeAlias, conceptIdByKey, factByConceptId),
+            PickAliasFact(BankTopLine.InterestExpenseAlias, conceptIdByKey, factByConceptId)
         );
         return ReferenceEquals(topLine, picked.Fact) ? picked : (null, topLine);
     }

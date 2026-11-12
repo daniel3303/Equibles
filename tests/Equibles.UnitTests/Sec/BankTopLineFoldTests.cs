@@ -8,7 +8,7 @@ namespace Equibles.UnitTests.Sec;
 /// <summary>
 /// The revenue alias folds in a bank's net interest plus noninterest income. Figures are Zions'
 /// filings in millions: its Revenues tag is a fee slice (Q2 2026: 182 against 677 + 460), so the
-/// sum outranks it; a line equal to the sum, or more than a tenth above it, keeps every period; a
+/// sum outranks it; a line equal to the sum, or a broader line above it, keeps every period; a
 /// line that states the sum on another basis gives way to it; a period only one component states
 /// keeps revenue; a bank with no revenue tag reads the sum.
 /// </summary>
@@ -151,6 +151,22 @@ public class BankTopLineFoldTests
 
         picked[SecFiscalPeriod.Q1].Should().Be(1_150m);
         picked[SecFiscalPeriod.Q2].Should().Be(1_480m);
+    }
+
+    [Fact]
+    public void Fold_RevenueBeforeInterestExpenseNearsTheSumWhenRatesAreLow_KeepsRevenues()
+    {
+        // Raymond James tags revenue before interest expense. Its newest quarter here is the one
+        // ended 2020-12-31 (2,260 against 165 + 2,057, 1.7% above); the year is its fiscal 2023
+        // (12,992 against 2,375 + 9,244), which proves the line a broader one.
+        var picked = PickMillions(
+            [Q2(Revenues, 2_260m), Year(Revenues, 12_992m)],
+            [Q2(NetInterest, 165m), Year(NetInterest, 2_375m)],
+            [Q2(Noninterest, 2_057m), Year(Noninterest, 9_244m)]
+        );
+
+        picked[SecFiscalPeriod.Q2].Should().Be(2_260m);
+        picked[SecFiscalPeriod.FullYear].Should().Be(12_992m);
     }
 
     [Fact]

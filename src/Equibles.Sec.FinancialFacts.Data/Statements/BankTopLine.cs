@@ -9,13 +9,16 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// noninterest income) or the same top line on another basis (US Bancorp FY2025: a
 /// taxable-equivalent 28,656M against 16,649M plus 11,891M), and many banks tag no revenue concept
 /// at all, so the sum stands in for the revenue alias wherever revenue is missing, partial or
-/// restated; a line more than a tenth above the sum is a broader one the filer states and is kept.
+/// restated. Revenue before interest expense is a broader line the filer states and is kept: it
+/// sits above the sum by the period's interest expense (Raymond James, quarter ended 2020-12-31:
+/// 2,260M against 165M plus 2,057M, with 38M of interest expense).
 /// </summary>
 public static class BankTopLine
 {
     public const string RevenueAlias = "revenue";
     public const string NetInterestIncomeAlias = "net-interest-income";
     public const string NoninterestIncomeAlias = "noninterest-income";
+    public const string InterestExpenseAlias = "interest-expense";
 
     /// <summary>
     /// The concept id every summed fact carries. No stored concept has it, so a sum never collides
@@ -23,9 +26,14 @@ public static class BankTopLine
     /// </summary>
     public static readonly Guid ConceptId = new("b4a1e7c2-3f5d-4e86-9a0b-6c2d8e1f7a53");
 
-    // A reported line more than a tenth above the bank sum is a broader line, such as revenue
-    // before interest expense; below that it is a slice of the sum or the sum on another basis.
-    private const decimal BroaderLineMargin = 0.1m;
+    // The same top line on another basis sits a fraction of a percent above the bank sum (a
+    // taxable-equivalent adjustment); anything further above is a broader line. Revenue before
+    // interest expense falls inside this margin when rates are low, so the margin alone cannot
+    // tell the two apart: the period's interest expense or the filer's other periods do.
+    private const decimal OtherBasisMargin = 0.02m;
+
+    // Rounding between the revenue line and the three figures it is compared with.
+    private const decimal InterestExpenseTolerance = 0.001m;
 
     /// <summary>
     /// True when <paramref name="concepts"/> is the revenue alias (or one of its synonyms, which
@@ -40,7 +48,9 @@ public static class BankTopLine
     /// them. A sum pairs the two components one filing states for one exact period. When the newest
     /// revenue period differs from the sum without being a broader line, revenue is a slice of the
     /// top line or states it on another basis, and the sums replace it in every fiscal year they
-    /// reach; otherwise they only fill fiscal years with no revenue. Each fiscal year keeps one
+    /// reach; otherwise they only fill fiscal years with no revenue. A line above the sum is another
+    /// basis only while none of its periods sits further above than that margin, so one filer keeps
+    /// one basis through low and high rates. Each fiscal year keeps one
     /// measure, so a derived fourth quarter (the year less its first three quarters) never subtracts
     /// one measure from the other.
     /// </summary>
@@ -73,12 +83,15 @@ public static class BankTopLine
     /// One period's top line, for a statement that shows a single period: the bank sum where the
     /// period has no revenue or its revenue is a slice or another basis of the sum, else the revenue.
     /// The components may come from different filings, as each statement line takes its own latest
-    /// restatement; a derived component makes the sum derived.
+    /// restatement; a derived component makes the sum derived. A single period shows none of the
+    /// filer's history, so <paramref name="interestExpense"/> is what proves revenue before
+    /// interest expense here.
     /// </summary>
     public static FinancialFact PickForPeriod(
         FinancialFact revenue,
         FinancialFact netInterestIncome,
-        FinancialFact noninterestIncome
+        FinancialFact noninterestIncome,
+        FinancialFact interestExpense = null
     )
     {
         if (
@@ -95,7 +108,11 @@ public static class BankTopLine
             return revenue;
         if (revenue == null)
             return sum;
-        return SamePeriod(revenue, sum) && SumIsTopLine(revenue, sum) ? sum : revenue;
+        if (!SamePeriod(revenue, sum))
+            return revenue;
+        var samePeriodInterestExpense =
+            interestExpense != null && SamePeriod(interestExpense, sum) ? interestExpense : null;
+        return SumIsTopLine(revenue, sum, samePeriodInterestExpense) ? sum : revenue;
     }
 
     private static List<FinancialFact> Sums(
@@ -138,12 +155,25 @@ public static class BankTopLine
         if (newest == null)
             return false;
 
-        var sum = sums.Where(s => SamePeriod(s, newest))
+        var sum = SumFor(newest, sums);
+        if (sum == null || !SumIsTopLine(newest, sum))
+            return false;
+        return newest.Value < sum.Value
+            || !revenue
+                .Where(f =>
+                    f.FinancialConceptId == newest.FinancialConceptId && IsConsolidatedDuration(f)
+                )
+                .Any(f => SumFor(f, sums) is { } own && IsBroaderLine(f, own));
+    }
+
+    private static FinancialFact SumFor(
+        FinancialFact revenue,
+        IReadOnlyCollection<FinancialFact> sums
+    ) =>
+        sums.Where(s => SamePeriod(s, revenue))
             .OrderByDescending(s => s.FiledDate)
             .ThenByDescending(s => s.AccessionNumber, StringComparer.Ordinal)
             .FirstOrDefault();
-        return sum != null && SumIsTopLine(newest, sum);
-    }
 
     // A negative or zero sum is no top line; a copy keeps EF-tracked components untouched.
     private static FinancialFact Sum(
@@ -174,10 +204,30 @@ public static class BankTopLine
         return sum;
     }
 
-    // An equal line is the sum itself and keeps its own tag and filing.
-    private static bool SumIsTopLine(FinancialFact direct, FinancialFact topLine) =>
-        direct.Value != topLine.Value
-        && direct.Value - topLine.Value <= Math.Abs(topLine.Value) * BroaderLineMargin;
+    // An equal line is the sum itself and keeps its own tag and filing; a line above the sum by
+    // the period's interest expense is revenue before interest expense, however small that is.
+    private static bool SumIsTopLine(
+        FinancialFact direct,
+        FinancialFact topLine,
+        FinancialFact interestExpense = null
+    )
+    {
+        if (direct.Value == topLine.Value)
+            return false;
+        var above = direct.Value - topLine.Value;
+        if (above < 0m)
+            return true;
+        if (
+            interestExpense != null
+            && Math.Abs(above - interestExpense.Value)
+                <= Math.Abs(topLine.Value) * InterestExpenseTolerance
+        )
+            return false;
+        return !IsBroaderLine(direct, topLine);
+    }
+
+    private static bool IsBroaderLine(FinancialFact direct, FinancialFact topLine) =>
+        direct.Value - topLine.Value > Math.Abs(topLine.Value) * OtherBasisMargin;
 
     private static bool SamePeriod(FinancialFact left, FinancialFact right) =>
         left.PeriodStart == right.PeriodStart
