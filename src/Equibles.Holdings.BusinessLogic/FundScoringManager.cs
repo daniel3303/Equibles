@@ -94,10 +94,7 @@ public class FundScoringManager
             return null;
         }
 
-        // A clone that tracks too little of the reported book (options or holdings without a
-        // price make up the rest) is not this manager's return; the ranking shows no coverage
-        // line, so such a score is never stored and an earlier one is removed.
-        if (result.Coverage is { IsRepresentative: false })
+        if (!IsRankable(result))
         {
             await DeleteExistingScore(holder, windowYears, benchmarkTicker);
             return null;
@@ -281,6 +278,19 @@ public class FundScoringManager
                     .ToList(),
             })
             .ToList();
+
+    /// <summary>Shortest simulated window a score annualises; the backtest itself answers from 90 days.</summary>
+    public const int MinScoreWindowDays = 365;
+
+    // The ranking compares annualised alpha and shows neither coverage nor window, so a score is
+    // stored only when it can stand there: the clone tracks enough of the reported book (options
+    // and holdings without a price are the rest), the window spans a year (five months of +530%
+    // annualise to +8,480%), and the filer still files (a window the stale-tail cut ended is a
+    // past book nobody can clone today).
+    private static bool IsRankable(BacktestResult result) =>
+        result.Coverage is not { IsRepresentative: false }
+        && result.TruncatedAt == null
+        && result.EndDate.DayNumber - result.StartDate.DayNumber >= MinScoreWindowDays;
 
     // Whether an unstorable result should also evict the existing stored score. Prune when
     // the filer has no 13F snapshots to score, OR the window is too short to annualize (CAGR
