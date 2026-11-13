@@ -73,6 +73,30 @@ public class ListingSymbolResolutionExtensionsTests : IDisposable
         paris.Error.Should().BeNull();
     }
 
+    // Milan stores its lines under segment codes, and an after-hours line repeats the share's ticker.
+    [Fact]
+    public async Task OperatingOrSiblingCode_ReachesTheMarketsRegularLine()
+    {
+        Venue("UCG", "MTAA", "IT", "UniCredit");
+        Venue("UCG", "MTAH", "IT", "UniCredit after hours");
+        Venue("ALCLS", "ALXP", "FR", "Cellectis Growth");
+        Venue("SAP", "XETR", "DE", "SAP");
+        await _dbContext.SaveChangesAsync();
+
+        var milan = await _repository.ResolveListing("XMIL:UCG");
+        milan.Stock.Name.Should().Be("UniCredit");
+        EquityListingSymbol.Display(milan.Venue).Should().Be("MTAA:UCG");
+
+        (await _repository.ResolveListing("XPAR:ALCLS")).Stock.Name.Should().Be("Cellectis Growth");
+        (await _repository.ResolveListing("MTAH:UCG"))
+            .Stock.Name.Should()
+            .Be("UniCredit after hours");
+
+        var otherMarket = await _repository.ResolveListing("XMIL:SAP");
+        otherMarket.Stock.Should().BeNull();
+        otherMarket.Error.Should().StartWith("Listing 'XMIL:SAP' not found.");
+    }
+
     [Fact]
     public async Task ProviderSuffix_ResolvesTheMarketOnlyAfterTheUsLookupMisses()
     {

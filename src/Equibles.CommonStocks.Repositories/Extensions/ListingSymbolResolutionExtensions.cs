@@ -23,7 +23,21 @@ public static class ListingSymbolResolutionExtensions
     )> ResolveListing(this EquityIssuerRepository repository, string symbol)
     {
         if (EquityListingSymbol.TryParse(symbol, out var code, out var ticker))
-            return await repository.ResolveVenueListing(symbol.Trim(), [code], ticker);
+        {
+            var typed = symbol.Trim();
+            var exact = await repository.ResolveVenueListing(typed, [code], ticker);
+            // A caller often writes a market's operating code (XMIL) or its main segment for a share stored
+            // under another segment, so a plain miss reads the market's other regular lines.
+            var siblings =
+                EquityMarketCatalog
+                    .ByCallerVenueCode(code)
+                    ?.RegularLineCodes.Where(other => other != code)
+                    .ToArray()
+                ?? [];
+            if (exact.Error != VenueNotFound(typed) || siblings.Length == 0)
+                return exact;
+            return await repository.ResolveVenueListing(typed, siblings, ticker);
+        }
 
         var (stock, error) = await repository.ResolveByTicker(symbol);
         return stock != null
