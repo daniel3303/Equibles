@@ -3219,7 +3219,11 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         if (slices.Count == 0)
         {
-            result.AppendLine("_No holdings reported for the selected quarter._");
+            // The filer may still report option or principal rows, which the allocation leaves out.
+            result.AppendLine(
+                "_No common-share positions reported for the selected quarter; option and "
+                    + "principal rows are not part of the allocation._"
+            );
             return result.ToString();
         }
 

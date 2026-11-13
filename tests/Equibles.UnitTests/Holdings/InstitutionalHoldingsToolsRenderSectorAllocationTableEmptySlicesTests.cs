@@ -31,7 +31,7 @@ public class InstitutionalHoldingsToolsRenderSectorAllocationTableEmptySlicesTes
                 [holder, new DateOnly(2024, 9, 30), slices, "Industry", null]
             );
 
-        rendered.Should().Contain("_No holdings reported for the selected quarter._");
+        rendered.Should().Contain("_No common-share positions reported for the selected quarter");
         rendered.Should().NotContain("| # | Industry |");
     }
 }
