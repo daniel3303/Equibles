@@ -133,6 +133,47 @@ public class FundScoringManagerTests : IDisposable
         _fundScoreRepository.GetByHolder(holder).Should().BeEmpty();
     }
 
+    // The simulation ends 150 days after a filer's last rebalance. Such a window is a past book
+    // nobody can clone today, and it must not rank beside managers measured to the scoring date.
+    [Fact]
+    public async Task ScoreHolder_FilerStoppedFiling_StoresNoScoreAndRemovesTheEarlierOne()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark();
+        (await _manager.ScoreHolder(holder, AsOf, windowYears: 3, benchmarkTicker: "SPY"))
+            .Should()
+            .NotBeNull();
+        RemoveReports(holder, report => report > new DateOnly(2024, 12, 31));
+
+        var score = await _manager.ScoreHolder(
+            holder,
+            AsOf,
+            windowYears: 3,
+            benchmarkTicker: "SPY"
+        );
+
+        score.Should().BeNull();
+        _fundScoreRepository.GetByHolder(holder).Should().BeEmpty();
+    }
+
+    // A filer whose first report matured five months before the scoring date: annualising that
+    // stretch extrapolates it, so the filer is scored once its window spans a year.
+    [Fact]
+    public async Task ScoreHolder_HistoryShorterThanAYear_StoresNoScore()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark();
+        RemoveReports(holder, report => report < new DateOnly(2025, 6, 30));
+
+        var score = await _manager.ScoreHolder(
+            holder,
+            AsOf,
+            windowYears: 3,
+            benchmarkTicker: "SPY"
+        );
+
+        score.Should().BeNull();
+        _fundScoreRepository.GetByHolder(holder).Should().BeEmpty();
+    }
+
     [Fact]
     public async Task ScoreHolder_UnknownBenchmark_ReturnsNull()
     {
@@ -204,7 +245,7 @@ public class FundScoringManagerTests : IDisposable
             Name: "Split Co"
         );
         _dbContext.Set<EquityIssuer>().Add(held);
-        var splitDate = new DateOnly(2025, 1, 2);
+        var splitDate = new DateOnly(2024, 7, 2);
         var firstComparableClose = splitDate.AddDays(1);
         AddPrice(held, firstComparableClose, close: 50m, adjustedClose: 500m);
         AddPrice(held, AsOf, close: 75m, adjustedClose: 1m);
@@ -253,7 +294,7 @@ public class FundScoringManagerTests : IDisposable
         // the rebalance of the quarter reported after the close, never in cash before it.
         score
             .WindowStart.Should()
-            .Be(HoldingsBacktestCalculator.RebalanceDateOf(new DateOnly(2024, 12, 30)));
+            .Be(HoldingsBacktestCalculator.RebalanceDateOf(new DateOnly(2024, 6, 30)));
         score.PortfolioTotalReturnPercent.Should().BeApproximately(50m, 0.01m);
     }
 
@@ -427,6 +468,18 @@ public class FundScoringManagerTests : IDisposable
 
         _dbContext.SaveChanges();
         return holder;
+    }
+
+    private void RemoveReports(InstitutionalHolder holder, Func<DateOnly, bool> reportDates)
+    {
+        var holdings = _dbContext.Set<InstitutionalHolding>();
+        holdings.RemoveRange(
+            holdings
+                .Where(holding => holding.InstitutionalHolderId == holder.Id)
+                .AsEnumerable()
+                .Where(holding => reportDates(holding.ReportDate))
+        );
+        _dbContext.SaveChanges();
     }
 
     private void SeedBenchmark()
