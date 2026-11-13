@@ -126,8 +126,7 @@ public class BacktestPriceLoader
             .Select(mapping => new ListingReference(
                 mapping.Security.EquityIssuerId,
                 mapping.Ticker,
-                mapping.Id,
-                mapping.Active
+                mapping.Id
             ))
             .ToListAsync(cancellationToken);
         // A symbol two of the issuer's US listings carry names no single series, so it maps to
@@ -173,40 +172,11 @@ public class BacktestPriceLoader
         // bar under an earlier symbol proves the listing traded, so its holding is not unpriced.
         var firstBarByListing = rows.GroupBy(row => row.EquityListingId)
             .ToDictionary(group => group.Key, group => group.Min(row => row.Date));
-        // A live listing with no bar in the window either has a history that does not reach it
-        // or is still waiting for its first prices; only the stored series tells the two apart.
-        var unloadedLive = listingByKey
-            .Values.Where(listing =>
-                listing.Active && !firstBarByListing.ContainsKey(listing.EquityListingId)
-            )
-            .ToList();
-        var unloadedLiveIds = unloadedLive.Select(listing => listing.EquityListingId).ToList();
-        var pricedOutsideWindow =
-            unloadedLiveIds.Count == 0
-                ? []
-                : (
-                    await _priceRepository
-                        .GetUsListingReferences(
-                            unloadedLive.Select(listing => listing.CommonStockId).Distinct()
-                        )
-                        .Where(listing =>
-                            unloadedLiveIds.Contains(listing.Id)
-                            && _priceRepository
-                                .GetAllSeries()
-                                .Any(price =>
-                                    price.EquityListingId == listing.Id
-                                    && price.Close > 0
-                                    && price.Volume > 0
-                                )
-                        )
-                        .Select(listing => listing.Id)
-                        .ToListAsync(cancellationToken)
-                ).ToHashSet();
-
         // A holding whose listing has no usable close on the day the clone would buy it is left
         // out of that rebalance and coverage counts it as untracked: a delisted company whose
-        // history the price source no longer serves, or a line priced only from a later date.
-        // Refusing or shortening the window for it would hide every other holding's return.
+        // history the price source no longer serves, a line priced only from a later date, or a
+        // listing that has no price yet. Refusing or shortening the window for it would hide
+        // every other holding's return; once its prices are stored the next run buys it.
         foreach (var snapshot in snapshots)
         {
             var rebalanceDate = HoldingsBacktestCalculator.RebalanceDateOf(snapshot.ReportDate);
@@ -236,11 +206,10 @@ public class BacktestPriceLoader
                 && ForwardFill(series, buyDate) is > 0
             )
                 return false;
-            if (firstBarByListing.TryGetValue(listing.EquityListingId, out var firstBar))
-                return firstBar > buyDate;
-            // No bar in the window: a retired listing never gains one, a live one is left out
-            // only when it has a stored history elsewhere and otherwise waits for its prices.
-            return !listing.Active || pricedOutsideWindow.Contains(listing.EquityListingId);
+            // Bars under another symbol on or before the buy date mean the listing traded, so
+            // it stays under the strict rules instead of being reported as unpriced.
+            return !firstBarByListing.TryGetValue(listing.EquityListingId, out var firstBar)
+                || firstBar > buyDate;
         }
 
         var usableFrom = ResolveUsableStart(
@@ -791,9 +760,9 @@ public class BacktestPriceLoader
         return null;
     }
 
-    // A later filing can introduce a listing that was not in the initial portfolio. Rebalance uses
-    // reported value as its denominator, so silently skipping an unpriced position destroys that
-    // weight and publishes a false loss. Fail the result before simulation instead.
+    // A cloneable position without a close on its rebalance date (an ambiguous symbol, or bars
+    // stored under another symbol) would silently lose its weight and publish a false loss, and a
+    // quarter with nothing to buy would publish cash. Fail the result before simulation instead.
     private static bool EveryRebalanceIsPriceable(
         IReadOnlyList<BacktestQuarterSnapshot> snapshots,
         DateOnly from,
@@ -807,6 +776,14 @@ public class BacktestPriceLoader
             var rebalanceDate = HoldingsBacktestCalculator.RebalanceDateOf(snapshot.ReportDate);
             if (rebalanceDate < from || rebalanceDate > to)
                 continue;
+
+            // Every holding left out: the clone would sit in cash for the quarter and the flat
+            // stretch would be scored as the manager's return, so the result is unavailable.
+            if (
+                snapshot.Positions.Any(position => position.Unpriced)
+                && !snapshot.Positions.Any(position => position.IsCloneable)
+            )
+                return false;
 
             foreach (var position in snapshot.Positions.Where(position => position.IsCloneable))
             {
@@ -837,8 +814,7 @@ public class BacktestPriceLoader
     private sealed record ListingReference(
         Guid CommonStockId,
         string ListedTicker,
-        Guid EquityListingId,
-        bool Active
+        Guid EquityListingId
     );
 
     private sealed class LoadedPriceRow

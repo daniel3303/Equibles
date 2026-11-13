@@ -30,7 +30,7 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
     public void Dispose() => _dbContext.Dispose();
 
     [Fact]
-    public async Task RunBacktest_LaterRebalanceIntroducesUnpricedSecondaryListing_ReturnsUnavailable()
+    public async Task RunBacktest_LaterRebalanceHoldsOnlyAnUnpricedSecondaryListing_ReturnsUnavailable()
     {
         var firstReportDate = new DateOnly(2025, 3, 31);
         var secondReportDate = new DateOnly(2025, 6, 30);
@@ -73,6 +73,8 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
             to
         );
 
+        // The sibling class never borrows the primary's price, and a quarter with nothing to buy
+        // is never simulated as cash.
         result.Points.Should().BeEmpty();
         result.Reason.Should().Contain("rebalance").And.Contain("exact-listing price");
     }

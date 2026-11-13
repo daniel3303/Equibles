@@ -184,7 +184,8 @@ public class BacktestPriceLoaderSeriesCacheTests : IDisposable
 
         var loader = Loader();
         var before = await loader.RunBacktest(snapshots, benchmark, "SPY", From, To);
-        before.Points.Should().BeEmpty("one holding has no price at all");
+        before.Points[^1].PortfolioValue.Should().Be(120m, "the unpriced holding is left out");
+        before.Coverage.AverageUnpricedPercent.Should().Be(50m);
 
         AddPrice(empty, From, 50m);
         AddPrice(empty, To, 55m);
