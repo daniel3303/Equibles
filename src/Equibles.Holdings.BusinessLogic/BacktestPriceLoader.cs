@@ -174,7 +174,8 @@ public class BacktestPriceLoader
             to,
             pricesByListing,
             primaryTickers,
-            benchmarkSeries
+            benchmarkSeries,
+            out var unpriced
         );
         if (usableFrom == null)
         {
@@ -182,7 +183,13 @@ public class BacktestPriceLoader
             {
                 StartDate = from,
                 EndDate = to,
-                Reason = "no common comparable price date for the active portfolio and benchmark",
+                Reason =
+                    "no common comparable price date for the active portfolio and benchmark"
+                    + (
+                        unpriced == null
+                            ? ""
+                            : $": {unpriced} has no stored prices, so start after the holder's last filing that reports it"
+                    ),
             };
         }
 
@@ -597,9 +604,12 @@ public class BacktestPriceLoader
         DateOnly to,
         IReadOnlyDictionary<ListingKey, PriceRow[]> pricesByListing,
         IReadOnlyDictionary<Guid, string> primaryTickers,
-        PriceRow[] benchmarkSeries
+        PriceRow[] benchmarkSeries,
+        out string unpriced
     )
     {
+        // The first holding that has no price at all from the start on; it names what blocks the run.
+        unpriced = null;
         if (snapshots.Count == 0)
             return requestedFrom;
 
@@ -637,7 +647,10 @@ public class BacktestPriceLoader
             )
             {
                 if (!primaryTickers.TryGetValue(position.CommonStockId, out var primaryTicker))
+                {
+                    unpriced = position.ListedTicker;
                     return null;
+                }
 
                 var key = new ListingKey(
                     position.CommonStockId,
@@ -648,6 +661,7 @@ public class BacktestPriceLoader
                     || FirstUsableDate(series, start) is not { } firstPriceDate
                 )
                 {
+                    unpriced = key.ListedTicker;
                     return null;
                 }
 
