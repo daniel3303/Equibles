@@ -760,9 +760,9 @@ public class BacktestPriceLoader
         return null;
     }
 
-    // A later filing can introduce a listing that was not in the initial portfolio. Rebalance uses
-    // reported value as its denominator, so silently skipping an unpriced position destroys that
-    // weight and publishes a false loss. Fail the result before simulation instead.
+    // A cloneable position without a close on its rebalance date (an ambiguous symbol, or bars
+    // stored under another symbol) would silently lose its weight and publish a false loss, and a
+    // quarter with nothing to buy would publish cash. Fail the result before simulation instead.
     private static bool EveryRebalanceIsPriceable(
         IReadOnlyList<BacktestQuarterSnapshot> snapshots,
         DateOnly from,
@@ -776,6 +776,14 @@ public class BacktestPriceLoader
             var rebalanceDate = HoldingsBacktestCalculator.RebalanceDateOf(snapshot.ReportDate);
             if (rebalanceDate < from || rebalanceDate > to)
                 continue;
+
+            // Every holding left out: the clone would sit in cash for the quarter and the flat
+            // stretch would be scored as the manager's return, so the result is unavailable.
+            if (
+                snapshot.Positions.Any(position => position.Unpriced)
+                && !snapshot.Positions.Any(position => position.IsCloneable)
+            )
+                return false;
 
             foreach (var position in snapshot.Positions.Where(position => position.IsCloneable))
             {
