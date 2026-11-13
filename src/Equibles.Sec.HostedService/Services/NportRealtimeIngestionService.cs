@@ -191,7 +191,9 @@ public class NportRealtimeIngestionService
         {
             content = await _edgarClient.GetDocumentContent(entry.AccessionNumber, entry.Cik);
         }
-        catch (OperationCanceledException)
+        // Only shutdown propagates: an HttpClient timeout is also an OperationCanceledException,
+        // and rethrowing it aborted the whole sweep on one slow submission.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }

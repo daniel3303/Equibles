@@ -90,6 +90,26 @@ public class TickerMapServiceTests : IDisposable
         result.Should().ContainKey("MSFT").WhoseValue.Should().Be(msft.Id);
     }
 
+    // Two active issuers claiming one ticker fail closed instead of throwing on the duplicate key.
+    [Fact]
+    public async Task Build_TickerClaimedByTwoIssuers_LeavesItOutAndMapsTheRest()
+    {
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
+        await SeedStocks(
+            apple,
+            CreateStock("DUPE", "First Claimant"),
+            CreateStock("DUPE", "Second Claimant")
+        );
+
+        var result = await _service.Build(null, CancellationToken.None);
+
+        result
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new KeyValuePair<string, Guid>("AAPL", apple.Id));
+    }
+
     [Fact]
     public async Task Build_EmptyTickerList_ReturnsAllStocks()
     {

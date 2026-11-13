@@ -109,6 +109,26 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         filing.FilerCik.Should().Be("rollup");
     }
 
+    // The rollup also stores Schedule 13D/G event rows; the recent-filings feeds list 13F books only.
+    [Fact]
+    public async Task GetRecentFilings_FilerWithA13GEvent_ListsOnlyThe13FFiling()
+    {
+        await using var seed = FreshContext();
+        var holder = await SeedHolder(seed, "event");
+        seed.Add(MakeFiling(holder, Q4, "acc-13f"));
+        var schedule = MakeFiling(holder, new DateOnly(2025, 1, 15), "acc-13g");
+        schedule.FilingType = FilingType.Schedule13G;
+        seed.Add(schedule);
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var filings = await new InstitutionalHoldingRepository(read)
+            .GetRecentFilings()
+            .ToListAsync();
+
+        filings.Select(f => f.AccessionNumber).Should().Equal("acc-13f");
+    }
+
     [Fact]
     public async Task Backfill_CollapsesHoldingsIntoOneRowPerAccession()
     {

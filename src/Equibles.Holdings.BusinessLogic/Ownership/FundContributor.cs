@@ -102,25 +102,25 @@ public class FundContributor : IHolderSourceContributor
                 var first = series.First();
                 var balance = series.Sum(line => line.Balance);
                 var shares = RestateBalance(balance, first.LatestReportPeriodDate, splits);
+                // An id-less fund carries an empty SeriesId, as the filters above expect; keying it
+                // as a series would merge every id-less fund into one holder.
+                var hasSeriesId = !string.IsNullOrEmpty(first.SeriesId);
                 (decimal Balance, DateOnly ReportPeriodDate)? prior =
-                    first.SeriesId != null && priors.TryGetValue(first.SeriesId, out var found)
-                        ? found
-                        : null;
+                    hasSeriesId && priors.TryGetValue(first.SeriesId, out var found) ? found : null;
                 long? priorShares = prior is { } p
                     ? RestateBalance(p.Balance, p.ReportPeriodDate, splits)
                     : null;
                 return new StockHolderRow
                 {
-                    HolderKey =
-                        first.SeriesId != null
-                            ? new StockHolderKey(StockHolderKeyKind.SeriesId, first.SeriesId)
-                            : new StockHolderKey(StockHolderKeyKind.Opaque, series.Key),
+                    HolderKey = hasSeriesId
+                        ? new StockHolderKey(StockHolderKeyKind.SeriesId, first.SeriesId)
+                        : new StockHolderKey(StockHolderKeyKind.Opaque, series.Key),
                     Source = StockHolderSource.Fund,
                     Name = first.SeriesName ?? first.RegistrantName,
                     SeriesId = first.SeriesId,
                     Detail = first.RegistrantName,
                     AdviserHolderId =
-                        first.SeriesId != null && links.TryGetValue(first.SeriesId, out var link)
+                        hasSeriesId && links.TryGetValue(first.SeriesId, out var link)
                             ? link.InstitutionalHolderId
                             : null,
                     Shares = shares,

@@ -109,6 +109,26 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         fmrGroup.Shares.Should().Be(1_500_000);
     }
 
+    // Two funds that file without a series id stay two holders, not one shared empty series.
+    [Fact]
+    public async Task Read_TwoFundsWithoutASeriesId_StaySeparateHolders()
+    {
+        IdlessFund("31001", "Alpha Income Fund", 4_000m);
+        IdlessFund("31002", "Beta Growth Fund", 6_000m);
+        await DbContext.SaveChangesAsync();
+
+        var read = await Reader().Read(_nvda, "NVDA", complete: true);
+
+        var funds = read
+            .Rows.Where(row =>
+                row.Source == StockHolderSource.Fund
+                && row.Name is "Alpha Income Fund" or "Beta Growth Fund"
+            )
+            .ToList();
+        funds.Select(row => row.Shares).Should().BeEquivalentTo(new long?[] { 4_000, 6_000 });
+        funds.Select(row => row.HolderKey).Distinct().Should().HaveCount(2);
+    }
+
     [Fact]
     public async Task Read_APredecessorsBlockNestsUnderTheSuccessorIts13FReportsMovedTo()
     {
@@ -775,6 +795,51 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
                     LatestNportFilingId = filing.Id,
                 }
             );
+    }
+
+    private void IdlessFund(string registrantCik, string name, decimal balance)
+    {
+        var period = Q3;
+        var filing = new NportFiling
+        {
+            RegistrantCik = registrantCik,
+            RegistrantName = name + " Trust",
+            AccessionNumber = $"nport-{registrantCik}-{period:yyyyMMdd}",
+            FilingDate = period.AddDays(55),
+            SeriesId = "",
+            SeriesName = name,
+            ReportPeriodDate = period,
+            ReportPeriodEnd = new DateOnly(2026, 12, 31),
+            ParserVersion = NportFiling.CurrentParserVersion,
+        };
+        filing.Holdings.Add(
+            new NportHolding
+            {
+                NportFilingId = filing.Id,
+                Name = "NVIDIA Corp",
+                Cusip = NvdaCusip,
+                Balance = balance,
+                Units = FundContributor.SharesUnit,
+                ValueUsd = balance * 100,
+                PercentValue = 1m,
+                PayoffProfile = "Long",
+            }
+        );
+        DbContext.Add(filing);
+        DbContext.Add(
+            new FundSeries
+            {
+                IdentityKey = $"rc:{registrantCik}",
+                Slug = "fund-" + registrantCik,
+                RegistrantCik = registrantCik,
+                SeriesId = "",
+                SeriesName = name,
+                RegistrantName = filing.RegistrantName,
+                LatestReportPeriodDate = period,
+                LatestFilingDate = filing.FilingDate,
+                LatestNportFilingId = filing.Id,
+            }
+        );
     }
 
     private void AddFundReport(string seriesId, string registrantCik, int crd)

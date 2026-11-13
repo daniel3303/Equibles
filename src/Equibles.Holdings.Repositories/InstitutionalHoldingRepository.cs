@@ -2127,8 +2127,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     public IQueryable<RecentFiling> GetRecentFilings()
     {
+        // The rollup also stores one row per Schedule 13D/G event; the recent-filings feeds
+        // list 13F books only.
         return DbContext
             .Set<InstitutionalFiling>()
+            .Where(f => f.FilingType == FilingType.Form13F)
             .Join(
                 DbContext.Set<InstitutionalHolder>(),
                 f => f.InstitutionalHolderId,
