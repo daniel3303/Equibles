@@ -25,17 +25,17 @@ public static class ListingSymbolResolutionExtensions
         if (EquityListingSymbol.TryParse(symbol, out var code, out var ticker))
         {
             var typed = symbol.Trim();
-            var exact = await repository.ResolveVenueListing(typed, [code], ticker);
+            var exact = await repository.FindVenueListing(typed, [code], ticker);
             // A caller often writes a market's operating code (XMIL) or its main segment for a share stored
-            // under another segment, so a plain miss reads the market's other regular lines.
+            // under another segment, so a code nobody claims the ticker on reads the market's other regular
+            // lines. A refused claim on the typed code, or an extended-session code, never falls through.
+            var market = EquityMarketCatalog.ByCallerVenueCode(code);
             var siblings =
-                EquityMarketCatalog
-                    .ByCallerVenueCode(code)
-                    ?.RegularLineCodes.Where(other => other != code)
-                    .ToArray()
-                ?? [];
-            if (exact.Error != VenueNotFound(typed) || siblings.Length == 0)
-                return exact;
+                market == null || market.IsExtendedSession(code)
+                    ? []
+                    : market.RegularLineCodes.Where(other => other != code).ToArray();
+            if (exact.Claimed || siblings.Length == 0)
+                return (exact.Stock, exact.Venue, exact.Error);
             return await repository.ResolveVenueListing(typed, siblings, ticker);
         }
 
@@ -101,6 +101,23 @@ public static class ListingSymbolResolutionExtensions
         string ticker
     )
     {
+        var found = await repository.FindVenueListing(symbol, codes, ticker);
+        return (found.Stock, found.Venue, found.Error);
+    }
+
+    // Claimed tells a ticker somebody holds on these codes (answered, refused or ambiguous) from one nobody holds.
+    private static async Task<(
+        EquityIssuer Stock,
+        EquityListing Venue,
+        string Error,
+        bool Claimed
+    )> FindVenueListing(
+        this EquityIssuerRepository repository,
+        string symbol,
+        string[] codes,
+        string ticker
+    )
+    {
         var listings = repository
             .GetAll()
             .SelectMany(issuer => issuer.Securities.SelectMany(security => security.Listings))
@@ -122,15 +139,15 @@ public static class ListingSymbolResolutionExtensions
                     .Take(2)
                     .ToListAsync();
             if (claims.Count > 1)
-                return (null, null, $"Listing '{symbol}' is ambiguous.");
+                return (null, null, $"Listing '{symbol}' is ambiguous.", true);
             if (claims.Count == 1)
                 return
                     claims[0].IdentityState == EquityIdentityState.Verified
                     && claims[0].MarketCountryCode != "US"
-                    ? (claims[0].Security.Issuer, claims[0], null)
-                    : (null, null, VenueNotFound(symbol));
+                    ? (claims[0].Security.Issuer, claims[0], null, true)
+                    : (null, null, VenueNotFound(symbol), true);
         }
-        return (null, null, VenueNotFound(symbol));
+        return (null, null, VenueNotFound(symbol), false);
     }
 
     // The spellings a venue stores for what a caller typed: the directory writes a class separator as a
