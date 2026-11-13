@@ -142,8 +142,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Frequency: Monthly");
         result.Should().Contain("| Date | Value |");
         result.Should().Contain("2025-01-01");
-        result.Should().Contain(4.33m.ToString("G"));
-        result.Should().Contain(4.50m.ToString("G"));
+        result.Should().Contain("| 4.33 |");
+        // A stored scale never reaches the text: 4.50 reads 4.5, as a revised 3.6300000000 reads 3.63.
+        result.Should().Contain("| 4.5 |");
     }
 
     [Fact]

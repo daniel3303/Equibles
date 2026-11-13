@@ -152,7 +152,7 @@ public class CongressToolsTests : ParadeDbMcpTestBase
             .Description;
 
         result.Should().Contain("NVDA put option \\\\\\| $100 strike");
-        result.Should().Contain("| OP |");
+        result.Should().Contain("| Options |");
         result.Should().Contain("Brokerage \\\\\\| IRA");
         description.Should().Contain("securities transactions");
         description.Should().Contain("Asset identifies the filed instrument");

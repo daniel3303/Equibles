@@ -50,6 +50,7 @@ public class InvalidParamsTranslatingTool : McpServerTool
             {
                 RecordReason(McpToolErrorReason.ToolFault, overwrite: false);
             }
+            NoteIgnoredArguments(result, ProtocolTool, request?.Params?.Arguments);
             return result;
         }
         catch (McpToolFaultException ex)
@@ -101,6 +102,45 @@ public class InvalidParamsTranslatingTool : McpServerTool
                 ],
             };
         }
+    }
+
+    // The SDK binder silently drops an argument the schema does not declare (names match
+    // case-sensitively), so a page size or filter borrowed from another tool (maxItems,
+    // startDate) would read as applied; the answer says which arguments had no effect.
+    public static void NoteIgnoredArguments(
+        CallToolResult result,
+        Tool tool,
+        IDictionary<string, JsonElement> arguments
+    )
+    {
+        var schema = tool?.InputSchema ?? default;
+        if (
+            result == null
+            || arguments == null
+            || arguments.Count == 0
+            || schema.ValueKind != JsonValueKind.Object
+            || !schema.TryGetProperty("properties", out var properties)
+            || properties.ValueKind != JsonValueKind.Object
+        )
+        {
+            return;
+        }
+        var declared = properties.EnumerateObject().Select(property => property.Name).ToList();
+        var ignored = arguments
+            .Keys.Where(name => !declared.Contains(name, StringComparer.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var block = result.Content?.OfType<TextContentBlock>().LastOrDefault();
+        if (ignored.Count == 0 || block == null)
+        {
+            return;
+        }
+        var accepted =
+            declared.Count == 0
+                ? "it takes no arguments"
+                : $"its arguments are {string.Join(", ", declared)}";
+        block.Text +=
+            $"\n\nNote: {tool.Name} ignored {(ignored.Count == 1 ? "the argument" : "the arguments")} {string.Join(", ", ignored)}; {accepted}.";
     }
 
     // The rejected parameter, kept only when it is a declared schema property so the telemetry

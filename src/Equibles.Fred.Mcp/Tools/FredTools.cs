@@ -129,7 +129,7 @@ public class FredTools
                         // Format with InvariantCulture so the MCP markdown does not fork the
                         // decimal separator by host locale (e.g. de-DE would render 5,25).
                         var valueStr = obs.Value.HasValue
-                            ? McpFormat.Invariant(obs.Value.Value, "G")
+                            ? McpFormat.Invariant(obs.Value.Value, "G29")
                             : "N/A";
                         return $"| {obs.Date:yyyy-MM-dd} | {valueStr} |";
                     }
@@ -265,8 +265,8 @@ public class FredTools
                     previousObservations.TryGetValue(series.Id, out var previousObs);
 
                     var dateStr = McpFormat.OrDash(latestObs?.Date, "yyyy-MM-dd");
-                    var valueStr = McpFormat.OrDash(latestObs?.Value, "G");
-                    var previousStr = McpFormat.OrDash(previousObs?.Value, "G");
+                    var valueStr = McpFormat.OrDash(latestObs?.Value, "G29");
+                    var previousStr = McpFormat.OrDash(previousObs?.Value, "G29");
 
                     decimal? change =
                         latestObs?.Value != null && previousObs?.Value != null
@@ -274,8 +274,8 @@ public class FredTools
                             : null;
                     var changeStr =
                         change > 0
-                            ? "+" + McpFormat.Invariant(change.Value, "G")
-                            : McpFormat.OrDash(change, "G");
+                            ? "+" + McpFormat.Invariant(change.Value, "G29")
+                            : McpFormat.OrDash(change, "G29");
 
                     result.AppendLine(
                         $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {previousStr} | {changeStr} | {series.Units} |"
