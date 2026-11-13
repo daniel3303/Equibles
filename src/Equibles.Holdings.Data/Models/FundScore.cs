@@ -19,7 +19,8 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(WindowYears), nameof(BenchmarkTicker), nameof(AlphaPercent))]
 public class FundScore
 {
-    public const int CurrentCalculationVersion = 3;
+    // 4: certified splits are crossed and holdings with no close on the buy date are left out.
+    public const int CurrentCalculationVersion = 4;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

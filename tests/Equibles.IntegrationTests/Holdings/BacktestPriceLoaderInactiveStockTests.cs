@@ -402,6 +402,9 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
         result.Reason.Should().BeNull();
         result.StartDate.Should().Be(secondRebalance);
         result.Points[^1].PortfolioValue.Should().Be(110m);
+        result.Coverage.QuartersMeasured.Should().Be(1, "the skipped quarter was never traded");
+        result.Coverage.AverageLongPercent.Should().Be(100m);
+        result.Coverage.AverageUnpricedPercent.Should().Be(0m);
     }
 
     // A retired listing that stored bars under an earlier symbol is priced, never "without prices":
