@@ -42,7 +42,8 @@ public class BacktestCoverage
 
     /// <summary>
     /// Mean share of reported value in long holdings the clone left out because their listing has
-    /// no stored price; part of what the two figures above do not cover, so a surface can say why.
+    /// no stored price on the rebalance date; part of what the two figures above do not cover, so a
+    /// surface can say why.
     /// </summary>
     public decimal AverageUnpricedPercent { get; set; }
 

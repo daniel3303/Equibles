@@ -112,6 +112,7 @@ public static class HoldingsBacktestCalculator
         // open at the earliest snapshot's rebalance date instead.
         var priorIdx = ordered.FindLastIndex(x => x.RebalanceDate <= from);
         var snapshotIdx = priorIdx < 0 ? 0 : priorIdx;
+        var firstSnapshotIdx = snapshotIdx;
 
         var startDate = ordered[snapshotIdx].RebalanceDate;
         if (startDate < from)
@@ -180,8 +181,14 @@ public static class HoldingsBacktestCalculator
         }
 
         // Measured over the snapshots the simulation actually rebalanced on, not every snapshot
-        // handed in — a quarter outside the window says nothing about what this result covers.
-        result.Coverage = ComputeCoverage(ordered.Take(snapshotIdx + 1).Select(x => x.Snapshot));
+        // handed in — a quarter before the start or after the end says nothing about what this
+        // result covers, and a start moved past quarters with nothing to buy must not count them.
+        result.Coverage = ComputeCoverage(
+            ordered
+                .Skip(firstSnapshotIdx)
+                .Take(snapshotIdx - firstSnapshotIdx + 1)
+                .Select(x => x.Snapshot)
+        );
 
         return result;
     }

@@ -230,7 +230,7 @@ public class CloneBacktestTools
                     + (
                         coverage.AverageUnpricedPercent > 0
                             ? "The remainder is option positions, which a long-only clone cannot replicate, and "
-                                + $"holdings without stored prices, mostly delisted companies ({FormatShare(coverage.AverageUnpricedPercent)} "
+                                + $"holdings with no stored price on the rebalance date, mostly delisted companies ({FormatShare(coverage.AverageUnpricedPercent)} "
                                 + "of value on average); both are excluded."
                             : "The remainder is option positions, which a long-only clone "
                                 + "cannot replicate and excludes."
@@ -242,7 +242,7 @@ public class CloneBacktestTools
                     "WARNING: most of this filer's reported book is options"
                         + (
                             coverage.AverageUnpricedPercent > 0
-                                ? " or holdings without stored prices"
+                                ? " or holdings with no stored price on the rebalance date"
                                 : ""
                         )
                         + ", so the return above is "
