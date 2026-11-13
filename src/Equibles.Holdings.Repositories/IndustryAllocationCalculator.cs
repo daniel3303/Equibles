@@ -33,6 +33,11 @@ public static class IndustryAllocationCalculator
         Func<InstitutionalHolding, string> groupName
     )
     {
+        // Common shares only: a put or call row carries the underlying's notional and a principal
+        // row a debt amount, so either would count a hedge or a bond as equity in that industry.
+        currentQuarterHoldings = currentQuarterHoldings
+            .Where(h => h.OptionType == null && h.ShareType == ShareType.Shares)
+            .ToList();
         if (currentQuarterHoldings.Count == 0)
             return [];
 

@@ -77,6 +77,36 @@ public class InstitutionalHoldingRepositoryDoubleDownTests : IAsyncLifetime
         positions[0].Ticker.Should().Be("AAPL");
     }
 
+    [Fact]
+    public async Task GetDoubleDownCandidates_KeepsAPositionWhoseFiledCountFell()
+    {
+        // A one-for-ten reverse split between the quarters: 1,000 shares become 100, and the
+        // holder then doubles to 200. As filed the count fell, so the growth test would drop it.
+        await using var seed = FreshContext();
+        EquityIssuer split = await SeedStock(seed, "RSPL");
+        EquityIssuer other = await SeedStock(seed, "OTHR");
+        var holder = await SeedHolder(seed, "candidate");
+        seed.AddRange(
+            MakeHolding(split, holder, Q3, 1_000, "acc-split-q3"),
+            MakeHolding(split, holder, Q4, 200, "acc-split-q4"),
+            MakeHolding(other, holder, Q3, 1_000, "acc-other-q3"),
+            MakeHolding(other, holder, Q4, 200, "acc-other-q4")
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var candidates = await sut.GetDoubleDownCandidates(Q4, Q3, [split.Id]).ToListAsync();
+        var filed = await sut.GetDoubleDownPositions(Q4, Q3, 50.0).ToListAsync();
+
+        candidates.Should().ContainSingle("only the requested issuer is read");
+        candidates[0].Ticker.Should().Be("RSPL");
+        candidates[0].CurrentShares.Should().Be(200);
+        candidates[0].PreviousShares.Should().Be(1_000);
+        filed.Should().BeEmpty("the growth test on as-filed counts sees a decrease");
+    }
+
     private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker

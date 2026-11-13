@@ -3235,7 +3235,8 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             $"Total: {McpFormat.WholeNumber(slices.Sum(s => s.PositionCount))} positions, "
                 + $"${FormatMillions(slices.Sum(s => s.TotalValue))}M 13F value. "
-                + "_Percentages are of the 13F-reported (long U.S. equity) book only._"
+                + "_Common-share positions only: option and principal rows are left out, so "
+                + "percentages are of the 13F-reported long U.S. equity book._"
         );
         result.AppendLine(PublishedValueCaveat);
 
