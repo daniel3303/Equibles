@@ -20,9 +20,4 @@ public class GovernmentContractRepository : BaseRepository<GovernmentContract>
     {
         return GetAll().Where(c => c.CountryCode == countryCode);
     }
-
-    public IQueryable<GovernmentContract> GetByAwardUniqueKey(string awardUniqueKey)
-    {
-        return GetAll().Where(c => c.AwardUniqueKey == awardUniqueKey);
-    }
 }

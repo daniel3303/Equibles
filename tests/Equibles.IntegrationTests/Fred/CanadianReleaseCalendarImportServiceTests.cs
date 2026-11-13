@@ -29,6 +29,8 @@ public class CanadianReleaseCalendarImportServiceTests : IDisposable
     private readonly CanadianReleaseCalendarImportService _sut;
     private string _statCan = "[]";
     private string _bank = "";
+    private bool _statCanTimesOut;
+    private readonly List<string> _requestedHosts = [];
 
     public CanadianReleaseCalendarImportServiceTests()
     {
@@ -40,8 +42,15 @@ public class CanadianReleaseCalendarImportServiceTests : IDisposable
             .CreateClient(Arg.Any<string>())
             .Returns(_ => new HttpClient(
                 new AddressHandler(uri =>
-                    uri.Host.Contains("statcan", StringComparison.Ordinal) ? _statCan : _bank
-                )
+                {
+                    _requestedHosts.Add(uri.Host);
+                    var statCan = uri.Host.Contains("statcan", StringComparison.Ordinal);
+                    if (statCan && _statCanTimesOut)
+                    {
+                        throw new TaskCanceledException("The request timed out.");
+                    }
+                    return statCan ? _statCan : _bank;
+                })
             ));
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(FredSeriesRepository), _seriesRepo),
@@ -148,6 +157,20 @@ public class CanadianReleaseCalendarImportServiceTests : IDisposable
             .Select(d => d.Date)
             .ToListAsync(CancellationToken.None);
         dates.Should().Equal(nearer, further);
+    }
+
+    // An HttpClient timeout surfaces as a TaskCanceledException while the worker is not stopping.
+    [Fact]
+    public async Task Import_APublisherTimeoutSkipsOnlyThatPublisher()
+    {
+        _statCanTimesOut = true;
+
+        var import = () => _sut.Import(CancellationToken.None);
+
+        await import.Should().NotThrowAsync();
+        _requestedHosts
+            .Should()
+            .Contain(host => host.Contains("bankofcanada", StringComparison.Ordinal));
     }
 
     private static string Schedule(params (string Title, DateOnly Date, string Period)[] rows) =>

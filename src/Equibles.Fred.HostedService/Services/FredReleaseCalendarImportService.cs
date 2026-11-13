@@ -285,6 +285,12 @@ public class FredReleaseCalendarImportService : IImporter
             }
         }
 
+        await PurgeUnlistedUpcomingDates(
+            parsed,
+            DateOnly.FromDateTime(utcToday),
+            cancellationToken
+        );
+
         var minDate = parsed.Min(p => p.Date);
         var maxDate = parsed.Max(p => p.Date);
 
@@ -317,6 +323,40 @@ public class FredReleaseCalendarImportService : IImporter
             "Imported {Count} FRED release dates across {Releases} tracked releases",
             totalInserted,
             trackedReleases.Count
+        );
+    }
+
+    // A rescheduled or cancelled print leaves the release's FRED dates, so an upcoming stored date
+    // FRED no longer lists would stay on the calendar beside the new one. Past dates stay, and a
+    // release whose read returned no dates is absent from parsed and keeps what it has.
+    private async Task PurgeUnlistedUpcomingDates(
+        List<(Guid ReleaseId, DateOnly Date)> parsed,
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
+    {
+        var listed = parsed.ToHashSet();
+        var releaseIds = parsed.Select(p => p.ReleaseId).ToHashSet();
+        using var scope = _scopeFactory.CreateScope();
+        var dateRepo = scope.ServiceProvider.GetRequiredService<FredReleaseDateRepository>();
+
+        var stale = (
+            await dateRepo
+                .GetAll()
+                .Where(d => releaseIds.Contains(d.FredReleaseId) && d.Date >= today)
+                .ToListAsync(cancellationToken)
+        )
+            .Where(d => !listed.Contains((d.FredReleaseId, d.Date)))
+            .ToList();
+        if (stale.Count == 0)
+            return;
+
+        dateRepo.Delete(stale);
+        await dateRepo.SaveChanges();
+
+        _logger.LogInformation(
+            "Removed {Count} upcoming release dates FRED no longer lists",
+            stale.Count
         );
     }
 

@@ -356,7 +356,7 @@ public class GovernmentContractsImportService : IImporter
         if (mapped.Count == 0)
             return 0;
 
-        var existingKeys = await LoadExistingKeys(mapped.Keys, cancellationToken);
+        var existingKeys = await RefreshStoredAwards(mapped, cancellationToken);
         var toInsert = mapped.Values.Where(c => !existingKeys.Contains(c.AwardUniqueKey)).ToList();
         if (toInsert.Count == 0)
             return 0;
@@ -722,21 +722,64 @@ public class GovernmentContractsImportService : IImporter
         await repository.SaveChanges();
     }
 
-    private async Task<HashSet<string>> LoadExistingKeys(
-        IEnumerable<string> keys,
+    // A modification brings an award back into a window carrying its current state, so a stored
+    // award takes the newer amount, outlays, end date and description instead of keeping the
+    // values from the first time it was seen. Returns every stored key, refreshed or not.
+    private async Task<HashSet<string>> RefreshStoredAwards(
+        IReadOnlyDictionary<string, GovernmentContract> mapped,
         CancellationToken cancellationToken
     )
     {
-        var keyList = keys.ToList();
+        var keyList = mapped.Keys.ToList();
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<GovernmentContractRepository>();
-        return (
-            await repository
-                .GetByCountry(UsCountryCode)
-                .Where(c => keyList.Contains(c.AwardUniqueKey))
-                .Select(c => c.AwardUniqueKey)
-                .ToListAsync(cancellationToken)
-        ).ToHashSet(StringComparer.Ordinal);
+        var stored = await repository
+            .GetByCountry(UsCountryCode)
+            .Where(c => keyList.Contains(c.AwardUniqueKey))
+            .ToListAsync(cancellationToken);
+
+        var refreshed = 0;
+        foreach (var contract in stored)
+        {
+            var current = mapped[contract.AwardUniqueKey];
+            if (
+                contract.LastModifiedDate is { } storedAt
+                && current.LastModifiedDate is { } incomingAt
+                && incomingAt < storedAt
+            )
+                continue;
+
+            // The mapper writes a missing amount as 0, and outlays never un-happen.
+            var amount = current.Amount != 0m ? current.Amount : contract.Amount;
+            var outlays = current.TotalOutlays ?? contract.TotalOutlays;
+            var endDate = current.EndDate ?? contract.EndDate;
+            var lastModified = current.LastModifiedDate ?? contract.LastModifiedDate;
+            var description = string.IsNullOrWhiteSpace(current.Description)
+                ? contract.Description
+                : current.Description;
+            if (
+                contract.Amount == amount
+                && contract.TotalOutlays == outlays
+                && contract.EndDate == endDate
+                && contract.LastModifiedDate == lastModified
+                && contract.Description == description
+            )
+                continue;
+
+            contract.Amount = amount;
+            contract.TotalOutlays = outlays;
+            contract.EndDate = endDate;
+            contract.LastModifiedDate = lastModified;
+            contract.Description = description;
+            refreshed++;
+        }
+
+        if (refreshed > 0)
+        {
+            await repository.SaveChanges();
+            _logger.LogDebug("Refreshed {Count} stored US contract awards", refreshed);
+        }
+        return stored.Select(c => c.AwardUniqueKey).ToHashSet(StringComparer.Ordinal);
     }
 
     private async Task<DateOnly> DetermineStartDate(CancellationToken cancellationToken)
