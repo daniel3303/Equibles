@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using Equibles.Core.AutoWiring;
@@ -25,11 +26,21 @@ public class YahooFinanceClient : IYahooFinanceClient
     private const string BrowserUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-    // Yahoo has no documented limit; community reports ~60 req/min triggers blocking
-    private static readonly IRateLimiter RateLimiter = new Common.RateLimiter.RateLimiter(
+    // Yahoo has no documented limit; community reports ~60 req/min triggers blocking. Urgent
+    // requests (YahooRequestPriority) go first, and the reserve keeps profile refreshes and
+    // re-asks moving while a large market's new session is being read.
+    private static readonly Common.RateLimiter.RateLimiter RateLimiter = new(
         maxRequests: 40,
-        timeWindow: TimeSpan.FromMinutes(1)
+        timeWindow: TimeSpan.FromMinutes(1),
+        backgroundReserve: 12
     );
+
+    // The profile read rides the key-statistics request; see GetKeyStatistics.
+    private static readonly TimeSpan ProfileCarryLifetime = TimeSpan.FromMinutes(5);
+    private readonly ConcurrentDictionary<
+        string,
+        (CompanyProfile Profile, DateTime FetchedAt)
+    > _carriedProfiles = new(StringComparer.Ordinal);
 
     private static readonly SemaphoreSlim SessionSemaphore = new(1, 1);
     private static string _cachedCrumb;
@@ -315,10 +326,16 @@ public class YahooFinanceClient : IYahooFinanceClient
     {
         // Request defaultKeyStatistics + summaryDetail together — Yahoo returns both
         // modules in a single HTTP round-trip when separated by a comma, so this costs
-        // nothing extra over the previous shares-only call.
-        var result = await GetQuoteSummaryResult(ticker, "defaultKeyStatistics,summaryDetail");
+        // nothing extra over the previous shares-only call. The asset profile rides along too:
+        // enrichment reads it right after, and a second request per stock spent a sixth of the
+        // shared budget.
+        var result = await GetQuoteSummaryResult(
+            ticker,
+            "defaultKeyStatistics,summaryDetail,assetProfile"
+        );
         if (result == null)
             return null;
+        CarryProfile(ticker, MapProfile(result.AssetProfile));
         if (result.DefaultKeyStatistics == null && result.SummaryDetail == null)
             return null;
 
@@ -333,18 +350,39 @@ public class YahooFinanceClient : IYahooFinanceClient
 
     public async Task<CompanyProfile> GetCompanyProfile(string ticker)
     {
-        var profile = (await GetQuoteSummaryResult(ticker, "assetProfile"))?.AssetProfile;
-        if (profile == null)
-            return null;
+        ArgumentException.ThrowIfNullOrWhiteSpace(ticker);
+        // Served once from the key-statistics response that just carried it; any other caller
+        // makes its own request.
+        if (
+            _carriedProfiles.TryRemove(ticker, out var carried)
+            && DateTime.UtcNow - carried.FetchedAt <= ProfileCarryLifetime
+        )
+            return carried.Profile;
 
-        return new CompanyProfile
-        {
-            Sector = profile.Sector,
-            Industry = profile.Industry,
-            LongBusinessSummary = profile.LongBusinessSummary,
-            Website = profile.Website,
-        };
+        return MapProfile((await GetQuoteSummaryResult(ticker, "assetProfile"))?.AssetProfile);
     }
+
+    private void CarryProfile(string ticker, CompanyProfile profile)
+    {
+        var now = DateTime.UtcNow;
+        // A caller that never reads the profile must not grow the map for the client's lifetime.
+        foreach (
+            var stale in _carriedProfiles.Where(e => now - e.Value.FetchedAt > ProfileCarryLifetime)
+        )
+            _carriedProfiles.TryRemove(stale.Key, out _);
+        _carriedProfiles[ticker] = (profile, now);
+    }
+
+    private static CompanyProfile MapProfile(AssetProfileContainer profile) =>
+        profile == null
+            ? null
+            : new CompanyProfile
+            {
+                Sector = profile.Sector,
+                Industry = profile.Industry,
+                LongBusinessSummary = profile.LongBusinessSummary,
+                Website = profile.Website,
+            };
 
     private async Task<QuoteSummaryResult> GetQuoteSummaryResult(string ticker, string modules)
     {
@@ -449,7 +487,7 @@ public class YahooFinanceClient : IYahooFinanceClient
 
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            await RateLimiter.WaitAsync();
+            await RateLimiter.WaitAsync(YahooRequestPriority.IsUrgent);
 
             var separator = baseUrl.Contains('?') ? "&" : "?";
             var url = $"{baseUrl}{separator}crumb={Uri.EscapeDataString(crumb)}";

@@ -184,7 +184,11 @@ public class RateLimiterTests
         // with a `while` loop removes that call and is the canonical fix; a future PR
         // re-introducing `await WaitAsync()` (or any other self-call within the body)
         // re-introduces the same unbounded cascade and trips this regression.
-        var waitAsync = typeof(RateLimiter).GetMethod(nameof(RateLimiter.WaitAsync));
+        // The loop lives in the (urgent, token) overload; the token-only one forwards to it.
+        var waitAsync = typeof(RateLimiter).GetMethod(
+            nameof(RateLimiter.WaitAsync),
+            [typeof(bool), typeof(CancellationToken)]
+        );
         waitAsync.Should().NotBeNull();
 
         var stateMachineAttr = waitAsync.GetCustomAttribute<AsyncStateMachineAttribute>();

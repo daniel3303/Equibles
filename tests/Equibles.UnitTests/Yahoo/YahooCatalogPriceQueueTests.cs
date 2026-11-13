@@ -201,6 +201,33 @@ public class YahooCatalogPriceQueueTests
     }
 
     [Fact]
+    public void OnlyASessionNobodyHasAskedForIsAFirstAsk()
+    {
+        // Hong Kong's 2026-09-30 session settled at 08:40 UTC: one listing was last asked the day
+        // before, the other was asked after the settle and returned nothing.
+        var unasked = VenueTarget("00001", "HK", "XHKG") with
+        {
+            YahooPriceSyncAttemptedAt = Now.AddHours(-16),
+        };
+        var retried = VenueTarget("00002", "HK", "XHKG") with
+        {
+            YahooPriceSyncAttemptedAt = Now.AddMinutes(-30),
+        };
+        var dormant = VenueTarget("00003", "HK", "XHKG");
+        var dates = new Dictionary<Guid, DateOnly?>
+        {
+            [unasked.EquityListingId] = new(2026, 9, 29),
+            [retried.EquityListingId] = new(2026, 9, 29),
+            [dormant.EquityListingId] = new(2026, 6, 1),
+        };
+
+        YahooCatalogPriceQueue
+            .FirstAsks([unasked, retried, dormant], dates, Now)
+            .Should()
+            .BeEquivalentTo([unasked.EquityListingId]);
+    }
+
+    [Fact]
     public void AWeekendGapLeavesTheSeriesCurrent()
     {
         var saturday = new DateTime(2026, 10, 3, 18, 0, 0, DateTimeKind.Utc);
