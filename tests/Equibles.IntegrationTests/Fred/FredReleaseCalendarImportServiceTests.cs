@@ -319,6 +319,43 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
             .BeEquivalentTo([new DateOnly(2026, 6, 11), new DateOnly(2026, 7, 14)]);
     }
 
+    // A government shutdown moves a print: FRED drops the old date and lists the new one.
+    [Fact]
+    public async Task Import_UpcomingDateFredNoLongerLists_IsRemovedAndPastDatesStay()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var past = today.AddDays(-40);
+        var dropped = today.AddDays(20);
+        var moved = today.AddDays(48);
+        var release = new FredRelease { ReleaseId = 50, Name = "Employment Situation" };
+        _releaseRepo.Add(release);
+        await _releaseRepo.SaveChanges();
+        _seriesRepo.Add(
+            new FredSeries
+            {
+                SeriesId = "PAYEMS",
+                Title = "All Employees, Total Nonfarm",
+                FredReleaseId = release.Id,
+            }
+        );
+        await _seriesRepo.SaveChanges();
+        _dateRepo.Add(new FredReleaseDate { FredReleaseId = release.Id, Date = past });
+        _dateRepo.Add(new FredReleaseDate { FredReleaseId = release.Id, Date = dropped });
+        await _dateRepo.SaveChanges();
+        SetupReleaseDates(
+            new FredReleaseDateRecord
+            {
+                ReleaseId = 50,
+                ReleaseName = "Employment Situation",
+                Date = moved.ToString("yyyy-MM-dd"),
+            }
+        );
+
+        await _sut.Import(CancellationToken.None);
+
+        _dateRepo.GetAll().Select(d => d.Date).OrderBy(d => d).ToList().Should().Equal(past, moved);
+    }
+
     [Fact]
     public async Task Import_StoredPhantomDatesOfCarryForwardRelease_ArePurged()
     {

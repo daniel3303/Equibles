@@ -64,7 +64,9 @@ public class CanadianIndicatorImportService : IImporter
                     curated.SeriesId
                 );
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // An HttpClient timeout is a TaskCanceledException too; only shutdown may end the cycle,
+            // so a series that timed out skips itself, not every series after it.
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 _logger.LogError(
                     ex,

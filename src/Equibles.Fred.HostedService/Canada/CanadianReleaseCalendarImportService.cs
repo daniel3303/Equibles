@@ -78,7 +78,9 @@ public class CanadianReleaseCalendarImportService : IImporter
                 source
             );
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        // An HttpClient timeout is a TaskCanceledException too; only shutdown may end the cycle,
+        // so a publisher that timed out skips itself, not the other publisher.
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(exception, "Error importing the {Source} release calendar", source);
             await _errorReporter.Report(
