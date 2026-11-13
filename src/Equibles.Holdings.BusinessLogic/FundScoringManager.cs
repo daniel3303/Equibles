@@ -94,6 +94,15 @@ public class FundScoringManager
             return null;
         }
 
+        // A clone that tracks too little of the reported book (options or holdings without a
+        // price make up the rest) is not this manager's return; the ranking shows no coverage
+        // line, so such a score is never stored and an earlier one is removed.
+        if (result.Coverage is { IsRepresentative: false })
+        {
+            await DeleteExistingScore(holder, windowYears, benchmarkTicker);
+            return null;
+        }
+
         return await Upsert(holder, windowYears, benchmarkTicker, result);
     }
 

@@ -90,6 +90,49 @@ public class FundScoringManagerTests : IDisposable
         _fundScoreRepository.GetByHolder(holder).Should().HaveCount(1);
     }
 
+    // Three quarters of the reported value in put options leave a clone that tracks a quarter of
+    // the book: the ranking has no coverage line, so the score is removed rather than shown.
+    [Fact]
+    public async Task ScoreHolder_BookMostlyOptions_StoresNoScoreAndRemovesTheEarlierOne()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark();
+        (await _manager.ScoreHolder(holder, AsOf, windowYears: 3, benchmarkTicker: "SPY"))
+            .Should()
+            .NotBeNull();
+        var equity = _dbContext
+            .Set<InstitutionalHolding>()
+            .Where(holding => holding.InstitutionalHolderId == holder.Id)
+            .ToList();
+        foreach (var holding in equity)
+        {
+            _dbContext
+                .Set<InstitutionalHolding>()
+                .Add(
+                    new InstitutionalHolding
+                    {
+                        InstitutionalHolderId = holder.Id,
+                        EquityIssuerId = holding.EquityIssuerId,
+                        ReportDate = holding.ReportDate,
+                        FilingDate = holding.FilingDate,
+                        OptionType = OptionType.Put,
+                        Shares = 3000,
+                        Value = 300_000,
+                    }
+                );
+        }
+        _dbContext.SaveChanges();
+
+        var score = await _manager.ScoreHolder(
+            holder,
+            AsOf,
+            windowYears: 3,
+            benchmarkTicker: "SPY"
+        );
+
+        score.Should().BeNull();
+        _fundScoreRepository.GetByHolder(holder).Should().BeEmpty();
+    }
+
     [Fact]
     public async Task ScoreHolder_UnknownBenchmark_ReturnsNull()
     {

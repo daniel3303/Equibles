@@ -46,6 +46,41 @@ public class EquityListingRepository : BaseRepository<EquityListing>
         return true;
     }
 
+    /// <summary>
+    /// Stamps a US listing whose symbol the price provider does not know, so the crawl can space
+    /// its next ask. US listings carry no venue identity state, so the symbol itself is revalidated.
+    /// </summary>
+    public async Task<bool> StampUsPriceSyncAttempt(
+        Guid listingId,
+        string ticker,
+        DateTime attemptedAt,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var current = GetAll()
+            .Where(listing =>
+                listing.Id == listingId
+                && listing.Active
+                && listing.MarketCountryCode == "US"
+                && listing.Ticker == ticker
+            );
+        if (DbContext.Database.IsRelational())
+            return await current.ExecuteUpdateAsync(
+                    setters =>
+                        setters.SetProperty(
+                            listing => listing.YahooPriceSyncAttemptedAt,
+                            attemptedAt
+                        ),
+                    cancellationToken
+                ) == 1;
+        var listing = await current.SingleOrDefaultAsync(cancellationToken);
+        if (listing == null)
+            return false;
+        listing.YahooPriceSyncAttemptedAt = attemptedAt;
+        await DbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     // The caller supplies source-validated USD evidence; the database revalidates exact
     // current U.S. ownership under the same lock used by directory writers.
     public async Task<bool> RecordUsDollarQuotation(

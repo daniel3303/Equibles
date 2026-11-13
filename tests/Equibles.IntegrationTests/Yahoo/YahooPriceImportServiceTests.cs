@@ -638,6 +638,31 @@ public class YahooPriceImportServiceTests : IDisposable
         split.PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
+    // A live US symbol the provider answers "not found" for is stamped and then left alone for a
+    // week: the second cycle makes no request for it.
+    [Fact]
+    public async Task Import_UsSymbolNotFound_IsStampedAndNotAskedAgainTheNextCycle()
+    {
+        EquityIssuer stock = CreateStock("NOPE", "Unknown To The Provider");
+        await SeedStocks(stock);
+        _yahooClient
+            .GetChart("NOPE", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .ThrowsAsync(
+                new HttpRequestException("not found", null, System.Net.HttpStatusCode.NotFound)
+            );
+
+        await AttributeFixtureActions();
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.Received(1).GetChart("NOPE", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        _stockRepo
+            .GetAll()
+            .Single(row => row.Id == stock.Id)
+            .Presentation.Listing.YahooPriceSyncAttemptedAt.Should()
+            .NotBeNull();
+    }
+
     [Fact]
     public async Task Import_InactiveListingHttpFailure_CheckpointsAttemptWithoutCompleting()
     {

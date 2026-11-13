@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Data;
+using System.Net;
 using Equibles.CommonStocks.Data.Extensions;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
@@ -318,6 +319,7 @@ public class YahooPriceImportService
                         listing.IsReferenceListed,
                         listing.PriceHistoryBackfilled,
                         listing.YahooEnrichmentAttemptedAt,
+                        listing.YahooPriceSyncAttemptedAt,
                     })
                     .ToList(),
             })
@@ -358,7 +360,8 @@ public class YahooPriceImportService
                             && !listing.PriceHistoryBackfilled,
                         YahooEnrichmentAttemptedAt: isPrimary
                             ? listing.YahooEnrichmentAttemptedAt
-                            : null
+                            : null,
+                        YahooPriceSyncAttemptedAt: listing.YahooPriceSyncAttemptedAt
                     )
                 );
             }
@@ -764,6 +767,8 @@ public class YahooPriceImportService
                 attempted++;
                 _logger.LogWarning(ex, "Failed to fetch prices for {Ticker}, skipping", ticker);
                 await StampFailedAttempt(target, cancellationToken);
+                if (ex.StatusCode == HttpStatusCode.NotFound)
+                    await StampUsSymbolNotFound(target, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -1018,6 +1023,40 @@ public class YahooPriceImportService
             await StampPriceSyncAttempt(target, cancellationToken);
     }
 
+    // The provider does not know this US symbol, or serves no bar for it. The stamp lets the crawl
+    // ask it weekly instead of every cycle; it is ignored once the series has a recent stored bar.
+    private async Task StampUsSymbolNotFound(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!target.IsUs || target.IsHistorical)
+            return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var listings = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+            await listings.StampUsPriceSyncAttempt(
+                target.EquityListingId,
+                target.Ticker,
+                DateTime.UtcNow,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Error stamping the not-found price attempt for {Ticker}",
+                target.Ticker
+            );
+        }
+    }
+
     private async Task StampHistoricalBackfillAttempt(
         PriceSeriesTarget target,
         CancellationToken cancellationToken
@@ -1081,8 +1120,41 @@ public class YahooPriceImportService
         var lastDates = rows.Where(row => row.Date != null)
             .ToDictionary(row => row.EquityListingId, row => row.Date.GetValueOrDefault());
 
-        return BuildCrawlOrder(targets, lastDates, DateOnly.FromDateTime(DateTime.UtcNow));
+        var now = DateTime.UtcNow;
+        var due = targets
+            .Where(target =>
+                !IsNotFoundBackedOff(
+                    target,
+                    lastDates.TryGetValue(target.EquityListingId, out var lastDate)
+                        ? lastDate
+                        : null,
+                    now
+                )
+            )
+            .ToList();
+        return BuildCrawlOrder(due, lastDates, DateOnly.FromDateTime(now));
     }
+
+    // How long a US symbol the provider answered "not found" for waits before the next ask.
+    internal static readonly TimeSpan NotFoundRetryInterval = TimeSpan.FromDays(7);
+
+    // Several hundred live US symbols are unknown to the provider (unsponsored receipts, lines
+    // that stopped trading, a ticker it has not picked up yet). Asked every cycle they cost
+    // thousands of requests a day from the budget the venue closes share. A series with a recent
+    // stored bar is never held back: its bars come from elsewhere and the provider may serve it.
+    internal static bool IsNotFoundBackedOff(
+        PriceSeriesTarget target,
+        DateOnly? lastStoredBar,
+        DateTime now
+    ) =>
+        target.IsUs
+        && !target.IsHistorical
+        && target.YahooPriceSyncAttemptedAt is { } notFoundAt
+        && notFoundAt > now - NotFoundRetryInterval
+        && (
+            lastStoredBar == null
+            || lastStoredBar < DateOnly.FromDateTime(now).AddDays(-ActivelyTradedWindowDays)
+        );
 
     // Pure so the priority rule is pinnable in tests without a database.
     internal static List<PriceSeriesTarget> BuildCrawlOrder(
@@ -2665,6 +2737,10 @@ public class YahooPriceImportService
         var floor = PriceHistoryFloor();
         if (startDate == floor)
         {
+            // The provider lists the symbol but serves no bar for it (a line that stopped trading
+            // while its ticker stays in the directory): the same weekly ask as an unknown symbol.
+            if (chartData.Prices.Count == 0)
+                await StampUsSymbolNotFound(target, cancellationToken);
             await CaptureSplits(target, chartData.Splits, cancellationToken);
             // A catalog listing's first history is installed whole, so its leading edge is checked here.
             if (!target.IsUs && !HasCompleteLeadingEdge(chartData, floor, today))
