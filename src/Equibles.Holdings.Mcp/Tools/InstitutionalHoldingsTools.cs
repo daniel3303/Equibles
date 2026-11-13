@@ -3219,7 +3219,11 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         if (slices.Count == 0)
         {
-            result.AppendLine("_No holdings reported for the selected quarter._");
+            // The filer may still report option or principal rows, which the allocation leaves out.
+            result.AppendLine(
+                "_No common-share positions reported for the selected quarter; option and "
+                    + "principal rows are not part of the allocation._"
+            );
             return result.ToString();
         }
 
@@ -3235,7 +3239,8 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             $"Total: {McpFormat.WholeNumber(slices.Sum(s => s.PositionCount))} positions, "
                 + $"${FormatMillions(slices.Sum(s => s.TotalValue))}M 13F value. "
-                + "_Percentages are of the 13F-reported (long U.S. equity) book only._"
+                + "_Common-share positions only: option and principal rows are left out, so "
+                + "percentages are of the 13F-reported long U.S. equity book._"
         );
         result.AppendLine(PublishedValueCaveat);
 

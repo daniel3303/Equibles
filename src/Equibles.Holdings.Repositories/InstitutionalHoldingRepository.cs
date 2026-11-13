@@ -2066,9 +2066,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly current,
         DateOnly previous,
         double minPctIncrease
+    ) => ProjectDoubleDownPositions(DoubleDownAggregates(current, previous, null), minPctIncrease);
+
+    private IQueryable<DoubleDownAggregate> DoubleDownAggregates(
+        DateOnly current,
+        DateOnly previous,
+        IReadOnlyCollection<Guid> issuerIds
     )
     {
-        var aggregated = BothQuarters(current, previous)
+        return DoubleDownRows(current, previous, issuerIds)
             .GroupBy(h => new
             {
                 h.InstitutionalHolderId,
@@ -2085,8 +2091,6 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
                 PreviousValue = g.Sum(h => h.ReportDate == previous ? h.Value : 0L),
             });
-
-        return ProjectDoubleDownPositions(aggregated, minPctIncrease);
     }
 
     // Recent filings feed: one row per 13F filing, read straight from the
@@ -2917,6 +2921,26 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return ProjectDoubleDownPositions(aggregated, minPctIncrease);
     }
 
+    private IQueryable<InstitutionalHolding> DoubleDownRows(
+        DateOnly current,
+        DateOnly previous,
+        IReadOnlyCollection<Guid> issuerIds
+    )
+    {
+        var rows = BothQuarters(current, previous);
+        return issuerIds == null ? rows : rows.Where(h => issuerIds.Contains(h.EquityIssuerId));
+    }
+
+    // Every position these issuers' holders reported in both quarters, with no growth test.
+    // A split between the quarters moves the as-filed counts, so the growth test on them drops
+    // real increases across a reverse split; the caller restates the counts, then applies it.
+    // The combined view needs no variant: a carried-forward position has no current-quarter row.
+    public IQueryable<DoubleDownPosition> GetDoubleDownCandidates(
+        DateOnly current,
+        DateOnly previous,
+        IReadOnlyCollection<Guid> issuerIds
+    ) => ProjectDoubleDownPositions(DoubleDownAggregates(current, previous, issuerIds), null);
+
     // A double down needs a non-trivial existing position: a 1-share / near-$0 prior
     // base turns an ordinary new position into a "+190,898,100%" share-change artifact
     // that dominates the percentage ranking and buries genuine conviction increases.
@@ -2928,17 +2952,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // or combined-quarter projection.
     private IQueryable<DoubleDownPosition> ProjectDoubleDownPositions(
         IQueryable<DoubleDownAggregate> aggregated,
-        double minPctIncrease
+        double? minPctIncrease
     ) =>
         aggregated
             .Where(a =>
                 a.PreviousShares > 0
                 && a.PreviousValue >= MinDoubleDownPreviousValue
-                && a.CurrentShares > a.PreviousShares
+                && a.CurrentShares > 0
             )
+            // Null skips the growth test on as-filed counts (GetDoubleDownCandidates).
             .Where(a =>
-                (double)(a.CurrentShares - a.PreviousShares) / a.PreviousShares * 100.0
-                >= minPctIncrease
+                minPctIncrease == null
+                || (
+                    a.CurrentShares > a.PreviousShares
+                    && (double)(a.CurrentShares - a.PreviousShares) / a.PreviousShares * 100.0
+                        >= minPctIncrease
+                )
             )
             .Join(
                 DbContext.Set<InstitutionalHolder>(),

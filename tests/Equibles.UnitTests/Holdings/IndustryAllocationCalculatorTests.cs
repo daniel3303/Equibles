@@ -105,6 +105,27 @@ public class IndustryAllocationCalculatorTests
         result[0].TotalValue.Should().Be(1_000_000);
     }
 
+    [Fact]
+    public void Calculate_OptionAndPrincipalRows_AreNotEquityInTheIndustry()
+    {
+        var software = new Industry { Id = Guid.NewGuid(), Name = "Software" };
+        var banking = new Industry { Id = Guid.NewGuid(), Name = "Banking" };
+        var owned = MakeHolding(MakeStock(software), value: 100_000);
+        var put = MakeHolding(MakeStock(banking), value: 900_000);
+        put.OptionType = OptionType.Put;
+        var call = MakeHolding(MakeStock(software), value: 400_000);
+        call.OptionType = OptionType.Call;
+        var note = MakeHolding(MakeStock(banking), value: 300_000);
+        note.ShareType = ShareType.Principal;
+
+        var result = IndustryAllocationCalculator.Calculate([owned, put, call, note]);
+
+        result.Should().ContainSingle();
+        result[0].IndustryName.Should().Be("Software");
+        result[0].TotalValue.Should().Be(100_000);
+        result[0].PercentOfPortfolio.Should().Be(100);
+    }
+
     private static EquityIssuer MakeStock(Industry industry) =>
         Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
