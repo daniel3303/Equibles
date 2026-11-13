@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using Equibles.CommonStocks.Data.Extensions;
 using Equibles.CommonStocks.Data.Helpers;
@@ -14,6 +15,7 @@ using Equibles.CorporateActions.Repositories;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Integrations.Yahoo;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
@@ -239,14 +241,25 @@ public class YahooPriceImportService
             .Where(row => VenuePriceSource.IsVenueKey(row.Source))
             .Select(row => row.Id)
             .ToHashSet();
+        var now = DateTime.UtcNow;
+        var coveredFetchInterval = TimeSpan.FromHours(
+            Math.Max(1, _scraperOptions.CoveredListingFetchIntervalHours)
+        );
         var order = YahooCatalogPriceQueue.Order(
             targets,
             lastDates,
-            DateTime.UtcNow,
+            now,
             venueCovered,
-            TimeSpan.FromHours(Math.Max(1, _scraperOptions.CoveredListingFetchIntervalHours))
+            coveredFetchInterval
         );
-        var result = await ImportPriceBatch(order, cancellationToken, 200);
+        var firstAsks = YahooCatalogPriceQueue.FirstAsks(
+            targets,
+            lastDates,
+            now,
+            venueCovered,
+            coveredFetchInterval
+        );
+        var result = await ImportPriceBatch(order, cancellationToken, 200, firstAsks);
         HasCatalogPriceBacklog = result.HasMore;
         _logger.LogInformation(
             "Yahoo catalog price batch complete: {Count} inserted; more prices: {HasMore}",
@@ -685,10 +698,34 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     ) => (await ImportPriceBatch(crawlOrder, cancellationToken, int.MaxValue)).Inserted;
 
+    // US series carry no persisted attempt stamp, so a first ask is remembered per process: a
+    // restart asks each series once more, which is the request it would make anyway.
+    private static readonly ConcurrentDictionary<Guid, DateOnly> UsAskedThrough = new();
+
+    // A fetch for a session nobody has asked for yet is urgent in the shared request budget;
+    // re-asks of series that returned nothing and historical recovery are not.
+    internal static bool IsFirstAsk(
+        PriceSeriesTarget target,
+        DateOnly settledBefore,
+        IReadOnlySet<Guid> catalogFirstAsks
+    )
+    {
+        if (!target.IsUs)
+            return catalogFirstAsks?.Contains(target.EquityListingId) == true;
+        if (target.IsHistorical)
+            return false;
+        var asked =
+            UsAskedThrough.TryGetValue(target.EquityListingId, out var through)
+            && through >= settledBefore;
+        UsAskedThrough[target.EquityListingId] = settledBefore;
+        return !asked;
+    }
+
     private async Task<(int Inserted, bool HasMore)> ImportPriceBatch(
         List<PriceSeriesTarget> crawlOrder,
         CancellationToken cancellationToken,
-        int attemptLimit
+        int attemptLimit,
+        IReadOnlySet<Guid> catalogFirstAsks = null
     )
     {
         var totalInserted = 0;
@@ -709,6 +746,9 @@ public class YahooPriceImportService
 
             try
             {
+                using var priority = YahooRequestPriority.UrgentScope(
+                    IsFirstAsk(target, today, catalogFirstAsks)
+                );
                 var result = await ImportTicker(target, today, cancellationToken);
                 totalInserted += result.Inserted;
                 if (result.Fetched)

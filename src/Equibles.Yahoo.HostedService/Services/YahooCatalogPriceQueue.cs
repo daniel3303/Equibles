@@ -63,6 +63,27 @@ internal static class YahooCatalogPriceQueue
         return result;
     }
 
+    // The targets whose next fetch reads a session nobody has asked for yet (the queue's first
+    // tier); the importer sends those ahead of re-asks and profile refreshes in the shared budget.
+    public static HashSet<Guid> FirstAsks(
+        IReadOnlyCollection<PriceSeriesTarget> targets,
+        IReadOnlyDictionary<Guid, DateOnly?> lastDates,
+        DateTime now,
+        IReadOnlySet<Guid> venueCovered = null,
+        TimeSpan coveredFetchInterval = default
+    )
+    {
+        var activeSince = DateOnly.FromDateTime(now).AddDays(-10);
+        return targets
+            .Where(target =>
+                lastDates.GetValueOrDefault(target.EquityListingId) >= activeSince
+                && Priority(target, lastDates, now, venueCovered, coveredFetchInterval)
+                    == SessionPriority.Unasked
+            )
+            .Select(target => target.EquityListingId)
+            .ToHashSet();
+    }
+
     private enum SessionPriority
     {
         Unasked,
