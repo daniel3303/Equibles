@@ -40,6 +40,48 @@ public class YahooPriceImportServiceCrawlOrderTests
             .ToList();
     }
 
+    // A US symbol the provider does not serve is asked weekly, never every cycle; a series that
+    // keeps receiving bars from elsewhere, a historical recovery target and a venue listing (which
+    // has its own queue and uses the same stamp for every attempt) are never held back.
+    [Theory]
+    [InlineData(3, null, false, "US", true)]
+    [InlineData(8, null, false, "US", false)]
+    [InlineData(3, 40, false, "US", true)]
+    [InlineData(3, 2, false, "US", false)]
+    [InlineData(3, null, true, "US", false)]
+    [InlineData(3, null, false, "DE", false)]
+    public void UnservedUsSymbol_WaitsAWeekUnlessItHasARecentBar(
+        int daysSinceNotFound,
+        int? daysSinceLastBar,
+        bool historical,
+        string country,
+        bool heldBack
+    )
+    {
+        var now = Today.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
+        var target = new PriceSeriesTarget(
+            "GONE",
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            IsPrimary: true,
+            IsHistorical: historical,
+            MarketCountryCode: country,
+            YahooPriceSyncAttemptedAt: now.AddDays(-daysSinceNotFound)
+        );
+        DateOnly? lastBar = daysSinceLastBar is { } days ? Today.AddDays(-days) : null;
+
+        YahooPriceImportService.IsNotFoundBackedOff(target, lastBar, now).Should().Be(heldBack);
+    }
+
+    [Fact]
+    public void SymbolNeverAnsweredNotFound_IsAlwaysDue()
+    {
+        var now = Today.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
+        var target = new PriceSeriesTarget("NEW", Guid.NewGuid(), Guid.NewGuid(), IsPrimary: true);
+
+        YahooPriceImportService.IsNotFoundBackedOff(target, null, now).Should().BeFalse();
+    }
+
     [Fact]
     public void ActivelyTradedStocks_LeadLongDormantOnes()
     {

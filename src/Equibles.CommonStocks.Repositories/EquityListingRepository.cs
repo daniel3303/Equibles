@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CommonStocks.Repositories.Models;
@@ -28,6 +29,52 @@ public class EquityListingRepository : BaseRepository<EquityListing>
                 && listing.IdentityState == EquityIdentityState.Verified
                 && listing.MarketIdentifierCode == marketIdentifierCode
                 && listing.Ticker == ticker
+            );
+        if (DbContext.Database.IsRelational())
+            return await current.ExecuteUpdateAsync(
+                    setters =>
+                        setters.SetProperty(
+                            listing => listing.YahooPriceSyncAttemptedAt,
+                            attemptedAt
+                        ),
+                    cancellationToken
+                ) == 1;
+        var listing = await current.SingleOrDefaultAsync(cancellationToken);
+        if (listing == null)
+            return false;
+        listing.YahooPriceSyncAttemptedAt = attemptedAt;
+        await DbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Stamps a US listing whose symbol the price provider does not know, so the crawl can space
+    /// its next ask. US listings carry no venue identity state, so the symbol itself is revalidated.
+    /// A symbol SEC's directory first listed on or after <paramref name="newSymbolSince"/> is never
+    /// stamped: the provider picks a new listing or a changed ticker up within days.
+    /// </summary>
+    public async Task<bool> StampUsPriceSyncAttempt(
+        Guid listingId,
+        string ticker,
+        DateTime attemptedAt,
+        DateOnly newSymbolSince,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var observations = DbContext.Set<SecTickerDirectoryObservation>();
+        // The directory ledger stores the identity form, without the class separator a listing keeps.
+        var directoryTicker = TickerNormalizer.NormalizeIdentity(ticker);
+        var current = GetAll()
+            .Where(listing =>
+                listing.Id == listingId
+                && listing.Active
+                && listing.MarketCountryCode == "US"
+                && listing.Ticker == ticker
+                && !observations.Any(observation =>
+                    observation.Cik == listing.Security.Issuer.Cik
+                    && observation.Ticker == directoryTicker
+                    && observation.FirstObservedOn >= newSymbolSince
+                )
             );
         if (DbContext.Database.IsRelational())
             return await current.ExecuteUpdateAsync(
