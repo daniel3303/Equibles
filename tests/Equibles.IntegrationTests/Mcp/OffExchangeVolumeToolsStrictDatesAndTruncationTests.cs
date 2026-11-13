@@ -126,6 +126,8 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
         result.Should().Contain("Showing the newest 2 of 3 weeks");
         result.Should().Contain("2026-03-09");
         result.Should().NotContain("2026-03-02");
+        // The newest stored week trails today by design; the answer says why.
+        result.Should().Contain("FINRA publishes a week in full about four weeks after it ends");
     }
 
     [Fact]
