@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CommonStocks.Repositories.Models;
@@ -61,6 +62,8 @@ public class EquityListingRepository : BaseRepository<EquityListing>
     )
     {
         var observations = DbContext.Set<SecTickerDirectoryObservation>();
+        // The directory ledger stores the identity form, without the class separator a listing keeps.
+        var directoryTicker = TickerNormalizer.NormalizeIdentity(ticker);
         var current = GetAll()
             .Where(listing =>
                 listing.Id == listingId
@@ -69,7 +72,7 @@ public class EquityListingRepository : BaseRepository<EquityListing>
                 && listing.Ticker == ticker
                 && !observations.Any(observation =>
                     observation.Cik == listing.Security.Issuer.Cik
-                    && observation.Ticker == ticker
+                    && observation.Ticker == directoryTicker
                     && observation.FirstObservedOn >= newSymbolSince
                 )
             );
