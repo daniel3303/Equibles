@@ -125,8 +125,18 @@ public class BacktestPriceLoader
                 CommonStockId = mapping.Security.EquityIssuerId,
                 ListedTicker = mapping.Ticker,
                 EquityListingId = mapping.Id,
+                Retired = !mapping.Active && mapping.DelistedOn != null,
             })
             .ToListAsync(cancellationToken);
+        // Exact listings that are retired: the only ones a missing price series is permanent for.
+        var retiredKeys = mappings
+            .GroupBy(mapping => new ListingKey(
+                mapping.CommonStockId,
+                NormalizeTicker(mapping.ListedTicker)
+            ))
+            .Where(group => group.Count() == 1 && group.Single().Retired)
+            .Select(group => group.Key)
+            .ToHashSet();
         var stockByListing = mappings
             .GroupBy(mapping => new ListingKey(
                 mapping.CommonStockId,
@@ -168,6 +178,27 @@ public class BacktestPriceLoader
         if (!pricesByListing.TryGetValue(benchmarkKey, out var benchmarkSeries))
             return null;
 
+        // A retired listing with no stored price at all (a delisted company the price source no
+        // longer serves) can never be bought, so the clone leaves it out and coverage counts it as
+        // untracked; one such name otherwise makes every window that holds it unavailable. A live
+        // listing still waiting for its prices stays under the strict rules below.
+        foreach (var position in snapshots.SelectMany(snapshot => snapshot.Positions))
+        {
+            position.Unpriced =
+                !position.IsOption
+                && position.Value > 0
+                && primaryTickers.TryGetValue(position.CommonStockId, out var primary)
+                && IsRetiredWithoutPrices(
+                    new ListingKey(
+                        position.CommonStockId,
+                        NormalizeTicker(position.ListedTicker ?? primary)
+                    )
+                );
+        }
+
+        bool IsRetiredWithoutPrices(ListingKey key) =>
+            retiredKeys.Contains(key) && !pricesByListing.ContainsKey(key);
+
         var usableFrom = ResolveUsableStart(
             snapshots,
             from,
@@ -188,7 +219,7 @@ public class BacktestPriceLoader
                     + (
                         unpriced == null
                             ? ""
-                            : $": {unpriced} has no stored prices, so start after the holder's last filing that reports it"
+                            : $": {unpriced} has no usable price from the start date on, so start after the holder's last filing that reports it"
                     ),
             };
         }
@@ -608,7 +639,7 @@ public class BacktestPriceLoader
         out string unpriced
     )
     {
-        // The first holding that has no price at all from the start on; it names what blocks the run.
+        // The first holding whose series has no usable price from the start on; it names what blocks the run.
         unpriced = null;
         if (snapshots.Count == 0)
             return requestedFrom;
@@ -641,9 +672,7 @@ public class BacktestPriceLoader
                 return null;
 
             foreach (
-                var position in active.Snapshot.Positions.Where(position =>
-                    !position.IsOption && position.Value > 0
-                )
+                var position in active.Snapshot.Positions.Where(position => position.IsCloneable)
             )
             {
                 if (!primaryTickers.TryGetValue(position.CommonStockId, out var primaryTicker))
@@ -710,11 +739,7 @@ public class BacktestPriceLoader
             if (rebalanceDate < from || rebalanceDate > to)
                 continue;
 
-            foreach (
-                var position in snapshot.Positions.Where(position =>
-                    !position.IsOption && position.Value > 0
-                )
-            )
+            foreach (var position in snapshot.Positions.Where(position => position.IsCloneable))
             {
                 if (!primaryTickers.TryGetValue(position.CommonStockId, out var primaryTicker))
                     return false;
