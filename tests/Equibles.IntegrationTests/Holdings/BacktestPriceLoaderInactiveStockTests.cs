@@ -191,11 +191,13 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
     [InlineData("live line priced only from a later date")]
     [InlineData("retired listing with zero-volume bars only")]
     [InlineData("inactive listing without a delisting date")]
+    [InlineData("live listing with no bar at all")]
     public async Task RunBacktest_LeavesOutAHoldingWithNoUsableCloseOnTheBuyDate(string shape)
     {
         var from = new DateOnly(2023, 1, 3);
         var to = new DateOnly(2023, 2, 3);
         var live = shape.StartsWith("live");
+        var pricedLate = shape.StartsWith("live line");
         EquityIssuer unpriced = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "LATE",
             Name: "Priced Late Or Never",
@@ -218,7 +220,7 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
         AddPrice(priced, to, 12m);
         AddPrice(benchmark, from, 100m);
         AddPrice(benchmark, to, 100m);
-        if (live)
+        if (pricedLate)
         {
             AddPrice(unpriced, to.AddDays(-7), 50m);
             AddPrice(unpriced, to, 5m);

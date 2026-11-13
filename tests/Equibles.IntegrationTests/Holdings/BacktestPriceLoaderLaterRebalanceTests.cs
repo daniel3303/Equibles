@@ -30,7 +30,7 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
     public void Dispose() => _dbContext.Dispose();
 
     [Fact]
-    public async Task RunBacktest_LaterRebalanceIntroducesUnpricedSecondaryListing_ReturnsUnavailable()
+    public async Task RunBacktest_LaterRebalanceIntroducesUnpricedSecondaryListing_LeavesItOutAndFlagsCoverage()
     {
         var firstReportDate = new DateOnly(2025, 3, 31);
         var secondReportDate = new DateOnly(2025, 6, 30);
@@ -73,8 +73,12 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
             to
         );
 
-        result.Points.Should().BeEmpty();
-        result.Reason.Should().Contain("rebalance").And.Contain("exact-listing price");
+        // The sibling class never borrows the primary's price: the second quarter holds nothing,
+        // and coverage says so instead of the run publishing a loss on a vanished weight.
+        result.Reason.Should().BeNull();
+        result.Points[^1].PortfolioValue.Should().Be(100m);
+        result.Coverage.MinimumLongPercent.Should().Be(0m);
+        result.Coverage.IsRepresentative.Should().BeFalse();
     }
 
     private static BacktestQuarterSnapshot Snapshot(
