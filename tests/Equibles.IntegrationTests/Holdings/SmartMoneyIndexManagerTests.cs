@@ -129,6 +129,39 @@ public class SmartMoneyIndexManagerTests : IDisposable
         result.Reason.Should().Contain("No stock");
     }
 
+    // A principal-amount (bond) row is not a stock holding, so it never counts toward consensus.
+    [Fact]
+    public async Task Build_BondRowsOfAnIssuer_DoNotCountAsConsensus()
+    {
+        SeedBenchmark();
+        EquityIssuer a = AddStock("AAA", "Alpha Co", 100m, 200m);
+        EquityIssuer b = AddStock("BBB", "Beta Co", 100m, 100m);
+        var first = SeedFund("0000000001", alpha: 30m, (a, 100));
+        var second = SeedFund("0000000002", alpha: 20m, (a, 100));
+        foreach (var holder in new[] { first, second })
+        {
+            _dbContext
+                .Set<InstitutionalHolding>()
+                .Add(
+                    new InstitutionalHolding
+                    {
+                        InstitutionalHolderId = holder.Id,
+                        EquityIssuerId = b.Id,
+                        ReportDate = ReportDate,
+                        FilingDate = ReportDate.AddDays(20),
+                        Shares = 5_000,
+                        Value = 5_000,
+                        ShareType = ShareType.Principal,
+                    }
+                );
+        }
+        _dbContext.SaveChanges();
+
+        var result = await _manager.Build(AsOf, minConsensus: 2, benchmarkTicker: "SPY");
+
+        result.Constituents.Select(c => c.Ticker).Should().Equal("AAA");
+    }
+
     [Fact]
     public async Task Build_TopFundsHaveNoHoldingsOnFile_ReturnsReasonAndZeroFundCount()
     {

@@ -163,7 +163,13 @@ public class SmartMoneyIndexManager
 
         var positions = await _holdingRepository
             .Get13FHistoryByHolder(holder)
-            .Where(h => h.ReportDate == latest && h.OptionType == null && h.Value > 0)
+            // Common shares only: a principal-amount (bond) row is not a stock holding.
+            .Where(h =>
+                h.ReportDate == latest
+                && h.OptionType == null
+                && h.ShareType == ShareType.Shares
+                && h.Value > 0
+            )
             // Legacy null attribution means the issuer's primary listing. Canonicalize it before
             // composing consensus so null and an explicit primary ticker cannot count twice.
             .GroupBy(h => new

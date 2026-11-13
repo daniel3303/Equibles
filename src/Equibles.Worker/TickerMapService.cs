@@ -46,12 +46,18 @@ public class TickerMapService
             )
         );
 
-        return await query.ToDictionaryAsync(
-            s => s.Presentation.Listing.Ticker,
-            s => s.Id,
-            comparer ?? StringComparer.OrdinalIgnoreCase,
-            cancellationToken
-        );
+        var rows = await query
+            .Select(s => new { Ticker = s.Presentation.Listing.Ticker, s.Id })
+            .ToListAsync(cancellationToken);
+        // Two active issuers claiming one ticker fail closed, as in BuildListed: materialising
+        // straight into a dictionary threw on the duplicate key and halted every lane that maps.
+        return rows.GroupBy(row => row.Ticker, comparer ?? StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Select(row => row.Id).Distinct().Count() == 1)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First().Id,
+                comparer ?? StringComparer.OrdinalIgnoreCase
+            );
     }
 
     /// <summary>

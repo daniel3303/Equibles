@@ -176,6 +176,35 @@ public class NportRealtimeIngestionServiceTests
         await secClient.Received(1).GetDocumentContent(skipped.AccessionNumber, Arg.Any<string>());
     }
 
+    // An HttpClient timeout on one submission is a transient miss, not a shutdown: the sweep goes on.
+    [Fact]
+    public async Task IngestRecentFilings_OneSubmissionTimesOut_SweepStoresTheRest()
+    {
+        var (service, dbContext, secClient) = CreateServiceWithDeps();
+        SeedStock(dbContext, "AAPL", cik: "0000320193", cusip: AppleCusip);
+        var slow = Entry("0000111111-26-000001", cik: "111111");
+        var fine = Entry("0000036405-26-000001", cik: "36405");
+        StubDailyIndex(secClient, slow, fine);
+        secClient
+            .GetDocumentContent(slow.AccessionNumber, slow.Cik)
+            .Returns<Task<string>>(_ => throw new TaskCanceledException("The request timed out."));
+        StubContent(
+            secClient,
+            fine,
+            NportXml("VANGUARD INDEX FUNDS", "S000002277", (AppleCusip, "APPLE INC", 1m))
+        );
+
+        var result = await service.IngestRecentFilings(
+            new DateOnly(2026, 3, 1),
+            1,
+            100,
+            NportFullFidelitySeries.None,
+            CancellationToken.None
+        );
+
+        result.Stored.Should().Be(1);
+    }
+
     [Fact]
     public async Task IngestRecentFilings_TrackedStockWithNullSecondaryCiks_StillIngests()
     {

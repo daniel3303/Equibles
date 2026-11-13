@@ -87,8 +87,8 @@
                                         <span class="font-mono text-success font-semibold">+@pos.PctChange.ToString("F1")%</span>
                                         <span class="text-xs text-base-content/50 block">+@pos.DeltaShares.ToString("N0")</span>
                                     </td>
-                                    <td class="text-right font-mono hidden md:table-cell">$@(pos.PreviousValue / 1_000).ToString("N0")k</td>
-                                    <td class="text-right font-mono hidden md:table-cell">$@(pos.CurrentValue / 1_000).ToString("N0")k</td>
+                                    <td class="text-right font-mono hidden md:table-cell">$@((pos.PreviousValue / 1_000).ToString("N0"))k</td>
+                                    <td class="text-right font-mono hidden md:table-cell">$@((pos.CurrentValue / 1_000).ToString("N0"))k</td>
                                 </tr>
                             }
                             @if (Model.Positions.Count == 0 && Model.PreviousDate.HasValue) {
