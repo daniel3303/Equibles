@@ -38,10 +38,13 @@ public class FredObservationRepository : BaseRepository<FredObservation>
             .Take(1);
     }
 
+    // Latest means observed: a projection series (GDPPOT carries CBO estimates to 2036) never
+    // offers a future quarter as its current value.
     public IQueryable<FredObservation> GetLatestPerSeries()
     {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         return GetAll()
-            .Where(o => o.Value != null)
+            .Where(o => o.Value != null && o.Date <= today)
             .GroupBy(o => o.FredSeriesId)
             .Select(g => g.OrderByDescending(o => o.Date).First());
     }
@@ -53,8 +56,9 @@ public class FredObservationRepository : BaseRepository<FredObservation>
     // ToDictionary over the results.
     public IQueryable<FredObservation> GetPreviousPerSeries()
     {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         return GetAll()
-            .Where(o => o.Value != null)
+            .Where(o => o.Value != null && o.Date <= today)
             .GroupBy(o => o.FredSeriesId)
             .Where(g => g.Count() > 1)
             .Select(g => g.OrderByDescending(o => o.Date).Skip(1).First());

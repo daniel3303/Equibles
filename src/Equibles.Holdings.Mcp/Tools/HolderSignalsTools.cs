@@ -337,7 +337,7 @@ public class HolderSignalsTools
 
     private static string PercentileText(StockQuarterlyHolderSignals row) =>
         row.CrowdingPercentile is { } value
-            ? $"{McpFormat.Invariant(Math.Round(value), "F0")}th percentile"
+            ? $"{McpFormat.Ordinal((long)Math.Round(value))} percentile"
         : StockHolderSignalsMath.NotRankedReason(row) is { } reason ? $"not ranked: {reason}"
         : "no percentile";
 

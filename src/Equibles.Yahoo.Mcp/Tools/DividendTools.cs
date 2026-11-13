@@ -108,8 +108,8 @@ public class DividendTools
                     dividend =>
                     {
                         var amount = venue
-                            ? $"{McpFormat.Price(dividend.AmountPerShare)} {dividend.Currency}"
-                            : $"${McpFormat.Price(dividend.AmountPerShare)}";
+                            ? $"{McpFormat.PerShareAmount(dividend.AmountPerShare)} {dividend.Currency}"
+                            : $"${McpFormat.PerShareAmount(dividend.AmountPerShare)}";
                         var exDate = McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd");
                         return dated
                             ? $"{exDate} | {Day(dividend.RecordDate)} | {Day(dividend.PaymentDate)} | {amount}"

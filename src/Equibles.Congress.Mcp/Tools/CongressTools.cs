@@ -117,7 +117,7 @@ public class CongressTools
                         // The asset as filed is the ONLY thing separating an option or bond trade
                         // from a stock trade — "Purchase" alone reads as a bullish share buy even
                         // when the filing says it was a put.
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(HouseAssetTypeCodes.Display(t.AssetType))} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
                     }
                 );
                 var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);
@@ -241,7 +241,7 @@ public class CongressTools
                         var filedTicker = string.IsNullOrWhiteSpace(t.FiledTicker)
                             ? t.Issuer?.Presentation?.Listing?.Ticker
                             : t.FiledTicker;
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {filedTicker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} | {EscapeCell(partyByTrade.GetValueOrDefault(t.Id))} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {filedTicker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(HouseAssetTypeCodes.Display(t.AssetType))} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} | {EscapeCell(partyByTrade.GetValueOrDefault(t.Id))} |";
                     }
                 );
                 var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);
