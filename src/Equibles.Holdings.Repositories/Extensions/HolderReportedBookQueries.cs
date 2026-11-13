@@ -9,13 +9,45 @@ public static class HolderReportedBookQueries
 {
     /// <summary>
     /// Each filer's book as it is reported today (<see cref="HolderReportedBook"/>), keyed by the
-    /// filer's own id: three bounded reads however many filers are asked for.
+    /// filer's own id: three bounded reads however many filers are asked for. A filer without
+    /// materialised quarters falls back to its own holdings.
     /// </summary>
-    public static async Task<Dictionary<Guid, HolderReportedBook>> GetReportedBooks(
+    public static Task<Dictionary<Guid, HolderReportedBook>> GetReportedBooks(
         this InstitutionalHoldingRepository holdings,
         InstitutionalHolderRepository holders,
         IReadOnlyCollection<InstitutionalHolder> filers,
         CancellationToken cancellationToken = default
+    ) =>
+        Read(
+            holders,
+            filers,
+            ids => holdings.GetHolderQuarterlySnapshotsSnapshotBacked(ids, cancellationToken),
+            cancellationToken
+        );
+
+    /// <summary>The same books from materialised quarters only, for a page that must never group live holdings.</summary>
+    public static Task<Dictionary<Guid, HolderReportedBook>> GetReportedBooks(
+        this HolderQuarterlySnapshotRepository snapshots,
+        InstitutionalHolderRepository holders,
+        IReadOnlyCollection<InstitutionalHolder> filers,
+        CancellationToken cancellationToken = default
+    ) =>
+        Read(
+            holders,
+            filers,
+            ids =>
+                snapshots
+                    .GetAll()
+                    .Where(quarter => ids.Contains(quarter.InstitutionalHolderId))
+                    .ToListAsync(cancellationToken),
+            cancellationToken
+        );
+
+    private static async Task<Dictionary<Guid, HolderReportedBook>> Read(
+        InstitutionalHolderRepository holders,
+        IReadOnlyCollection<InstitutionalHolder> filers,
+        Func<List<Guid>, Task<List<HolderQuarterlySnapshot>>> loadQuarters,
+        CancellationToken cancellationToken
     )
     {
         var canonicalCiks = filers
@@ -40,9 +72,8 @@ public static class HolderReportedBookQueries
                 );
 
         var quartersByHolder = (
-            await holdings.GetHolderQuarterlySnapshotsSnapshotBacked(
-                filers.Concat(reporters).Select(holder => holder.Id).Distinct().ToList(),
-                cancellationToken
+            await loadQuarters(
+                filers.Concat(reporters).Select(holder => holder.Id).Distinct().ToList()
             )
         ).ToLookup(quarter => quarter.InstitutionalHolderId);
 
