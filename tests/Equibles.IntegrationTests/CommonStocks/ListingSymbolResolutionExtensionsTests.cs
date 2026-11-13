@@ -73,6 +73,46 @@ public class ListingSymbolResolutionExtensionsTests : IDisposable
         paris.Error.Should().BeNull();
     }
 
+    // Milan stores its lines under segment codes, and an after-hours line repeats the share's ticker.
+    [Fact]
+    public async Task OperatingOrSiblingCode_ReachesTheMarketsRegularLine()
+    {
+        Venue("UCG", "MTAA", "IT", "UniCredit");
+        Venue("UCG", "MTAH", "IT", "UniCredit after hours");
+        Venue("ALCLS", "ALXP", "FR", "Cellectis Growth");
+        Venue("SAP", "XETR", "DE", "SAP");
+        await _dbContext.SaveChangesAsync();
+
+        var milan = await _repository.ResolveListing("XMIL:UCG");
+        milan.Stock.Name.Should().Be("UniCredit");
+        EquityListingSymbol.Display(milan.Venue).Should().Be("MTAA:UCG");
+
+        (await _repository.ResolveListing("XPAR:ALCLS")).Stock.Name.Should().Be("Cellectis Growth");
+        (await _repository.ResolveListing("MTAH:UCG"))
+            .Stock.Name.Should()
+            .Be("UniCredit after hours");
+
+        var otherMarket = await _repository.ResolveListing("XMIL:SAP");
+        otherMarket.Stock.Should().BeNull();
+        otherMarket.Error.Should().StartWith("Listing 'XMIL:SAP' not found.");
+    }
+
+    // A sibling segment answers only for a ticker nobody claims on the typed code.
+    [Fact]
+    public async Task RefusedClaimOrExtendedSessionCode_NeverFallsThroughToASibling()
+    {
+        Venue("TAKEN", "XPAR", "FR", "Unverified Paris line", EquityIdentityState.Legacy);
+        Venue("TAKEN", "ALXP", "FR", "Growth line");
+        Venue("ENI", "MTAA", "IT", "Eni");
+        Venue("DUP", "ALXP", "FR", "Growth duplicate");
+        Venue("DUP", "XMLI", "FR", "Access duplicate");
+        await _dbContext.SaveChangesAsync();
+
+        (await _repository.ResolveListing("XPAR:TAKEN")).Stock.Should().BeNull();
+        (await _repository.ResolveListing("MTAH:ENI")).Stock.Should().BeNull();
+        (await _repository.ResolveListing("XPAR:DUP")).Error.Should().Contain("ambiguous");
+    }
+
     [Fact]
     public async Task ProviderSuffix_ResolvesTheMarketOnlyAfterTheUsLookupMisses()
     {

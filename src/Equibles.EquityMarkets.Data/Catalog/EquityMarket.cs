@@ -37,6 +37,14 @@ public sealed record EquityMarket(
     // a FIRDS home share then needs a home-venue line that states the issuer requested admission.
     public bool HomeRequiresIssuerRequest { get; init; } = HomeRequiresIssuerRequest;
 
+    // The operating code people write for a market whose lines are stored under segment codes only (Milan's XMIL);
+    // it names the market for a reader and is never stored on a listing.
+    public string OperatingCode { get; init; }
+
+    // The stored codes of the lines that price the market's shares, in catalog order.
+    public IEnumerable<string> RegularLineCodes =>
+        MarketIdentifierCodes.Where(code => !IsExtendedSession(code));
+
     // Every venue code, operating or segment, that places a share's home market here.
     public IReadOnlyList<string> HomeVenueCodes { get; init; } =
         HomeVenueCodes ?? MarketIdentifierCodes;

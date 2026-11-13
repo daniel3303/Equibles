@@ -74,6 +74,7 @@ public static class EquityMarketCatalog
         ) with
         {
             ExtendedSessionCodes = ["MTAH"],
+            OperatingCode = "XMIL",
         },
         Euronext(
             "euronext-lisbon",
@@ -403,6 +404,14 @@ public static class EquityMarketCatalog
         marketIdentifierCode != null && ByMic.TryGetValue(marketIdentifierCode, out var market)
             ? market
             : null;
+
+    // The market a caller-typed venue code names: one of its stored codes, or its operating code.
+    public static EquityMarket ByCallerVenueCode(string venueCode) =>
+        ByMarketIdentifierCode(venueCode)
+        ?? All.FirstOrDefault(market =>
+            venueCode != null
+            && string.Equals(market.OperatingCode, venueCode, StringComparison.Ordinal)
+        );
 
     // Session times are the venue's own prints: continuous trading opens at SessionOpen, the last continuous print
     // lands before SessionClose and the closing auction uncrosses at ClosingAuctionEnd (trade-at-last follows it).

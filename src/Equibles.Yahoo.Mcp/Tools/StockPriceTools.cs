@@ -212,13 +212,17 @@ public class StockPriceTools
                 var segments = tickers.Select(ticker => ticker?.Trim()).ToList();
                 if (segments.All(string.IsNullOrWhiteSpace))
                     return "No tickers provided.";
-                if (segments.Count > 25)
-                    return "Maximum 25 tickers per request. Please split into multiple calls.";
+                // A batch over the cap is answered for its first 25 rather than refused: one long
+                // watchlist would otherwise return nothing at all.
+                var unread = Math.Max(0, segments.Count - MaxLatestPriceTickers);
+                if (unread > 0)
+                    segments = segments.Take(MaxLatestPriceTickers).ToList();
 
                 var tickerList = new List<string>();
                 var seenTickers = new HashSet<string>(StringComparer.Ordinal);
                 // A dotted segment is looked up as typed, so a provider suffix (MC.PA) is not folded to MC-PA.
                 var dottedSpelling = new Dictionary<string, string>(StringComparer.Ordinal);
+                var invalidSegments = new List<string>();
                 foreach (var segment in segments)
                 {
                     var normalizedTicker = EquityListingSymbol.TryParse(
@@ -229,7 +233,13 @@ public class StockPriceTools
                         ? EquityListingSymbol.Display(venueTicker, null, venueCode)
                         : TickerNormalizer.NormalizeDashListed(segment);
                     if (normalizedTicker == null)
-                        return $"Invalid ticker '{segment}'. Use 1-32 ASCII letters, digits, dots, or dashes.";
+                    {
+                        // One symbol this tool cannot read (an index such as ^GSPC) gets its own
+                        // row; refusing the batch hid every valid ticker beside it.
+                        if (!string.IsNullOrWhiteSpace(segment))
+                            invalidSegments.Add(segment);
+                        continue;
+                    }
                     if (seenTickers.Add(normalizedTicker))
                     {
                         tickerList.Add(normalizedTicker);
@@ -239,6 +249,12 @@ public class StockPriceTools
                             );
                     }
                 }
+
+                // Nothing readable in the batch: answer before any repository is touched.
+                if (tickerList.Count == 0)
+                    return invalidSegments.Count == 0
+                        ? "No tickers provided."
+                        : $"Invalid ticker '{invalidSegments[0]}'. Use 1-32 ASCII letters, digits, dots, or dashes.";
 
                 var result = StartTable(
                     "Latest prices:",
@@ -505,6 +521,25 @@ public class StockPriceTools
                             + "previous session falls before that split. Earlier raw bars are "
                             + "withheld because stored rows do not identify their split basis; "
                             + "the displayed figures compare only the post-split interval."
+                    );
+                }
+
+                foreach (var segment in invalidSegments.Distinct(StringComparer.Ordinal))
+                    result.AppendLine(
+                        PlaceholderRow(MarkdownTable.EscapeCell(segment), "Invalid ticker")
+                    );
+                if (invalidSegments.Count > 0)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        "Note: an \"Invalid ticker\" row is not a listing symbol (1-32 ASCII letters, digits, dots, or dashes; MIC:TICKER outside the US). Index symbols such as ^GSPC are not listings."
+                    );
+                }
+                if (unread > 0)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        $"Note: only the first {MaxLatestPriceTickers} tickers were read; ask for the other {unread} in another call."
                     );
                 }
 
@@ -1292,6 +1327,8 @@ public class StockPriceTools
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
     // keeping the em-dash columns identical across the per-ticker fallback branches.
+    private const int MaxLatestPriceTickers = 25;
+
     private static string PlaceholderRow(string ticker, string status) =>
         $"| {ticker} | — | {status} | — | — | — | — | — | — | — |";
 

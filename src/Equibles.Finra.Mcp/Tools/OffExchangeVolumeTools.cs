@@ -52,7 +52,7 @@ public class OffExchangeVolumeTools
             + "off-exchange share of total market volume is not reported here; compute that share elsewhere against a consolidated-volume source. "
             + OffExchangeVolumeCoverage.HistoricalCaseFoldCaveat
             + " "
-            + "FINRA publishes each week on a delay (2 weeks for Tier 1 NMS stocks, longer for other tiers), so the latest week lags today."
+            + "A week appears once FINRA has published all of its tiers, about four weeks after the week ends, so the latest week lags today."
     )]
     public Task<string> GetOffExchangeVolume(
         [Description("Listed security ticker (e.g., AAPL, VOO, GME)")] string ticker,
@@ -132,6 +132,7 @@ public class OffExchangeVolumeTools
                         : null,
                     HistoricalCoverageNote(records),
                     NewestKeptNote(records.Count, total, "weeks"),
+                    records.Count > 0 ? PublicationDelayNote : null,
                 };
                 return AppendNotes(table, notes);
             },
@@ -192,6 +193,11 @@ public class OffExchangeVolumeTools
     // Sibling of McpOutput.TruncationNote for a table that KEEPS the newest N weeks but
     // DISPLAYS them oldest-first: "first N" would read as the oldest N, so the note names
     // the kept end explicitly. Empty when nothing was cut.
+    // A week is stored only when all of FINRA's tiers are out, so the newest row trails today by
+    // about a month; without the note that reads as a feed that stopped.
+    private const string PublicationDelayNote =
+        "_FINRA publishes a week in full about four weeks after it ends; newer weeks are not out yet._";
+
     private static string NewestKeptNote(int shown, int total, string unit) =>
         shown >= total ? string.Empty
         : shown >= McpLimit.MaxResults
