@@ -7,6 +7,10 @@ public static class McpFormat
 {
     private const string Dash = "—";
 
+    // A stored decimal in plain digits without its storage scale (3.6300000000 reads 3.63).
+    // "G29" drops the zeros too, but prints anything below 0.0001 in scientific notation (1E-06).
+    public const string PlainDecimal = "0.############################";
+
     // Formats a nullable value with the given format string, or the em-dash placeholder when null.
     // Always formats with InvariantCulture so MCP markdown does not fork the separators by host locale.
     public static string OrDash<T>(T? value, string format)
