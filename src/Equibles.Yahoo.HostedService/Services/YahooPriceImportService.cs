@@ -1036,10 +1036,12 @@ public class YahooPriceImportService
         {
             using var scope = _scopeFactory.CreateScope();
             var listings = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+            var now = DateTime.UtcNow;
             await listings.StampUsPriceSyncAttempt(
                 target.EquityListingId,
                 target.Ticker,
-                DateTime.UtcNow,
+                now,
+                DateOnly.FromDateTime(now).AddDays(-NewSymbolGraceDays),
                 cancellationToken
             );
         }
@@ -1134,6 +1136,10 @@ public class YahooPriceImportService
             .ToList();
         return BuildCrawlOrder(due, lastDates, DateOnly.FromDateTime(now));
     }
+
+    // A symbol the directory listed this recently keeps the normal cadence: the provider adds a
+    // new listing or a changed ticker within days, and its first history must not wait a week.
+    internal const int NewSymbolGraceDays = 14;
 
     // How long a US symbol the provider answered "not found" for waits before the next ask.
     internal static readonly TimeSpan NotFoundRetryInterval = TimeSpan.FromDays(7);

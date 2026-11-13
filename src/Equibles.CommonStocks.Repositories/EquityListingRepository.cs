@@ -49,20 +49,29 @@ public class EquityListingRepository : BaseRepository<EquityListing>
     /// <summary>
     /// Stamps a US listing whose symbol the price provider does not know, so the crawl can space
     /// its next ask. US listings carry no venue identity state, so the symbol itself is revalidated.
+    /// A symbol SEC's directory first listed on or after <paramref name="newSymbolSince"/> is never
+    /// stamped: the provider picks a new listing or a changed ticker up within days.
     /// </summary>
     public async Task<bool> StampUsPriceSyncAttempt(
         Guid listingId,
         string ticker,
         DateTime attemptedAt,
+        DateOnly newSymbolSince,
         CancellationToken cancellationToken = default
     )
     {
+        var observations = DbContext.Set<SecTickerDirectoryObservation>();
         var current = GetAll()
             .Where(listing =>
                 listing.Id == listingId
                 && listing.Active
                 && listing.MarketCountryCode == "US"
                 && listing.Ticker == ticker
+                && !observations.Any(observation =>
+                    observation.Cik == listing.Security.Issuer.Cik
+                    && observation.Ticker == ticker
+                    && observation.FirstObservedOn >= newSymbolSince
+                )
             );
         if (DbContext.Database.IsRelational())
             return await current.ExecuteUpdateAsync(

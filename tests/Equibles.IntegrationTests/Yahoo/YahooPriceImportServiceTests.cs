@@ -664,6 +664,35 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_UsSymbolNewToTheDirectory_KeepsBeingAskedWhileNotFound()
+    {
+        EquityIssuer stock = CreateStock("NEWT", "Renamed This Week");
+        await SeedStocks(stock);
+        _dbContext.Add(
+            new SecTickerDirectoryObservation
+            {
+                Cik = stock.Cik,
+                Ticker = "NEWT",
+                Exchange = "NYSE",
+                FirstObservedOn = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3),
+                LastObservedOn = DateOnly.FromDateTime(DateTime.UtcNow),
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+        _yahooClient
+            .GetChart("NEWT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .ThrowsAsync(
+                new HttpRequestException("not found", null, System.Net.HttpStatusCode.NotFound)
+            );
+
+        await AttributeFixtureActions();
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.Received(2).GetChart("NEWT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+    }
+
+    [Fact]
     public async Task Import_InactiveListingHttpFailure_CheckpointsAttemptWithoutCompleting()
     {
         EquityIssuer stock = CreateStock("GONE", "Formerly Listed");
