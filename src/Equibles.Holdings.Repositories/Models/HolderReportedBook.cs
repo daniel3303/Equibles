@@ -21,13 +21,15 @@ public sealed record HolderReportedBook(
     /// <summary>
     /// The handover has to be seamless to count: the reporter's 13F for the quarter right after
     /// the filer's last, with the two books within
-    /// <see cref="HolderSuccession.MaximumComparableBookRatio"/> of each other.
+    /// <see cref="HolderSuccession.MaximumComparableBookRatio"/> of each other. That quarter's
+    /// filing window must have closed, or a filer that has not filed yet reads as stopped.
     /// </summary>
     public static HolderReportedBook Continue(
         InstitutionalHolder holder,
         IEnumerable<HolderQuarterlySnapshot> own,
         InstitutionalHolder reporter,
-        IEnumerable<HolderQuarterlySnapshot> reported
+        IEnumerable<HolderQuarterlySnapshot> reported,
+        DateOnly today
     )
     {
         var ownNewestFirst = own.OrderByDescending(quarter => quarter.ReportDate).ToList();
@@ -37,6 +39,8 @@ public sealed record HolderReportedBook(
 
         var last = ownNewestFirst[0];
         var next = QuarterEndAfter(last.ReportDate);
+        if (next > CombinedQuarterHelper.CompletedReportDateCutoff(today))
+            return unchanged;
         var continued = reported
             .Where(quarter => quarter.ReportDate >= next)
             .OrderByDescending(quarter => quarter.ReportDate)

@@ -128,15 +128,37 @@ public class BacktestPriceLoader
                 Retired = !mapping.Active && mapping.DelistedOn != null,
             })
             .ToListAsync(cancellationToken);
-        // Exact listings that are retired: the only ones a missing price series is permanent for.
-        var retiredKeys = mappings
+        // Retired listings that never stored a price row, under any symbol or volume: the only
+        // ones a missing series is permanent for. Asked per listing id, because a series keeps
+        // the symbol its rows were written under and the loaded window drops zero-volume bars.
+        var retiredListings = mappings
             .GroupBy(mapping => new ListingKey(
                 mapping.CommonStockId,
                 NormalizeTicker(mapping.ListedTicker)
             ))
             .Where(group => group.Count() == 1 && group.Single().Retired)
-            .Select(group => group.Key)
-            .ToHashSet();
+            .Where(group => requestedKeys.Contains(group.Key))
+            .ToDictionary(group => group.Single().EquityListingId, group => group.Key);
+        var retiredIds = retiredListings.Keys.ToList();
+        var neverPricedKeys =
+            retiredIds.Count == 0
+                ? []
+                : (
+                    await _priceRepository
+                        .GetUsListingReferences(
+                            retiredListings.Values.Select(key => key.CommonStockId)
+                        )
+                        .Where(listing =>
+                            retiredIds.Contains(listing.Id)
+                            && !_priceRepository
+                                .GetAllSeries()
+                                .Any(price => price.EquityListingId == listing.Id)
+                        )
+                        .Select(listing => listing.Id)
+                        .ToListAsync(cancellationToken)
+                )
+                    .Select(id => retiredListings[id])
+                    .ToHashSet();
         var stockByListing = mappings
             .GroupBy(mapping => new ListingKey(
                 mapping.CommonStockId,
@@ -188,16 +210,13 @@ public class BacktestPriceLoader
                 !position.IsOption
                 && position.Value > 0
                 && primaryTickers.TryGetValue(position.CommonStockId, out var primary)
-                && IsRetiredWithoutPrices(
+                && neverPricedKeys.Contains(
                     new ListingKey(
                         position.CommonStockId,
                         NormalizeTicker(position.ListedTicker ?? primary)
                     )
                 );
         }
-
-        bool IsRetiredWithoutPrices(ListingKey key) =>
-            retiredKeys.Contains(key) && !pricesByListing.ContainsKey(key);
 
         var usableFrom = ResolveUsableStart(
             snapshots,

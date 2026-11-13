@@ -16,6 +16,7 @@ public class HolderReportedBookQueriesTests : IDisposable
     private static readonly DateOnly Q1 = new(2026, 3, 31);
     private static readonly DateOnly Q2 = new(2026, 6, 30);
     private static readonly DateOnly Q3 = new(2026, 9, 30);
+    private static readonly DateOnly AfterEveryDeadline = new(2027, 1, 15);
 
     private readonly EquiblesFinancialDbContext _dbContext;
 
@@ -82,12 +83,33 @@ public class HolderReportedBookQueriesTests : IDisposable
         books[affiliate.Id].Quarters.Single().Aum.Should().Be(10_000);
     }
 
+    // The parent files the new quarter first: until that quarter's window closes, the filer may still file.
+    [Fact]
+    public async Task AFilerWhoseParentFiledTheOpenQuarterFirst_IsNotContinuedUntilTheWindowCloses()
+    {
+        var fund = Holder("6000001", "Late Filer Capital");
+        var parent = Holder("6000002", "Early Parent");
+        Quarters(fund, (Q1, 10_000), (Q2, 10_100));
+        Quarters(parent, (Q2, 10_100), (Q3, 10_200));
+        ReportsThrough(fund, parent);
+        await _dbContext.SaveChangesAsync();
+
+        (await Books(new DateOnly(2026, 11, 5), fund))[fund.Id].Continued.Should().BeFalse();
+        (await Books(new DateOnly(2026, 12, 1), fund))[fund.Id].Continued.Should().BeTrue();
+    }
+
     private Task<Dictionary<Guid, Equibles.Holdings.Repositories.Models.HolderReportedBook>> Books(
+        params InstitutionalHolder[] filers
+    ) => Books(null, filers);
+
+    private Task<Dictionary<Guid, Equibles.Holdings.Repositories.Models.HolderReportedBook>> Books(
+        DateOnly? today,
         params InstitutionalHolder[] filers
     ) =>
         new InstitutionalHoldingRepository(_dbContext).GetReportedBooks(
             new InstitutionalHolderRepository(_dbContext),
-            filers
+            filers,
+            today ?? AfterEveryDeadline
         );
 
     private InstitutionalHolder Holder(string cik, string name)

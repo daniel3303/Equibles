@@ -16,11 +16,13 @@ public static class HolderReportedBookQueries
         this InstitutionalHoldingRepository holdings,
         InstitutionalHolderRepository holders,
         IReadOnlyCollection<InstitutionalHolder> filers,
+        DateOnly today,
         CancellationToken cancellationToken = default
     ) =>
         Read(
             holders,
             filers,
+            today,
             ids => holdings.GetHolderQuarterlySnapshotsSnapshotBacked(ids, cancellationToken),
             cancellationToken
         );
@@ -30,11 +32,13 @@ public static class HolderReportedBookQueries
         this HolderQuarterlySnapshotRepository snapshots,
         InstitutionalHolderRepository holders,
         IReadOnlyCollection<InstitutionalHolder> filers,
+        DateOnly today,
         CancellationToken cancellationToken = default
     ) =>
         Read(
             holders,
             filers,
+            today,
             ids =>
                 snapshots
                     .GetAll()
@@ -46,6 +50,7 @@ public static class HolderReportedBookQueries
     private static async Task<Dictionary<Guid, HolderReportedBook>> Read(
         InstitutionalHolderRepository holders,
         IReadOnlyCollection<InstitutionalHolder> filers,
+        DateOnly today,
         Func<List<Guid>, Task<List<HolderQuarterlySnapshot>>> loadQuarters,
         CancellationToken cancellationToken
     )
@@ -92,7 +97,8 @@ public static class HolderReportedBookQueries
                         filer,
                         quartersByHolder[filer.Id],
                         reporter,
-                        reporter == null ? [] : quartersByHolder[reporter.Id]
+                        reporter == null ? [] : quartersByHolder[reporter.Id],
+                        today
                     );
                 }
             );
