@@ -40,7 +40,13 @@ public class BacktestCoverage
     /// </summary>
     public decimal MinimumLongPercent { get; set; }
 
-    /// <summary>Quarters with any reported value, i.e. how many the two figures above are over.</summary>
+    /// <summary>
+    /// Mean share of reported value in long holdings the clone left out because their listing has
+    /// no stored price; part of what the two figures above do not cover, so a surface can say why.
+    /// </summary>
+    public decimal AverageUnpricedPercent { get; set; }
+
+    /// <summary>Quarters with any reported value, i.e. how many the figures above are over.</summary>
     public int QuartersMeasured { get; set; }
 
     /// <summary>

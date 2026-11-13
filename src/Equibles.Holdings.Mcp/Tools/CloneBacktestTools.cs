@@ -226,13 +226,26 @@ public class CloneBacktestTools
                 $"Coverage: the clone tracks {FormatShare(coverage.AverageLongPercent)} of "
                     + $"{holder.Name}'s published tracked 13F value on average across {coverage.QuartersMeasured} "
                     + $"quarter(s), and as little as {FormatShare(coverage.MinimumLongPercent)} in its "
-                    + "thinnest quarter. The remainder is option positions, which a long-only clone "
-                    + "cannot replicate and excludes."
+                    + "thinnest quarter. "
+                    + (
+                        coverage.AverageUnpricedPercent > 0
+                            ? "The remainder is option positions, which a long-only clone cannot replicate, and "
+                                + $"holdings without stored prices, mostly delisted companies ({FormatShare(coverage.AverageUnpricedPercent)} "
+                                + "of value on average); both are excluded."
+                            : "The remainder is option positions, which a long-only clone "
+                                + "cannot replicate and excludes."
+                    )
             );
             if (!coverage.IsRepresentative)
             {
                 output.AppendLine(
-                    "WARNING: most of this filer's reported book is options, so the return above is "
+                    "WARNING: most of this filer's reported book is options"
+                        + (
+                            coverage.AverageUnpricedPercent > 0
+                                ? " or holdings without stored prices"
+                                : ""
+                        )
+                        + ", so the return above is "
                         + "the performance of the residual equity positions, NOT of this manager. Do "
                         + "not present it as their track record; a manager whose options thesis lost "
                         + "money can still show a large positive clone return."

@@ -113,9 +113,10 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
         result.Points[^1].PortfolioValue.Should().Be(120m);
     }
 
-    // One holding without any stored price blocks the run; the reason names it so the caller can start later.
+    // A holding whose listing has no stored price at all is left out of the clone: the priced holding
+    // carries the whole portfolio, and coverage reports the share that was left out.
     [Fact]
-    public async Task RunBacktest_NamesTheHoldingWithoutPrices()
+    public async Task RunBacktest_LeavesOutAHoldingWithoutPricesAndCountsItInCoverage()
     {
         var from = new DateOnly(2023, 1, 3);
         var to = new DateOnly(2023, 2, 3);
@@ -137,11 +138,10 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
             Cik: "222"
         );
         _dbContext.AddRange(unpriced, priced, benchmark);
-        foreach (var stock in new[] { priced, benchmark })
-        {
-            AddPrice(stock, from, 100m);
-            AddPrice(stock, to, 100m);
-        }
+        AddPrice(priced, from, 10m);
+        AddPrice(priced, to, 12m);
+        AddPrice(benchmark, from, 100m);
+        AddPrice(benchmark, to, 100m);
         await _dbContext.SaveChangesAsync();
 
         var loader = new BacktestPriceLoader(
@@ -167,6 +167,77 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
                     {
                         CommonStockId = unpriced.Id,
                         Shares = 1_000,
+                        Value = 30_000,
+                    },
+                ],
+            },
+        };
+
+        var result = await loader.RunBacktest(snapshots, benchmark, "SPY", from, to);
+
+        result.Reason.Should().BeNull();
+        // Fully invested in the priced holding: 10 to 12 is +20%, not +5% on a quarter of the book.
+        result.Points[^1].PortfolioValue.Should().Be(120m);
+        result.Coverage.AverageLongPercent.Should().Be(25m);
+        result.Coverage.AverageUnpricedPercent.Should().Be(75m);
+        result.Coverage.IsRepresentative.Should().BeFalse();
+    }
+
+    // A retired listing that stored bars under an earlier symbol is priced, never "without prices":
+    // leaving it out would hide the loss its series shows, so the run stays unavailable.
+    [Fact]
+    public async Task RunBacktest_RetiredListingWithBarsUnderAnEarlierSymbol_StaysStrict()
+    {
+        var from = new DateOnly(2023, 1, 3);
+        var to = new DateOnly(2023, 2, 3);
+        EquityIssuer renamed = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONEQ",
+            Name: "Renamed Then Delisted",
+            Cik: "111",
+            Active: false,
+            DelistedOn: to
+        );
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "Benchmark",
+            Cik: "222"
+        );
+        _dbContext.AddRange(renamed, benchmark);
+        AddPrice(benchmark, from, 100m);
+        AddPrice(benchmark, to, 100m);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.Add(
+            new EquityDailyStockPrice
+            {
+                Listing = renamed.Presentation.Listing,
+                SourceTicker = "GONE",
+                Date = from,
+                Open = 10m,
+                High = 10m,
+                Low = 10m,
+                Close = 10m,
+                Volume = 100,
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var loader = new BacktestPriceLoader(
+            new EquityDailyStockPriceRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
+            new StockSplitRepository(_dbContext),
+            new BacktestPriceSeriesCache()
+        );
+        var snapshots = new[]
+        {
+            new BacktestQuarterSnapshot
+            {
+                ReportDate = from.AddDays(-46),
+                Positions =
+                [
+                    new BacktestPosition
+                    {
+                        CommonStockId = renamed.Id,
+                        Shares = 1_000,
                         Value = 10_000,
                     },
                 ],
@@ -176,7 +247,7 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
         var result = await loader.RunBacktest(snapshots, benchmark, "SPY", from, to);
 
         result.Points.Should().BeEmpty();
-        result.Reason.Should().Contain("GONE has no stored prices");
+        result.Reason.Should().NotBeNullOrEmpty();
     }
 
     private void AddPrice(EquityIssuer stock, DateOnly date, decimal close) =>
