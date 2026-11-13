@@ -70,6 +70,30 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
         Assert.Null(result.PortfolioSummary.CagrPercent);
     }
 
+    // The stamp is written only after the whole series was rebased, so both sides of the split
+    // sit on one basis and the holding's return is its plain close-to-close move.
+    [Fact]
+    public async Task HeldSplit_CertifiedForTheExactListing_IsCrossed()
+    {
+        var (stock, benchmark) = await SeedStocks();
+        await SeedPrices(stock, "ACME", (Start, 125m), (SplitDate, 125m), (End, 137.5m));
+        await SeedPrices(benchmark, "SPY", (Start, 100m), (End, 100m));
+        await SeedSplit(stock, SplitDate, 4, 1);
+        var split = await _dbContext.Set<StockSplit>().SingleAsync();
+        split.EquityListingId = stock.Presentation.Listing.Id;
+        split.PriceAdjustmentAppliedTime = SplitDate
+            .AddDays(1)
+            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await Run(benchmark, [Snapshot(ReportDate)]);
+
+        Assert.Null(result.Reason);
+        Assert.False(result.HasUncertifiedSplitPrices);
+        Assert.Equal(Start, result.StartDate);
+        Assert.Equal(10m, result.PortfolioSummary.TotalReturnPercent);
+    }
+
     [Fact]
     public async Task BenchmarkSplit_RefusesReturn()
     {

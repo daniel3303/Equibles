@@ -14,8 +14,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.BusinessLogic;
 
 /// <summary>
-/// Loads exact-listing price returns. Stored closes have no certified split basis, so a
-/// captured split across an actual holding or benchmark comparison makes the result unavailable.
+/// Loads exact-listing price returns. A captured split across an actual holding or benchmark
+/// comparison makes the result unavailable unless <see cref="CertifiedSplitBasis"/> certifies
+/// that the listing's stored series was rebased across it.
 /// </summary>
 [Service]
 public class BacktestPriceLoader
@@ -105,9 +106,11 @@ public class BacktestPriceLoader
         var splitDatesByListing = new Dictionary<ListingKey, DateOnly[]>();
         foreach (var key in listingKeys)
         {
-            var primaryTicker = primaryTickers.GetValueOrDefault(key.CommonStockId);
-            var scoped = PriceSeriesSplitScope.ForPriceComparison(
-                splitsByIssuer.For(key.CommonStockId),
+            var scoped = CertifiedSplitBasis.RemainingBoundaries(
+                PriceSeriesSplitScope.ForPriceComparison(
+                    splitsByIssuer.For(key.CommonStockId),
+                    key.ListedTicker
+                ),
                 key.ListedTicker
             );
             splitDatesByListing[key] = scoped
@@ -120,58 +123,24 @@ public class BacktestPriceLoader
         var requestedKeys = listingKeys.ToHashSet();
         var mappings = await _priceRepository
             .GetUsListingReferences(listingKeys.Select(key => key.CommonStockId).Distinct())
-            .Select(mapping => new
-            {
-                CommonStockId = mapping.Security.EquityIssuerId,
-                ListedTicker = mapping.Ticker,
-                EquityListingId = mapping.Id,
-                Retired = !mapping.Active && mapping.DelistedOn != null,
-            })
+            .Select(mapping => new ListingReference(
+                mapping.Security.EquityIssuerId,
+                mapping.Ticker,
+                mapping.Id,
+                mapping.Active
+            ))
             .ToListAsync(cancellationToken);
-        // Retired listings that never stored a price row, under any symbol or volume: the only
-        // ones a missing series is permanent for. Asked per listing id, because a series keeps
-        // the symbol its rows were written under and the loaded window drops zero-volume bars.
-        var retiredListings = mappings
+        // A symbol two of the issuer's US listings carry names no single series, so it maps to
+        // none and its holdings stay under the strict rules.
+        var listingByKey = mappings
             .GroupBy(mapping => new ListingKey(
                 mapping.CommonStockId,
                 NormalizeTicker(mapping.ListedTicker)
             ))
-            .Where(group => group.Count() == 1 && group.Single().Retired)
-            .Where(group => requestedKeys.Contains(group.Key))
-            .ToDictionary(group => group.Single().EquityListingId, group => group.Key);
-        var retiredIds = retiredListings.Keys.ToList();
-        var neverPricedKeys =
-            retiredIds.Count == 0
-                ? []
-                : (
-                    await _priceRepository
-                        .GetUsListingReferences(
-                            retiredListings.Values.Select(key => key.CommonStockId)
-                        )
-                        .Where(listing =>
-                            retiredIds.Contains(listing.Id)
-                            && !_priceRepository
-                                .GetAllSeries()
-                                .Any(price => price.EquityListingId == listing.Id)
-                        )
-                        .Select(listing => listing.Id)
-                        .ToListAsync(cancellationToken)
-                )
-                    .Select(id => retiredListings[id])
-                    .ToHashSet();
-        var stockByListing = mappings
-            .GroupBy(mapping => new ListingKey(
-                mapping.CommonStockId,
-                NormalizeTicker(mapping.ListedTicker)
-            ))
-            .Where(group => group.Count() == 1)
-            .Select(group => group.Single())
-            .Where(mapping =>
-                requestedKeys.Contains(
-                    new ListingKey(mapping.CommonStockId, NormalizeTicker(mapping.ListedTicker))
-                )
-            )
-            .GroupBy(mapping => mapping.EquityListingId)
+            .Where(group => group.Count() == 1 && requestedKeys.Contains(group.Key))
+            .ToDictionary(group => group.Key, group => group.Single());
+        var stockByListing = listingByKey
+            .Values.GroupBy(mapping => mapping.EquityListingId)
             .ToDictionary(group => group.Key, group => group.First().CommonStockId);
         var rows = await LoadListingRows(
             stockByListing,
@@ -200,22 +169,78 @@ public class BacktestPriceLoader
         if (!pricesByListing.TryGetValue(benchmarkKey, out var benchmarkSeries))
             return null;
 
-        // A retired listing with no stored price at all (a delisted company the price source no
-        // longer serves) can never be bought, so the clone leaves it out and coverage counts it as
-        // untracked; one such name otherwise makes every window that holds it unavailable. A live
-        // listing still waiting for its prices stays under the strict rules below.
-        foreach (var position in snapshots.SelectMany(snapshot => snapshot.Positions))
+        // The first loaded bar of each listing under any symbol its rows were written under: a
+        // bar under an earlier symbol proves the listing traded, so its holding is not unpriced.
+        var firstBarByListing = rows.GroupBy(row => row.EquityListingId)
+            .ToDictionary(group => group.Key, group => group.Min(row => row.Date));
+        // A live listing with no bar in the window either has a history that does not reach it
+        // or is still waiting for its first prices; only the stored series tells the two apart.
+        var unloadedLive = listingByKey
+            .Values.Where(listing =>
+                listing.Active && !firstBarByListing.ContainsKey(listing.EquityListingId)
+            )
+            .ToList();
+        var unloadedLiveIds = unloadedLive.Select(listing => listing.EquityListingId).ToList();
+        var pricedOutsideWindow =
+            unloadedLiveIds.Count == 0
+                ? []
+                : (
+                    await _priceRepository
+                        .GetUsListingReferences(
+                            unloadedLive.Select(listing => listing.CommonStockId).Distinct()
+                        )
+                        .Where(listing =>
+                            unloadedLiveIds.Contains(listing.Id)
+                            && _priceRepository
+                                .GetAllSeries()
+                                .Any(price =>
+                                    price.EquityListingId == listing.Id
+                                    && price.Close > 0
+                                    && price.Volume > 0
+                                )
+                        )
+                        .Select(listing => listing.Id)
+                        .ToListAsync(cancellationToken)
+                ).ToHashSet();
+
+        // A holding whose listing has no usable close on the day the clone would buy it is left
+        // out of that rebalance and coverage counts it as untracked: a delisted company whose
+        // history the price source no longer serves, or a line priced only from a later date.
+        // Refusing or shortening the window for it would hide every other holding's return.
+        foreach (var snapshot in snapshots)
         {
-            position.Unpriced =
-                !position.IsOption
-                && position.Value > 0
-                && primaryTickers.TryGetValue(position.CommonStockId, out var primary)
-                && neverPricedKeys.Contains(
-                    new ListingKey(
-                        position.CommonStockId,
-                        NormalizeTicker(position.ListedTicker ?? primary)
-                    )
-                );
+            var rebalanceDate = HoldingsBacktestCalculator.RebalanceDateOf(snapshot.ReportDate);
+            var buyDate = rebalanceDate > from ? rebalanceDate : from;
+            foreach (var position in snapshot.Positions)
+            {
+                position.Unpriced =
+                    !position.IsOption
+                    && position.Value > 0
+                    && primaryTickers.TryGetValue(position.CommonStockId, out var primary)
+                    && IsUnpriced(
+                        new ListingKey(
+                            position.CommonStockId,
+                            NormalizeTicker(position.ListedTicker ?? primary)
+                        ),
+                        buyDate
+                    );
+            }
+        }
+
+        bool IsUnpriced(ListingKey key, DateOnly buyDate)
+        {
+            if (!listingByKey.TryGetValue(key, out var listing))
+                return false;
+            if (
+                pricesByListing.TryGetValue(key, out var series)
+                && ForwardFill(series, buyDate) is > 0
+            )
+                return false;
+            if (firstBarByListing.TryGetValue(listing.EquityListingId, out var firstBar))
+                return firstBar > buyDate;
+            // No bar in the window: a retired listing never gains one, a live one is left out
+            // only when it has a stored history elsewhere and otherwise waits for its prices.
+            return !listing.Active || pricedOutsideWindow.Contains(listing.EquityListingId);
         }
 
         var usableFrom = ResolveUsableStart(
@@ -405,7 +430,7 @@ public class BacktestPriceLoader
             )
             {
                 if (cached.TailIsCurrent(now, to))
-                    AppendRows(rows, stockId, cached, to);
+                    AppendRows(rows, listingId, stockId, cached, to);
                 else
                     hits.Add((listingId, cached));
             }
@@ -429,7 +454,7 @@ public class BacktestPriceLoader
             {
                 var series = ToSeries(loaded[listingId], loadedAt).WithTailRead(loadedAt, to);
                 _seriesCache.Set(listingId, priceWindowFrom, series);
-                AppendRows(rows, stockByListing[listingId], series, to);
+                AppendRows(rows, listingId, stockByListing[listingId], series, to);
             }
         }
 
@@ -463,7 +488,7 @@ public class BacktestPriceLoader
                         )
                         .WithTailRead(readAt, to);
                     _seriesCache.Set(listingId, priceWindowFrom, current);
-                    AppendRows(rows, stockByListing[listingId], current, to);
+                    AppendRows(rows, listingId, stockByListing[listingId], current, to);
                 }
             }
         }
@@ -610,6 +635,7 @@ public class BacktestPriceLoader
 
     private static void AppendRows(
         List<LoadedPriceRow> rows,
+        Guid listingId,
         Guid stockId,
         CachedListingSeries series,
         DateOnly to
@@ -624,6 +650,7 @@ public class BacktestPriceLoader
                 rows.Add(
                     new LoadedPriceRow
                     {
+                        EquityListingId = listingId,
                         CommonStockId = stockId,
                         ListedTicker = segment.SourceTicker,
                         Date = segment.Dates[index],
@@ -689,6 +716,29 @@ public class BacktestPriceLoader
             var next = FirstUsableDate(benchmarkSeries, start);
             if (next == null)
                 return null;
+
+            // Every reported holding is left out: start at the next rebalance rather than sit
+            // in cash and publish a flat stretch as the manager's return.
+            if (
+                !active.Snapshot.Positions.Any(position => position.IsCloneable)
+                && active.Snapshot.Positions.FirstOrDefault(position => position.Unpriced)
+                    is { } leftOut
+            )
+            {
+                if (
+                    snapshotIndex + 1 >= ordered.Count
+                    || ordered[snapshotIndex + 1].RebalanceDate > to
+                )
+                {
+                    unpriced = NormalizeTicker(
+                        leftOut.ListedTicker
+                            ?? primaryTickers.GetValueOrDefault(leftOut.CommonStockId)
+                    );
+                    return null;
+                }
+                candidate = ordered[snapshotIndex + 1].RebalanceDate;
+                continue;
+            }
 
             foreach (
                 var position in active.Snapshot.Positions.Where(position => position.IsCloneable)
@@ -784,8 +834,17 @@ public class BacktestPriceLoader
 
     internal readonly record struct ListingKey(Guid CommonStockId, string ListedTicker);
 
+    private sealed record ListingReference(
+        Guid CommonStockId,
+        string ListedTicker,
+        Guid EquityListingId,
+        bool Active
+    );
+
     private sealed class LoadedPriceRow
     {
+        public Guid EquityListingId { get; init; }
+
         public Guid CommonStockId { get; init; }
 
         public string ListedTicker { get; init; }

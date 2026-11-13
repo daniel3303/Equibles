@@ -153,7 +153,7 @@ public class FundScoringManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task ScoreHolder_CapturedSplit_AdvancesToFirstPostSplitCloseWithoutDroppingHolding()
+    public async Task ScoreHolder_CapturedSplit_StartsAtTheFirstRebalanceWithAPostSplitClose()
     {
         SeedBenchmark();
         EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -206,7 +206,11 @@ public class FundScoringManagerTests : IDisposable
         var score = await _manager.ScoreHolder(holder, AsOf, benchmarkTicker: "SPY");
 
         score.Should().NotBeNull();
-        score.WindowStart.Should().Be(firstComparableClose);
+        // The holding has no close on the earlier rebalance dates, so the clone first buys it at
+        // the rebalance of the quarter reported after the close, never in cash before it.
+        score
+            .WindowStart.Should()
+            .Be(HoldingsBacktestCalculator.RebalanceDateOf(new DateOnly(2024, 12, 30)));
         score.PortfolioTotalReturnPercent.Should().BeApproximately(50m, 0.01m);
     }
 
