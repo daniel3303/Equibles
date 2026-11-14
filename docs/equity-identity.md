@@ -9,6 +9,8 @@
 - Null and empty-string ticker sentinels remain unattributed and are excluded from listing registration and audit expectations; their original rows and values are retained.
 - Unattributed issuer-level rows stay issuer-level; never assign an old ambiguous price, split or holding to today's primary ticker.
 - An unattributed split blocks a history replacement unless the series is a venue listing whose own capture or chart states the same event (same ratio, same-event window).
+- A US series' full-history replacement removes an unattributed split its own evidence settles: a row attached to the listing states the same event, or the provider that captured it reports no split near the date and the fetched bars do not jump by its ratio there. Every other listing of the issuer whose stored bars cross the date must state the event itself; anything else keeps the refusal. `ResettleUnattributedSplits` re-reads each affected issuer once per process.
+- A US ticker SEC lists first does not take the presentation while it holds no stored price and the presenting line still trades; it stays a directory-listed line and takes over on the first sync after its first bar.
 - A verified listing requires source evidence, MIC, currency and positive quote scale; legacy migration does not grant verification or international publication.
 - Historical symbols and reused tickers keep separate source keys and listing IDs; one symbol never merges different issuers.
 - Database writer guards synchronize issuer changes and register newly observed exact historical series from EF, bulk imports and retiring binaries.
