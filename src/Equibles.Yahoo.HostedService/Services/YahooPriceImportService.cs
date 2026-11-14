@@ -2194,9 +2194,29 @@ public class YahooPriceImportService
             var statedByOwnRow = issuerSplits.Any(row =>
                 row.EquityListingId == target.EquityListingId && IsSameSplitEvent(row, split)
             );
+            // The bars prove absence only where the detector can see a jump: a ratio it treats as
+            // material, and traded bars on both sides of the date inside the window.
+            var ratio = split.Numerator / split.Denominator;
+            var windowStart = split.EffectiveDate.AddDays(-SplitEvents.SameEventWindowDays);
+            var windowEnd = split.EffectiveDate.AddDays(SplitEvents.SameEventWindowDays);
+            var tradedAcrossDate =
+                servedBars.Any(bar =>
+                    bar.Volume > 0
+                    && bar.Close > 0m
+                    && bar.Date >= windowStart
+                    && bar.Date < split.EffectiveDate
+                )
+                && servedBars.Any(bar =>
+                    bar.Volume > 0
+                    && bar.Close > 0m
+                    && bar.Date >= split.EffectiveDate
+                    && bar.Date <= windowEnd
+                );
             var withdrawn =
                 split.Source == StockSplitSource.Yahoo
-                && lastPriceDate >= split.EffectiveDate.AddDays(SplitEvents.SameEventWindowDays)
+                && (ratio <= MaterialSplitRatioFloor || ratio >= MaterialSplitRatioCeiling)
+                && lastPriceDate >= windowEnd
+                && tradedAcrossDate
                 && !reported.Any(boundary =>
                     Math.Abs(boundary.EffectiveDate.DayNumber - split.EffectiveDate.DayNumber)
                     <= SplitEvents.SameEventWindowDays
