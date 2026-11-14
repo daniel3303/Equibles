@@ -14,6 +14,7 @@ using Equibles.Integrations.Sec.Models;
 using Equibles.Messaging.Contracts.CommonStocks;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Yahoo.Data.Models;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -354,6 +355,41 @@ public class CompanySyncService : ICompanySyncService
         return result;
     }
 
+    // How recent a stored bar must be for the presenting line to count as still trading.
+    internal const int TradedLineWindowDays = 10;
+
+    // SEC lists a new symbol (a second exchange line, a ticker change during its changeover) days
+    // before the price provider serves it. Moving the presentation there leaves the company with
+    // no price while the line it had still trades, so that line keeps the presentation until the
+    // new symbol holds a stored bar. A host without the price module holds nothing.
+    private static async Task<bool> HoldsPresentation(
+        EquityIssuer issuer,
+        EquityListing presenting,
+        string candidateTicker,
+        StockSyncState state
+    )
+    {
+        if (state.DbContext.Model.FindEntityType(typeof(EquityDailyStockPrice)) == null)
+            return false;
+        var prices = state.DbContext.Set<EquityDailyStockPrice>().AsNoTracking();
+        var candidateId = issuer
+            .Securities.SelectMany(security => security.Listings)
+            .Where(listing =>
+                listing.MarketCountryCode == "US" && listing.Ticker == candidateTicker
+            )
+            .Select(listing => (Guid?)listing.Id)
+            .FirstOrDefault();
+        if (
+            candidateId != null
+            && await prices.AnyAsync(price => price.EquityListingId == candidateId)
+        )
+            return false;
+        var tradedSince = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-TradedLineWindowDays);
+        return await prices.AnyAsync(price =>
+            price.EquityListingId == presenting.Id && price.Date >= tradedSince
+        );
+    }
+
     private async Task UpdateExistingStock(
         CompanyInfo secCompany,
         string primaryTicker,
@@ -366,6 +402,26 @@ public class CompanySyncService : ICompanySyncService
             CikNormalizer.Canonicalize(stock.Cik) == canonicalCik
         );
         var normalizedName = NormalizeCompanyName(secCompany.Name);
+        var presenting = existingStock.Presentation?.Listing;
+        if (
+            presenting is { MarketCountryCode: "US", Active: true, DelistedOn: null }
+            && presenting.Ticker != primaryTicker
+            && secondaryTickers.Contains(presenting.Ticker)
+            // A ticker another company presents stays with the collision path below.
+            && !(
+                state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var holder)
+                && holder.Id != existingStock.Id
+            )
+            && await HoldsPresentation(existingStock, presenting, primaryTicker, state)
+        )
+        {
+            secondaryTickers =
+            [
+                .. secondaryTickers.Where(ticker => ticker != presenting.Ticker),
+                primaryTicker,
+            ];
+            primaryTicker = presenting.Ticker;
+        }
         var combinedSecondaryTickers = MergeSecondaryTickers(
             primaryTicker,
             secondaryTickers,
