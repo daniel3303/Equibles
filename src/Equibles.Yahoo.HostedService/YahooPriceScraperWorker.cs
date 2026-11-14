@@ -21,6 +21,9 @@ public class YahooPriceScraperWorker : BaseScraperWorker
     private const int DividendRecaptureBatchSize = 100;
     private readonly HashSet<Guid> _dividendRecaptureAttempted = [];
     private bool _dividendRecaptureComplete;
+    private const int SplitResettleBatchSize = 10;
+    private readonly HashSet<Guid> _splitResettleAttempted = [];
+    private bool _splitResettleComplete;
 
     protected override string WorkerName => "Yahoo price scraper";
     protected override TimeSpan SleepInterval { get; }
@@ -76,6 +79,18 @@ public class YahooPriceScraperWorker : BaseScraperWorker
             );
             _dividendRecaptureAttempted.UnionWith(attempted);
             _dividendRecaptureComplete = attempted.Count == 0;
+        }
+        // Splits captured before splits recorded their listing: a finite cohort no writer adds to.
+        // One re-read per issuer and process lets the replacement settle what its evidence can.
+        if (!_splitResettleComplete)
+        {
+            var attempted = await importService.ResettleUnattributedSplits(
+                _splitResettleAttempted,
+                SplitResettleBatchSize,
+                stoppingToken
+            );
+            _splitResettleAttempted.UnionWith(attempted);
+            _splitResettleComplete = attempted.Count == 0;
         }
     }
 }
