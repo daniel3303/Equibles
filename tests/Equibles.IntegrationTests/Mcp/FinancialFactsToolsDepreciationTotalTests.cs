@@ -113,7 +113,7 @@ public class FinancialFactsToolsDepreciationTotalTests : ParadeDbMcpTestBase
             2025,
             calendarStart,
             calendarEnd,
-            10_552m,
+            10_551m,
             mcdonaldsAnnual
         );
 
@@ -129,7 +129,7 @@ public class FinancialFactsToolsDepreciationTotalTests : ParadeDbMcpTestBase
         const string microsoftAnnual = "0001193125-26-323660";
         AddYear(microsoft, depreciation, 2026, juneStart, juneEnd, 34_300m, microsoftAnnual);
         AddYear(microsoft, amortization, 2026, juneStart, juneEnd, 4_700m, microsoftAnnual);
-        AddYear(microsoft, operatingCashFlow, 2026, juneStart, juneEnd, 160_000m, microsoftAnnual);
+        AddYear(microsoft, operatingCashFlow, 2026, juneStart, juneEnd, 182_935m, microsoftAnnual);
         await DbContext.SaveChangesAsync();
     }
 
