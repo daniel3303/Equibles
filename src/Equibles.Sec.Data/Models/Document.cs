@@ -355,7 +355,8 @@ public class Document
     /// backoffice "pending" metric can reference it without depending on the hosted-service
     /// assembly. Bump after a parser change to re-derive the corpus.
     /// </summary>
-    public const int ReportedStatementsParserVersion = 4;
+    // Version 5: a figure printed behind its currency marker keeps its value and its sign.
+    public const int ReportedStatementsParserVersion = 5;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
