@@ -246,16 +246,47 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetEconomicCalendar_Truncated_HeaderNamesCoveredRangeAndFooterNotes()
+    public async Task GetEconomicCalendar_OverTheCap_LeavesTheLowTierOutBeforeAScheduledPrint()
     {
-        // Three rows in June; a cap of 2 cuts the SOFR row. The header must not
-        // claim the full requested range as covered, and the footer must say how
-        // to see the rest — otherwise the tail silently reads as "nothing scheduled".
+        // Three rows in June, two scheduled prints and one daily SOFR row. A cap of 2 keeps both
+        // prints: a chronological cut would have kept SOFR's date and dropped nothing a reader
+        // can see, while a real month holds hundreds of daily rows ahead of CPI.
         var result = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", maxResults: 2);
 
-        result.Should().Contain("truncated at 2 rows, shown only through 2026-06-11");
-        result.Should().Contain("Showing first 2 of 3 results");
+        result.Should().Contain("Employment Situation").And.Contain("Consumer Price Index");
         result.Should().NotContain("Secured Overnight Financing Rate Data");
+        result.Should().Contain("1 release date(s) below Medium importance are left out");
+        result.Should().NotContain("truncated at");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_TopTierOverTheCap_HeaderNamesCoveredRangeAndFooterNotes()
+    {
+        // Even the High tier exceeds a cap of 1, so the header must not claim the full range
+        // and the footer must say how to see the rest.
+        var result = await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", maxResults: 1);
+
+        result.Should().Contain("truncated at 1 rows, shown only through 2026-06-05");
+        result.Should().Contain("Showing first 1 of 2 results");
+        result.Should().Contain("1 release date(s) below High importance are left out");
+    }
+
+    [Fact]
+    public async Task GetEconomicCalendar_OnlyLowRowsOverTheCap_CutsChronologicallyInsteadOfAnsweringEmpty()
+    {
+        DbContext
+            .Set<FredReleaseDate>()
+            .AddRange(
+                new FredReleaseDate { FredReleaseId = _sofrRelease.Id, Date = new(2026, 9, 1) },
+                new FredReleaseDate { FredReleaseId = _sofrRelease.Id, Date = new(2026, 9, 2) }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetEconomicCalendar("2026-09-01", "2026-09-30", maxResults: 1);
+
+        result.Should().Contain("truncated at 1 rows, shown only through 2026-09-01");
+        result.Should().Contain("Secured Overnight Financing Rate Data");
+        result.Should().NotContain("are left out");
     }
 
     [Fact]
