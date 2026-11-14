@@ -43,7 +43,9 @@ public class DoubleDownBoardLoader
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var splitIssuerIds = await _stockSplitRepository
             .GetEffective(today)
-            .Where(split => split.EffectiveDate > previousDate && split.EffectiveDate <= selectedDate)
+            .Where(split =>
+                split.EffectiveDate > previousDate && split.EffectiveDate <= selectedDate
+            )
             .Select(split => split.EquityIssuerId)
             .Distinct()
             .ToListAsync();
