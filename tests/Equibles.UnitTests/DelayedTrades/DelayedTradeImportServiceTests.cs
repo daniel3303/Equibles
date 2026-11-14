@@ -300,6 +300,31 @@ public class DelayedTradeImportServiceTests
     }
 
     [Fact]
+    public async Task Settle_WithASinkThatCannotBeBuilt_KeepsTheSettledSession()
+    {
+        var db = new DelayedTradeDbFixture(services =>
+            services.AddScoped<IDelayedTradeSessionSink>(_ =>
+                throw new InvalidOperationException("the sink's own dependency is missing")
+            )
+        );
+        db.SeedListing("PHR", "PTPTC0AM0009");
+
+        var result = await Service(db)
+            .SettleSession(
+                Lisbon,
+                new FixtureSource(TradesFixture.Lisbon()),
+                rederive: false,
+                SettleNow,
+                CancellationToken.None
+            );
+
+        result.Outcome.Should().Be(DelayedTradeSettleOutcome.Imported);
+        result.SinkFailures.Should().ContainSingle();
+        using var context = db.NewContext();
+        context.Set<DelayedTradeImportPartition>().Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task Settle_FindingTheSessionMarked_OffersItAgainWithTheSamePrints()
     {
         var sink = new RecordingSink();

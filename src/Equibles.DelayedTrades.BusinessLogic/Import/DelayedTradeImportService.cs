@@ -446,7 +446,8 @@ public class DelayedTradeImportService(
     }
 
     // Offers a settled session to every registered sink and returns the ones that threw. The marker is
-    // already written, so a sink that fails costs only its own output; the settle is not repeated for it.
+    // already written, so nothing here may fail the settle: a sink that fails, or cannot even be built,
+    // costs only its own output, and the settle is not repeated for it.
     private async Task<IReadOnlyList<DelayedTradeSinkFailure>> OfferSession(
         EquityMarket market,
         IDelayedTradeSource source,
@@ -459,54 +460,73 @@ public class DelayedTradeImportService(
         CancellationToken cancellationToken
     )
     {
-        using var scope = scopeFactory.CreateScope();
-        var sinks = scope.ServiceProvider.GetServices<IDelayedTradeSessionSink>().ToList();
-        if (sinks.Count == 0)
-            return [];
         var failures = new List<DelayedTradeSinkFailure>();
-        // A pass that found the session already marked parsed nothing; the ledger and the listings are
-        // built only when a sink asks for the prints.
-        var session = new DelayedTradeSettledSession(
-            market,
-            sessionDate,
-            zone,
-            outcome,
-            async token =>
-            {
-                ledger ??= DelayedTradeModificationLedger.Build(
-                    source.Parse(file, new DelayedTradeParseCounters())
-                );
-                map ??= await LoadListings(market, token);
-                return SessionPrints(source, file, ledger, map, zone, sessionDate);
-            }
-        );
-        foreach (var sink in sinks)
+        try
         {
-            try
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var sinks = scope.ServiceProvider.GetServices<IDelayedTradeSessionSink>().ToList();
+            if (sinks.Count == 0)
+                return failures;
+            // A pass that found the session already marked parsed nothing; the ledger and the listings
+            // are built only when a sink asks for the prints.
+            var session = new DelayedTradeSettledSession(
+                market,
+                sessionDate,
+                zone,
+                outcome,
+                async token =>
+                {
+                    ledger ??= DelayedTradeModificationLedger.Build(
+                        source.Parse(file, new DelayedTradeParseCounters())
+                    );
+                    map ??= await LoadListings(market, token);
+                    return SessionPrints(source, file, ledger, map, zone, sessionDate);
+                }
+            );
+            foreach (var sink in sinks)
             {
-                await sink.Accept(session, cancellationToken);
+                try
+                {
+                    await sink.Accept(session, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(
+                        exception,
+                        "{Market} settle {Date}: session sink {Sink} failed; the settled bars stand",
+                        market.Code,
+                        sessionDate,
+                        sink.GetType().Name
+                    );
+                    failures.Add(new DelayedTradeSinkFailure(sink.GetType().Name, exception));
+                }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                logger.LogError(
-                    exception,
-                    "{Market} settle {Date}: session sink {Sink} failed; the settled bars stand",
-                    market.Code,
-                    sessionDate,
-                    sink.GetType().Name
-                );
-                failures.Add(new DelayedTradeSinkFailure(sink.GetType().Name, exception));
-            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Building the sinks or closing their scope failed, so no single sink can be named.
+            logger.LogError(
+                exception,
+                "{Market} settle {Date}: the session sinks could not be offered the session; the settled bars stand",
+                market.Code,
+                sessionDate
+            );
+            failures.Add(new DelayedTradeSinkFailure(nameof(IDelayedTradeSessionSink), exception));
         }
         return failures;
     }
 
-    // The prints the session's daily bars counted, by the aggregator's own rules in its own order, with no
-    // counter touched: a sink may read them any number of times.
+    // The session's prints by the rules its daily bars count them with, in the aggregator's own order and
+    // with no counter touched: a sink may read them any number of times. A listing whose prints form no
+    // price gets no daily bar and is read here all the same.
     private IEnumerable<DelayedTradeSessionPrint> SessionPrints(
         IDelayedTradeSource source,
         DelayedTradeFile file,

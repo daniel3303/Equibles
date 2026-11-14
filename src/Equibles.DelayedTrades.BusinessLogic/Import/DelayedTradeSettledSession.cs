@@ -30,11 +30,12 @@ public sealed class DelayedTradeSettledSession(
     public DelayedTradeSettleOutcome Outcome { get; } = outcome;
 
     /// <summary>
-    /// The session's prints as the daily bars counted them: effective after cancellations and
-    /// amendments, real trades in money terms, matched to one verified listing in its own
-    /// quotation unit, traded on <see cref="SessionDate"/>. The file is parsed only when this is
-    /// called, and again on each enumeration of the result, which streams in the file's
-    /// publication order and never in trade-time order.
+    /// The session's prints by the rules the daily bars count them with: effective after
+    /// cancellations and amendments, real trades in money terms, matched to one verified listing
+    /// in its own quotation unit, traded on <see cref="SessionDate"/>. A listing whose prints
+    /// form no price has no daily bar, and its prints are read here all the same. The file is
+    /// parsed only when this is called, and again on each enumeration of the result, which
+    /// streams in the file's publication order and never in trade-time order.
     /// </summary>
     public Task<IEnumerable<DelayedTradeSessionPrint>> ReadPrints(
         CancellationToken cancellationToken
