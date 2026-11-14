@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<ReportedStatementsCaptureWorker>();
         services.AddHostedService<ReportedStatementsParseWorker>();
         services.AddHostedService<SplitShareCountEvidenceWorker>();
+        services.AddHostedService<FinancialDimensionSetBackfillWorker>();
         return services;
     }
 }

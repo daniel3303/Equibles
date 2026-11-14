@@ -76,6 +76,19 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         dimension.Axis.Should().Be("srt:ProductOrServiceAxis");
         dimension.Member.Should().Be("aapl:IPhoneMember");
 
+        // The same combination is stored once as a set, under the key the fact carries.
+        var member = (
+            await DbContext
+                .Set<FinancialDimensionSetMember>()
+                .Where(m => m.DimensionSetKey == fact.DimensionsKey)
+                .ToListAsync(CancellationToken.None)
+        )
+            .Should()
+            .ContainSingle()
+            .Subject;
+        member.Axis.Should().Be("srt:ProductOrServiceAxis");
+        member.Member.Should().Be("aapl:IPhoneMember");
+
         // A version replay repairs derived labels without duplicating facts or dimensions.
         var factId = fact.Id;
         fact.FiscalYear = 2024;
@@ -99,6 +112,9 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
                 .Set<FinancialFactDimension>()
                 .CountAsync(d => d.FinancialFact.DocumentId == document.Id, CancellationToken.None)
         )
+            .Should()
+            .Be(1);
+        (await DbContext.Set<FinancialDimensionSetMember>().CountAsync(CancellationToken.None))
             .Should()
             .Be(1);
     }

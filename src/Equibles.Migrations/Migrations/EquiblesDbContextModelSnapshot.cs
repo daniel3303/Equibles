@@ -7142,6 +7142,41 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FinancialConcept");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialDimensionSet", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("FinancialDimensionSet");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialDimensionSetMember", b =>
+                {
+                    b.Property<string>("DimensionSetKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Axis")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Member")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("DimensionSetKey", "Axis", "Member");
+
+                    b.HasIndex("Axis", "Member");
+
+                    b.ToTable("FinancialDimensionSetMember");
+                });
+
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8599,6 +8634,17 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Issuer");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialDimensionSetMember", b =>
+                {
+                    b.HasOne("Equibles.Sec.FinancialFacts.Data.Models.FinancialDimensionSet", "DimensionSet")
+                        .WithMany("Members")
+                        .HasForeignKey("DimensionSetKey")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DimensionSet");
+                });
+
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFact", b =>
                 {
                     b.HasOne("Equibles.Sec.Data.Models.Document", "Document")
@@ -8855,6 +8901,11 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialConcept", b =>
                 {
                     b.Navigation("Facts");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialDimensionSet", b =>
+                {
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFact", b =>
