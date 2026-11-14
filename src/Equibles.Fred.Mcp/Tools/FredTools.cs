@@ -247,8 +247,8 @@ public class FredTools
                     countryCode == "US"
                         ? "Latest Economic Indicators:"
                         : $"Latest Economic Indicators ({countryCode}):",
-                    "| Series | Title | Latest Date | Value | Previous | Change | Units |",
-                    "|--------|-------|-------------|-------|----------|--------|-------|"
+                    "| Series | Title | Latest Date | Value | Previous | Change | Units | Frequency |",
+                    "|--------|-------|-------------|-------|----------|--------|-------|-----------|"
                 );
 
                 var currentCategory = (FredSeriesCategory?)null;
@@ -258,7 +258,7 @@ public class FredTools
                     if (currentCategory != series.Category)
                     {
                         currentCategory = series.Category;
-                        result.AppendLine($"| **{series.Category}** | | | | | | |");
+                        result.AppendLine($"| **{series.Category}** | | | | | | | |");
                     }
 
                     latestObservations.TryGetValue(series.Id, out var latestObs);
@@ -278,7 +278,7 @@ public class FredTools
                             : McpFormat.OrDash(change, McpFormat.PlainDecimal);
 
                     result.AppendLine(
-                        $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {previousStr} | {changeStr} | {series.Units} |"
+                        $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {previousStr} | {changeStr} | {series.Units} | {FrequencyName(series.Frequency)} |"
                     );
                 }
 
@@ -534,6 +534,22 @@ public class FredTools
             $"startDate: {startDate}, endDate: {endDate}, minImportance: {minImportance}, country: {country}"
         );
     }
+
+    // Previous and Change span one observation, so the row states how far apart observations are:
+    // a daily rate and a quarterly output figure otherwise read as the same kind of move.
+    private static string FrequencyName(string code) =>
+        code?.Trim().ToUpperInvariant() switch
+        {
+            "D" => "Daily",
+            "W" => "Weekly",
+            "BW" => "Biweekly",
+            "M" => "Monthly",
+            "Q" => "Quarterly",
+            "SA" => "Semiannual",
+            "A" => "Annual",
+            null or "" => "—",
+            _ => code.Trim(),
+        };
 
     // A series from another country or publisher says so beside its units; a US FRED series reads as before.
     private static string SourceNote(FredSeries series) =>

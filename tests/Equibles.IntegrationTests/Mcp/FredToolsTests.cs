@@ -458,10 +458,14 @@ public class FredToolsTests : ParadeDbMcpTestBase
 
         result
             .Should()
-            .Contain("| Series | Title | Latest Date | Value | Previous | Change | Units |");
+            .Contain(
+                "| Series | Title | Latest Date | Value | Previous | Change | Units | Frequency |"
+            );
         result
             .Should()
-            .Contain("|--------|-------|-------------|-------|----------|--------|-------|");
+            .Contain(
+                "|--------|-------|-------------|-------|----------|--------|-------|-----------|"
+            );
     }
 
     [Fact]
