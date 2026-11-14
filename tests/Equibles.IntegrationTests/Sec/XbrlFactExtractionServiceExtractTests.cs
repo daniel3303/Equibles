@@ -55,7 +55,6 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
 
         var facts = await DbContext
             .Set<FinancialFact>()
-            .Include(f => f.Dimensions)
             .Include(f => f.FinancialConcept)
             .Where(f => f.DocumentId == document.Id)
             .ToListAsync(CancellationToken.None);
@@ -72,7 +71,15 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.Q1);
         fact.DimensionsKey.Should().MatchRegex("^[0-9a-f]{64}$");
 
-        var dimension = fact.Dimensions.Should().ContainSingle().Subject;
+        var dimension = (
+            await DbContext
+                .Set<FinancialFactDimension>()
+                .Where(d => d.FinancialFactId == fact.Id)
+                .ToListAsync(CancellationToken.None)
+        )
+            .Should()
+            .ContainSingle()
+            .Subject;
         dimension.Axis.Should().Be("srt:ProductOrServiceAxis");
         dimension.Member.Should().Be("aapl:IPhoneMember");
 
