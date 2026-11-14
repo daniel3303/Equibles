@@ -59,9 +59,12 @@
             </div>
         </div>
     } else {
+        // Shares owned outright, one point a quarter: an option or principal row is another line.
         var chartHoldings = Model.Holdings
-            .Where(h => h.OptionType == null)
-            .OrderBy(h => h.ReportDate)
+            .Where(h => h.OptionType == null && h.ShareType == Equibles.Holdings.Data.Models.ShareType.Shares)
+            .GroupBy(h => h.ReportDate)
+            .OrderBy(g => g.Key)
+            .Select(g => new { ReportDate = g.Key, Shares = g.Sum(h => h.Shares) })
             .ToList();
 
         <div class="flex items-center justify-between mb-3">
@@ -96,10 +99,7 @@
                     <tbody>
                         @for (var i = 0; i < Model.Holdings.Count; i++) {
                             var h = Model.Holdings[i];
-                            var olderQuarter = i + 1 < Model.Holdings.Count ? Model.Holdings[i + 1] : null;
-                            var changePercent = olderQuarter != null && olderQuarter.Shares > 0
-                                ? (double)(h.Shares - olderQuarter.Shares) / olderQuarter.Shares * 100
-                                : (double?)null;
+                            double? changePercent = Model.ChangePercent.TryGetValue(h.Id, out var change) ? change : null;
                             <tr>
                                 <td>@h.ReportDate.ToString("yyyy-MM-dd")</td>
                                 <td class="text-right font-mono"><compactable-number value="@h.Value" prefix="$" /></td>

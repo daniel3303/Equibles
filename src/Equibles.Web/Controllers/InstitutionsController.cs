@@ -54,15 +54,13 @@ public class InstitutionsController : BaseController
 
         const int pageSize = 50;
 
-        // When a filing type is selected, every per-filer aggregate (latest
-        // report date, position count, book value) is computed from only that
-        // type's holdings, so the table reflects e.g. a filer's 13D book rather
-        // than its 13F book.
-        var holdingsBase = _dbContext.Set<InstitutionalHolding>().AsQueryable();
-        if (filingType.HasValue)
-        {
-            holdingsBase = holdingsBase.Where(h => h.FilingType == filingType.Value);
-        }
+        // Every per-filer aggregate (latest report date, position count, book value) comes from
+        // one filing type's holdings: the selected type, or the 13F book when none is selected.
+        // Mixed, a later 13D/G event date would stand in for the filer's whole 13F book.
+        var bookType = filingType ?? FilingType.Form13F;
+        var holdingsBase = _dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h => h.FilingType == bookType);
 
         var latestReportDate = await holdingsBase.Select(h => (DateOnly?)h.ReportDate).MaxAsync();
 

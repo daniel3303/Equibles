@@ -968,23 +968,27 @@ public class StockTabService
         InstitutionalHolder holder
     )
     {
-        // AsNoTracking: rows are mutated below for display and must never flush back.
-        var holdings = await _institutionalHoldingRepository
-            .GetHistoryByStock(stock)
+        // The whole 13F history, so the oldest row shown still finds its earlier quarter. A
+        // Schedule 13D/G row carries an event date, not a quarter. AsNoTracking: rows are mutated
+        // below for display and must never flush back.
+        var history = await _institutionalHoldingRepository
+            .Get13FHistoryByStock(stock)
             .Where(h => h.InstitutionalHolderId == holder.Id)
             .OrderByDescending(h => h.ReportDate)
-            .Take(50)
+            .ThenBy(h => h.ListedTicker)
+            .ThenBy(h => h.ShareType)
+            .ThenBy(h => h.OptionType)
             .AsNoTracking()
             .ToListAsync();
 
         // Restate every quarter's count onto today's split basis so the position-over-time
         // chart is continuous across a split and the quarter-over-quarter change compares
         // like with like (as filed, an unchanged position reads as a 10x jump across a
-        // 10:1 forward split). Values stay as filed.
+        // 10:1 forward split). Values stay as filed, and so does a principal amount.
         var effectiveSplits = await LoadEffectiveSplits(stock);
         if (effectiveSplits.Count > 0)
         {
-            foreach (var holding in holdings)
+            foreach (var holding in history.Where(h => h.ShareType == ShareType.Shares))
                 holding.Shares = HoldingShareRestatement.RestateToToday(
                     holding,
                     effectiveSplits,
@@ -997,7 +1001,8 @@ public class StockTabService
             Stock = stock,
             Holder = holder,
             HolderType = await _institutionalHolderRepository.GetEntityType(holder),
-            Holdings = holdings,
+            Holdings = history.Take(HolderDetailViewModel.MaxRows).ToList(),
+            ChangePercent = HolderHistoryChange.PercentByRow(history),
         };
     }
 
