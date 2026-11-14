@@ -58,6 +58,9 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<FinancialFactDimension>();
 
+        builder.Entity<FinancialDimensionSet>();
+        builder.Entity<FinancialDimensionSetMember>();
+
         builder.Entity<ReportedFinancialStatement>(b =>
         {
             b.HasOne(row => row.Issuer)

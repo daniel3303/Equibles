@@ -1010,6 +1010,11 @@ public class XbrlFactExtractionService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
+        // Both shapes are written until readers move to the sets and the per-fact rows retire.
+        await new FinancialDimensionSetWriter(
+            new FinancialDimensionSetRepository(dbContext)
+        ).AddMissing(dimensionsByKey, cancellationToken);
+
         var persistedFacts = await dbContext
             .Set<FinancialFact>()
             .AsNoTracking()
