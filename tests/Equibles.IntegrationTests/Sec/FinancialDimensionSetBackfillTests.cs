@@ -51,7 +51,10 @@ public class FinancialDimensionSetBackfillTests(ParadeDbFixture fixture)
 
     private async Task<EquityIssuer> SeedIssuer(string ticker)
     {
-        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Id: Guid.NewGuid(), Ticker: ticker);
+        var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker
+        );
         _revenue ??= DbContext
             .Add(
                 new FinancialConcept
@@ -73,8 +76,9 @@ public class FinancialDimensionSetBackfillTests(ParadeDbFixture fixture)
         (string Axis, string Member)[] set,
         (string Axis, string Member)[] stored = null,
         Guid? id = null
-    ) =>
-        DbContext
+    )
+    {
+        var fact = DbContext
             .Add(
                 new FinancialFact
                 {
@@ -92,16 +96,19 @@ public class FinancialDimensionSetBackfillTests(ParadeDbFixture fixture)
                     FiledDate = new DateOnly(2025, 5, 1),
                     AccessionNumber = $"0000320193-25-{++_accession:D6}",
                     DimensionsKey = Key(set),
-                    Dimensions = (stored ?? set)
-                        .Select(pair => new FinancialFactDimension
-                        {
-                            Axis = pair.Axis,
-                            Member = pair.Member,
-                        })
-                        .ToList(),
                 }
             )
             .Entity;
+        DbContext.AddRange(
+            (stored ?? set).Select(pair => new FinancialFactDimension
+            {
+                FinancialFactId = fact.Id,
+                Axis = pair.Axis,
+                Member = pair.Member,
+            })
+        );
+        return fact;
+    }
 
     private async Task<List<FinancialDimensionSet>> StoredSets()
     {
