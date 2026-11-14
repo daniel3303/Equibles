@@ -528,6 +528,28 @@ public class InstitutionalHolderRepositorySearchNameOrCikLargestFirstTests : Par
     }
 
     [Fact]
+    public async Task ResolveNameOrCik_WordHeldOnlyInsideAnotherWord_DoesNotMakeTheNameAmbiguous()
+    {
+        DbContext.AddRange(
+            new InstitutionalHolder { Cik = "1569147", Name = "PL Capital Advisors, LLC" },
+            new InstitutionalHolder { Cik = "1631941", Name = "Capital Planning Advisors, LLC" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var repository = new InstitutionalHolderRepository(verify);
+
+        var named = await repository.ResolveNameOrCik("PL Capital Advisors");
+        var shared = await repository.ResolveNameOrCik("Capital Advisors");
+
+        named.Selected.Should().NotBeNull();
+        named.Selected.Holder.Cik.Should().Be("1569147");
+        shared.Selected.Should().BeNull();
+        shared.IsAmbiguous.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ResolveNameOrCik_SolePrefixStillFailsClosedWhenAnotherTokenMatchExists()
     {
         DbContext.AddRange(

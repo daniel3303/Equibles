@@ -425,7 +425,13 @@ public class RagSearchTools
         if (string.IsNullOrWhiteSpace(documentType))
             return null;
 
-        return DocumentType.FromDisplayName(documentType) ?? DocumentType.FromValue(documentType);
+        var name = documentType.Trim();
+        var type = DocumentType.FromDisplayName(name) ?? DocumentType.FromValue(name);
+        // "Form 4", "Form 10-K": the SEC form name with its spoken prefix.
+        const string formPrefix = "Form ";
+        if (type == null && name.StartsWith(formPrefix, StringComparison.OrdinalIgnoreCase))
+            type = DocumentType.FromDisplayName(name[formPrefix.Length..].Trim());
+        return type;
     }
 
     // An unrecognized entry rejects the call with the full accepted list instead of silently

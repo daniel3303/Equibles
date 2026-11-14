@@ -76,6 +76,11 @@ public class InsiderTradingTools
         ["Other"] = TransactionCode.Other,
     };
 
+    // SEC code M covers both the exercise and the conversion of a derivative, and nearly every
+    // such row is an option exercise, so the bare enum name misread it as a conversion.
+    private static string TypeLabel(TransactionCode code) =>
+        code == TransactionCode.Conversion ? "Exercise/Conversion" : code.NameForHumans();
+
     private const string AcceptedTransactionTypes =
         "Buy, Sell, Award, Conversion, Exercise, TaxPayment, Expiration, Gift, Inheritance, Discretionary, Other";
 
@@ -85,7 +90,7 @@ public class InsiderTradingTools
         ReadOnly = true
     )]
     [Description(
-        "Get recent insider trading transactions for a stock from SEC Forms 4 and 5, newest first. Form 3 supplies initial ownership rather than a transaction. The Type column carries the SEC transaction code meaning: 'Buy'/'Sell' are open-market purchases/sales only, while Award, Conversion, Exercise, Tax Payment, Expiration, Gift, Inheritance, Discretionary and Other are compensation or derivative mechanics — not conviction trades. The 10b5-1 column marks trades made under a pre-arranged Rule 10b5-1 plan ('-' = filing predates the 2023 checkbox). Date is the day of the transaction and Filed the day its Form 4 or 5 reached the SEC, when the trade became public. Per-row Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis, tracked per security kind and ownership form. Supports optional date-range, transaction-type and insider-name filters to reach history beyond the newest rows. Use this to understand insider buying/selling activity."
+        "Get recent insider trading transactions for a stock from SEC Forms 4 and 5, newest first. Form 3 supplies initial ownership rather than a transaction. The Type column carries the SEC transaction code meaning: 'Buy'/'Sell' are open-market purchases/sales only, while Award, Exercise/Conversion (SEC code M: a derivative exercised or converted into shares, typically a stock-option exercise; filter value Conversion), Exercise (code X), Tax Payment, Expiration, Gift, Inheritance, Discretionary and Other are compensation or derivative mechanics — not conviction trades. The 10b5-1 column marks trades made under a pre-arranged Rule 10b5-1 plan ('-' = filing predates the 2023 checkbox). Date is the day of the transaction and Filed the day its Form 4 or 5 reached the SEC, when the trade became public. Per-row Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis, tracked per security kind and ownership form. Supports optional date-range, transaction-type and insider-name filters to reach history beyond the newest rows. Use this to understand insider buying/selling activity."
     )]
     public Task<string> GetInsiderTransactions(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -102,7 +107,7 @@ public class InsiderTradingTools
         )]
             string toDate = null,
         [Description(
-            "Only include one transaction type: Buy, Sell, Award, Conversion, Exercise, TaxPayment, Expiration, Gift, Inheritance, Discretionary or Other (optional)"
+            "Only include one transaction type: Buy, Sell, Award, Conversion (SEC code M, option exercises included), Exercise (code X), TaxPayment, Expiration, Gift, Inheritance, Discretionary or Other (optional)"
         )]
             string transactionType = null,
         [Description(
@@ -246,7 +251,7 @@ public class InsiderTradingTools
                         {
                             TransactionCode.Purchase => "Buy",
                             TransactionCode.Sale => "Sell",
-                            _ => t.TransactionCode.NameForHumans(),
+                            _ => TypeLabel(t.TransactionCode),
                         };
 
                         var value = t.Shares * t.PricePerShare;
@@ -366,7 +371,7 @@ public class InsiderTradingTools
                     p =>
                     {
                         var role = GetRole(p.Anchor.InsiderOwner);
-                        var lastType = p.Anchor.TransactionCode.NameForHumans();
+                        var lastType = TypeLabel(p.Anchor.TransactionCode);
                         var total = McpFormat.WholeNumber(p.DirectShares + p.IndirectShares);
                         return $"| {p.Anchor.InsiderOwner.Name} | {role} | {McpFormat.WholeNumber(p.DirectShares)} | {McpFormat.WholeNumber(p.IndirectShares)} | {total} | {lastType} | {p.Anchor.TransactionDate:yyyy-MM-dd} |";
                     }

@@ -47,10 +47,12 @@ public class CftcContractRepository : BaseRepository<CftcContract>
         var canonical = query.Trim().ToUpperInvariant();
         var exactIdentifier = GetAll().Where(c => c.MarketCode == canonical);
         var aliasCode = CftcContractSearchAliases.Resolve(query);
+        var aliasCodes =
+            aliasCode != null ? [aliasCode] : CftcContractSearchAliases.ResolveFamily(query);
         var verifiedAlias =
-            aliasCode == null
+            aliasCodes.Count == 0
                 ? GetAll().Where(_ => false)
-                : GetAll().Where(c => c.MarketCode == aliasCode);
+                : GetAll().Where(c => aliasCodes.Contains(c.MarketCode));
         return SearchTerms.WithExclusiveResolutionTiers(
             exactIdentifier,
             verifiedAlias,
@@ -64,8 +66,37 @@ internal static class CftcContractSearchAliases
 {
     private static readonly IReadOnlyDictionary<string, string> MarketCodes = Build();
 
+    // A word that names a family of contracts and appears in none of their CFTC market names
+    // ("10-Year T-Notes"); a search finds the family, a single-contract read still needs one code.
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> Families =
+        BuildFamilies();
+
     public static string Resolve(string query) =>
         MarketCodes.GetValueOrDefault(SearchTerms.Normalize(query));
+
+    public static IReadOnlyList<string> ResolveFamily(string query) =>
+        Families.GetValueOrDefault(SearchTerms.Normalize(query)) ?? [];
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> BuildFamilies()
+    {
+        string[] treasuries = ["042601", "044601", "043602", "020601"];
+        var families = new Dictionary<string, IReadOnlyList<string>>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        foreach (
+            var name in new[]
+            {
+                "treasury",
+                "treasuries",
+                "treasury futures",
+                "us treasury",
+                "us treasuries",
+                "treasury notes",
+            }
+        )
+            families[SearchTerms.Normalize(name)] = treasuries;
+        return families;
+    }
 
     private static IReadOnlyDictionary<string, string> Build()
     {
