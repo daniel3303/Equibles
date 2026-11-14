@@ -9,6 +9,7 @@ using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Yahoo.Data.Models;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -88,6 +89,83 @@ public class CompanySyncServicePresentationChoiceTests : ParadeDbMcpTestBase
         issuer.Presentation.Listing.Ticker.Should().Be("SNYRQ");
     }
 
+    // SEC listed Texas Capital's new TXCP ahead of TCBI days before any price existed for it.
+    [Fact]
+    public async Task NewFirstSymbolWithoutPrices_WaitsForItsFirstPriceBeforePresenting()
+    {
+        var existing = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0001077428",
+            Ticker: "TCBI",
+            Name: "Texas Capital Bancshares Inc"
+        );
+        DbContext.Add(existing);
+        DbContext.Add(Bar(existing.Presentation.EquityListingId, "TCBI", daysAgo: 2));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await BuildSut(["TXCP", "TCBI"], "0001077428").SyncCompaniesFromSecApi();
+
+        Guid newListingId;
+        await using (var held = Fixture.CreateDbContext())
+        {
+            var issuer = await held.Set<EquityIssuer>().AsNoTracking().SingleAsync();
+            issuer.Presentation.Listing.Ticker.Should().Be("TCBI");
+            var added = issuer
+                .Securities.SelectMany(security => security.Listings)
+                .Should()
+                .ContainSingle(listing => listing.Ticker == "TXCP")
+                .Which;
+            added.IsDirectoryListed.Should().BeTrue("the new symbol must still be priced");
+            newListingId = added.Id;
+        }
+
+        DbContext.ChangeTracker.Clear();
+        DbContext.Add(Bar(newListingId, "TXCP", daysAgo: 1));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        await BuildSut(["TXCP", "TCBI"], "0001077428").SyncCompaniesFromSecApi();
+
+        await using var moved = Fixture.CreateDbContext();
+        (await moved.Set<EquityIssuer>().AsNoTracking().SingleAsync())
+            .Presentation.Listing.Ticker.Should()
+            .Be("TXCP");
+    }
+
+    [Fact]
+    public async Task PresentingLineWithNoRecentBar_YieldsToTheNewFirstSymbol()
+    {
+        var existing = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0001077428",
+            Ticker: "TCBI",
+            Name: "Texas Capital Bancshares Inc"
+        );
+        DbContext.Add(existing);
+        DbContext.Add(Bar(existing.Presentation.EquityListingId, "TCBI", daysAgo: 40));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await BuildSut(["TXCP", "TCBI"], "0001077428").SyncCompaniesFromSecApi();
+
+        await using var verify = Fixture.CreateDbContext();
+        (await verify.Set<EquityIssuer>().AsNoTracking().SingleAsync())
+            .Presentation.Listing.Ticker.Should()
+            .Be("TXCP");
+    }
+
+    private static EquityDailyStockPrice Bar(Guid listingId, string ticker, int daysAgo) =>
+        new()
+        {
+            EquityListingId = listingId,
+            SourceTicker = ticker,
+            Date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-daysAgo),
+            Open = 10m,
+            High = 10m,
+            Low = 10m,
+            Close = 10m,
+            AdjustedClose = 10m,
+            Volume = 1_000,
+        };
+
     private static IssuerSecurityRegistration Registration(
         Guid issuerId,
         string symbol,
@@ -102,7 +180,7 @@ public class CompanySyncServicePresentationChoiceTests : ParadeDbMcpTestBase
             FiledDate = new DateOnly(2026, 8, 14),
         };
 
-    private CompanySyncService BuildSut(List<string> tickers)
+    private CompanySyncService BuildSut(List<string> tickers, string cik = null)
     {
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient
@@ -112,7 +190,7 @@ public class CompanySyncServicePresentationChoiceTests : ParadeDbMcpTestBase
                 {
                     new()
                     {
-                        Cik = tickers[0] == "BEATW" ? "0001779372" : "0001562733",
+                        Cik = cik ?? (tickers[0] == "BEATW" ? "0001779372" : "0001562733"),
                         Name = "Issuer",
                         Tickers = tickers,
                         EntityType = "operating",
