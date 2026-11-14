@@ -407,6 +407,11 @@ public class CompanySyncService : ICompanySyncService
             presenting is { MarketCountryCode: "US", Active: true, DelistedOn: null }
             && presenting.Ticker != primaryTicker
             && secondaryTickers.Contains(presenting.Ticker)
+            // A ticker another company presents stays with the collision path below.
+            && !(
+                state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var holder)
+                && holder.Id != existingStock.Id
+            )
             && await HoldsPresentation(existingStock, presenting, primaryTicker, state)
         )
         {
