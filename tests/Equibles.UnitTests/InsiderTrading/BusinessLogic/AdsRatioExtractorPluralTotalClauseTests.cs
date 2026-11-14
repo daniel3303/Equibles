@@ -30,4 +30,26 @@ public class AdsRatioExtractorPluralTotalClauseTests
         corrected.Should().BeFalse();
         ratio.Should().Be(0);
     }
+
+    // A count clause set off by a comma ("1,000 ADS, representing 20,000 ordinary shares") states
+    // how many were sold, never the ratio: read as one, it would divide the price by 20,000.
+    [Fact]
+    public void TryGetOrdinarySharesPerAds_CountClauseAfterAComma_LeavesRowUntouched()
+    {
+        var notes = new[]
+        {
+            "The price reported is the price per ADS.",
+            "The reporting person sold 1,000 ADS, representing 20,000 ordinary shares.",
+        };
+
+        var corrected = AdsRatioExtractor.TryGetOrdinarySharesPerAds(
+            "Ordinary Shares",
+            notes,
+            20_000L,
+            out var ratio
+        );
+
+        corrected.Should().BeFalse();
+        ratio.Should().Be(0);
+    }
 }

@@ -185,12 +185,14 @@ public static class AdsRatioExtractor
     private static int? TryParseRatio(string note)
     {
         var tokens = Tokenize(note);
-        // Words are matched without the comma Tokenize keeps for grouped digits: a share noun
-        // followed by one ("ordinary shares, par value ...") is still the noun.
+        // The share noun is matched without the comma Tokenize keeps for grouped digits: a noun
+        // followed by one ("ordinary shares, par value ...") is still the noun. The anchor keeps
+        // its comma, so a count clause ("sold 1,000 ADS, representing 20,000 ordinary shares")
+        // stays unread instead of handing over the share count as the ratio.
         var words = tokens.Select(Word).ToList();
         for (var i = 0; i < tokens.Count; i++)
         {
-            var afterRepresents = MatchAdsRepresents(words, i);
+            var afterRepresents = MatchAdsRepresents(tokens, i);
             if (afterRepresents < 0)
                 continue;
 

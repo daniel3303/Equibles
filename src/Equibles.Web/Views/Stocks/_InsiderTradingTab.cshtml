@@ -1,4 +1,5 @@
 @using Equibles.InsiderTrading.Data.Models
+@using Equibles.InsiderTrading.Repositories
 @model Equibles.Web.ViewModels.Stocks.InsiderTradingTabViewModel
 
 <partial name="_TabIntro" model="@("Trades by corporate insiders — officers, directors and holders of more than 10% of the shares — disclosed to the SEC on Forms 4 and 5. Form 3 supplies initial ownership rather than a trade; Form 4 must be filed within two business days of the trade.")" />
@@ -35,14 +36,7 @@
                             TransactionCode.Discretionary => ("Discretionary", "Transaction by a discretionary account or trust"),
                             _ => (t.TransactionCode.ToString(), "Other transaction type")
                         };
-                        var role = "";
-                        if (t.InsiderOwner != null) {
-                            var roles = new List<string>();
-                            if (t.InsiderOwner.IsDirector) roles.Add("Director");
-                            if (t.InsiderOwner.IsOfficer) roles.Add(t.InsiderOwner.OfficerTitle ?? "Officer");
-                            if (t.InsiderOwner.IsTenPercentOwner) roles.Add("10% Owner");
-                            role = roles.Count > 0 ? string.Join(", ", roles) : "Insider";
-                        }
+                        var role = t.InsiderOwner != null ? InsiderRoleLabel.Of(t.InsiderOwner, t.OwnerRelationship) : "";
                         <tr>
                             <td>@t.TransactionDate.ToString("yyyy-MM-dd")</td>
                             <td class="max-w-xs truncate">@(t.InsiderOwner?.Name ?? "Unknown")</td>

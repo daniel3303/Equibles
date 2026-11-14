@@ -43,11 +43,15 @@ internal static class HoldingsRollupRefresher
         await MarkAumSnapshotsDirty(dbContext, reportDates, cancellationToken);
     }
 
-    /// <summary>Re-sums <c>InstitutionalFiling.TotalValue</c> for the given accessions.</summary>
+    /// <summary>
+    /// Re-sums <c>InstitutionalFiling.TotalValue</c> for the given accessions, adding the report
+    /// date of every filing whose total moved to <paramref name="changedQuarters"/> when given.
+    /// </summary>
     internal static async Task<int> RealignFilingTotals(
         EquiblesFinancialDbContext dbContext,
         IReadOnlyCollection<string> accessionNumbers,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        ISet<DateOnly> changedQuarters = null
     )
     {
         var accessions = accessionNumbers.Where(a => a != null).Distinct().ToList();
@@ -84,6 +88,7 @@ internal static class HoldingsRollupRefresher
                 )
                 {
                     filing.TotalValue = total;
+                    changedQuarters?.Add(filing.ReportDate);
                     batchRealigned++;
                 }
             }
