@@ -51,6 +51,33 @@ public class InsiderRoleLabelTests
             .Be("Director, 10% Owner");
     }
 
+    // The owner-only ladder every surface shared before rows kept their filing's boxes: roles join
+    // in box order, a blank title reads "Officer", and no box at all reads "Insider".
+    [Theory]
+    [InlineData(true, true, null, true, "Director, Officer, 10% Owner")]
+    [InlineData(false, true, "Chief Executive Officer", false, "Chief Executive Officer")]
+    [InlineData(false, true, "", false, "Officer")]
+    [InlineData(false, true, "   ", false, "Officer")]
+    [InlineData(false, false, null, false, "Insider")]
+    public void Of_OwnerFlagsOnly_JoinsTheRolesInBoxOrder(
+        bool director,
+        bool officer,
+        string title,
+        bool tenPercentOwner,
+        string expected
+    )
+    {
+        var owner = new InsiderOwner
+        {
+            IsDirector = director,
+            IsOfficer = officer,
+            OfficerTitle = title,
+            IsTenPercentOwner = tenPercentOwner,
+        };
+
+        InsiderRoleLabel.Of(owner).Should().Be(expected);
+    }
+
     [Fact]
     public void Of_FilingTicksOnlyOther_ReadsAsInsider()
     {
