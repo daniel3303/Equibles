@@ -47,8 +47,32 @@ public class DropFinancialFactDimensionMigrationTests : ParadeDbMcpTestBase
         await using var dropper = Fixture.CreateDbContext();
         var dropping = dropper.Database.ExecuteSqlRawAsync(DropFinancialFactDimension.DropSql);
 
-        // Longer than one 3 s attempt, so the first one has been refused.
-        await Task.Delay(TimeSpan.FromSeconds(4));
+        // Between attempts the drop sleeps, and a refused attempt has given its locks back.
+        var sleeping = false;
+        for (var poll = 0; poll < 100 && !sleeping; poll++)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(200));
+            sleeping = await DbContext
+                .Database.SqlQueryRaw<bool>(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM pg_stat_activity AS activity
+                        WHERE activity.wait_event = 'PgSleep'
+                            AND activity.query LIKE '%DROP TABLE "FinancialFactDimension"%'
+                            AND activity.pid <> pg_backend_pid()
+                            AND NOT EXISTS (
+                                SELECT 1
+                                FROM pg_locks AS held
+                                WHERE held.pid = activity.pid
+                                    AND held.relation = '"FinancialFact"'::regclass
+                            )
+                    ) AS "Value"
+                    """
+                )
+                .SingleAsync();
+        }
+        sleeping.Should().BeTrue("the first attempt is refused after its lock timeout");
         dropping.IsCompleted.Should().BeFalse("the read still holds its lock");
         (await TableExists()).Should().BeTrue();
 
