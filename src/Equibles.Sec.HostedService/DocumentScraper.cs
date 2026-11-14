@@ -519,25 +519,30 @@ public class DocumentScraper : IDocumentScraper
             if (metadata != null)
                 await profileReader.Store(company, metadata);
 
-            if (metadata?.FiscalYearEndMonth is { } month)
+            if (metadata != null)
             {
-                // A filer without a current annual report here (a Form D or F-1 filer, or one
-                // that left years ago) states a year end no report of its confirms, so it fills a
-                // blank but never replaces the one its own annual reports elsewhere recorded.
-                if (
+                // The company's own agreeing annual reports outrank the company record, which
+                // states a year end no report confirms for some registrants.
+                var chosen = ReportedFiscalYearEnd.Choose(
+                    metadata.FiscalYearEndMonth,
+                    metadata.FiscalYearEndDay,
+                    metadata.AnnualReportPeriodEnds,
+                    metadata.QuarterlyReportPeriodEnds,
+                    company.FiscalYearEndMonth,
+                    company.FiscalYearEndDay,
                     SecAnnualFiler.IsCurrent(
                         metadata.LatestAnnualReportFiledOn,
                         DateOnly.FromDateTime(DateTime.UtcNow)
-                    ) || company.FiscalYearEndMonth is null
-                )
+                    ),
+                    DateOnly.FromDateTime(DateTime.UtcNow)
+                );
+                if (chosen is { } yearEnd)
                 {
-                    await commonStockManager.SetFiscalYearEnd(
-                        company,
-                        month,
-                        metadata.FiscalYearEndDay
-                    );
+                    await commonStockManager.SetFiscalYearEnd(company, yearEnd.Month, yearEnd.Day);
+                    return;
                 }
-                return;
+                if (metadata.FiscalYearEndMonth is not null)
+                    return;
             }
 
             // SEC metadata lacks fiscal year-end — infer from most recent 10-K.

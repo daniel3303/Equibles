@@ -36,6 +36,12 @@ public class CompanyMetadata
     /// <summary>Filing date of the newest annual report (10-K, 10-KT, 20-F or 40-F) among the recent filings; null when none is listed.</summary>
     public DateOnly? LatestAnnualReportFiledOn { get; set; }
 
+    /// <summary>The distinct period ends the annual reports among the recent filings close, newest first.</summary>
+    public List<DateOnly> AnnualReportPeriodEnds { get; set; } = [];
+
+    /// <summary>The distinct period ends the quarterly reports among the recent filings close, newest first.</summary>
+    public List<DateOnly> QuarterlyReportPeriodEnds { get; set; } = [];
+
     /// <summary>The file number EDGAR indexes the newest 10-K or 10-Q under, from the recent filings; null when none is listed.</summary>
     public string PeriodicReportFileNumber { get; set; }
 

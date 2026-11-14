@@ -328,6 +328,12 @@ namespace Equibles.Migrations.Migrations
                     b.Property<int?>("FiscalYearEndMonth")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("FiscalYearEndMonthBeforeChange")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FiscalYearEndMonthChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("IdentitySourceUrl")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");

@@ -847,6 +847,40 @@ public class DocumentScraperTests
     }
 
     [Fact]
+    public async Task ScrapeDocuments_AnnualReportsContradictTheCompanyRecord_RecordTheReportsYearEnd()
+    {
+        // Brown & Brown's company record states January 19; its annual reports close December 31.
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        EquityIssuer company = SeedCompany(dbContext, ticker: "BRO", cik: "0000079282");
+        company.FiscalYearEndMonth = 1;
+        company.FiscalYearEndDay = 19;
+        await dbContext.SaveChangesAsync();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var newestYearEnd = new DateOnly(today.Year - 1, 12, 31);
+        harness
+            .SecEdgarClient.GetCompanyMetadata("0000079282")
+            .Returns(
+                new CompanyMetadata
+                {
+                    FiscalYearEnd = "0119",
+                    LatestAnnualReportFiledOn = newestYearEnd.AddDays(45),
+                    AnnualReportPeriodEnds = [newestYearEnd, newestYearEnd.AddYears(-1)],
+                }
+            );
+
+        await harness.BuildScraper(dbContext).ScrapeDocuments();
+
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .AsNoTracking()
+            .SingleAsync(c => c.Id == company.Id);
+        persisted.FiscalYearEndMonth.Should().Be(12);
+        persisted.FiscalYearEndDay.Should().Be(31);
+        persisted.FiscalYearEndMonthChangedAt.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task ScrapeDocuments_UnclassifiedFilerWithArchives_ReadsTheArchivedElectionOnce()
     {
         // An N-54A filed long ago can sit on an archived page. A filer SEC never gave an

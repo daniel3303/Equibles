@@ -48,6 +48,24 @@ public static class SecRegistrantFilings
     public static DateOnly? LatestBdcWithdrawal(IEnumerable<FilingData> filings) =>
         LatestFiled(filings, "N-54C");
 
+    private static readonly string[] QuarterlyReportForms = ["10-Q", "10-Q/A", "10-QT", "10-QT/A"];
+
+    /// <summary>The distinct period ends the listed annual reports close, newest first.</summary>
+    public static List<DateOnly> AnnualReportPeriodEnds(IEnumerable<FilingData> filings) =>
+        PeriodEnds(filings, AnnualReportForms);
+
+    /// <summary>The distinct period ends the listed quarterly reports close, newest first.</summary>
+    public static List<DateOnly> QuarterlyReportPeriodEnds(IEnumerable<FilingData> filings) =>
+        PeriodEnds(filings, QuarterlyReportForms);
+
+    private static List<DateOnly> PeriodEnds(IEnumerable<FilingData> filings, string[] forms) =>
+        filings
+            .Where(f => forms.Contains(f.Form) && f.ReportDate != DateOnly.MinValue)
+            .Select(f => f.ReportDate)
+            .Distinct()
+            .OrderDescending()
+            .ToList();
+
     public static DateOnly? LatestAnnualReportFiledOn(IEnumerable<FilingData> filings) =>
         filings
             .Where(f => AnnualReportForms.Contains(f.Form) && f.FilingDate != DateOnly.MinValue)

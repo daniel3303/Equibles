@@ -20,6 +20,32 @@ public static class FiscalCalendar
 {
     private const int MonthsPerQuarter = 3;
 
+    // A 52/53-week year closes up to a week into the next month.
+    private const int FirstWeekDays = 7;
+
+    /// <summary>
+    /// A fiscal year end on the month grid: one in a month's first week belongs to a 52/53-week
+    /// calendar closing near the end of the month before (the Saturday nearest January 31 falls
+    /// on February 1 some years), so it reads as that month's last day. Stored that way, the
+    /// recorded year end does not move between two months from year to year.
+    /// </summary>
+    public static (int Month, int? Day) YearEndOnMonthGrid(int month, int? day)
+    {
+        if (day is not (>= 1 and <= FirstWeekDays))
+            return (month, day);
+        var before = month == 1 ? 12 : month - 1;
+        // February's day is its common-year one, valid every year.
+        return (before, DateTime.DaysInMonth(2001, before));
+    }
+
+    /// <summary>
+    /// The form a fiscal year end is recorded in: on the month grid, except an early-January one,
+    /// which stays as stated. Every reader already takes that one as December, and the stated day
+    /// is what tells a 52/53-week December year from a plain one.
+    /// </summary>
+    public static (int Month, int? Day) RecordedYearEnd(int month, int? day) =>
+        month == 1 ? (month, day) : YearEndOnMonthGrid(month, day);
+
     /// <summary>
     /// Returns the fiscal period for <paramref name="date"/> given a fiscal
     /// year that ends in <paramref name="fiscalYearEndMonth"/> (1-12, where 12
