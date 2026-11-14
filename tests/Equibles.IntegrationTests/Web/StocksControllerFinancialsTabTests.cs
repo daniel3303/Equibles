@@ -465,4 +465,88 @@ public class StocksControllerFinancialsTabTests : IDisposable
         tab.SelectedYear.Should().Be(2024);
         tab.Lines.Should().ContainSingle(l => l.Label == "Revenue" && l.Value == 120m);
     }
+
+    // Microsoft's FY2026 10-K tags no depreciation and amortization total, only depreciation 34,300
+    // and amortization of intangible assets 4,700 (millions): the cash flow line is their sum, marked
+    // as a sum and never as a derived quarter.
+    [Fact]
+    public async Task Financials_DepreciationWithoutATotal_LineIsASumNotADerivedQuarter()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corporation",
+            Cik: "0000789019"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        foreach (
+            var (tag, millions) in new[]
+            {
+                ("Depreciation", 34_300m),
+                ("AmortizationOfIntangibleAssets", 4_700m),
+                ("NetCashProvidedByUsedInOperatingActivities", 182_935m),
+            }
+        )
+        {
+            var concept = new FinancialConcept
+            {
+                Id = Guid.NewGuid(),
+                Taxonomy = FactTaxonomy.UsGaap,
+                Tag = tag,
+                Label = tag,
+            };
+            _dbContext.Set<FinancialConcept>().Add(concept);
+            _dbContext
+                .Set<FinancialFact>()
+                .Add(
+                    new FinancialFact
+                    {
+                        EquityIssuerId = stock.Id,
+                        FinancialConceptId = concept.Id,
+                        Unit = "USD",
+                        PeriodType = FactPeriodType.Duration,
+                        PeriodStart = new DateOnly(2025, 7, 1),
+                        PeriodEnd = new DateOnly(2026, 6, 30),
+                        Value = millions * 1_000_000m,
+                        FiscalYear = 2026,
+                        FiscalPeriod = SecFiscalPeriod.FullYear,
+                        Form = DocumentType.TenK,
+                        FiledDate = new DateOnly(2026, 7, 29),
+                        AccessionNumber = "0001193125-26-323660",
+                    }
+                );
+        }
+        await _dbContext.SaveChangesAsync();
+
+        var stockTabService = new StockTabService(
+            new InstitutionalHoldingRepository(_dbContext),
+            new InstitutionalHolderRepository(_dbContext),
+            new DailyShortVolumeRepository(_dbContext),
+            new ShortInterestRepository(_dbContext),
+            new FailToDeliverRepository(_dbContext),
+            new DocumentRepository(_dbContext),
+            new InsiderTransactionRepository(_dbContext),
+            new Form144FilingRepository(_dbContext),
+            new FormDFilingRepository(_dbContext),
+            new NCenFilingRepository(_dbContext),
+            new NportFilingRepository(_dbContext),
+            new CongressionalTradeRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext)
+        );
+
+        var tab = await stockTabService.LoadFinancialsTab(
+            stock,
+            FinancialStatementType.CashFlow,
+            year: 2026,
+            period: SecFiscalPeriod.FullYear
+        );
+
+        var line = tab.Lines.Single(l => l.HasValue && l.Value == 39_000_000_000m);
+        line.Summed.Should().BeTrue();
+        line.Derived.Should().BeFalse();
+        tab.Lines.Where(l => l != line).Should().OnlyContain(l => !l.Summed);
+    }
 }

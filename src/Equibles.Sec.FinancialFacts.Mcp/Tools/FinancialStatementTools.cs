@@ -251,6 +251,16 @@ public class FinancialStatementTools
             allEvidence,
             selectedPeriod
         );
+        // Depreciation and amortization reads as the issuer's whole history folds it, so the
+        // statement and the fact series show one figure for a period (DepreciationTotal).
+        if (statementLines.Any(line => DepreciationTotal.IsFamily(line.Concepts)))
+            facts = await DepreciationTotalFacts.ForStatement(
+                _financialFactRepository,
+                _financialConceptRepository,
+                stock.Id,
+                facts,
+                selectedYear
+            );
 
         if (statementType != FinancialStatementType.BalanceSheet)
         {
@@ -311,6 +321,8 @@ public class FinancialStatementTools
         if (statementType == FinancialStatementType.CashFlow)
         {
             var ownLines = statementLines.Where(line => line.Alias != NetIncomeAlias).ToList();
+            // A summed depreciation and amortization is built from income-statement parts, so
+            // it is no evidence of a cash flow statement either.
             var statesOwnLine = ownLines.Any(line =>
                 StatementLineFacts
                     .PickConceptFact(
@@ -320,7 +332,9 @@ public class FinancialStatementTools
                         operatingCostsClaimant,
                         derivedOperatingIncomeRounding
                     )
-                    .Fact != null
+                    .Fact
+                    is { } own
+                && !DepreciationTotal.IsSum(own)
             );
             if (!statesOwnLine)
             {
@@ -456,6 +470,7 @@ public class FinancialStatementTools
         var splitAdjusted = false;
         var unresolvedBasis = false;
         var grossProfitReplaced = false;
+        var depreciationSummed = false;
         DateOnly? earliestFiled = null;
         DateOnly? latestFiled = null;
         foreach (var line in statementLines)
@@ -493,8 +508,11 @@ public class FinancialStatementTools
                 derivedOperatingIncomeRounding
             );
             grossProfitReplaced |= replaced;
+            var summed = DepreciationTotal.IsSum(fact);
+            depreciationSummed |= summed;
             var basis =
                 replaced ? "Derived"
+                : summed ? "Sum of reported parts"
                 : StatementQuarterDerivation.IsDerived(fact) ? "Derived quarter"
                 : "Reported";
             result.AppendLine(
@@ -528,6 +546,8 @@ public class FinancialStatementTools
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
         if (grossProfitReplaced)
             result.AppendLine($"\n_{GrossProfitMistag.ReplacedNote}_");
+        if (depreciationSummed)
+            result.AppendLine($"\n_{DepreciationTotal.SumNote}_");
 
         if (
             selectedPeriod != SecFiscalPeriod.FullYear

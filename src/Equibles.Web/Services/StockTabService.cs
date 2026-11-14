@@ -813,6 +813,17 @@ public class StockTabService
                 )
                 .ToListAsync();
 
+        // Depreciation and amortization reads as the issuer's whole history folds it, the same
+        // figure the MCP statement tool shows (DepreciationTotal).
+        if (statementLines.Any(line => DepreciationTotal.IsFamily(line.Concepts)))
+            facts = await DepreciationTotalFacts.ForStatement(
+                _financialFactRepository,
+                _financialConceptRepository,
+                stock.Id,
+                facts,
+                fiscalYear
+            );
+
         if (statementType != FinancialStatementType.BalanceSheet)
         {
             var rejectNegativeConceptIds = StatementQuarterDerivation.GetNonNegativeConceptIds(
@@ -867,8 +878,10 @@ public class StockTabService
         ).ToHashSet();
 
         return statementLines
+            // A line never reported under its own concepts still shows where its parts sum.
             .Where(line =>
                 StatementLineFacts.IsEverReported(line, conceptIdByKey, everReportedConceptIds)
+                || StatementLineFacts.PickFact(line, conceptIdByKey, latestByConcept) != null
             )
             .Select(line =>
             {
@@ -883,6 +896,7 @@ public class StockTabService
                     row.Form = fact.Form?.DisplayName;
                     row.FiledDate = fact.FiledDate;
                     row.Derived = StatementQuarterDerivation.IsDerived(fact);
+                    row.Summed = DepreciationTotal.IsSum(fact);
                 }
                 return row;
             })

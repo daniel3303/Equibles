@@ -71,15 +71,21 @@ public static class StatementQuarterDerivation
     public static HashSet<Guid> GetNonNegativeConceptIds(
         IEnumerable<StatementLine> lines,
         IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey
-    ) =>
-        lines
-            .Where(line => NonNegativeAliases.Contains(line.Alias))
+    )
+    {
+        var nonNegative = lines.Where(line => NonNegativeAliases.Contains(line.Alias)).ToList();
+        var ids = nonNegative
             .SelectMany(line => line.Concepts)
             .Select(reference =>
                 conceptIdByKey.GetValueOrDefault((reference.Taxonomy, reference.Tag))
             )
             .Where(id => id != Guid.Empty)
             .ToHashSet();
+        // The line's summed stand-in is a charge like the concepts it stands in for.
+        if (nonNegative.Any(line => DepreciationTotal.IsFamily(line.Concepts)))
+            ids.Add(DepreciationTotal.ConceptId);
+        return ids;
+    }
 
     private static List<SpanFact> SelectSpans(IReadOnlyCollection<FinancialFact> facts) =>
         facts
