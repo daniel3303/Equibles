@@ -18,9 +18,12 @@ internal static class FinancialDimensionSeed
             return "";
         var canonical = string.Join(
             "|",
-            pairs.Select(pair => $"{pair.Axis}={pair.Member}").OrderBy(p => p, StringComparer.Ordinal)
+            pairs
+                .Select(pair => $"{pair.Axis}={pair.Member}")
+                .OrderBy(p => p, StringComparer.Ordinal)
         );
-        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
+        var key = Convert
+            .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
             .ToLowerInvariant();
         if (db.Set<FinancialDimensionSet>().Find(key) == null)
             db.Add(
@@ -39,5 +42,28 @@ internal static class FinancialDimensionSeed
                 }
             );
         return key;
+    }
+
+    /// <summary>
+    /// Adds one (axis, member) pair to the set under the fact's own <c>DimensionsKey</c>, creating
+    /// the set on first use; for tests that name their keys themselves.
+    /// </summary>
+    public static void Add(DbContext db, FinancialFact fact, string axis, string member)
+    {
+        var set = db.Set<FinancialDimensionSet>().Find(fact.DimensionsKey);
+        if (set == null)
+        {
+            set = new FinancialDimensionSet { Key = fact.DimensionsKey };
+            db.Add(set);
+        }
+        if (!set.Members.Any(pair => pair.Axis == axis && pair.Member == member))
+            set.Members.Add(
+                new FinancialDimensionSetMember
+                {
+                    DimensionSetKey = set.Key,
+                    Axis = axis,
+                    Member = member,
+                }
+            );
     }
 }
