@@ -21,8 +21,8 @@ namespace Equibles.Migrations.Migrations
                         sha256(convert_to(string_agg(pairs."Pair", '|' ORDER BY pairs."Pair" COLLATE "C"), 'UTF8')),
                         'hex'
                     ) AS "Hash",
-                    array_agg(pairs."Axis" ORDER BY pairs."Pair" COLLATE "C") AS "Axes",
-                    array_agg(pairs."Member" ORDER BY pairs."Pair" COLLATE "C") AS "Members"
+                    array_agg(pairs."Axis" ORDER BY pairs."Pair" COLLATE "C", pairs."Axis") AS "Axes",
+                    array_agg(pairs."Member" ORDER BY pairs."Pair" COLLATE "C", pairs."Axis") AS "Members"
                 FROM (
                     SELECT dimension."Axis", dimension."Member", dimension."Axis" || '=' || dimension."Member" AS "Pair"
                     FROM "FinancialFactDimension" AS dimension
@@ -49,6 +49,7 @@ namespace Equibles.Migrations.Migrations
                         WHERE stored."Key" = fact."DimensionsKey"
                     )
                 GROUP BY fact."DimensionsKey";
+                ANALYZE "DimensionSetCandidate";
 
                 CREATE TEMP TABLE "DimensionSetSource" ON COMMIT DROP AS
                 SELECT fact."DimensionsKey" AS "Key", stated."Axes", stated."Members"
