@@ -229,6 +229,10 @@ public class SecEdgarClient : ISecEdgarClient
                 LatestAnnualReportFiledOn = SecRegistrantFilings.LatestAnnualReportFiledOn(
                     recentFilings
                 ),
+                AnnualReportPeriodEnds = SecRegistrantFilings.AnnualReportPeriodEnds(recentFilings),
+                QuarterlyReportPeriodEnds = SecRegistrantFilings.QuarterlyReportPeriodEnds(
+                    recentFilings
+                ),
                 PeriodicReportFileNumber = SecRegistrantFilings.PeriodicReportFileNumber(
                     recentFilings
                 ),

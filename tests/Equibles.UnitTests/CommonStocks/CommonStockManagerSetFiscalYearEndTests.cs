@@ -51,6 +51,69 @@ public class CommonStockManagerSetFiscalYearEndTests
     }
 
     [Fact]
+    public async Task SetFiscalYearEnd_FirstWeekOfAMonth_IsStoredAsThePreviousMonthsLastDay()
+    {
+        // The Saturday nearest January 31 falls on February 1 some years.
+        var db = NewDb();
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            FiscalYearEndMonth: null,
+            FiscalYearEndDay: null
+        );
+
+        await NewManager(repository).SetFiscalYearEnd(stock, 2, 1);
+
+        stock.FiscalYearEndMonth.Should().Be(1);
+        stock.FiscalYearEndDay.Should().Be(31);
+        stock.FiscalYearEndMonthChangedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetFiscalYearEnd_EarlyJanuary_StaysAsStated()
+    {
+        var db = NewDb();
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            FiscalYearEndMonth: null,
+            FiscalYearEndDay: null
+        );
+
+        await NewManager(repository).SetFiscalYearEnd(stock, 1, 3);
+
+        stock.FiscalYearEndMonth.Should().Be(1);
+        stock.FiscalYearEndDay.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData(1, 19, 12, 31, true)]
+    [InlineData(9, 27, 9, 26, false)]
+    // An early-January year end reads as December, whichever of the two is recorded.
+    [InlineData(1, 3, 12, 31, false)]
+    [InlineData(12, 31, 1, 3, false)]
+    [InlineData(2, 1, 1, 31, true)]
+    public async Task SetFiscalYearEnd_RecordedMonthReplaced_IsStampedOnlyWhenTheMonthChanges(
+        int recordedMonth,
+        int recordedDay,
+        int month,
+        int day,
+        bool stamped
+    )
+    {
+        var db = NewDb();
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            FiscalYearEndMonth: recordedMonth,
+            FiscalYearEndDay: recordedDay
+        );
+
+        await NewManager(repository).SetFiscalYearEnd(stock, month, day);
+
+        stock.FiscalYearEndMonth.Should().Be(month);
+        (stock.FiscalYearEndMonthChangedAt != null).Should().Be(stamped);
+        stock.FiscalYearEndMonthBeforeChange.Should().Be(stamped ? recordedMonth : null);
+    }
+
+    [Fact]
     public async Task SetFiscalYearEnd_UnchangedValue_PersistsNothing()
     {
         var db = NewDb();

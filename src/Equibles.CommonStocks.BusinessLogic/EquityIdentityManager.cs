@@ -1244,11 +1244,16 @@ public class EquityIdentityManager
         );
     }
 
+    // The month readers take a recorded year end as: its own, or December for an early-January one.
+    private static int MonthAsRead(int month, int? day) =>
+        month == 1 ? FiscalCalendar.YearEndOnMonthGrid(month, day).Month : month;
+
     /// <summary>
     /// Sets the company's fiscal year-end (month 1-12, optional day 1-31),
-    /// sourced from SEC EDGAR's submissions <c>fiscalYearEnd</c> field. A
-    /// no-op change persists nothing. Saves directly via the repository — like
-    /// <see cref="SetCusip"/>, this mutates a single non-key field and must not
+    /// stored in its recorded form (<see cref="FiscalCalendar.RecordedYearEnd"/>). A
+    /// no-op change persists nothing; a change of an already recorded month is stamped, since
+    /// everything labelled under the old month has to be labelled again. Saves directly via the
+    /// repository — like <see cref="SetCusip"/>, this mutates non-key fields and must not
     /// re-run the full ticker/CIK uniqueness validation.
     /// </summary>
     public async Task SetFiscalYearEnd(EquityIssuer commonStock, int month, int? day)
@@ -1274,9 +1279,22 @@ public class EquityIdentityManager
             throw new DomainValidationException($"Day {day} is invalid for month {month}");
         }
 
+        (month, day) = FiscalCalendar.RecordedYearEnd(month, day);
         if (commonStock.FiscalYearEndMonth == month && commonStock.FiscalYearEndDay == day)
         {
             return;
+        }
+
+        if (commonStock.FiscalYearEndMonth is { } recorded)
+        {
+            // An early-January year end reads as December, so a move between the two changes
+            // no label.
+            var before = MonthAsRead(recorded, commonStock.FiscalYearEndDay);
+            if (before != MonthAsRead(month, day))
+            {
+                commonStock.FiscalYearEndMonthChangedAt = DateTime.UtcNow;
+                commonStock.FiscalYearEndMonthBeforeChange = before;
+            }
         }
 
         commonStock.FiscalYearEndMonth = month;

@@ -57,6 +57,16 @@ public class EquityIssuer
     public int? FiscalYearEndMonth { get; set; }
     public int? FiscalYearEndDay { get; set; }
 
+    /// <summary>
+    /// When an already recorded <see cref="FiscalYearEndMonth"/> last changed, and the month it
+    /// replaced as lanes read it (an early-January year end was read as December, so storing it
+    /// as December is no change); both null while the first value stands. Lanes that stored
+    /// labels under the replaced month read them to redo those labels.
+    /// </summary>
+    public DateTime? FiscalYearEndMonthChangedAt { get; set; }
+
+    public int? FiscalYearEndMonthBeforeChange { get; set; }
+
     [MaxLength(8)]
     public string Sic { get; set; }
 
