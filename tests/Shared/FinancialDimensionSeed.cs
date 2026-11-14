@@ -66,4 +66,14 @@ internal static class FinancialDimensionSeed
                 }
             );
     }
+
+    public static void Add(
+        DbContext db,
+        FinancialFact fact,
+        IEnumerable<(string Axis, string Member)> pairs
+    )
+    {
+        foreach (var (axis, member) in pairs)
+            Add(db, fact, axis, member);
+    }
 }
