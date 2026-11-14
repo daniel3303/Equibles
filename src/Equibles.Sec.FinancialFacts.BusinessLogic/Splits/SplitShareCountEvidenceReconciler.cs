@@ -103,16 +103,22 @@ public class SplitShareCountEvidenceReconciler
                 fact.Value,
             })
             .ToListAsync(cancellationToken);
+        var dimensionMembers = _factRepository.GetDimensionMembers();
         var perClass = await _factRepository
             .GetByIssuerIds(issuerIds)
             .Where(fact =>
                 conceptIds.Contains(fact.FinancialConceptId)
                 && fact.Unit == SharesUnit
                 && fact.Value >= 0
-                && fact.Dimensions.Count == 1
+                && dimensionMembers.Count(member =>
+                    member.DimensionSetKey == fact.DimensionsKey
+                ) == 1
             )
             .SelectMany(
-                fact => fact.Dimensions,
+                fact =>
+                    dimensionMembers.Where(member =>
+                        member.DimensionSetKey == fact.DimensionsKey
+                    ),
                 (fact, dimension) =>
                     new
                     {

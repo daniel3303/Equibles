@@ -13,6 +13,76 @@ public class FinancialDimensionSetRepository : BaseRepository<FinancialDimension
         : base(dbContext) { }
 
     /// <summary>
+    /// Distinct member QNames for the requested axes after a database-ordered keyset cursor.
+    /// PostgreSQL's ordinary DISTINCT plan scans every row of an axis, so one recursive
+    /// loose-index scan per axis jumps directly between values in the (Axis, Member) index.
+    /// The final merge stays in PostgreSQL so its ordering exactly matches the cursor predicate.
+    /// </summary>
+    public IQueryable<FinancialFactDimensionMember> GetDistinctMembersPage(
+        string[] axes,
+        string afterMember,
+        int take
+    )
+    {
+        if (!DbContext.Database.IsRelational())
+        {
+            return DbContext
+                .Set<FinancialDimensionSetMember>()
+                .Where(d => axes.Contains(d.Axis) && string.Compare(d.Member, afterMember) > 0)
+                .GroupBy(d => d.Member)
+                .Select(group => new FinancialFactDimensionMember
+                {
+                    Member = group.Key,
+                    Axis = group.Min(d => d.Axis),
+                })
+                .OrderBy(candidate => candidate.Member)
+                .Take(take);
+        }
+
+        return DbContext.Database.SqlQuery<FinancialFactDimensionMember>(
+            $"""
+            WITH RECURSIVE "members" ("Axis", "Member", "Depth") AS (
+                SELECT "seed"."Axis", (
+                    SELECT "dimension"."Member"
+                    FROM "FinancialDimensionSetMember" AS "dimension"
+                    WHERE "dimension"."Axis" = "seed"."Axis"
+                        AND "dimension"."Member" > {afterMember}
+                    ORDER BY "dimension"."Member"
+                    LIMIT 1
+                ), 1
+                FROM unnest({axes}) AS "seed" ("Axis")
+                UNION ALL
+                SELECT "members"."Axis", (
+                    SELECT "dimension"."Member"
+                    FROM "FinancialDimensionSetMember" AS "dimension"
+                    WHERE "dimension"."Axis" = "members"."Axis"
+                        AND "dimension"."Member" > "members"."Member"
+                    ORDER BY "dimension"."Member"
+                    LIMIT 1
+                ), "members"."Depth" + 1
+                FROM "members"
+                WHERE "members"."Member" IS NOT NULL AND "members"."Depth" < {take}
+            ), "page" AS (
+                SELECT "Member"
+                FROM "members"
+                WHERE "Member" IS NOT NULL
+                GROUP BY "Member"
+                ORDER BY "Member"
+                LIMIT {take}
+            )
+            SELECT "page"."Member", (
+                SELECT MIN("dimension"."Axis")
+                FROM "FinancialDimensionSetMember" AS "dimension"
+                WHERE "dimension"."Axis" = ANY({axes})
+                    AND "dimension"."Member" = "page"."Member"
+            ) AS "Axis"
+            FROM "page"
+            ORDER BY "page"."Member"
+            """
+        );
+    }
+
+    /// <summary>
     /// Inserts the sets with their members in one transaction and leaves a set another writer
     /// stored first untouched, so a stored set always holds all of its members.
     /// </summary>

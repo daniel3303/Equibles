@@ -130,7 +130,7 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
         return cover;
     }
 
-    private static FinancialFact ClassCount(
+    private FinancialFact ClassCount(
         EquityIssuer issuer,
         FinancialConcept cover,
         DateOnly asOf,
@@ -152,15 +152,10 @@ public class SplitShareCountEvidenceReconcilerTests(ParadeDbFixture fixture)
             Form = DocumentType.TenQ,
             FiledDate = filed,
             AccessionNumber = $"0001795250-{filed:yyMMdd}",
-            DimensionsKey = $"{member}@{asOf:yyyyMMdd}",
-            Dimensions =
-            [
-                new FinancialFactDimension
-                {
-                    Axis = "us-gaap:StatementClassOfStockAxis",
-                    Member = member,
-                },
-            ],
+            DimensionsKey = Equibles.TestSupport.FinancialDimensionSeed.Key(
+                DbContext,
+                ("us-gaap:StatementClassOfStockAxis", member)
+            ),
         };
 
     private static StockSplit ListedSplit(

@@ -413,17 +413,8 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
             Form = DocumentType.TenK,
             FiledDate = new DateOnly(fy + filedYearOffset, 2, 1),
             AccessionNumber = $"acc-{Guid.NewGuid():N}"[..20],
-            DimensionsKey = DimensionsKeyOf(dimensions),
+            DimensionsKey = Equibles.TestSupport.FinancialDimensionSeed.Key(DbContext, dimensions),
         };
-        foreach (var (axis, member) in dimensions)
-            fact.Dimensions.Add(
-                new FinancialFactDimension
-                {
-                    FinancialFactId = fact.Id,
-                    Axis = axis,
-                    Member = member,
-                }
-            );
         DbContext.Set<FinancialFact>().Add(fact);
     }
 
@@ -451,33 +442,8 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
             Form = DocumentType.TenK,
             FiledDate = periodEnd.AddDays(45),
             AccessionNumber = $"acc-{Guid.NewGuid():N}"[..20],
-            DimensionsKey = DimensionsKeyOf(dimensions),
+            DimensionsKey = Equibles.TestSupport.FinancialDimensionSeed.Key(DbContext, dimensions),
         };
-        foreach (var (axis, member) in dimensions)
-            fact.Dimensions.Add(
-                new FinancialFactDimension
-                {
-                    FinancialFactId = fact.Id,
-                    Axis = axis,
-                    Member = member,
-                }
-            );
         DbContext.Set<FinancialFact>().Add(fact);
-    }
-
-    private static string DimensionsKeyOf((string Axis, string Member)[] dimensions)
-    {
-        if (dimensions.Length == 0)
-            return "";
-        var canonical = string.Join(
-            "|",
-            dimensions
-                .OrderBy(d => d.Axis)
-                .ThenBy(d => d.Member)
-                .Select(d => $"{d.Axis}={d.Member}")
-        );
-        return Convert
-            .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
-            .ToLowerInvariant();
     }
 }

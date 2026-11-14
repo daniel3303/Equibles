@@ -264,6 +264,7 @@ public class RevenueBreakdownTools
         string[] axes
     )
     {
+        var members = _financialFactRepository.GetDimensionMembers();
         return await _financialFactRepository
             .GetByIssuerId(stock.Id)
             .Where(f =>
@@ -272,18 +273,27 @@ public class RevenueBreakdownTools
                 && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnual) <= f.PeriodEnd
                 && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnual) >= f.PeriodEnd
                 && f.DimensionsKey != ""
-                && f.Dimensions.Count(d => axes.Contains(d.Axis)) == 1
-                && f.Dimensions.All(d =>
-                    axes.Contains(d.Axis)
-                    || (
-                        d.Axis == RevenueBreakdownCore.ConsolidationItemsAxis
-                        && d.Member == RevenueBreakdownCore.OperatingSegmentsMember
+                && members.Count(d => d.DimensionSetKey == f.DimensionsKey && axes.Contains(d.Axis))
+                    == 1
+                && members
+                    .Where(d => d.DimensionSetKey == f.DimensionsKey)
+                    .All(d =>
+                        axes.Contains(d.Axis)
+                        || (
+                            d.Axis == RevenueBreakdownCore.ConsolidationItemsAxis
+                            && d.Member == RevenueBreakdownCore.OperatingSegmentsMember
+                        )
                     )
-                )
             )
             .Select(f => new DimensionalRevenueRow(
-                f.Dimensions.First(d => axes.Contains(d.Axis)).Axis,
-                f.Dimensions.First(d => axes.Contains(d.Axis)).Member,
+                members
+                    .Where(d => d.DimensionSetKey == f.DimensionsKey && axes.Contains(d.Axis))
+                    .Select(d => d.Axis)
+                    .First(),
+                members
+                    .Where(d => d.DimensionSetKey == f.DimensionsKey && axes.Contains(d.Axis))
+                    .Select(d => d.Member)
+                    .First(),
                 f.PeriodEnd,
                 f.Value,
                 f.Unit,
@@ -301,6 +311,7 @@ public class RevenueBreakdownTools
         List<Guid> conceptIds
     )
     {
+        var members = _financialFactRepository.GetDimensionMembers();
         var facts = await _financialFactRepository
             .GetByIssuerId(stock.Id)
             .Where(f =>
@@ -309,14 +320,19 @@ public class RevenueBreakdownTools
                 && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnual) <= f.PeriodEnd
                 && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnual) >= f.PeriodEnd
                 && f.DimensionsKey != ""
-                && f.Dimensions.Count(d => RevenueBreakdownCore.AllAxes.Contains(d.Axis)) == 2
-                && f.Dimensions.All(d =>
-                    RevenueBreakdownCore.AllAxes.Contains(d.Axis)
-                    || (
-                        d.Axis == RevenueBreakdownCore.ConsolidationItemsAxis
-                        && d.Member == RevenueBreakdownCore.OperatingSegmentsMember
+                && members.Count(d =>
+                    d.DimensionSetKey == f.DimensionsKey
+                    && RevenueBreakdownCore.AllAxes.Contains(d.Axis)
+                ) == 2
+                && members
+                    .Where(d => d.DimensionSetKey == f.DimensionsKey)
+                    .All(d =>
+                        RevenueBreakdownCore.AllAxes.Contains(d.Axis)
+                        || (
+                            d.Axis == RevenueBreakdownCore.ConsolidationItemsAxis
+                            && d.Member == RevenueBreakdownCore.OperatingSegmentsMember
+                        )
                     )
-                )
             )
             .Select(f => new
             {
@@ -326,8 +342,11 @@ public class RevenueBreakdownTools
                 f.FiledDate,
                 f.PeriodStart,
                 f.FiscalYear,
-                Dims = f
-                    .Dimensions.Where(d => RevenueBreakdownCore.AllAxes.Contains(d.Axis))
+                Dims = members
+                    .Where(d =>
+                        d.DimensionSetKey == f.DimensionsKey
+                        && RevenueBreakdownCore.AllAxes.Contains(d.Axis)
+                    )
                     .Select(d => new { d.Axis, d.Member })
                     .ToList(),
             })

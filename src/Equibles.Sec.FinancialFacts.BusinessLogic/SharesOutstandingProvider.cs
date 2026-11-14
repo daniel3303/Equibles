@@ -221,18 +221,21 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         CancellationToken cancellationToken
     )
     {
+        var members = _financialFactRepository.GetDimensionMembers();
         return await _financialFactRepository
             .GetByIssuerId(stock.Id)
             .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
             .Where(f =>
-                f.Dimensions.Count == 0
+                f.DimensionsKey == ""
                 || (
-                    f.Dimensions.Count == 1
-                    && f.Dimensions.Any(d => ClassOfStockAxes.Contains(d.Axis))
+                    members.Count(d => d.DimensionSetKey == f.DimensionsKey) == 1
+                    && members.Any(d =>
+                        d.DimensionSetKey == f.DimensionsKey && ClassOfStockAxes.Contains(d.Axis)
+                    )
                 )
             )
             .OrderByDescending(f => f.FiledDate)
-            .ThenBy(f => f.Dimensions.Count)
+            .ThenBy(f => f.DimensionsKey != "")
             .ThenByDescending(f => f.PeriodEnd)
             .Select(f => f.Form)
             .FirstOrDefaultAsync(cancellationToken);
@@ -438,6 +441,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // subtracted. Members that are not a share class by taxonomy definition are excluded too:
         // filers put the consolidated roll-up, treasury shares, and the ADS listing on the same
         // axis, and summing any of those with the real classes double-counts or mixes units.
+        var members = _financialFactRepository.GetDimensionMembers();
         var perClassFacts = await _financialFactRepository
             .GetByIssuerId(stock.Id)
             .Where(f =>
@@ -445,26 +449,31 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 && f.Unit == SharesUnit
                 && f.AccessionNumber == accessionNumber
                 && f.Value >= 0
-                && f.Dimensions.Count == 1
-                && f.Dimensions.Any(d =>
-                    ClassOfStockAxes.Contains(d.Axis) && !NonClassMembers.Contains(d.Member)
+                && members.Count(d => d.DimensionSetKey == f.DimensionsKey) == 1
+                && members.Any(d =>
+                    d.DimensionSetKey == f.DimensionsKey
+                    && ClassOfStockAxes.Contains(d.Axis)
+                    && !NonClassMembers.Contains(d.Member)
                 )
             )
-            .Include(f => f.Dimensions)
             .Include(f => f.Document)
+            // Ties between same-day filings and repeated class rows resolve to the lowest fact id.
+            .OrderBy(f => f.Id)
             .ToListAsync(cancellationToken);
         if (perClassFacts.Count == 0)
             return null;
 
-        var latest = LatestDatedClassFact(perClassFacts);
+        var classOf = await ClassMembers(perClassFacts, cancellationToken);
+        var latest = LatestDatedClassFact(perClassFacts, classOf);
         if (latest == null)
             return null;
 
         var total = perClassFacts
             .Where(f =>
-                f.PeriodEnd == latest.PeriodEnd && f.Dimensions[0].Axis == latest.Dimensions[0].Axis
+                f.PeriodEnd == latest.PeriodEnd
+                && classOf[f.DimensionsKey].Axis == classOf[latest.DimensionsKey].Axis
             )
-            .GroupBy(f => f.Dimensions[0].Member)
+            .GroupBy(f => classOf[f.DimensionsKey].Member)
             .Sum(g => g.First().Value);
 
         return total > 0 ? total : null;
@@ -532,25 +541,30 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // Per-share-class cover-page facts only: a single explicit dimension, on a class-of-stock
         // axis. A fact dimensioned otherwise (segment/geography), on several axes, or with none is
         // excluded so only genuine per-class counts are summed.
+        var members = _financialFactRepository.GetDimensionMembers();
         var perClassFacts = await _financialFactRepository
             .GetByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
-                && f.Dimensions.Count == 1
-                && f.Dimensions.Any(d => ClassOfStockAxes.Contains(d.Axis))
+                && members.Count(d => d.DimensionSetKey == f.DimensionsKey) == 1
+                && members.Any(d =>
+                    d.DimensionSetKey == f.DimensionsKey && ClassOfStockAxes.Contains(d.Axis)
+                )
             )
-            .Include(f => f.Dimensions)
             .Include(f => f.Document)
+            // Ties between same-day filings and repeated class rows resolve to the lowest fact id.
+            .OrderBy(f => f.Id)
             .ToListAsync(cancellationToken);
         if (perClassFacts.Count == 0)
             return null;
+        var classOf = await ClassMembers(perClassFacts, cancellationToken);
 
         // Sum across share classes from the latest filing only — pinned to that one accession,
         // as-of date and axis (a filer double-tagging the same classes on two axes must not be
         // double-counted), and grouped by class member so a restated row never double-counts a
         // class.
-        var latest = LatestDatedClassFact(perClassFacts);
+        var latest = LatestDatedClassFact(perClassFacts, classOf);
         if (latest == null)
             return null;
 
@@ -558,9 +572,9 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             .Where(f =>
                 f.AccessionNumber == latest.AccessionNumber
                 && f.PeriodEnd == latest.PeriodEnd
-                && f.Dimensions[0].Axis == latest.Dimensions[0].Axis
+                && classOf[f.DimensionsKey].Axis == classOf[latest.DimensionsKey].Axis
             )
-            .GroupBy(f => f.Dimensions[0].Member)
+            .GroupBy(f => classOf[f.DimensionsKey].Member)
             .Sum(g => g.First().Value);
 
         // Same range-check: a corrupt per-class count can push the sum past Int64; degrade to null
@@ -578,7 +592,10 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
 
     // Comparative classes may repeat, but a class stated only at another date cannot
     // silently disappear from the purported entity total.
-    private static FinancialFact LatestDatedClassFact(IEnumerable<FinancialFact> facts)
+    private static FinancialFact LatestDatedClassFact(
+        IEnumerable<FinancialFact> facts,
+        IReadOnlyDictionary<string, (string Axis, string Member)> classOf
+    )
     {
         foreach (
             var filing in facts
@@ -588,20 +605,46 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         {
             var latest = filing
                 .OrderByDescending(f => f.PeriodEnd)
-                .ThenBy(f => Array.IndexOf(ClassOfStockAxes, f.Dimensions[0].Axis))
+                .ThenBy(f => Array.IndexOf(ClassOfStockAxes, classOf[f.DimensionsKey].Axis))
                 .First();
             if (!CurrentShareEvidenceDates.IsEligible(latest))
                 continue;
-            var axisFacts = filing.Where(f => f.Dimensions[0].Axis == latest.Dimensions[0].Axis);
+            var axis = classOf[latest.DimensionsKey].Axis;
+            var axisFacts = filing.Where(f => classOf[f.DimensionsKey].Axis == axis);
             var currentMembers = axisFacts
                 .Where(f => f.PeriodEnd == latest.PeriodEnd)
-                .Select(f => f.Dimensions[0].Member)
+                .Select(f => classOf[f.DimensionsKey].Member)
                 .ToHashSet(StringComparer.Ordinal);
-            if (axisFacts.Any(f => !currentMembers.Contains(f.Dimensions[0].Member)))
+            if (axisFacts.Any(f => !currentMembers.Contains(classOf[f.DimensionsKey].Member)))
                 continue;
             return latest;
         }
         return null;
+    }
+
+    // The single (axis, member) pair of each fact's dimension set, by DimensionsKey; callers
+    // pass only facts whose set holds exactly one pair.
+    private async Task<Dictionary<string, (string Axis, string Member)>> ClassMembers(
+        IReadOnlyCollection<FinancialFact> perClassFacts,
+        CancellationToken cancellationToken
+    )
+    {
+        var keys = perClassFacts.Select(f => f.DimensionsKey).Distinct().ToArray();
+        var rows = await _financialFactRepository
+            .GetDimensionMembers()
+            .Where(d => keys.Contains(d.DimensionSetKey))
+            .Select(d => new
+            {
+                d.DimensionSetKey,
+                d.Axis,
+                d.Member,
+            })
+            .ToListAsync(cancellationToken);
+        return rows.ToDictionary(
+            row => row.DimensionSetKey,
+            row => (row.Axis, row.Member),
+            StringComparer.Ordinal
+        );
     }
 
     // The financial-concept ids the "shares-outstanding" alias resolves to, or an empty list when

@@ -10,6 +10,14 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     public FinancialFactRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
+    /// <summary>
+    /// The (axis, member) pairs of every dimension set. A fact's pairs are the rows whose
+    /// <see cref="FinancialDimensionSetMember.DimensionSetKey"/> equals its
+    /// <see cref="FinancialFact.DimensionsKey"/>; a consolidated fact (empty key) has none.
+    /// </summary>
+    public virtual IQueryable<FinancialDimensionSetMember> GetDimensionMembers() =>
+        DbContext.Set<FinancialDimensionSetMember>();
+
     public IQueryable<FinancialFact> GetByIssuerId(Guid issuerId)
     {
         return GetAll().Where(f => f.EquityIssuerId == issuerId);

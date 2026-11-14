@@ -102,7 +102,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
         // A single corrupt per-class count of 1e20 makes the summed total exceed long.MaxValue;
         // the same unguarded (long)total cast must degrade to null, not throw.
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 concept,
                 100_000_000_000_000_000_000m,
@@ -126,6 +126,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
     }
 
     private static FinancialFact ClassFact(
+        EquiblesFinancialDbContext db,
         EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
@@ -150,9 +151,8 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
             Form = DocumentType.TenQ,
             FiledDate = filed,
             AccessionNumber = accession,
-            DimensionsKey = $"{axis}={member}",
+            DimensionsKey = Equibles.TestSupport.FinancialDimensionSeed.Key(db, (axis, member)),
         };
-        fact.Dimensions.Add(new FinancialFactDimension { Axis = axis, Member = member });
         return fact;
     }
 

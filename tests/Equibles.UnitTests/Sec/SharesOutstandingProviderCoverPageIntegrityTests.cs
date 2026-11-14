@@ -106,6 +106,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         };
 
     private static FinancialFact ClassFact(
+        EquiblesFinancialDbContext db,
         EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
@@ -118,8 +119,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
     )
     {
         var fact = Fact(stock, concept, value, filed, asOf, accession, form);
-        fact.DimensionsKey = $"{axis}={member}";
-        fact.Dimensions.Add(new FinancialFactDimension { Axis = axis, Member = member });
+        fact.DimensionsKey = Equibles.TestSupport.FinancialDimensionSeed.Key(db, (axis, member));
         return fact;
     }
 
@@ -147,7 +147,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         );
         const string acc = "0001185185-26-001069";
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 coverPage,
                 42m,
@@ -160,7 +160,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
             )
         );
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 coverPage,
                 3_887_729m,
@@ -201,7 +201,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
             )
         );
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 coverPage,
                 3_887_729m,
@@ -425,7 +425,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         const string acc = "0000950170-26-000003";
         db.Add(Fact(stock, coverPage, 200m, new(2026, 5, 7), new(2026, 5, 5), acc));
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 balanceSheet,
                 112_415_671m,
@@ -437,7 +437,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
             )
         );
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 balanceSheet,
                 0m,
@@ -452,7 +452,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // double-count the classes it totals) and treasury shares (issued but not outstanding).
         // Both must be excluded from the sum.
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 balanceSheet,
                 112_415_671m,
@@ -464,7 +464,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
             )
         );
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 balanceSheet,
                 9_000_000m,
