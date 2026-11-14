@@ -24,6 +24,22 @@ public class ShareClassTotalTests
     public void Of_CommonStockMemberEqualToTheOtherClasses_IsTheirRollUpAndCountsOnce() =>
         ShareClassTotal.Of([(ClassA, 600m), (ClassB, 400m), (Common, 1_000m)]).Should().Be(1_000m);
 
+    // A cover page stating common stock, exchangeable units and their total as a third member.
+    [Fact]
+    public void Of_AnotherMemberEqualToTheOthers_IsTheirRollUpAndCountsOnce() =>
+        ShareClassTotal
+            .Of([
+                (Common, 154_423_421m),
+                ("blk:ExchangeableUnitsMember", 7_606_927m),
+                ("blk:FullyDilutedSharesMember", 162_030_348m),
+            ])
+            .Should()
+            .Be(162_030_348m);
+
+    [Fact]
+    public void Of_TwoEqualClasses_AreBothCounted() =>
+        ShareClassTotal.Of([(ClassA, 500m), (ClassB, 500m)]).Should().Be(1_000m);
+
     [Fact]
     public void Of_CommonStockMemberAlone_IsTheCount() =>
         ShareClassTotal.Of([(Common, 1_000m)]).Should().Be(1_000m);

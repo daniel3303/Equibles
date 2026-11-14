@@ -31,15 +31,18 @@ internal static class ShareClassTotal
             return null;
 
         var total = classes.Sum(member => member.Value);
-        var others = classes.Where(member => member.Member != CommonStockMember).ToList();
-        if (others.Count == 0 || others.Count == classes.Count)
-            return total;
 
-        // Filers tag their main class as the common-stock member beside the other classes, or use
-        // it for the roll-up of them; only the roll-up equals their sum, and counting it doubles
-        // the total.
-        var othersTotal = others.Sum(member => member.Value);
-        return total - othersTotal == othersTotal ? othersTotal : total;
+        // A member equal to the sum of the others is their roll-up, and counting it doubles the
+        // total. Filers use the common-stock member for it, or for their main class beside the
+        // others; any other member needs two beside it, since two equal classes prove nothing.
+        var rollUp = classes
+            .Where(member =>
+                member.Value * 2 == total
+                && (member.Member == CommonStockMember ? classes.Count >= 2 : classes.Count >= 3)
+            )
+            .Select(member => (decimal?)member.Value)
+            .FirstOrDefault();
+        return rollUp ?? total;
     }
 
     /// <summary>
