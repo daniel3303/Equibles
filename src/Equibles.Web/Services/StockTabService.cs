@@ -1001,9 +1001,22 @@ public class StockTabService
             Stock = stock,
             Holder = holder,
             HolderType = await _institutionalHolderRepository.GetEntityType(holder),
-            Holdings = history.Take(HolderDetailViewModel.MaxRows).ToList(),
+            Holdings = NewestWholeQuarters(history, HolderDetailViewModel.MaxRows),
             ChangePercent = HolderHistoryChange.PercentByRow(history),
         };
+    }
+
+    // The newest rows up to the cap, ending on a whole quarter: a quarter cut part-way would
+    // show some of its lines and chart a position smaller than the one held.
+    public static List<InstitutionalHolding> NewestWholeQuarters(
+        List<InstitutionalHolding> newestFirst,
+        int maxRows
+    )
+    {
+        if (newestFirst.Count <= maxRows)
+            return newestFirst;
+        var cutQuarter = newestFirst[maxRows].ReportDate;
+        return newestFirst.Take(maxRows).Where(h => h.ReportDate != cutQuarter).ToList();
     }
 
     // Stamp each holder's first-owned quarter for this stock via one batched lookup.

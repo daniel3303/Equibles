@@ -112,24 +112,26 @@ public class DoubleDownBoardLoader
         var restated = new List<DoubleDownPosition>();
         foreach (var position in candidates)
         {
-            // Without a primary series the splits cannot be assigned to this row's series.
-            if (!primaryTickers.TryGetValue(position.CommonStockId, out var primaryTicker))
-                continue;
-            var splits = ShareCountSplitScope.ForListedSeries(
-                splitsByIssuer[position.CommonStockId],
-                primaryTicker,
-                position.ListedTicker ?? primaryTicker
-            );
-            position.CurrentShares = SplitAdjustment.AdjustShareCount(
-                position.CurrentShares,
-                selectedDate,
-                splits
-            );
-            position.PreviousShares = SplitAdjustment.AdjustShareCount(
-                position.PreviousShares,
-                previousDate,
-                splits
-            );
+            // The primary series is read from the current directory; an issuer outside it keeps
+            // its as-filed counts, as it does on the activity boards.
+            if (primaryTickers.TryGetValue(position.CommonStockId, out var primaryTicker))
+            {
+                var splits = ShareCountSplitScope.ForListedSeries(
+                    splitsByIssuer[position.CommonStockId],
+                    primaryTicker,
+                    position.ListedTicker ?? primaryTicker
+                );
+                position.CurrentShares = SplitAdjustment.AdjustShareCount(
+                    position.CurrentShares,
+                    selectedDate,
+                    splits
+                );
+                position.PreviousShares = SplitAdjustment.AdjustShareCount(
+                    position.PreviousShares,
+                    previousDate,
+                    splits
+                );
+            }
             if (
                 position.PreviousShares > 0
                 && position.CurrentShares > position.PreviousShares
