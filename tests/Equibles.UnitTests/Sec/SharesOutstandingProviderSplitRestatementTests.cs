@@ -97,7 +97,14 @@ public class SharesOutstandingProviderSplitRestatementTests
     )
     {
         const string axis = "us-gaap:StatementClassOfStockAxis";
-        var fact = Fact(stock, concept, value, filed, asOf, dimensionsKey: Equibles.TestSupport.FinancialDimensionSeed.Key(db, (axis, member)));
+        var fact = Fact(
+            stock,
+            concept,
+            value,
+            filed,
+            asOf,
+            dimensionsKey: Equibles.TestSupport.FinancialDimensionSeed.Key(db, (axis, member))
+        );
         fact.AccessionNumber = "ACC-SAME-FILING";
         return fact;
     }
@@ -231,7 +238,8 @@ public class SharesOutstandingProviderSplitRestatementTests
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 200_000_000m,
@@ -241,7 +249,8 @@ public class SharesOutstandingProviderSplitRestatementTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 100_000_000m,

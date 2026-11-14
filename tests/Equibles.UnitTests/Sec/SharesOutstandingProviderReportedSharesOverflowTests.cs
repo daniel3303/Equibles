@@ -102,7 +102,8 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
         // A single corrupt per-class count of 1e20 makes the summed total exceed long.MaxValue;
         // the same unguarded (long)total cast must degrade to null, not throw.
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 100_000_000_000_000_000_000m,

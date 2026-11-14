@@ -25,7 +25,7 @@ namespace Equibles.IntegrationTests.Sec;
 /// <summary>
 /// End-to-end pin of the dimensional-fact extraction path (#877): a captured
 /// gzipped inline-XBRL envelope goes in, dimensional FinancialFact rows with
-/// FinancialFactDimension children come out, and the consolidated fact in the
+/// their dimension set come out, and the consolidated fact in the
 /// same envelope is left to the Company Facts API (not persisted) once the API
 /// carries the accession; until then a 10-Q fills it. Also pins
 /// idempotency — re-extracting the same document must not duplicate rows,
@@ -71,19 +71,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.Q1);
         fact.DimensionsKey.Should().MatchRegex("^[0-9a-f]{64}$");
 
-        var dimension = (
-            await DbContext
-                .Set<FinancialFactDimension>()
-                .Where(d => d.FinancialFactId == fact.Id)
-                .ToListAsync(CancellationToken.None)
-        )
-            .Should()
-            .ContainSingle()
-            .Subject;
-        dimension.Axis.Should().Be("srt:ProductOrServiceAxis");
-        dimension.Member.Should().Be("aapl:IPhoneMember");
-
-        // The same combination is stored once as a set, under the key the fact carries.
+        // The combination is stored once as a set, under the key the fact carries.
         var member = (
             await DbContext
                 .Set<FinancialDimensionSetMember>()
@@ -111,13 +99,6 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             await DbContext
                 .Set<FinancialFact>()
                 .CountAsync(f => f.DocumentId == document.Id, CancellationToken.None)
-        )
-            .Should()
-            .Be(1);
-        (
-            await DbContext
-                .Set<FinancialFactDimension>()
-                .CountAsync(d => d.FinancialFact.DocumentId == document.Id, CancellationToken.None)
         )
             .Should()
             .Be(1);
@@ -218,8 +199,13 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
                 .Be(2);
             (
                 await DbContext
-                    .Set<FinancialFactDimension>()
-                    .CountAsync(d => d.FinancialFact.DocumentId == document.Id)
+                    .Set<FinancialFact>()
+                    .CountAsync(f =>
+                        f.DocumentId == document.Id
+                        && DbContext
+                            .Set<FinancialDimensionSet>()
+                            .Any(set => set.Key == f.DimensionsKey)
+                    )
             )
                 .Should()
                 .Be(2);
@@ -309,7 +295,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
     [InlineData(2, new[] { 2, 1 })]
     [InlineData(0, new[] { 3 })]
     [InlineData(-5, new[] { 3 })]
-    public async Task Extract_ConfiguredBatchSize_PersistsDimensionalAndConsolidatedFactsAndChildren(
+    public async Task Extract_ConfiguredBatchSize_PersistsDimensionalAndConsolidatedFacts(
         int? batchSize,
         int[] expectedBatches
     )
@@ -342,11 +328,15 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         (await sut.Extract(document, CancellationToken.None)).Should().Be(6);
 
         batches.FactBatchSizes.Should().Equal(expectedBatches.Concat(expectedBatches));
-        batches.DimensionBatchSizes.Should().Equal(expectedBatches);
+        // A fact is never stored before the set its key names.
+        batches
+            .InsertedTables.IndexOf(nameof(FinancialDimensionSetMember))
+            .Should()
+            .BeInRange(0, batches.InsertedTables.IndexOf(nameof(FinancialFact)) - 1);
         (await DbContext.Set<FinancialFact>().CountAsync(f => f.DocumentId == document.Id))
             .Should()
             .Be(6);
-        (await DbContext.Set<FinancialFactDimension>().CountAsync()).Should().Be(3);
+        (await DbContext.Set<FinancialDimensionSetMember>().CountAsync()).Should().Be(1);
     }
 
     [Fact]

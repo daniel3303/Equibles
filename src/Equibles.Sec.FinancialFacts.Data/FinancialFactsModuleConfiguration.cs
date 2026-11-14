@@ -56,8 +56,6 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
                 .HasFilter("\"Source\" = 1 AND \"DimensionsKey\" = ''");
         });
 
-        builder.Entity<FinancialFactDimension>();
-
         builder.Entity<FinancialDimensionSet>();
         builder.Entity<FinancialDimensionSetMember>();
 
