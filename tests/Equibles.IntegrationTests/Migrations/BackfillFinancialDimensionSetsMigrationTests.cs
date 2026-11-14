@@ -29,6 +29,13 @@ public class BackfillFinancialDimensionSetsMigrationTests(ParadeDbFixture fixtur
     private FinancialConcept _revenue;
     private int _accession;
 
+    // A test that fails midway must still leave the migrated schema, without the table.
+    public override async Task DisposeAsync()
+    {
+        await DbContext.Database.ExecuteSqlRawAsync(DropFinancialFactDimension.DropSql);
+        await base.DisposeAsync();
+    }
+
     // The key exactly as the extractor computes it: the SQL must agree with it.
     private static string Key(params (string Axis, string Member)[] pairs) =>
         XbrlDimensionsKey.Compute(
@@ -132,6 +139,36 @@ public class BackfillFinancialDimensionSetsMigrationTests(ParadeDbFixture fixtur
         sets.Single(set => set.Key == Key(IPhone)).Members.Should().ContainSingle();
     }
 
+    // Byte order puts "C" before "b" and "x:A-1=" before "x:A=": neither a linguistic sort nor
+    // the axis order the rows are stored in gives the extractor's key.
+    [Fact]
+    public async Task Up_PairsWhoseOrdinalOrderDiffersFromOtherOrders_StillHashToTheExtractorsKey()
+    {
+        (string Axis, string Member)[] pairs =
+        [
+            ("x:b", "m:Member"),
+            ("x:C", "m:Member"),
+            ("x:A", "m:Member"),
+            ("x:A-1", "m:Member"),
+        ];
+        var apple = await SeedIssuer("AAPL");
+        await Fact(apple, pairs);
+
+        var set = (await BackfilledSets()).Should().ContainSingle().Subject;
+
+        set.Key.Should().Be(Key(pairs));
+        set.Members.Select(member => (member.Axis, member.Member)).Should().BeEquivalentTo(pairs);
+    }
+
+    [Fact]
+    public async Task Up_AFactWithAKeyAndNoRows_GetsNoSet()
+    {
+        var apple = await SeedIssuer("AAPL");
+        await Fact(apple, [IPhone], stored: []);
+
+        (await BackfilledSets()).Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Up_FirstFactHasRowsCutShort_TakesTheSetFromAnotherFactWithTheKey()
     {
@@ -164,17 +201,16 @@ public class BackfillFinancialDimensionSetsMigrationTests(ParadeDbFixture fixtur
     public async Task Up_ASetAlreadyStored_IsLeftAsItIs()
     {
         var apple = await SeedIssuer("AAPL");
-        await Fact(apple, [IPhone]);
+        await Fact(apple, [IPhone, Americas]);
         DbContext.Add(
             new FinancialDimensionSet
             {
-                Key = Key(IPhone),
-                CreationTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                Key = Key(IPhone, Americas),
                 Members =
                 [
                     new FinancialDimensionSetMember
                     {
-                        DimensionSetKey = Key(IPhone),
+                        DimensionSetKey = Key(IPhone, Americas),
                         Axis = IPhone.Axis,
                         Member = IPhone.Member,
                     },
@@ -183,9 +219,10 @@ public class BackfillFinancialDimensionSetsMigrationTests(ParadeDbFixture fixtur
         );
         await DbContext.SaveChangesAsync();
 
-        var set = (await BackfilledSets()).Should().ContainSingle().Subject;
-
-        set.CreationTime.Should().Be(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        set.Members.Should().ContainSingle();
+        (await BackfilledSets())
+            .Should()
+            .ContainSingle()
+            .Which.Members.Should()
+            .ContainSingle("a stored set is never given members");
     }
 }

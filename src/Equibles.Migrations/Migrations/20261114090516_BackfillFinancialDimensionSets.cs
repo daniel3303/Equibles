@@ -11,20 +11,24 @@ namespace Equibles.Migrations.Migrations
         // per-fact rows, which no reader uses any more and the next migration drops. Each key
         // without a set gets one from a fact whose rows hash to the key, exactly as the extractor
         // computes it (SHA-256 of the ordinal-sorted "axis=member" pairs joined by "|"), so a set
-        // is never built from a fact whose rows were cut short. A key no fact states in full
-        // stays without a set until its filing is extracted again.
-        private const string StatesItsKey = """
-            fact."DimensionsKey" = (
-                SELECT encode(
-                    sha256(convert_to(string_agg(pairs."Pair", '|' ORDER BY pairs."Pair" COLLATE "C"), 'UTF8')),
-                    'hex'
-                )
+        // is never built from a fact whose rows were cut short. The pairs are captured by the
+        // statement that verifies them. A key no fact states in full stays without a set until
+        // its filing is extracted again.
+        private const string StatedPairs = """
+            CROSS JOIN LATERAL (
+                SELECT
+                    encode(
+                        sha256(convert_to(string_agg(pairs."Pair", '|' ORDER BY pairs."Pair" COLLATE "C"), 'UTF8')),
+                        'hex'
+                    ) AS "Hash",
+                    array_agg(pairs."Axis" ORDER BY pairs."Pair" COLLATE "C") AS "Axes",
+                    array_agg(pairs."Member" ORDER BY pairs."Pair" COLLATE "C") AS "Members"
                 FROM (
-                    SELECT stated."Axis" || '=' || stated."Member" AS "Pair"
-                    FROM "FinancialFactDimension" AS stated
-                    WHERE stated."FinancialFactId" = fact."Id"
+                    SELECT dimension."Axis", dimension."Member", dimension."Axis" || '=' || dimension."Member" AS "Pair"
+                    FROM "FinancialFactDimension" AS dimension
+                    WHERE dimension."FinancialFactId" = fact."Id"
                 ) AS pairs
-            )
+            ) AS stated
             """;
 
         public const string BackfillSql = $$"""
@@ -47,12 +51,15 @@ namespace Equibles.Migrations.Migrations
                 GROUP BY fact."DimensionsKey";
 
                 CREATE TEMP TABLE "DimensionSetSource" ON COMMIT DROP AS
-                SELECT fact."DimensionsKey" AS "Key", fact."Id" AS "FactId"
+                SELECT fact."DimensionsKey" AS "Key", stated."Axes", stated."Members"
                 FROM "DimensionSetCandidate" AS candidate
                 INNER JOIN "FinancialFact" AS fact ON fact."Id" = candidate."FactId"
-                WHERE {{StatesItsKey}};
+                {{StatedPairs}}
+                WHERE stated."Hash" = fact."DimensionsKey";
 
-                -- A key whose first fact does not state it in full is taken from any fact that does.
+                -- A key whose first fact does not state it in full is taken from any fact that
+                -- does. Only facts under such a key are hashed: the key filter is materialized
+                -- first, or the hash would be computed for every fact in the table.
                 IF EXISTS (
                     SELECT 1
                     FROM "DimensionSetCandidate" AS candidate
@@ -60,10 +67,11 @@ namespace Equibles.Migrations.Migrations
                         SELECT 1 FROM "DimensionSetSource" AS source WHERE source."Key" = candidate."Key"
                     )
                 ) THEN
-                    INSERT INTO "DimensionSetSource" ("Key", "FactId")
-                    SELECT DISTINCT ON (fact."DimensionsKey") fact."DimensionsKey", fact."Id"
-                    FROM "FinancialFact" AS fact
-                    WHERE fact."DimensionsKey" IN (
+                    INSERT INTO "DimensionSetSource" ("Key", "Axes", "Members")
+                    WITH fact AS MATERIALIZED (
+                        SELECT unresolved."Id", unresolved."DimensionsKey"
+                        FROM "FinancialFact" AS unresolved
+                        WHERE unresolved."DimensionsKey" IN (
                             SELECT candidate."Key"
                             FROM "DimensionSetCandidate" AS candidate
                             WHERE NOT EXISTS (
@@ -72,7 +80,11 @@ namespace Equibles.Migrations.Migrations
                                 WHERE source."Key" = candidate."Key"
                             )
                         )
-                        AND {{StatesItsKey}}
+                    )
+                    SELECT DISTINCT ON (fact."DimensionsKey") fact."DimensionsKey", stated."Axes", stated."Members"
+                    FROM fact
+                    {{StatedPairs}}
+                    WHERE stated."Hash" = fact."DimensionsKey"
                     ORDER BY fact."DimensionsKey", fact."Id";
                 END IF;
 
@@ -82,9 +94,9 @@ namespace Equibles.Migrations.Migrations
                 ON CONFLICT DO NOTHING;
 
                 INSERT INTO "FinancialDimensionSetMember" ("DimensionSetKey", "Axis", "Member")
-                SELECT source."Key", stated."Axis", stated."Member"
+                SELECT source."Key", pair."Axis", pair."Member"
                 FROM "DimensionSetSource" AS source
-                INNER JOIN "FinancialFactDimension" AS stated ON stated."FinancialFactId" = source."FactId"
+                CROSS JOIN LATERAL unnest(source."Axes", source."Members") AS pair ("Axis", "Member")
                 ON CONFLICT DO NOTHING;
 
                 DROP TABLE "DimensionSetSource";
