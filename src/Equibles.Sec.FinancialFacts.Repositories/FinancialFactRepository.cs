@@ -15,7 +15,7 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     /// <see cref="FinancialDimensionSetMember.DimensionSetKey"/> equals its
     /// <see cref="FinancialFact.DimensionsKey"/>; a consolidated fact (empty key) has none.
     /// </summary>
-    public IQueryable<FinancialDimensionSetMember> GetDimensionMembers() =>
+    public virtual IQueryable<FinancialDimensionSetMember> GetDimensionMembers() =>
         DbContext.Set<FinancialDimensionSetMember>();
 
     public IQueryable<FinancialFact> GetByIssuerId(Guid issuerId)
