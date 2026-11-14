@@ -48,6 +48,7 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
         );
         await AcquireReconciliationLock(ct);
         await ReconcileCatalog(ct);
+        await AlignChambersWithLatestTerms(ct);
         await transaction.CommitAsync(ct);
     }
 
@@ -62,6 +63,7 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
         await AcquireReconciliationLock(ct);
         await ReconcileCatalog(ct);
         var result = await MatchLegislators(ct);
+        await AlignChambersWithLatestTerms(ct);
         await transaction.CommitAsync(ct);
         return result;
     }
@@ -86,6 +88,7 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
 
         var members = BuildMembers(normalized);
         await UpsertMemberRows(members, ct);
+        await AlignChambersWithLatestTerms(ct);
         var persisted = await LoadPersistedMembers(members, ct);
 
         await transaction.CommitAsync(ct);
@@ -158,6 +161,26 @@ public class CongressMemberIdentityService : ICongressMemberIdentityService
             )
             .RunAsync(ct);
     }
+
+    // A filing proves only the chamber its member sat in when it was filed, so a replayed House
+    // report turns a senator back into a Representative. The roster's latest-started term decides
+    // for every member it identifies; the House seat stays as filed, since the seat-and-surname
+    // match reads it. A member without a BioGuide id keeps the chamber of the newest filing seen.
+    private Task<int> AlignChambersWithLatestTerms(CancellationToken ct) =>
+        _dbContext.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "CongressMember" AS member
+            SET "Position" = latest."Chamber"
+            FROM (
+                SELECT DISTINCT ON ("BioguideId") "BioguideId", "Chamber"
+                FROM "CongressMemberTerm"
+                ORDER BY "BioguideId", "StartDate" DESC, "Id" DESC
+            ) AS latest
+            WHERE member."BioguideId" = latest."BioguideId"
+              AND member."Position" <> latest."Chamber"
+            """,
+            cancellationToken: ct
+        );
 
     private async Task<Dictionary<string, CongressMember>> LoadPersistedMembers(
         IEnumerable<CongressMember> members,

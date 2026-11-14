@@ -22,10 +22,11 @@ public class CongressionalAnnualDisclosureSyncServiceNegativeNetWorthTests
     [Fact]
     public void ComputeNetWorthBand_LiabilitiesOnlyNoAssets_ProducesNegativeBand()
     {
-        var (minimum, maximum) = CongressionalAnnualDisclosureSyncService.ComputeNetWorthBand([
-            Liability(100_000, 250_000),
-            Liability(15_001, 50_000),
-        ]);
+        var (minimum, maximum, _, _) =
+            CongressionalAnnualDisclosureSyncService.ComputeNetWorthBand([
+                Liability(100_000, 250_000),
+                Liability(15_001, 50_000),
+            ]);
 
         // No assets → 0 − Σ liability maxes / mins.
         minimum.Should().Be(-(250_000 + 50_000));

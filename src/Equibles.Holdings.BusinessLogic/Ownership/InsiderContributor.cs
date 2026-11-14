@@ -59,7 +59,7 @@ public class InsiderContributor : IHolderSourceContributor
                     Source = StockHolderSource.Insider,
                     Name = owner.Name,
                     Cik = cik,
-                    Detail = InsiderRoleLabel.Of(owner),
+                    Detail = InsiderRoleLabel.Of(owner, position.Anchor.OwnerRelationship),
                     Shares = position.TotalShares,
                     FiledShares = position.TotalShares,
                     ChangeShares = prior == null ? null : position.TotalShares - prior.TotalShares,

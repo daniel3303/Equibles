@@ -48,9 +48,10 @@ public class InsiderTransaction
     /// and its footnote ids, so an insider's indirect vehicles keep separate balances; v14 adds the
     /// footnote ids on the row's reported balance, where some filers name the vehicle; v15 moves
     /// rows a company took from a filing where it is the reporting owner to the issuer that
-    /// filing names.
+    /// filing names; v16 re-reads ADS ratios whose share noun is followed by a comma
+    /// ("represents 20 ordinary shares, par value ...").
     /// </summary>
-    public const int CurrentParserVersion = 15;
+    public const int CurrentParserVersion = 16;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

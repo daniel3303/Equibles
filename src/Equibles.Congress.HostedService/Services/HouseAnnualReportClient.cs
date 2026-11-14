@@ -815,10 +815,12 @@ public partial class HouseAnnualReportClient
                 Description = Truncate(description, 512),
                 RangeMinimum = minimum,
                 RangeMaximum = maximum,
+                RangeOpenEnded = IsOpenEndedBracket(_rangeText),
                 AssetType = _assetType,
                 IncomeType = NormalizeIncomeType(),
                 IncomeMinimum = incomeMinimum,
                 IncomeMaximum = incomeMaximum,
+                IncomeOpenEnded = incomeMinimum.HasValue && IsOpenEndedBracket(_incomeRangeText),
             };
         }
 

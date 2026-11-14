@@ -90,7 +90,7 @@ public class InsiderTradingTools
         ReadOnly = true
     )]
     [Description(
-        "Get recent insider trading transactions for a stock from SEC Forms 4 and 5, newest first. Form 3 supplies initial ownership rather than a transaction. The Type column carries the SEC transaction code meaning: 'Buy'/'Sell' are open-market purchases/sales only, while Award, Exercise/Conversion (SEC code M: a derivative exercised or converted into shares, typically a stock-option exercise; filter value Conversion), Exercise (code X), Tax Payment, Expiration, Gift, Inheritance, Discretionary and Other are compensation or derivative mechanics — not conviction trades. The 10b5-1 column marks trades made under a pre-arranged Rule 10b5-1 plan ('-' = filing predates the 2023 checkbox). Date is the day of the transaction and Filed the day its Form 4 or 5 reached the SEC, when the trade became public. Per-row Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis, tracked per security kind and ownership form. Supports optional date-range, transaction-type and insider-name filters to reach history beyond the newest rows. Use this to understand insider buying/selling activity."
+        "Get recent insider trading transactions for a stock from SEC Forms 4 and 5, newest first. Form 3 supplies initial ownership rather than a transaction. Type is the SEC transaction code: 'Buy'/'Sell' are open-market purchases/sales only, while Award, Exercise/Conversion (SEC code M: a derivative exercised or converted into shares, typically a stock-option exercise; filter value Conversion), Exercise (code X), Tax Payment, Expiration, Gift, Inheritance, Discretionary and Other are compensation or derivative mechanics, not conviction trades. 10b5-1 marks trades under a pre-arranged Rule 10b5-1 plan ('-' = filing predates the 2023 checkbox). Date is the transaction day; Filed is the day its Form 4 or 5 reached the SEC, when the trade became public. Shares/Price/Value are as filed; Owned After is the post-transaction balance on today's split basis, per security kind and ownership form. Optional date-range, transaction-type and insider-name filters reach history beyond the newest rows."
     )]
     public Task<string> GetInsiderTransactions(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -242,7 +242,7 @@ public class InsiderTradingTools
                     transactions,
                     t =>
                     {
-                        var role = GetRole(t.InsiderOwner);
+                        var role = InsiderRoleLabel.Of(t.InsiderOwner, t.OwnerRelationship);
                         // Reserve the Buy/Sell trade labels strictly for open-market
                         // purchases/sales; every other SEC code renders its own meaning so
                         // comp mechanics (conversions, tax withholding, expirations) are
@@ -370,7 +370,10 @@ public class InsiderTradingTools
                     ranked,
                     p =>
                     {
-                        var role = GetRole(p.Anchor.InsiderOwner);
+                        var role = InsiderRoleLabel.Of(
+                            p.Anchor.InsiderOwner,
+                            p.Anchor.OwnerRelationship
+                        );
                         var lastType = TypeLabel(p.Anchor.TransactionCode);
                         var total = McpFormat.WholeNumber(p.DirectShares + p.IndirectShares);
                         return $"| {p.Anchor.InsiderOwner.Name} | {role} | {McpFormat.WholeNumber(p.DirectShares)} | {McpFormat.WholeNumber(p.IndirectShares)} | {total} | {lastType} | {p.Anchor.TransactionDate:yyyy-MM-dd} |";
@@ -630,7 +633,11 @@ public class InsiderTradingTools
                     insiders,
                     insider =>
                     {
-                        var role = GetRole(insider);
+                        // The role shown is the one filed at the company on the same row.
+                        var role = InsiderRoleLabel.Of(
+                            insider,
+                            latestByOwner.GetValueOrDefault(insider.Id)?.OwnerRelationship
+                        );
                         var company =
                             latestByOwner.TryGetValue(insider.Id, out var transaction)
                             && transaction.Issuer != null
@@ -659,8 +666,6 @@ public class InsiderTradingTools
             $"query: {query}, offset: {offset}"
         );
     }
-
-    private static string GetRole(InsiderOwner owner) => InsiderRoleLabel.Of(owner);
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
     private Task<(EquityIssuer Stock, string Error)> ResolveStockByTicker(string ticker) =>

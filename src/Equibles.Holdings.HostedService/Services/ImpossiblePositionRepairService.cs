@@ -378,6 +378,10 @@ public class ImpossiblePositionRepairService
             .Select(c => c.Id)
             .ToList();
 
+        // The quarter's AUM snapshot is rebuilt only when stamped, so a withdrawal that stops at
+        // the filing rollup leaves the market-wide total advertising the value it just removed.
+        // Each chunk stamps its own quarters as it commits: a withdrawn row is never a candidate
+        // again, so a pass cut short after the save could not stamp them later.
         var repaired = 0;
         foreach (var chunk in withdrawals.Chunk(BatchSize))
         {
@@ -394,6 +398,11 @@ public class ImpossiblePositionRepairService
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
+            await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+                dbContext,
+                rows.Select(holding => holding.ReportDate).Distinct().ToList(),
+                cancellationToken
+            );
             repaired += rows.Count;
         }
 
@@ -408,7 +417,20 @@ public class ImpossiblePositionRepairService
             );
         }
 
-        var realigned = await RealignFilingTotals(dbContext, cancellationToken);
+        // A snapshot rebuilt between the stamp above and this re-sum read the old filing totals,
+        // so the quarters whose rollups actually moved are stamped again. The re-sum writes
+        // nothing once a rollup agrees with its positions, so this ends by itself, and it also
+        // covers a rollup an interrupted earlier pass left behind.
+        var realignedQuarters = new HashSet<DateOnly>();
+        var realigned = await RealignFilingTotals(dbContext, realignedQuarters, cancellationToken);
+        if (realignedQuarters.Count > 0)
+        {
+            await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+                dbContext,
+                realignedQuarters,
+                cancellationToken
+            );
+        }
         if (realigned > 0)
         {
             _logger.LogWarning(
@@ -439,6 +461,7 @@ public class ImpossiblePositionRepairService
     /// </remarks>
     private static async Task<int> RealignFilingTotals(
         EquiblesFinancialDbContext dbContext,
+        ISet<DateOnly> changedQuarters,
         CancellationToken cancellationToken
     )
     {
@@ -457,7 +480,8 @@ public class ImpossiblePositionRepairService
         return await HoldingsRollupRefresher.RealignFilingTotals(
             dbContext,
             accessionNumbers,
-            cancellationToken
+            cancellationToken,
+            changedQuarters
         );
     }
 }

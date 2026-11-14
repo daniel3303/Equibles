@@ -336,16 +336,18 @@ public class CongressionalAnnualDisclosureSyncService
     /// <summary>
     /// The net-worth band: minimum = Σ asset range minimums − Σ liability
     /// range maximums; maximum = Σ asset range maximums − Σ liability range
-    /// minimums. Never a point estimate.
+    /// minimums. Never a point estimate. A bracket with no ceiling counts at
+    /// its floor and leaves its side open: an asset the maximum, a liability
+    /// the minimum.
     /// </summary>
-    internal static (long Minimum, long Maximum) ComputeNetWorthBand(
-        IReadOnlyList<AnnualDisclosureLineItem> lines
-    )
+    internal static NetWorthBand ComputeNetWorthBand(IReadOnlyList<AnnualDisclosureLineItem> lines)
     {
         long assetMinimums = 0,
             assetMaximums = 0,
             liabilityMinimums = 0,
             liabilityMaximums = 0;
+        bool openEndedAsset = false,
+            openEndedLiability = false;
 
         foreach (var line in lines)
         {
@@ -353,31 +355,47 @@ public class CongressionalAnnualDisclosureSyncService
             {
                 assetMinimums += line.RangeMinimum;
                 assetMaximums += line.RangeMaximum;
+                openEndedAsset |= line.RangeOpenEnded;
             }
             else
             {
                 liabilityMinimums += line.RangeMinimum;
                 liabilityMaximums += line.RangeMaximum;
+                openEndedLiability |= line.RangeOpenEnded;
             }
         }
 
-        return (assetMinimums - liabilityMaximums, assetMaximums - liabilityMinimums);
+        return new NetWorthBand(
+            assetMinimums - liabilityMaximums,
+            assetMaximums - liabilityMinimums,
+            MinimumOpenEnded: openEndedLiability,
+            MaximumOpenEnded: openEndedAsset
+        );
     }
+
+    internal readonly record struct NetWorthBand(
+        long Minimum,
+        long Maximum,
+        bool MinimumOpenEnded,
+        bool MaximumOpenEnded
+    );
 
     private static CongressionalAnnualDisclosure BuildDisclosure(
         AnnualDisclosureReport report,
         CongressMember member
     )
     {
-        var (minimum, maximum) = ComputeNetWorthBand(report.Lines);
+        var band = ComputeNetWorthBand(report.Lines);
         return new CongressionalAnnualDisclosure
         {
             CongressMemberId = member.Id,
             Year = report.Year,
             FiledDate = report.FiledDate,
             ReportId = report.ReportId,
-            NetWorthMinimum = minimum,
-            NetWorthMaximum = maximum,
+            NetWorthMinimum = band.Minimum,
+            NetWorthMaximum = band.Maximum,
+            NetWorthMinimumOpenEnded = band.MinimumOpenEnded,
+            NetWorthMaximumOpenEnded = band.MaximumOpenEnded,
             Lines = report.Lines.Select(BuildLine).ToList(),
         };
     }
@@ -388,11 +406,13 @@ public class CongressionalAnnualDisclosureSyncService
         EquiblesFinancialDbContext dbContext
     )
     {
-        var (minimum, maximum) = ComputeNetWorthBand(report.Lines);
+        var band = ComputeNetWorthBand(report.Lines);
         existing.FiledDate = report.FiledDate;
         existing.ReportId = report.ReportId;
-        existing.NetWorthMinimum = minimum;
-        existing.NetWorthMaximum = maximum;
+        existing.NetWorthMinimum = band.Minimum;
+        existing.NetWorthMaximum = band.Maximum;
+        existing.NetWorthMinimumOpenEnded = band.MinimumOpenEnded;
+        existing.NetWorthMaximumOpenEnded = band.MaximumOpenEnded;
 
         dbContext.RemoveRange(existing.Lines);
         existing.Lines = report
@@ -412,9 +432,11 @@ public class CongressionalAnnualDisclosureSyncService
             Description = item.Description,
             RangeMinimum = item.RangeMinimum,
             RangeMaximum = item.RangeMaximum,
+            RangeOpenEnded = item.RangeOpenEnded,
             AssetType = item.AssetType,
             IncomeType = item.IncomeType,
             IncomeMinimum = item.IncomeMinimum,
             IncomeMaximum = item.IncomeMaximum,
+            IncomeOpenEnded = item.IncomeOpenEnded,
         };
 }

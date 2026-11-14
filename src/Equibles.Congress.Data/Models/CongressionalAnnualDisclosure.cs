@@ -11,8 +11,10 @@ namespace Equibles.Congress.Data.Models;
 /// electronic filing", not zero net worth. Disclosed values are ranges; the
 /// rollup is a band: <see cref="NetWorthMinimum"/> sums asset minimums minus
 /// liability maximums, <see cref="NetWorthMaximum"/> asset maximums minus
-/// liability minimums. Amendments replace the year's report in place — the
-/// latest filed report is the one represented here.
+/// liability minimums. A bracket without a ceiling ("Over $50,000,000") leaves
+/// that side of the band unbounded, which the two open-ended flags record.
+/// Amendments replace the year's report in place — the latest filed report is
+/// the one represented here.
 /// </summary>
 [Index(nameof(CongressMemberId), nameof(Year), IsUnique = true)]
 [Index(nameof(Year))]
@@ -42,6 +44,18 @@ public class CongressionalAnnualDisclosure
 
     /// <summary>Upper bound of the net-worth band, in dollars.</summary>
     public long NetWorthMaximum { get; set; }
+
+    /// <summary>
+    /// A liability is disclosed with no ceiling, so net worth may be below
+    /// <see cref="NetWorthMinimum"/>, which counts that liability at its floor.
+    /// </summary>
+    public bool NetWorthMinimumOpenEnded { get; set; }
+
+    /// <summary>
+    /// An asset is disclosed with no ceiling, so net worth has no upper bound:
+    /// <see cref="NetWorthMaximum"/> counts that asset at its floor.
+    /// </summary>
+    public bool NetWorthMaximumOpenEnded { get; set; }
 
     public virtual List<CongressionalDisclosureLine> Lines { get; set; } = [];
 

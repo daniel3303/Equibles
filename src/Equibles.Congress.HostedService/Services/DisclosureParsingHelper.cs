@@ -459,6 +459,24 @@ public static partial class DisclosureParsingHelper
         || text.StartsWith(abbreviation + " ", StringComparison.OrdinalIgnoreCase)
         || text.StartsWith(abbreviation + "(", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// True for a bracket the form leaves without a ceiling ("Over $50,000,000", "$1,000,000 +").
+    /// <see cref="ParseAmountRange"/> repeats the floor for one, so the upper value it returns is
+    /// the least the amount can be, never a bound on it.
+    /// </summary>
+    public static bool IsOpenEndedBracket(string amount)
+    {
+        if (string.IsNullOrWhiteSpace(amount))
+            return false;
+        var joined = BrokenThousandsRegex().Replace(amount, ",");
+        return AmountRegex().Matches(joined).Count == 1 && IsOpenTopBracket(joined);
+    }
+
+    // "Over $X" or the House top bracket "$X +" (>= $X).
+    private static bool IsOpenTopBracket(string amount) =>
+        amount.Contains("Over", StringComparison.OrdinalIgnoreCase)
+        || amount.TrimEnd().EndsWith('+');
+
     public static (long from, long to) ParseAmountRange(string amount)
     {
         if (string.IsNullOrWhiteSpace(amount))
@@ -491,10 +509,7 @@ public static partial class DisclosureParsingHelper
             // A single amount is an open-ended lower bound when phrased as
             // "Over $X" or the House top bracket "$X +" (>= $X) — both map to
             // (val, val).
-            var isOpenTopBracket =
-                amount.Contains("Over", StringComparison.OrdinalIgnoreCase)
-                || amount.TrimEnd().EndsWith('+');
-            if (isOpenTopBracket)
+            if (IsOpenTopBracket(amount))
                 return (val, val);
             // A transacted security has a positive dollar value. Under/less-than shapes therefore
             // start at one dollar rather than inventing a zero-valued trade.

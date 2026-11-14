@@ -315,7 +315,8 @@ public partial class SenateAnnualReportClient
             if (cells == null || cells.Count <= Math.Max(assetColumn, valueColumn))
                 continue;
 
-            var range = ParseRangeCell(CellText(cells[valueColumn]));
+            var valueText = CellText(cells[valueColumn]);
+            var range = ParseRangeCell(valueText);
             if (range == null)
                 continue;
 
@@ -323,9 +324,8 @@ public partial class SenateAnnualReportClient
             if (string.IsNullOrEmpty(description))
                 continue;
 
-            var income = ReadOptionalCell(cells, incomeColumn) is { } incomeText
-                ? ParseRangeCell(incomeText)
-                : null;
+            var incomeText = ReadOptionalCell(cells, incomeColumn);
+            var income = incomeText == null ? null : ParseRangeCell(incomeText);
 
             items.Add(
                 new AnnualDisclosureLineItem
@@ -334,10 +334,12 @@ public partial class SenateAnnualReportClient
                     Description = Truncate(description, 512),
                     RangeMinimum = range.Value.from,
                     RangeMaximum = range.Value.to,
+                    RangeOpenEnded = IsOpenEndedBracket(valueText),
                     AssetType = TruncateOrNull(ReadAssetTypeCell(cells, assetTypeColumn), 128),
                     IncomeType = TruncateOrNull(ReadOptionalCell(cells, incomeTypeColumn), 256),
                     IncomeMinimum = income?.from,
                     IncomeMaximum = income?.to,
+                    IncomeOpenEnded = income != null && IsOpenEndedBracket(incomeText),
                 }
             );
         }
@@ -362,7 +364,8 @@ public partial class SenateAnnualReportClient
             )
                 continue;
 
-            var range = ParseRangeCell(CellText(cells[amountColumn]));
+            var amountText = CellText(cells[amountColumn]);
+            var range = ParseRangeCell(amountText);
             if (range == null)
                 continue;
 
@@ -388,6 +391,7 @@ public partial class SenateAnnualReportClient
                     Description = Truncate(description, 512),
                     RangeMinimum = range.Value.from,
                     RangeMaximum = range.Value.to,
+                    RangeOpenEnded = IsOpenEndedBracket(amountText),
                 }
             );
         }

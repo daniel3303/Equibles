@@ -2107,7 +2107,11 @@ public class HoldingsImportService
     {
         if (Corrupt13FShareCountRepairer.IsSuspect(bufferedRows))
         {
-            var outcome = Corrupt13FShareCountRepairer.Repair(bufferedRows, context.StockPrices);
+            var outcome = Corrupt13FShareCountRepairer.Repair(
+                bufferedRows,
+                holding => FilingBasisPrice(holding, context),
+                row => Revalue(row, context)
+            );
             logger.LogWarning(
                 "Filing {Accession} duplicates its value column into the share-count column; "
                     + "recovered {Repaired} row(s) from the filed value, dropped {Dropped} unrepairable row(s)",

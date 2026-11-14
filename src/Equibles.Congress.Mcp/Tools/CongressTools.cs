@@ -293,6 +293,8 @@ public class CongressTools
                         d.FiledDate,
                         d.NetWorthMinimum,
                         d.NetWorthMaximum,
+                        d.NetWorthMinimumOpenEnded,
+                        d.NetWorthMaximumOpenEnded,
                         AssetCount = d.Lines.Count(l =>
                             l.Kind == CongressionalDisclosureLineKind.Asset
                         ),
@@ -305,11 +307,11 @@ public class CongressTools
                 var table = MarkdownTable.Render(
                     disclosures,
                     $"No electronically filed annual disclosure found for {member.Name} ({DescribeMember(member)}). Paper filings are not read, so this does not mean zero net worth.",
-                    $"Net worth of {member.Name} ({DescribeMember(member)}), as disclosed in annual financial reports (band = sum of disclosed asset minimums minus liability maximums, through asset maximums minus liability minimums; Asset Lines / Liability Lines are counts of disclosed line items, not dollar amounts):",
+                    $"Net worth of {member.Name} ({DescribeMember(member)}), as disclosed in annual financial reports (band = sum of disclosed asset minimums minus liability maximums, through asset maximums minus liability minimums; a bracket the form leaves without a ceiling, such as 'Over $50,000,000', makes that side of the band unbounded; Asset Lines / Liability Lines are counts of disclosed line items, not dollar amounts):",
                     "| Year | Filed | Net Worth Minimum | Net Worth Maximum | Asset Lines | Liability Lines |",
                     "|------|-------|-------------------|-------------------|-------------|-----------------|",
                     d =>
-                        $"| {d.Year} | {d.FiledDate:yyyy-MM-dd} | {FormatSignedAmount(d.NetWorthMinimum)} | {FormatSignedAmount(d.NetWorthMaximum)} | {d.AssetCount} | {d.LiabilityCount} |"
+                        $"| {d.Year} | {d.FiledDate:yyyy-MM-dd} | {(d.NetWorthMinimumOpenEnded ? NoLowerBound : FormatSignedAmount(d.NetWorthMinimum))} | {(d.NetWorthMaximumOpenEnded ? NoUpperBound : FormatSignedAmount(d.NetWorthMaximum))} | {d.AssetCount} | {d.LiabilityCount} |"
                 );
                 return AppendTruncationNote(table, disclosures.Count, totalCount);
             },
@@ -317,6 +319,11 @@ public class CongressTools
             $"memberName: {memberName}"
         );
     }
+
+    // A side of the band a ceiling-less bracket leaves open prints no figure: the stored one
+    // counts that bracket at its floor.
+    private const string NoLowerBound = "no lower bound";
+    private const string NoUpperBound = "no upper bound";
 
     // How a member is identified in prose: the chamber, plus the seat when one
     // is recorded. Only the House index publishes a seat, so senators read as
