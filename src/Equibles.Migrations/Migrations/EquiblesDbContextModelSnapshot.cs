@@ -7265,37 +7265,6 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FinancialFact");
                 });
 
-            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFactDimension", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Axis")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("CreationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("FinancialFactId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Member")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Axis", "Member");
-
-                    b.HasIndex("FinancialFactId", "Axis", "Member")
-                        .IsUnique();
-
-                    b.ToTable("FinancialFactDimension");
-                });
-
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFactsSyncStatus", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8670,17 +8639,6 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Issuer");
                 });
 
-            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFactDimension", b =>
-                {
-                    b.HasOne("Equibles.Sec.FinancialFacts.Data.Models.FinancialFact", "FinancialFact")
-                        .WithMany("Dimensions")
-                        .HasForeignKey("FinancialFactId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FinancialFact");
-                });
-
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFactsSyncStatus", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", "Issuer")
@@ -8906,11 +8864,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialDimensionSet", b =>
                 {
                     b.Navigation("Members");
-                });
-
-            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialFact", b =>
-                {
-                    b.Navigation("Dimensions");
                 });
 #pragma warning restore 612, 618
         }

@@ -150,7 +150,8 @@ public class SharesOutstandingProviderDateEvidenceTests
     {
         await using var db = NewDb();
         var (stock, concept) = SeedIdentity(db);
-        var priorA = ClassFact(db, 
+        var priorA = ClassFact(
+            db,
             stock,
             concept,
             100,
@@ -159,7 +160,8 @@ public class SharesOutstandingProviderDateEvidenceTests
             new(2025, 12, 31),
             "A"
         );
-        var priorB = ClassFact(db, 
+        var priorB = ClassFact(
+            db,
             stock,
             concept,
             200,
@@ -168,7 +170,8 @@ public class SharesOutstandingProviderDateEvidenceTests
             new(2025, 12, 31),
             "B"
         );
-        var currentA = ClassFact(db, 
+        var currentA = ClassFact(
+            db,
             stock,
             concept,
             110,
@@ -177,7 +180,8 @@ public class SharesOutstandingProviderDateEvidenceTests
             new(2026, 3, 31),
             "A"
         );
-        var invalidB = ClassFact(db, 
+        var invalidB = ClassFact(
+            db,
             stock,
             concept,
             210,

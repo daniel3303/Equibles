@@ -162,7 +162,8 @@ public class SharesOutstandingProviderTests
         db.AddRange(stock, concept);
         // An older filing whose per-class counts must be ignored entirely.
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_671_000_000m,
@@ -173,7 +174,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_438_000_000m,
@@ -184,7 +186,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 837_000_000m,
@@ -196,7 +199,8 @@ public class SharesOutstandingProviderTests
         );
         // The latest filing: Class A + Class C + Class B = 12,116,000,000 (the entity total).
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_824_000_000m,
@@ -207,7 +211,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_456_000_000m,
@@ -218,7 +223,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 836_000_000m,
@@ -298,7 +304,8 @@ public class SharesOutstandingProviderTests
         // A dimensional fact on a non-class axis must never be summed as a share class — only
         // genuine per-class counts on the class-of-stock axis count toward the entity total.
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_824_000_000m,
@@ -341,7 +348,8 @@ public class SharesOutstandingProviderTests
         // class is counted once, so the entity total must not double-count Class A.
         const string acc = "0001652044-26-000048";
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_824_000_000m,
@@ -352,7 +360,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_824_000_000m,
@@ -363,7 +372,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 5_456_000_000m,
@@ -374,7 +384,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 836_000_000m,
@@ -429,7 +440,8 @@ public class SharesOutstandingProviderTests
         // The current entity total, reported per share class in the latest 2026 filing.
         const string acc = "0001141391-26-000050";
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 900_000_000m,
@@ -440,7 +452,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 concept,
                 8_000_000m,
@@ -648,7 +661,8 @@ public class SharesOutstandingProviderTests
 
         const string acc = "0001493152-26-026667";
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 deiCoverPage,
                 31_895_656m,
@@ -659,7 +673,8 @@ public class SharesOutstandingProviderTests
             )
         );
         db.Add(
-            ClassFact(db, 
+            ClassFact(
+                db,
                 stock,
                 deiCoverPage,
                 29_533_018m,

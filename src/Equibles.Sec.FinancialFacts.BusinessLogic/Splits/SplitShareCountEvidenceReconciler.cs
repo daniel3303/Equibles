@@ -110,15 +110,12 @@ public class SplitShareCountEvidenceReconciler
                 conceptIds.Contains(fact.FinancialConceptId)
                 && fact.Unit == SharesUnit
                 && fact.Value >= 0
-                && dimensionMembers.Count(member =>
-                    member.DimensionSetKey == fact.DimensionsKey
-                ) == 1
+                && dimensionMembers.Count(member => member.DimensionSetKey == fact.DimensionsKey)
+                    == 1
             )
             .SelectMany(
                 fact =>
-                    dimensionMembers.Where(member =>
-                        member.DimensionSetKey == fact.DimensionsKey
-                    ),
+                    dimensionMembers.Where(member => member.DimensionSetKey == fact.DimensionsKey),
                 (fact, dimension) =>
                     new
                     {
