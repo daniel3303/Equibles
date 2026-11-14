@@ -242,7 +242,7 @@ public class FinancialFactsTools
                     conceptsById
                 );
                 if (shown.Any(DepreciationTotal.IsSum))
-                    table += $"\n_{DepreciationTotal.SumNote}_\n";
+                    table += SumFootnote;
                 // The rows keep the filer's tagged figure; a gross profit that is the period's
                 // operating income is named, and the statement shows the derived figure.
                 var tagWarning = GrossProfitMistag.IsGrossProfit(conceptRefs)
@@ -577,7 +577,7 @@ public class FinancialFactsTools
                     .Select(row => row.Ticker)
                     .ToList();
                 if (rows.Any(row => DepreciationTotal.IsSum(row.Fact)))
-                    table += $"\n_{DepreciationTotal.SumNote}_\n";
+                    table += SumFootnote;
                 return mistaggedTickers.Count == 0
                     ? table
                     : table
@@ -608,6 +608,14 @@ public class FinancialFactsTools
             fiscalYear,
             fiscalPeriod
         );
+
+    // A summed depreciation and amortization is marked on its own row, so a table that mixes
+    // reported totals and sums says which is which; the footnote explains the mark.
+    private static string SumMark(FinancialFact fact) =>
+        DepreciationTotal.IsSum(fact) ? " " + DepreciationTotal.SumMarker : "";
+
+    private const string SumFootnote =
+        "\n_" + DepreciationTotal.SumMarker + ": " + DepreciationTotal.SumNote + "_\n";
 
     private static string RenderFactHistoryTable(
         string concept,
@@ -644,7 +652,7 @@ public class FinancialFactsTools
                 splitAdjusted |= restated.Adjusted;
                 return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
                     + $"{f.FiscalPeriod.NameForHumans()} | "
-                    + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")} | "
+                    + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(f)} | "
                     + $"{FactMarkdown.Cell(f.Unit)} | "
                     + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
                     + $"{f.FiledDate:yyyy-MM-dd} | "
@@ -865,7 +873,7 @@ public class FinancialFactsTools
                 unresolvedBasis |= unresolved;
                 splitAdjusted |= restated.Adjusted;
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
-                    + $"{FactMarkdown.Value(value, r.Fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
+                    + $"{FactMarkdown.Value(value, r.Fact.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(r.Fact)} | "
                     + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
                     + $"{r.Fact.PeriodEnd:yyyy-MM-dd} | "
                     + $"{FactMarkdown.Cell(r.Fact.Form?.DisplayName)} | "

@@ -143,6 +143,7 @@ public class FinancialFactsToolsDepreciationTotalTests : ParadeDbMcpTestBase
         result.Should().Contain("| 2025-01-01 | 2025-12-31 | 2025 | FY | $2,199,000,000 | USD |");
         result.Should().NotContain("$457,000,000");
         result.Should().NotContain(DepreciationTotal.SumNote);
+        result.Should().NotContain(DepreciationTotal.SumMarker);
     }
 
     [Fact]
@@ -152,8 +153,10 @@ public class FinancialFactsToolsDepreciationTotalTests : ParadeDbMcpTestBase
 
         var result = await FactsSut().GetFinancialFact("MSFT", "d&a");
 
-        result.Should().Contain("| 2025-07-01 | 2026-06-30 | 2026 | FY | $39,000,000,000 | USD |");
-        result.Should().Contain(DepreciationTotal.SumNote);
+        result
+            .Should()
+            .Contain("| 2025-07-01 | 2026-06-30 | 2026 | FY | $39,000,000,000 (sum) | USD |");
+        result.Should().Contain("(sum): " + DepreciationTotal.SumNote);
     }
 
     [Fact]
@@ -169,8 +172,9 @@ public class FinancialFactsToolsDepreciationTotalTests : ParadeDbMcpTestBase
                 fiscalPeriod: "FY"
             );
 
-        result.Should().Contain("$2,199,000,000");
+        result.Should().Contain("$2,199,000,000 |");
         result.Should().NotContain("$457,000,000");
+        result.Should().NotContain(DepreciationTotal.SumMarker);
     }
 
     [Fact]
@@ -186,8 +190,8 @@ public class FinancialFactsToolsDepreciationTotalTests : ParadeDbMcpTestBase
                 fiscalPeriod: "FY"
             );
 
-        result.Should().Contain("$39,000,000,000");
-        result.Should().Contain(DepreciationTotal.SumNote);
+        result.Should().Contain("$39,000,000,000 (sum) |");
+        result.Should().Contain("(sum): " + DepreciationTotal.SumNote);
     }
 
     [Fact]

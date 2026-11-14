@@ -25,6 +25,9 @@ public static class DepreciationTotal
         "Depreciation & amortization is the sum of the reported depreciation and the reported "
         + "amortization of intangible assets where the filer tags no total.";
 
+    /// <summary>The mark a table puts on a row that <see cref="IsSum"/>, explained by the note.</summary>
+    public const string SumMarker = "(sum)";
+
     /// <summary>
     /// The concept id every summed fact carries. No stored concept has it, so a sum never collides
     /// with a part's own facts and its derived quarters subtract like any one concept.

@@ -66,7 +66,7 @@
                                     : isMoney
                                         ? "$" + line.Value.ToString("N0")
                                         : line.Value.ToString("N0");
-                                <td class="text-right font-mono">@formatted@if (line.Derived) {<sup title="Derived by subtracting consecutive cumulative year-to-date facts">d</sup>}</td>
+                                <td class="text-right font-mono">@formatted@if (line.Derived) {<sup title="Derived by subtracting consecutive cumulative year-to-date facts">d</sup>}@if (line.Summed) {<sup title="Sum of the reported depreciation and the reported amortization of intangible assets">s</sup>}</td>
                                 <td class="hidden md:table-cell text-base-content/60">@line.Unit</td>
                                 <td class="hidden md:table-cell text-base-content/60">@line.PeriodEnd.ToString("yyyy-MM-dd")</td>
                                 <td class="hidden lg:table-cell text-base-content/60">@line.Form</td>
@@ -85,6 +85,9 @@
 
     @if (Model.Lines.Any(line => line.Derived)) {
         <p class="mt-2 text-sm text-base-content/60"><sup>d</sup> Derived quarter: exact subtraction of consecutive cumulative facts with the same concept, currency and fiscal-year start.</p>
+    }
+    @if (Model.Lines.Any(line => line.Summed)) {
+        <p class="mt-2 text-sm text-base-content/60"><sup>s</sup> @Equibles.Sec.FinancialFacts.Data.Statements.DepreciationTotal.SumNote</p>
     }
 
     <script>

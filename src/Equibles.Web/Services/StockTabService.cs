@@ -895,8 +895,8 @@ public class StockTabService
                     row.PeriodEnd = fact.PeriodEnd;
                     row.Form = fact.Form?.DisplayName;
                     row.FiledDate = fact.FiledDate;
-                    row.Derived =
-                        StatementQuarterDerivation.IsDerived(fact) || DepreciationTotal.IsSum(fact);
+                    row.Derived = StatementQuarterDerivation.IsDerived(fact);
+                    row.Summed = DepreciationTotal.IsSum(fact);
                 }
                 return row;
             })
