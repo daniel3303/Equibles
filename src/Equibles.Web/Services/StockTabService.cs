@@ -58,6 +58,16 @@ public class StockTabService
     // misleading low/zero readings. Null = no floor configured, no clamp.
     private readonly DateOnly? _minSyncDate;
 
+    private const string UsDollarsPerShare = "USD/shares";
+
+    private static readonly Equibles.Sec.Data.Models.DocumentType[] ForeignAnnualForms =
+    [
+        Equibles.Sec.Data.Models.DocumentType.TwentyF,
+        Equibles.Sec.Data.Models.DocumentType.TwentyFa,
+        Equibles.Sec.Data.Models.DocumentType.FortyF,
+        Equibles.Sec.Data.Models.DocumentType.FortyFa,
+    ];
+
     // Benchmark the Price tab compares each stock's returns against.
     private const string BenchmarkTicker = "SPY";
 
@@ -957,20 +967,49 @@ public class StockTabService
 
         if (epsConcept != Guid.Empty)
         {
-            var epsFact = await _financialFactRepository
-                .GetConsolidatedByIssuerId(stock.Id)
+            // The annual bucket also holds a discrete fourth quarter and comparative years under a
+            // later filing's stamp, so the year is picked by its own span and end date. Only a
+            // dollar figure can sit under the tile's "$" and beside a dollar close.
+            var epsFact = (
+                await _financialFactRepository
+                    .GetConsolidatedByIssuerId(stock.Id)
+                    .Where(f =>
+                        f.FinancialConceptId == epsConcept
+                        && f.FiscalPeriod == SecFiscalPeriod.FullYear
+                        && f.Unit == UsDollarsPerShare
+                    )
+                    .ToListAsync()
+            )
                 .Where(f =>
-                    f.FinancialConceptId == epsConcept && f.FiscalPeriod == SecFiscalPeriod.FullYear
+                    f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber
+                        is >= FiscalPeriodSpanDays.MinAnnual
+                            and <= FiscalPeriodSpanDays.MaxAnnual
                 )
-                .OrderByDescending(f => f.FiscalYear)
+                .OrderByDescending(f => f.PeriodEnd)
                 .ThenByDescending(f => f.FiledDate)
-                .FirstOrDefaultAsync();
+                .FirstOrDefault();
 
             if (epsFact != null)
             {
-                vm.EpsDiluted = epsFact.Value;
-                if (vm.LatestClose.HasValue && epsFact.Value != 0)
-                    vm.PeRatio = Math.Round(vm.LatestClose.Value / epsFact.Value, 2);
+                // A filing states per-share figures on its filing date's share basis; the close is
+                // on today's.
+                var eps = SplitAdjustment.AdjustPerShareValue(
+                    epsFact.Value,
+                    epsFact.FiledDate,
+                    ShareCountSplitScope.ForListing(
+                        await LoadEffectiveSplits(stock),
+                        stock.Presentation.Listing.Id
+                    )
+                );
+                vm.EpsDiluted = eps;
+                // A loss has no multiple, and a 20-F or 40-F states earnings per ordinary share
+                // while the listing may be a receipt for several.
+                if (
+                    vm.LatestClose.HasValue
+                    && eps > 0
+                    && !ForeignAnnualForms.Contains(epsFact.Form)
+                )
+                    vm.PeRatio = Math.Round(vm.LatestClose.Value / eps, 2);
             }
         }
 
