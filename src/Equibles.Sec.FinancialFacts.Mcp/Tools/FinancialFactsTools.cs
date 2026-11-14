@@ -150,9 +150,22 @@ public class FinancialFactsTools
                     return $"No '{concept}' data has been ingested for {EquityListingSymbol.Display(stock)}.";
 
                 var issuerFacts = _financialFactRepository.GetConsolidatedByIssuerId(stock.Id);
-                var facts = await issuerFacts
-                    .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
-                    .ToListAsync();
+                List<FinancialFact> facts;
+                // Depreciation and amortization leaves out a slice tagged beside the total and
+                // sums its two parts where no total is tagged (DepreciationTotal).
+                if (DepreciationTotal.IsFamily(conceptRefs))
+                {
+                    var depreciation = await DepreciationTotalFacts.Load(
+                        _financialFactRepository,
+                        _financialConceptRepository,
+                        [stock.Id]
+                    );
+                    (facts, conceptPriority) = (depreciation.Facts, depreciation.Priority);
+                }
+                else
+                    facts = await issuerFacts
+                        .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
+                        .ToListAsync();
                 if (BankTopLine.IsRevenue(conceptRefs))
                 {
                     var bankComponents = await LoadBankTopLineComponents(issuerFacts);
@@ -228,6 +241,8 @@ public class FinancialFactsTools
                     splits,
                     conceptsById
                 );
+                if (shown.Any(DepreciationTotal.IsSum))
+                    table += $"\n_{DepreciationTotal.SumNote}_\n";
                 // The rows keep the filer's tagged figure; a gross profit that is the period's
                 // operating income is named, and the statement shows the derived figure.
                 var tagWarning = GrossProfitMistag.IsGrossProfit(conceptRefs)
@@ -402,6 +417,29 @@ public class FinancialFactsTools
                         && loadedConceptIds.Contains(f.FinancialConceptId)
                     )
                     .ToListAsync();
+                // Depreciation and amortization is judged on each issuer's whole history, so the
+                // period compared shows the figure GetFinancialFact shows (DepreciationTotal).
+                if (DepreciationTotal.IsFamily(conceptRefs))
+                {
+                    var depreciation = await DepreciationTotalFacts.Load(
+                        _financialFactRepository,
+                        _financialConceptRepository,
+                        stockIds
+                    );
+                    conceptPriority = depreciation.Priority;
+                    facts = depreciation
+                        .Facts.Where(f =>
+                            f.FiscalYear == fiscalYear
+                            && (
+                                f.FiscalPeriod == period
+                                || (
+                                    includeFullYearForQ4
+                                    && f.FiscalPeriod == SecFiscalPeriod.FullYear
+                                )
+                            )
+                        )
+                        .ToList();
+                }
 
                 if (includeFullYearForQ4)
                 {
@@ -538,6 +576,8 @@ public class FinancialFactsTools
                     )
                     .Select(row => row.Ticker)
                     .ToList();
+                if (rows.Any(row => DepreciationTotal.IsSum(row.Fact)))
+                    table += $"\n_{DepreciationTotal.SumNote}_\n";
                 return mistaggedTickers.Count == 0
                     ? table
                     : table

@@ -335,7 +335,9 @@ public static class StatementLineFacts
     /// revenue line reads a bank's net interest plus noninterest income where revenue is missing
     /// or partial (<see cref="BankTopLine.PickForPeriod"/>); that sum has no concept variant. A
     /// gross profit holding the period's operating income reads Revenue − Cost of Revenue
-    /// (<see cref="MistaggedGrossProfitReplacement"/>). <paramref name="operatingCostsClaimant"/>
+    /// (<see cref="MistaggedGrossProfitReplacement"/>). The depreciation-and-amortization line
+    /// reads the sum of its two parts where the caller folded one in and no concept states the
+    /// period (<see cref="DepreciationTotal.ForStatement"/>). <paramref name="operatingCostsClaimant"/>
     /// is the line the issuer's operating costs continue (<see cref="OperatingCostsContinuation"/>):
     /// that line reads the operating costs where it has no fact, and their own line is omitted.
     /// <paramref name="derivedOperatingIncomeRounding"/> is
@@ -373,6 +375,12 @@ public static class StatementLineFacts
                     is { } replaced
                 ? (picked.Concept, replaced)
                 : picked;
+        if (
+            picked.Fact == null
+            && DepreciationTotal.IsFamily(line.Concepts)
+            && factByConceptId.TryGetValue(DepreciationTotal.ConceptId, out var summed)
+        )
+            return (null, summed);
         if (line.Alias != BankTopLine.RevenueAlias)
             return picked;
 
