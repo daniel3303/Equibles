@@ -595,11 +595,11 @@ public static class RFileStatementParser
             return null;
         }
 
+        cleaned = WithoutCurrencyMarker(cleaned);
         var negative = cleaned.StartsWith('(') && cleaned.EndsWith(')');
         cleaned = cleaned
             .Replace("(", string.Empty)
             .Replace(")", string.Empty)
-            .Replace("$", string.Empty)
             .Replace(",", string.Empty)
             .Replace("%", string.Empty)
             .Trim();
@@ -616,6 +616,28 @@ public static class RFileStatementParser
         }
         return negative ? -value : value;
     }
+
+    // The first and total rows of a statement print the currency before the figure ("$ (862)",
+    // "€ 15,673", "SFr 1,638,612", "R$ 16,046"), so it goes before the parentheses are read: left
+    // in place, a loss read as a gain and every non-dollar figure as no figure at all.
+    private static string WithoutCurrencyMarker(string cleaned)
+    {
+        var figure = 0;
+        while (figure < cleaned.Length && !IsFigureStart(cleaned[figure]))
+            figure++;
+        var marker = cleaned[..figure].Trim();
+        return
+            marker.Length is > 0 and <= MaxCurrencyMarkerLength
+            && marker.All(ch =>
+                char.IsLetter(ch) || char.GetUnicodeCategory(ch) == UnicodeCategory.CurrencySymbol
+            )
+            ? cleaned[figure..]
+            : cleaned;
+    }
+
+    private const int MaxCurrencyMarkerLength = 4;
+
+    private static bool IsFigureStart(char ch) => char.IsAsciiDigit(ch) || ch is '(' or '-' or '.';
 
     private static DateOnly? ParseDate(string text)
     {
