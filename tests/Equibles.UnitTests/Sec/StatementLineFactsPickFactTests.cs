@@ -48,6 +48,33 @@ public class StatementLineFactsPickFactTests
         picked.Value.Should().Be(100);
     }
 
+    // A filer with indefinite-lived brands states the total on its balance sheet and the
+    // finite-lived part in a note, both for the same date (Pfizer: 46.0B and 28.2B).
+    [Theory]
+    [InlineData(true, 45_960)]
+    [InlineData(false, 28_180)]
+    public void PickFact_IntangibleAssets_ReadsTheTotalAndFallsBackToTheFiniteLivedPart(
+        bool statesTotal,
+        decimal expected
+    )
+    {
+        var line = FinancialStatementConcepts
+            .For(FinancialStatementType.BalanceSheet)
+            .Single(l => l.Alias == "intangible-assets");
+        var totalId = Guid.NewGuid();
+        var finiteLivedId = Guid.NewGuid();
+        var conceptIdByKey = new Dictionary<(FactTaxonomy, string), Guid>
+        {
+            [(FactTaxonomy.UsGaap, "IntangibleAssetsNetExcludingGoodwill")] = totalId,
+            [(FactTaxonomy.UsGaap, "FiniteLivedIntangibleAssetsNet")] = finiteLivedId,
+        };
+        var facts = new Dictionary<Guid, FinancialFact> { [finiteLivedId] = Fact(28_180) };
+        if (statesTotal)
+            facts[totalId] = Fact(45_960);
+
+        StatementLineFacts.PickFact(line, conceptIdByKey, facts).Value.Should().Be(expected);
+    }
+
     [Fact]
     public void PickFact_OnlyVariantReported_FillsFromVariant()
     {

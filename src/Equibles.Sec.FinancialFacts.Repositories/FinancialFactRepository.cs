@@ -67,6 +67,21 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
         IQueryable<FinancialFact> consolidated
     )
     {
+        var byNature = ByNatureCostOfSalesIds(consolidated);
+        return consolidated.Where(f => !byNature.Contains(f.Id));
+    }
+
+    /// <summary>
+    /// The consolidated facts <see cref="GetConsolidatedByIssuerId"/> drops for an issuer, for a
+    /// read that must load every dimension and so cannot start from the gated accessor.
+    /// </summary>
+    public IQueryable<Guid> GetByNatureCostOfSalesIds(Guid issuerId)
+    {
+        return ByNatureCostOfSalesIds(ConsolidatedByIssuerId(issuerId));
+    }
+
+    private IQueryable<Guid> ByNatureCostOfSalesIds(IQueryable<FinancialFact> consolidated)
+    {
         // Excluded ids are one hashed subplan over the scoped cost-of-sales rows, so no read
         // joins the concept table per fact.
         var concepts = GetConcepts();
@@ -81,7 +96,7 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
         // The proof stays correlated only; repeating the issuer list in it steers Postgres to the
         // slower concept/period index.
         var all = GetAll();
-        var byNature = consolidated
+        return consolidated
             .Where(c => costOfSalesIds.Contains(c.FinancialConceptId))
             .Where(c =>
                 !all.Any(p =>
@@ -94,7 +109,6 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
                 )
             )
             .Select(c => c.Id);
-        return consolidated.Where(f => !byNature.Contains(f.Id));
     }
 
     protected virtual IQueryable<FinancialConcept> GetConcepts() =>

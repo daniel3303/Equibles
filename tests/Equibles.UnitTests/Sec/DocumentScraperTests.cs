@@ -85,6 +85,44 @@ public class DocumentScraperTests
             );
     }
 
+    // SEC's directory file answering 503 once stopped every event-driven cycle before it looked
+    // for filings, and each following cycle fetched the directory again.
+    [Fact]
+    public async Task ScrapeDocuments_EventDrivenDirectorySyncFails_StillDiscoversFilingsAndWaitsBeforeRetrying()
+    {
+        DocumentScraper.ResetCompanySyncThrottleForTests();
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        harness
+            .CompanySync.SyncCompaniesFromSecApi()
+            .Returns<Task>(_ => throw new HttpRequestException("SEC EDGAR 503"));
+        harness
+            .Discovery.DiscoverCompaniesWithNewFilings(default, default)
+            .ReturnsForAnyArgs(new List<EquityIssuer>());
+        var scraper = harness.BuildScraper(
+            dbContext,
+            new DocumentScraperOptions { UseEventDrivenDiscovery = true, DocumentTypesToSync = [] }
+        );
+
+        try
+        {
+            var first = await scraper.ScrapeDocuments();
+            var second = await scraper.ScrapeDocuments();
+
+            first.Errors.Should().Be(1);
+            first.ErrorMessages.Should().ContainSingle().Which.Should().Contain("SEC EDGAR 503");
+            second.Errors.Should().Be(0);
+            await harness.CompanySync.Received(1).SyncCompaniesFromSecApi();
+            await harness
+                .Discovery.ReceivedWithAnyArgs(2)
+                .DiscoverCompaniesWithNewFilings(default, default);
+        }
+        finally
+        {
+            DocumentScraper.ResetCompanySyncThrottleForTests();
+        }
+    }
+
     [Fact]
     public async Task ScrapeDocuments_OneCompanyOneFiling_PersistsViaDefaultMarkdownFlow()
     {
@@ -1054,6 +1092,8 @@ public class DocumentScraperTests
             Substitute.For<IDocumentPersistenceService>();
         public IPdfTextExtractor PdfTextExtractor { get; } = Substitute.For<IPdfTextExtractor>();
         public IServiceScopeFactory ScopeFactory { get; private set; }
+        public IFilingDiscoveryService Discovery { get; } =
+            Substitute.For<IFilingDiscoveryService>();
         public List<IFilingProcessor> FilingProcessors { get; set; } = [];
 
         public EquiblesFinancialDbContext CreateDbContext()
@@ -1090,6 +1130,7 @@ public class DocumentScraperTests
             services.AddSingleton(dbContext);
             services.AddScoped<EquityIssuerRepository>();
             services.AddScoped<DocumentRepository>();
+            services.AddScoped<CompanyFilingSyncStateRepository>();
             // DocumentScraper now resolves CommonStockManager per scope to
             // persist the SEC-sourced fiscal year-end. IBus is an
             // unrelated CommonStockManager ctor dep (SetCusip outbox event);
@@ -1129,7 +1170,7 @@ public class DocumentScraperTests
             return new DocumentScraper(
                 ScopeFactory,
                 CompanySync,
-                Substitute.For<IFilingDiscoveryService>(),
+                Discovery,
                 FilingProcessors,
                 Options.Create(
                     options

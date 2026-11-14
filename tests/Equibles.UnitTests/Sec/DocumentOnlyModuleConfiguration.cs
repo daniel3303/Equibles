@@ -24,5 +24,7 @@ internal sealed class DocumentOnlyModuleConfiguration : IModuleConfiguration
             b.Property(e => e.DocumentType).HasConversion(conv);
             b.Ignore(e => e.Chunks);
         });
+        // Read by the scraper's event-driven reconciliation.
+        builder.Entity<CompanyFilingSyncState>();
     }
 }

@@ -24,8 +24,20 @@ public class XbrlFactsExtractionWorkerSelectDueDocumentsTests
     [InlineData(XbrlFactExtractionService.TargetedReplayFloor, "EightK", "2026-07-29", false)]
     [InlineData(XbrlFactExtractionService.TargetedReplayFloor, "SixK", "2026-07-29", false)]
     // A recent quarterly read by the previous version rejoins, so its cover statement is recorded.
-    [InlineData(XbrlFactExtractionService.CurrentVersion - 1, "TenQ", "2026-07-29", true)]
-    [InlineData(XbrlFactExtractionService.CurrentVersion - 1, "EightK", "2026-07-29", false)]
+    [InlineData(
+        XbrlFactExtractionService.PeriodicFormReplayVersion - 1,
+        "TenQ",
+        "2026-07-29",
+        true
+    )]
+    [InlineData(
+        XbrlFactExtractionService.PeriodicFormReplayVersion - 1,
+        "EightK",
+        "2026-07-29",
+        false
+    )]
+    // A later version that changes another kind of document leaves a read quarterly alone.
+    [InlineData(XbrlFactExtractionService.PeriodicFormReplayVersion, "TenQ", "2026-07-29", false)]
     [InlineData(XbrlFactExtractionService.CurrentVersion, "TenQ", "2026-07-29", false)]
     public void SelectDueDocuments_PicksOnlyTheTargetedReplay(
         int version,
@@ -66,6 +78,35 @@ public class XbrlFactsExtractionWorkerSelectDueDocumentsTests
             )
             .Should()
             .ContainSingle();
+    }
+
+    // Every standalone instance parsed to zero facts before the current version, whatever its form
+    // or age; an inline filing of the same form and date was read correctly and stays put.
+    [Theory]
+    [InlineData(XbrlType.StandaloneXbrl, XbrlFactExtractionService.CurrentVersion - 1, true)]
+    [InlineData(XbrlType.StandaloneXbrl, XbrlFactExtractionService.CurrentVersion, false)]
+    [InlineData(XbrlType.InlineIxbrl, XbrlFactExtractionService.CurrentVersion - 1, false)]
+    public void SelectDueDocuments_StandaloneInstanceBelowTheCurrentVersion_IsReplayed(
+        XbrlType type,
+        int version,
+        bool due
+    )
+    {
+        var document = Filing(version, "TwentyF", "2020-04-28");
+        document.XbrlType = type;
+        var checkpoints = new[]
+        {
+            new FinancialFactsSyncStatus
+            {
+                EquityIssuerId = IssuerId,
+                LastFiledDateSeen = new DateOnly(2025, 11, 15),
+            },
+        };
+
+        XbrlFactsExtractionWorker
+            .SelectDueDocuments(new[] { document }.AsQueryable(), checkpoints.AsQueryable())
+            .Should()
+            .HaveCount(due ? 1 : 0);
     }
 
     [Fact]

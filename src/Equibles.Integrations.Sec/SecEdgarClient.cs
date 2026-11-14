@@ -246,6 +246,16 @@ public class SecEdgarClient : ISecEdgarClient
             _logger.LogError(ex, "HTTP error retrieving metadata for CIK: {Cik}", cik);
             throw;
         }
+        catch (OperationCanceledException ex)
+        {
+            // No caller token reaches this read, so a cancellation is the HttpClient timeout: a
+            // failed read like any HTTP error, never the "not found" a null stands for.
+            _logger.LogError(ex, "Timed out retrieving metadata for CIK: {Cik}", cik);
+            throw new HttpRequestException(
+                $"SEC EDGAR timed out reading metadata for CIK {cik}",
+                ex
+            );
+        }
         catch (Exception ex)
         {
             // Non-HTTP errors (deserialization, etc.) — return null as "not found"
@@ -278,6 +288,16 @@ public class SecEdgarClient : ISecEdgarClient
             // HTTP errors (including exhausted 429 retries) propagate to caller
             _logger.LogError(ex, "HTTP error retrieving company facts for CIK: {Cik}", cik);
             throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // No caller token reaches this read, so a cancellation is the HttpClient timeout: a
+            // failed read like any HTTP error, never the "not found" a null stands for.
+            _logger.LogError(ex, "Timed out retrieving company facts for CIK: {Cik}", cik);
+            throw new HttpRequestException(
+                $"SEC EDGAR timed out reading company facts for CIK {cik}",
+                ex
+            );
         }
         catch (Exception ex)
         {

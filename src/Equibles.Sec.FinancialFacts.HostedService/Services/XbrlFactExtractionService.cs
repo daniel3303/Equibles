@@ -77,11 +77,20 @@ public class XbrlFactExtractionService
     // targeted (XbrlFactsExtractionWorker.SelectDueDocuments), not the whole corpus.
     // Version 10: record each 10-Q/10-K cover's registrant file number and shell-company flag
     // (IssuerCoverStatement), through the same targeted replay.
-    public const int CurrentVersion = 10;
+    // Version 11: standalone instances are read through their stored <XBRL> wrapper; before it
+    // every one parsed to zero facts. The replay is every standalone document, nothing else.
+    public const int CurrentVersion = 11;
+
+    /// <summary>
+    /// The version the 10-Q/10-K targeted replay last needed: a periodic filing stamped at or above
+    /// it is not re-read when a later version changes another kind of document.
+    /// </summary>
+    public const int PeriodicFormReplayVersion = 10;
 
     /// <summary>
     /// Documents stamped below this version always rerun. Those stamped between it and
-    /// <see cref="CurrentVersion"/> rerun only when they are recent or lagging 10-Q/10-K filings.
+    /// <see cref="CurrentVersion"/> rerun only when they are recent or lagging 10-Q/10-K filings
+    /// below <see cref="PeriodicFormReplayVersion"/>, or standalone instances.
     /// The next full-corpus bump sets this equal to <see cref="CurrentVersion"/>, which retires the
     /// targeted replay.
     /// </summary>
