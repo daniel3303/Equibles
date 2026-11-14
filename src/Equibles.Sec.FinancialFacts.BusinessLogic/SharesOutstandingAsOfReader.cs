@@ -87,30 +87,42 @@ public class SharesOutstandingAsOfReader
                 Form = fact.Form,
                 AccessionNumber = fact.AccessionNumber,
                 Consolidated = fact.DimensionsKey == "",
+                DimensionsKey = fact.DimensionsKey,
             })
             .ToListAsync(cancellationToken);
-        var dimensionalIds = facts.Where(f => !f.Consolidated).Select(f => f.Id).ToList();
-        var classMembers = new Dictionary<Guid, (string Axis, string Member)>();
-        foreach (var chunk in dimensionalIds.Chunk(5_000))
+        var dimensionalKeys = facts
+            .Where(f => !f.Consolidated)
+            .Select(f => f.DimensionsKey)
+            .Distinct()
+            .ToList();
+        var members = _financialFactRepository.GetDimensionMembers();
+        var classByKey = new Dictionary<string, (string Axis, string Member)>(
+            StringComparer.Ordinal
+        );
+        foreach (var chunk in dimensionalKeys.Chunk(5_000))
         {
-            var dimensions = await _financialFactRepository
-                .GetAll()
-                .Where(fact => chunk.Contains(fact.Id) && fact.Dimensions.Count == 1)
-                .SelectMany(fact => fact.Dimensions)
+            var dimensions = await members
                 .Where(dimension =>
-                    SharesOutstandingProvider.ClassOfStockAxes.Contains(dimension.Axis)
+                    chunk.Contains(dimension.DimensionSetKey)
+                    && members.Count(other => other.DimensionSetKey == dimension.DimensionSetKey)
+                        == 1
+                    && SharesOutstandingProvider.ClassOfStockAxes.Contains(dimension.Axis)
                     && !SharesOutstandingProvider.NonClassMembers.Contains(dimension.Member)
                 )
                 .Select(dimension => new
                 {
-                    dimension.FinancialFactId,
+                    dimension.DimensionSetKey,
                     dimension.Axis,
                     dimension.Member,
                 })
                 .ToListAsync(cancellationToken);
             foreach (var dimension in dimensions)
-                classMembers[dimension.FinancialFactId] = (dimension.Axis, dimension.Member);
+                classByKey[dimension.DimensionSetKey] = (dimension.Axis, dimension.Member);
         }
+        var classMembers = new Dictionary<Guid, (string Axis, string Member)>();
+        foreach (var fact in facts.Where(f => !f.Consolidated))
+            if (classByKey.TryGetValue(fact.DimensionsKey, out var classMember))
+                classMembers[fact.Id] = classMember;
 
         var counts = new Dictionary<Guid, SharesOutstandingAsOf>();
         foreach (var issuer in facts.GroupBy(fact => fact.IssuerId))
@@ -183,6 +195,7 @@ public class SharesOutstandingAsOfReader
         public DocumentType Form { get; init; }
         public string AccessionNumber { get; init; }
         public bool Consolidated { get; init; }
+        public string DimensionsKey { get; init; }
     }
 }
 

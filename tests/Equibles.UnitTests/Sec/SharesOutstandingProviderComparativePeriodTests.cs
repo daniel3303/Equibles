@@ -63,7 +63,7 @@ public class SharesOutstandingProviderComparativePeriodTests
         const string acc = "0001652044-26-000048";
         // The latest filing's CURRENT as-of date (2026-04-23): Class A + Class B = 6,660,000,000.
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 concept,
                 5_824_000_000m,
@@ -74,7 +74,7 @@ public class SharesOutstandingProviderComparativePeriodTests
             )
         );
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 concept,
                 836_000_000m,
@@ -87,7 +87,7 @@ public class SharesOutstandingProviderComparativePeriodTests
         // The SAME accession also carries the prior-period (2025-04-23) class counts as comparatives.
         // Pinned to the latest as-of date, these must never be added to the current entity total.
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 concept,
                 5_671_000_000m,
@@ -98,7 +98,7 @@ public class SharesOutstandingProviderComparativePeriodTests
             )
         );
         db.Add(
-            ClassFact(
+            ClassFact(db, 
                 stock,
                 concept,
                 800_000_000m,
@@ -122,6 +122,7 @@ public class SharesOutstandingProviderComparativePeriodTests
     }
 
     private static FinancialFact ClassFact(
+        EquiblesFinancialDbContext db,
         EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
@@ -146,9 +147,8 @@ public class SharesOutstandingProviderComparativePeriodTests
             Form = DocumentType.TenQ,
             FiledDate = filed,
             AccessionNumber = accession,
-            DimensionsKey = $"{axis}={member}",
+            DimensionsKey = Equibles.TestSupport.FinancialDimensionSeed.Key(db, (axis, member)),
         };
-        fact.Dimensions.Add(new FinancialFactDimension { Axis = axis, Member = member });
         return fact;
     }
 }

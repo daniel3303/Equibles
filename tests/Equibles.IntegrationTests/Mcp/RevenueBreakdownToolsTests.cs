@@ -65,34 +65,9 @@ public class RevenueBreakdownToolsTests : ParadeDbMcpTestBase
             AccessionNumber = $"acc-{Guid.NewGuid():N}"[..20],
             // Production stores the SHA-256 of the ordinal-sorted dimensions (varchar(64)),
             // not the raw QName pairs; mirror that so the value fits the column.
-            DimensionsKey = DimensionsKeyOf(dimensions),
+            DimensionsKey = Equibles.TestSupport.FinancialDimensionSeed.Key(DbContext, dimensions),
         };
-        foreach (var (axis, member) in dimensions)
-        {
-            fact.Dimensions.Add(
-                new FinancialFactDimension
-                {
-                    FinancialFactId = fact.Id,
-                    Axis = axis,
-                    Member = member,
-                }
-            );
-        }
         DbContext.Set<FinancialFact>().Add(fact);
-    }
-
-    private static string DimensionsKeyOf((string Axis, string Member)[] dimensions)
-    {
-        var canonical = string.Join(
-            "|",
-            dimensions
-                .OrderBy(d => d.Axis)
-                .ThenBy(d => d.Member)
-                .Select(d => $"{d.Axis}={d.Member}")
-        );
-        return Convert
-            .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
-            .ToLowerInvariant();
     }
 
     // Issuers like Apple tag operating-segment revenue with the srt:ConsolidationItemsAxis

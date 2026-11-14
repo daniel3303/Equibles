@@ -26,5 +26,7 @@ internal sealed class FinancialFactsTestModuleConfiguration : IModuleConfigurati
             b.Property(e => e.Form).HasConversion(conv);
         });
         builder.Entity<FinancialFactDimension>();
+        builder.Entity<FinancialDimensionSet>();
+        builder.Entity<FinancialDimensionSetMember>();
     }
 }
