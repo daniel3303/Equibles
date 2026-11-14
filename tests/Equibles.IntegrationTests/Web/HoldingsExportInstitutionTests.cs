@@ -89,6 +89,50 @@ public class HoldingsExportInstitutionTests
         body.Should().Contain("Microsoft Corp.,50000");
     }
 
+    // A Schedule 13G can carry a quarter-end event date; it is not a line of the 13F portfolio.
+    [Fact]
+    public async Task ExportInstitution_ScheduleThirteenGOnTheQuarterEnd_IsNotAPortfolioRow()
+    {
+        var holderId = Guid.NewGuid();
+        var aaplId = Guid.NewGuid();
+        var reportDate = new DateOnly(2024, 12, 31);
+
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new InstitutionalHolder
+                {
+                    Id = holderId,
+                    Cik = "0008900002",
+                    Name = "Passive Holder",
+                }
+            );
+            db.Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
+            );
+            db.Add(MakeHolding(aaplId, holderId, reportDate, 100_000, 25_000_000));
+            var stake = MakeHolding(aaplId, holderId, reportDate, 777_777, 99_000_000);
+            stake.FilingType = FilingType.Schedule13G;
+            stake.AccessionNumber = "13g-" + stake.AccessionNumber;
+            db.Add(stake);
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync(
+            $"/Holdings/Export/Institution?cik=0008900002&date={reportDate:yyyy-MM-dd}"
+        );
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("Apple Inc.,100000");
+        body.Should().NotContain("777777");
+    }
+
     [Fact]
     public async Task InstitutionProfile_RendersDownloadCsvButton()
     {
