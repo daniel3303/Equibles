@@ -30,6 +30,23 @@ public class StockTabServiceNewestWholeQuartersTests
     }
 
     [Fact]
+    public void NewestWholeQuarters_NewestQuarterAloneExceedsTheCap_ShowsItWhole()
+    {
+        var latest = new DateOnly(2025, 6, 30);
+        var history = new List<InstitutionalHolding>
+        {
+            Row(latest, OptionType.Call),
+            Row(latest, OptionType.Put),
+            Row(latest),
+            Row(new DateOnly(2025, 3, 31)),
+        };
+
+        var shown = StockTabService.NewestWholeQuarters(history, maxRows: 2);
+
+        shown.Should().HaveCount(3).And.OnlyContain(h => h.ReportDate == latest);
+    }
+
+    [Fact]
     public void NewestWholeQuarters_CapLandsBetweenQuarters_KeepsEveryRowUnderIt()
     {
         var latest = new DateOnly(2025, 6, 30);

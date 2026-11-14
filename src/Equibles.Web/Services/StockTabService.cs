@@ -1016,7 +1016,12 @@ public class StockTabService
         if (newestFirst.Count <= maxRows)
             return newestFirst;
         var cutQuarter = newestFirst[maxRows].ReportDate;
-        return newestFirst.Take(maxRows).Where(h => h.ReportDate != cutQuarter).ToList();
+        var whole = newestFirst.Take(maxRows).Where(h => h.ReportDate != cutQuarter).ToList();
+        // The newest quarter alone can pass the cap (a trust held across many of its funds); it
+        // is shown whole rather than not at all.
+        return whole.Count > 0
+            ? whole
+            : newestFirst.Where(h => h.ReportDate == cutQuarter).ToList();
     }
 
     // Stamp each holder's first-owned quarter for this stock via one batched lookup.
