@@ -47,6 +47,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DocumentNormalizationBackfillService>();
         services.AddScoped<DocumentImageService>();
         services.AddScoped<FilingItemsBackfillService>();
+        services.AddScoped<ChunkTickerConvergenceService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
         services.AddScoped<IFilingDiscoveryService, FilingDiscoveryService>();
         // Primary IWebsiteSource (consumed by the CommonStocks website discovery
@@ -69,6 +70,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<NCenDataSetWorker>();
         services.AddHostedService<FundSeriesRefreshWorker>();
         services.AddHostedService<IssuerRegistrantProfileRefreshWorker>();
+        services.AddHostedService<ChunkTickerConvergenceWorker>();
         services.AddHostedService<EsefReportScraperWorker>();
 
         return services;
