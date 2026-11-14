@@ -30,7 +30,7 @@ public class Corrupt13FShareCountRepairerRepairValueOverflowTests
                 0.50m,
         };
 
-        var act = () => Corrupt13FShareCountRepairer.Repair(rows, prices);
+        var act = () => Corrupt13FRepairReplay.Repair(rows, prices);
 
         act.Should()
             .NotThrow<OverflowException>(

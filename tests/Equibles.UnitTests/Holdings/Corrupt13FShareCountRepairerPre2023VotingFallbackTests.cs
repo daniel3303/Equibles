@@ -32,7 +32,7 @@ public class Corrupt13FShareCountRepairerPre2023VotingFallbackTests
         };
         var rows = new List<BufferedHoldingRow> { row };
 
-        var outcome = Corrupt13FShareCountRepairer.Repair(
+        var outcome = Corrupt13FRepairReplay.Repair(
             rows,
             new Dictionary<(Guid, string, DateOnly), decimal>()
         );

@@ -258,15 +258,17 @@ public class HouseAnnualReportClientAssetDetailTests
         vineyard.IncomeType.Should().Be("Grape Sales");
         vineyard.IncomeMinimum.Should().Be(100_001);
         vineyard.IncomeMaximum.Should().Be(1_000_000);
+        vineyard.IncomeOpenEnded.Should().BeFalse();
+        vineyard.RangeOpenEnded.Should().BeFalse();
 
-        // "Over $5,000,000" is the form's open-top bracket, which this module
-        // represents as (value, value) — the same convention the value column
-        // already uses.
+        // "Over $5,000,000" is the form's open-top bracket: the floor on both
+        // sides, flagged as having no ceiling.
         var apple = lines.Single(l => l.Description == "Apple Inc. (AAPL)");
         apple.AssetType.Should().Be("ST");
         apple.IncomeType.Should().Be("Capital Gains, Dividends");
         apple.IncomeMinimum.Should().Be(5_000_000);
         apple.IncomeMaximum.Should().Be(5_000_000);
+        apple.IncomeOpenEnded.Should().BeTrue();
 
         // The name wrapped and carried "[BA]" onto its second line.
         lines

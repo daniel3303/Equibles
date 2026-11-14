@@ -379,6 +379,7 @@ public class ImpossiblePositionRepairService
             .ToList();
 
         var repaired = 0;
+        var withdrawnQuarters = new HashSet<DateOnly>();
         foreach (var chunk in withdrawals.Chunk(BatchSize))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -391,6 +392,7 @@ public class ImpossiblePositionRepairService
                 holding.Value = 0L;
                 holding.ValuePending = false;
                 holding.ValueUnavailable = true;
+                withdrawnQuarters.Add(holding.ReportDate);
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -414,6 +416,19 @@ public class ImpossiblePositionRepairService
             _logger.LogWarning(
                 "Re-summed {Realigned} filing rollup(s) still carrying a withdrawn position's value",
                 realigned
+            );
+        }
+
+        // The quarter's AUM snapshot is rebuilt only when stamped, so a withdrawal that stops at
+        // the filing rollup leaves the market-wide total advertising the value it just removed.
+        // Only this pass's quarters are stamped: the realign above revisits every marked row each
+        // cycle, and stamping from it would rebuild the same quarters forever.
+        if (withdrawnQuarters.Count > 0)
+        {
+            await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
+                dbContext,
+                withdrawnQuarters,
+                cancellationToken
             );
         }
 

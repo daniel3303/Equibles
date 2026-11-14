@@ -52,15 +52,60 @@ public class CongressionalAnnualDisclosureSyncServiceTests
         // Minimum = asset minimums − liability maximums; maximum = asset
         // maximums − liability minimums. The band brackets the truth from
         // both sides — never a point estimate.
-        var (minimum, maximum) = CongressionalAnnualDisclosureSyncService.ComputeNetWorthBand([
+        var band = CongressionalAnnualDisclosureSyncService.ComputeNetWorthBand([
             Asset(1_000_001, 5_000_000),
             Asset(15_001, 50_000),
             Liability(250_001, 500_000),
         ]);
 
-        minimum.Should().Be(1_000_001 + 15_001 - 500_000);
-        maximum.Should().Be(5_000_000 + 50_000 - 250_001);
+        band.Minimum.Should().Be(1_000_001 + 15_001 - 500_000);
+        band.Maximum.Should().Be(5_000_000 + 50_000 - 250_001);
+        band.MinimumOpenEnded.Should().BeFalse();
+        band.MaximumOpenEnded.Should().BeFalse();
     }
+
+    [Fact]
+    public void ComputeNetWorthBand_AssetWithNoCeiling_LeavesTheMaximumOpen()
+    {
+        // "Over $50,000,000" counts at its floor on both sides; only the minimum is a bound.
+        var band = CongressionalAnnualDisclosureSyncService.ComputeNetWorthBand([
+            OpenEnded(CongressionalDisclosureLineKind.Asset, 50_000_000),
+            Asset(1_000_001, 5_000_000),
+            Liability(250_001, 500_000),
+        ]);
+
+        band.Minimum.Should().Be(50_000_000 + 1_000_001 - 500_000);
+        band.Maximum.Should().Be(50_000_000 + 5_000_000 - 250_001);
+        band.MaximumOpenEnded.Should().BeTrue();
+        band.MinimumOpenEnded.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ComputeNetWorthBand_LiabilityWithNoCeiling_LeavesTheMinimumOpen()
+    {
+        var band = CongressionalAnnualDisclosureSyncService.ComputeNetWorthBand([
+            Asset(1_000_001, 5_000_000),
+            OpenEnded(CongressionalDisclosureLineKind.Liability, 1_000_000),
+        ]);
+
+        band.Minimum.Should().Be(1_000_001 - 1_000_000);
+        band.Maximum.Should().Be(5_000_000 - 1_000_000);
+        band.MinimumOpenEnded.Should().BeTrue();
+        band.MaximumOpenEnded.Should().BeFalse();
+    }
+
+    private static AnnualDisclosureLineItem OpenEnded(
+        CongressionalDisclosureLineKind kind,
+        long floor
+    ) =>
+        new()
+        {
+            Kind = kind,
+            Description = "No ceiling",
+            RangeMinimum = floor,
+            RangeMaximum = floor,
+            RangeOpenEnded = true,
+        };
 
     [Fact]
     public void SelectLatestReports_AmendmentAndOriginal_KeepsTheLatestPerMemberYear()

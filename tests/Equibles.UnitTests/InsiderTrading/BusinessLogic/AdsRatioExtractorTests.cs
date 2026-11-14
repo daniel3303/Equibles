@@ -106,6 +106,33 @@ public class AdsRatioExtractorTests
             0,
         };
 
+        // RedHill's ratio sentence puts a comma straight after the share noun
+        // ("ordinary shares, par value"). 15,740,000 / 10,000 = 1,574 (exact).
+        yield return new object[]
+        {
+            "Ordinary Shares",
+            new[]
+            {
+                "The reporting person sold 1,574 American Depositary Shares (\"ADS\") of RedHill Biopharma Inc. (the \"Issuer\"), each ADS represents 10,000 ordinary shares, par value NIS 0.01 per share, solely to satisfy tax withholding obligations.",
+                "The price reported in Table I Column 4 is $0.8001 per ADS.",
+            },
+            15_740_000L,
+            10_000,
+        };
+
+        // Silicon Motion's spelled-out anchor with the same comma. 6,000 / 4 exact.
+        yield return new object[]
+        {
+            "Ordinary Shares",
+            new[]
+            {
+                "Each American depositary share represents four ordinary shares, US$0.01 par value per share, of Silicon Motion Technology Corp.",
+                "The price reported is per ADS.",
+            },
+            6_000L,
+            4,
+        };
+
         // NEGATIVE — Avadel: the row is titled in ADS units, so count and price
         // are already consistent (and the ratio is 1 anyway).
         yield return new object[]

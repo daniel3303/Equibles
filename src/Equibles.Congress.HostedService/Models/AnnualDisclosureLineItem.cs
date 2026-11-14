@@ -20,6 +20,12 @@ public class AnnualDisclosureLineItem
     public long RangeMaximum { get; init; }
 
     /// <summary>
+    /// The filer checked a bracket with no ceiling ("Over $50,000,000"), so
+    /// <see cref="RangeMaximum"/> repeats the floor and bounds nothing.
+    /// </summary>
+    public bool RangeOpenEnded { get; init; }
+
+    /// <summary>
     /// The filer's own asset-class label — a House code without its brackets
     /// ("ST") or a Senate label ("Bank Deposit"). Null on liability rows.
     /// </summary>
@@ -37,4 +43,7 @@ public class AnnualDisclosureLineItem
 
     /// <summary>Upper bound of the disclosed income range, in dollars.</summary>
     public long? IncomeMaximum { get; init; }
+
+    /// <summary>The income bracket has no ceiling ("Over $5,000,000").</summary>
+    public bool IncomeOpenEnded { get; init; }
 }

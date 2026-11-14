@@ -1173,8 +1173,14 @@ namespace Equibles.Migrations.Migrations
                     b.Property<long>("NetWorthMaximum")
                         .HasColumnType("bigint");
 
+                    b.Property<bool>("NetWorthMaximumOpenEnded")
+                        .HasColumnType("boolean");
+
                     b.Property<long>("NetWorthMinimum")
                         .HasColumnType("bigint");
+
+                    b.Property<bool>("NetWorthMinimumOpenEnded")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ReportId")
                         .IsRequired()
@@ -1220,6 +1226,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<long?>("IncomeMinimum")
                         .HasColumnType("bigint");
 
+                    b.Property<bool>("IncomeOpenEnded")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("IncomeType")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -1232,6 +1241,9 @@ namespace Equibles.Migrations.Migrations
 
                     b.Property<long>("RangeMinimum")
                         .HasColumnType("bigint");
+
+                    b.Property<bool>("RangeOpenEnded")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 

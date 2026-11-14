@@ -82,7 +82,7 @@ public class Corrupt13FShareCountRepairerTests
         var rows = new List<BufferedHoldingRow> { row };
         var prices = Prices(row, 250.00m);
 
-        var outcome = Corrupt13FShareCountRepairer.Repair(rows, prices);
+        var outcome = Corrupt13FRepairReplay.Repair(rows, prices);
 
         outcome.Should().Be(new Corrupt13FRepairOutcome(RepairedRows: 1, DroppedRows: 0));
         row.Holding.Shares.Should().Be(10_000L);
@@ -102,7 +102,7 @@ public class Corrupt13FShareCountRepairerTests
         var row = Row(shares: 6_702_883, reportedValue: 6_702_883, votingSole: 6_751);
         var rows = new List<BufferedHoldingRow> { row };
 
-        var outcome = Corrupt13FShareCountRepairer.Repair(
+        var outcome = Corrupt13FRepairReplay.Repair(
             rows,
             new Dictionary<(Guid, string, DateOnly), decimal>()
         );
@@ -119,7 +119,7 @@ public class Corrupt13FShareCountRepairerTests
         var row = Row(shares: 1_000_000, reportedValue: 1_000_000);
         var rows = new List<BufferedHoldingRow> { row };
 
-        var outcome = Corrupt13FShareCountRepairer.Repair(
+        var outcome = Corrupt13FRepairReplay.Repair(
             rows,
             new Dictionary<(Guid, string, DateOnly), decimal>()
         );
@@ -142,7 +142,7 @@ public class Corrupt13FShareCountRepairerTests
         var rows = new List<BufferedHoldingRow> { row };
         var prices = Prices(row, 100.00m);
 
-        Corrupt13FShareCountRepairer.Repair(rows, prices);
+        Corrupt13FRepairReplay.Repair(rows, prices);
 
         // $1,000 thousands = $1,000,000 ÷ $100 = 10,000 shares.
         row.Holding.Shares.Should().Be(10_000L);
@@ -159,7 +159,7 @@ public class Corrupt13FShareCountRepairerTests
         var rows = new List<BufferedHoldingRow> { healthy };
         var prices = Prices(healthy, 250.00m);
 
-        var outcome = Corrupt13FShareCountRepairer.Repair(rows, prices);
+        var outcome = Corrupt13FRepairReplay.Repair(rows, prices);
 
         outcome.Should().Be(new Corrupt13FRepairOutcome(RepairedRows: 0, DroppedRows: 0));
         healthy.Holding.Shares.Should().Be(500L);

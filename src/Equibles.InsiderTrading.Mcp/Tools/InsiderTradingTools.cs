@@ -242,7 +242,7 @@ public class InsiderTradingTools
                     transactions,
                     t =>
                     {
-                        var role = GetRole(t.InsiderOwner);
+                        var role = InsiderRoleLabel.Of(t.InsiderOwner, t.OwnerRelationship);
                         // Reserve the Buy/Sell trade labels strictly for open-market
                         // purchases/sales; every other SEC code renders its own meaning so
                         // comp mechanics (conversions, tax withholding, expirations) are
@@ -370,7 +370,10 @@ public class InsiderTradingTools
                     ranked,
                     p =>
                     {
-                        var role = GetRole(p.Anchor.InsiderOwner);
+                        var role = InsiderRoleLabel.Of(
+                            p.Anchor.InsiderOwner,
+                            p.Anchor.OwnerRelationship
+                        );
                         var lastType = TypeLabel(p.Anchor.TransactionCode);
                         var total = McpFormat.WholeNumber(p.DirectShares + p.IndirectShares);
                         return $"| {p.Anchor.InsiderOwner.Name} | {role} | {McpFormat.WholeNumber(p.DirectShares)} | {McpFormat.WholeNumber(p.IndirectShares)} | {total} | {lastType} | {p.Anchor.TransactionDate:yyyy-MM-dd} |";
@@ -630,7 +633,11 @@ public class InsiderTradingTools
                     insiders,
                     insider =>
                     {
-                        var role = GetRole(insider);
+                        // The role shown is the one filed at the company on the same row.
+                        var role = InsiderRoleLabel.Of(
+                            insider,
+                            latestByOwner.GetValueOrDefault(insider.Id)?.OwnerRelationship
+                        );
                         var company =
                             latestByOwner.TryGetValue(insider.Id, out var transaction)
                             && transaction.Issuer != null
@@ -659,8 +666,6 @@ public class InsiderTradingTools
             $"query: {query}, offset: {offset}"
         );
     }
-
-    private static string GetRole(InsiderOwner owner) => InsiderRoleLabel.Of(owner);
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
     private Task<(EquityIssuer Stock, string Error)> ResolveStockByTicker(string ticker) =>

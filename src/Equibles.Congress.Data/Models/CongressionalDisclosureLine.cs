@@ -32,6 +32,12 @@ public class CongressionalDisclosureLine
     public long RangeMaximum { get; set; }
 
     /// <summary>
+    /// The filer checked a bracket with no ceiling ("Over $50,000,000"): the value is at least
+    /// <see cref="RangeMinimum"/>, and <see cref="RangeMaximum"/> repeats that floor.
+    /// </summary>
+    public bool RangeOpenEnded { get; set; }
+
+    /// <summary>
     /// The asset class the filer declared, verbatim in the filing's own
     /// vocabulary: a House bracketed code with its brackets removed ("ST",
     /// "RP", "BA") or the Senate's spelled-out label ("Bank Deposit", "Corporate
@@ -59,6 +65,9 @@ public class CongressionalDisclosureLine
 
     /// <summary>Upper bound of the disclosed income range, in dollars.</summary>
     public long? IncomeMaximum { get; set; }
+
+    /// <summary>The income bracket has no ceiling ("Over $5,000,000").</summary>
+    public bool IncomeOpenEnded { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

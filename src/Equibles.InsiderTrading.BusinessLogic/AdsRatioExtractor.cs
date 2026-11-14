@@ -185,9 +185,12 @@ public static class AdsRatioExtractor
     private static int? TryParseRatio(string note)
     {
         var tokens = Tokenize(note);
+        // Words are matched without the comma Tokenize keeps for grouped digits: a share noun
+        // followed by one ("ordinary shares, par value ...") is still the noun.
+        var words = tokens.Select(Word).ToList();
         for (var i = 0; i < tokens.Count; i++)
         {
-            var afterRepresents = MatchAdsRepresents(tokens, i);
+            var afterRepresents = MatchAdsRepresents(words, i);
             if (afterRepresents < 0)
                 continue;
 
@@ -198,7 +201,7 @@ public static class AdsRatioExtractor
                 var number = ParseNumberAt(tokens, j, out var next);
                 if (number == null)
                     continue;
-                if (OrdinaryShareNounFollows(tokens, next))
+                if (OrdinaryShareNounFollows(words, next))
                     return number;
                 // A number that doesn't lead to the share noun isn't the ratio;
                 // give up on this anchor and look for the next one.

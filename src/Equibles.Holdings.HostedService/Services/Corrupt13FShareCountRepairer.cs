@@ -49,19 +49,19 @@ internal static class Corrupt13FShareCountRepairer
     }
 
     /// <summary>
-    /// Repairs every duplicated row of a suspect filing in place. The value
-    /// column is internally consistent in these filings, so the true share
-    /// count is value ÷ closing price; without a price the voting-authority
-    /// total is used when populated (these filers report the real count
-    /// there), and a row with neither anchor is dropped from
-    /// <paramref name="rows"/> rather than allowed to poison the rankings.
+    /// Repairs every duplicated row of a suspect filing in place. The value column is internally
+    /// consistent in these filings, so the true share count is value ÷ the quarter-end price on
+    /// the filing's own share basis (<paramref name="filingBasisPrice"/>): the stored close is on
+    /// today's basis, and dividing by it states the count on a later split's basis. Without an
+    /// honest price the voting-authority total is used when populated (these filers report the
+    /// real count there), and a row with neither anchor is dropped from <paramref name="rows"/>
+    /// rather than allowed to poison the rankings. <paramref name="revalue"/> re-derives each
+    /// repaired row, so nothing of the corrupt count's valuation survives.
     /// </summary>
     internal static Corrupt13FRepairOutcome Repair(
         List<BufferedHoldingRow> rows,
-        IReadOnlyDictionary<
-            (Guid StockId, string ListedTicker, DateOnly ReportDate),
-            decimal
-        > stockPrices
+        Func<InstitutionalHolding, decimal?> filingBasisPrice,
+        Action<BufferedHoldingRow> revalue
     )
     {
         var repaired = 0;
@@ -79,36 +79,19 @@ internal static class Corrupt13FShareCountRepairer
             var holding = row.Holding;
             var reportedDollars = FiledValueScale.ToDollars(row.ReportedValue, holding.FilingDate);
 
-            if (
-                stockPrices.TryGetValue(
-                    (holding.EquityIssuerId, holding.ListedTicker, holding.ReportDate),
-                    out var closePrice
-                )
-                && closePrice > 0
-            )
+            if (filingBasisPrice(holding) is { } price && price > 0)
             {
-                var recoveredShares = Math.Round(reportedDollars / closePrice);
-                var recoveredValue = recoveredShares * closePrice;
-                // An oversized corrupt row can push value ÷ price (and the value it
-                // implies) past Int64; it is too large to represent, so drop it like the
-                // neither-anchor case below instead of letting the (long) casts throw
-                // OverflowException and abort the whole import batch.
-                if (
-                    recoveredShares < long.MinValue
-                    || recoveredShares > long.MaxValue
-                    || recoveredValue < long.MinValue
-                    || recoveredValue > long.MaxValue
-                )
+                var recoveredShares = Math.Round(reportedDollars / price);
+                // An oversized corrupt row can push value ÷ price past Int64; it is too large to
+                // represent, so drop it like the neither-anchor case below instead of letting the
+                // (long) cast throw OverflowException and abort the whole import batch.
+                if (recoveredShares < long.MinValue || recoveredShares > long.MaxValue)
                 {
                     dropped++;
                     continue;
                 }
 
-                var shares = (long)recoveredShares;
-                // The truncating cast deliberately mirrors ParseHoldingRow's
-                // `(long)(shares * closePrice)` so a repaired row is identical
-                // to what the same filing would have produced if filed correctly.
-                ApplyRepair(row, shares, (long)recoveredValue, valuePending: false);
+                ApplyRepair(row, (long)recoveredShares, revalue);
                 repaired++;
                 kept.Add(row);
                 continue;
@@ -122,9 +105,9 @@ internal static class Corrupt13FShareCountRepairer
                 holding.VotingAuthSole + holding.VotingAuthShared + holding.VotingAuthNone;
             if (votingTotal > 0)
             {
-                // No price for this (stock, quarter) yet: keep the corrected
-                // count and let the pending-value retry path price it later.
-                ApplyRepair(row, votingTotal, 0L, valuePending: true);
+                // No honest price for this (stock, quarter) yet: keep the corrected count and
+                // let the pending-value retry path price it later.
+                ApplyRepair(row, votingTotal, revalue);
                 repaired++;
                 kept.Add(row);
                 continue;
@@ -146,14 +129,11 @@ internal static class Corrupt13FShareCountRepairer
     private static void ApplyRepair(
         BufferedHoldingRow row,
         long shares,
-        long value,
-        bool valuePending
+        Action<BufferedHoldingRow> revalue
     )
     {
         row.Holding.Shares = shares;
-        row.Holding.Value = value;
-        row.Holding.ValuePending = valuePending;
         row.ManagerEntry.Shares = shares;
-        row.ManagerEntry.Value = value;
+        revalue(row);
     }
 }

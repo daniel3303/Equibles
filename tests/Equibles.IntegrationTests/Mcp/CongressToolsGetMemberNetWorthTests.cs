@@ -108,6 +108,45 @@ public class CongressToolsGetMemberNetWorthTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetMemberNetWorth_AssetWithNoCeiling_PrintsNoUpperBoundInsteadOfTheFloorSum()
+    {
+        var member = new CongressMember
+        {
+            Name = "Open Ended Member",
+            Position = CongressPosition.Senator,
+        };
+        DbContext.Add(member);
+        DbContext.Add(
+            new CongressionalAnnualDisclosure
+            {
+                CongressMemberId = member.Id,
+                Year = 2024,
+                FiledDate = new DateOnly(2025, 5, 15),
+                ReportId = "7000009",
+                NetWorthMinimum = 50_000_000,
+                NetWorthMaximum = 50_000_000,
+                NetWorthMaximumOpenEnded = true,
+                Lines =
+                [
+                    new CongressionalDisclosureLine
+                    {
+                        Kind = CongressionalDisclosureLineKind.Asset,
+                        Description = "Family Holding LLC",
+                        RangeMinimum = 50_000_000,
+                        RangeMaximum = 50_000_000,
+                        RangeOpenEnded = true,
+                    },
+                ],
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetMemberNetWorth("Open Ended Member");
+
+        result.Should().Contain("| 2024 | 2025-05-15 | $50,000,000 | no upper bound | 1 | 0 |");
+    }
+
+    [Fact]
     public async Task GetMemberNetWorth_MemberWithoutDisclosures_ExplainsMissingIsNotZero()
     {
         var member = new CongressMember

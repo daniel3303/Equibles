@@ -273,6 +273,74 @@ public class CongressMemberLegislatorIdentityTests : ParadeDbMcpTestBase
         stored.BioguideIdSource.Should().Be(CongressBioguideIdSource.SeatAndSurnameMatch);
     }
 
+    [Fact]
+    public async Task UpsertMembers_ReplayedHouseFilingOfASittingSenator_KeepsTheSenateChamber()
+    {
+        await SeedSchiffTerms();
+        var schiff = await SeedMember("Adam Schiff", "CA30", filingDate: null, "S001150");
+
+        await CreateSut()
+            .UpsertMembers(
+                [
+                    new Equibles.Congress.HostedService.Models.CongressMemberObservation(
+                        "Adam B. Schiff",
+                        CongressPosition.Representative,
+                        "CA30",
+                        new DateOnly(2023, 5, 10)
+                    ),
+                ],
+                CancellationToken.None
+            );
+
+        var stored = await Reload(schiff);
+        stored.Position.Should().Be(CongressPosition.Senator);
+        stored.StateDistrict.Should().Be("CA30");
+    }
+
+    [Fact]
+    public async Task ReconcileMembers_StoredChamberBehindTheRoster_TakesTheLatestTermsChamber()
+    {
+        await SeedSchiffTerms();
+        var schiff = await SeedMember("Adam Schiff", "CA30", filingDate: null, "S001150");
+
+        await CreateSut().ReconcileMembers(CancellationToken.None);
+
+        (await Reload(schiff)).Position.Should().Be(CongressPosition.Senator);
+    }
+
+    [Fact]
+    public async Task UpsertMembers_MemberTheRosterDoesNotIdentify_KeepsTheFiledChamber()
+    {
+        await SeedSchiffTerms();
+
+        var members = await CreateSut()
+            .UpsertMembers(
+                [
+                    new Equibles.Congress.HostedService.Models.CongressMemberObservation(
+                        "Unlisted Filer",
+                        CongressPosition.Senator,
+                        null,
+                        new DateOnly(2024, 3, 1)
+                    ),
+                ],
+                CancellationToken.None
+            );
+
+        members["Unlisted Filer"].Position.Should().Be(CongressPosition.Senator);
+    }
+
+    // Adam Schiff sat for California's 30th district until he was sworn into the Senate.
+    private async Task SeedSchiffTerms()
+    {
+        DbContext.AddRange(
+            Legislator("S001150", "Schiff"),
+            Term("S001150", CongressPosition.Representative, "CA", 30, 2023, 2025),
+            Term("S001150", CongressPosition.Senator, "CA", null, 2025, 2031)
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+    }
+
     private CongressMemberIdentityService CreateSut() =>
         new(Fixture.CreateDbContext(), NullLogger<CongressMemberIdentityService>());
 

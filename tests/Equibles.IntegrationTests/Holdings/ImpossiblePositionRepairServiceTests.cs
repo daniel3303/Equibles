@@ -259,6 +259,44 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
         (await Reload(holdings[2].Id)).ValueUnavailable.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Repair_StampsTheWithdrawnQuartersAumSnapshotOnceForRebuild()
+    {
+        var holding = await SeedHolding(
+            sharesOutstanding: 200_000_000,
+            marketCapitalization: 5_000_000_000,
+            shares: 32_098_694_296,
+            value: 100_800_000_000
+        );
+        var seedContext = CreateSharedContext();
+        seedContext
+            .Set<AumQuarterlySnapshot>()
+            .Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = holding.ReportDate,
+                    TotalValue = 100_800_000_000,
+                }
+            );
+        await seedContext.SaveChangesAsync();
+        var service = CreateService();
+
+        await service.Repair(CancellationToken.None);
+
+        var stamped = CreateSharedContext();
+        var snapshot = await stamped.Set<AumQuarterlySnapshot>().SingleAsync();
+        snapshot.DirtyAt.Should().NotBeNull("the snapshot still totals the withdrawn value");
+
+        // The drain claims the stamp; a later cycle that withdraws nothing must not re-stamp.
+        snapshot.DirtyAt = null;
+        await stamped.SaveChangesAsync();
+        await service.Repair(CancellationToken.None);
+
+        (await CreateSharedContext().Set<AumQuarterlySnapshot>().SingleAsync())
+            .DirtyAt.Should()
+            .BeNull();
+    }
+
     private ImpossiblePositionRepairService CreateService() =>
         new(CreateScopeFactory(), Substitute.For<ILogger<ImpossiblePositionRepairService>>());
 

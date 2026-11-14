@@ -55,3 +55,10 @@
 - `SwappedColumns/<accession>.json` holds one 13F information table's share rows (`sshPrnAmt` and `value` as filed) and each security's quarter-end close on the filing's share basis.
 - Rebuilt on 2026-10-20 from the stored rows of https://www.sec.gov/Archives/edgar/data/1737088/000173708822000002/ (thousands era) and https://www.sec.gov/Archives/edgar/data/1977602/000197760223000001/ (whole dollars), both swapped, and https://www.sec.gov/Archives/edgar/data/1737088/000173708822000005/, the same filer's correct next quarter.
 - A CUSIP without a recorded close was unpriced at import and stays unpriced in the replay.
+
+# Information table that duplicates its value column into the share count
+
+- `DuplicatedColumns/0002011335-26-000002.json`: J. Stern & Co. LLP, period 2025-12-31, filed 2026-02-24.
+- Rows are `[CUSIP, value as filed in whole dollars (the share-count column repeats it), sole voting authority]`; the voting column states the true count.
+- Prices are each series' stored 2025-12-31 close on today's split basis; splits are the ones that took effect on the primary listing after the quarter.
+- Captured 2026-11-14 from the stored positions; no row is edited.

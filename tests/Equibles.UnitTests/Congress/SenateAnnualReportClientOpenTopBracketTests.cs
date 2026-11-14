@@ -32,5 +32,39 @@ public class SenateAnnualReportClientOpenTopBracketTests
         asset.Description.Should().Be("Family Holding LLC");
         asset.RangeMinimum.Should().Be(50_000_000);
         asset.RangeMaximum.Should().Be(50_000_000);
+        asset.RangeOpenEnded.Should().BeTrue();
+    }
+
+    // The spouse and dependent-child category on a liability, beside an ordinary bracket.
+    [Fact]
+    public void ParseAnnualReportHtml_LiabilityOverOneMillion_IsOpenEndedAndTheBracketBesideItIsNot()
+    {
+        const string html = """
+            <html><body>
+            <h3>Part 3. Assets</h3>
+            <p>None disclosed.</p>
+            <h3>Part 7. Liabilities</h3>
+            <table>
+              <thead><tr><th></th><th>#</th><th>Incurred</th><th>Debtor</th><th>Type</th>
+              <th>Points</th><th>Rate (Term)</th><th>Amount</th><th>Creditor</th><th>Comments</th></tr></thead>
+              <tbody>
+              <tr><td></td><td>1</td><td>2019</td><td>Spouse</td><td>Mortgage</td>
+              <td>0</td><td>3.5% (30 year fixed)</td><td>Over $1,000,000</td>
+              <td>First Bank</td><td>n/a</td></tr>
+              <tr><td></td><td>2</td><td>2021</td><td>Joint</td><td>Mortgage</td>
+              <td>0</td><td>3.0% (30 year fixed)</td><td>$250,001 - $500,000</td>
+              <td>Second Bank</td><td>n/a</td></tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var lines = SenateAnnualReportClient.ParseAnnualReportHtml(html);
+
+        lines.Should().HaveCount(2);
+        lines[0].RangeMinimum.Should().Be(1_000_000);
+        lines[0].RangeOpenEnded.Should().BeTrue();
+        lines[1].RangeMaximum.Should().Be(500_000);
+        lines[1].RangeOpenEnded.Should().BeFalse();
     }
 }
