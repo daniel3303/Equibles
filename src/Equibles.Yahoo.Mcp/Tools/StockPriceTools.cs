@@ -274,6 +274,9 @@ public class StockPriceTools
                 // Set when a ticker's raw 52-week window crosses a captured split. Raw rows carry
                 // no basis metadata, so bars before the latest split are withheld and starred.
                 var splitLimitedWindow = false;
+                // Set when a day change is withheld because the previous session sits before a
+                // recorded split, whatever the range did.
+                var changeAcrossSplit = false;
 
                 // Sessions of the rendered rows: more than one means the newest session is
                 // still settling for part of the batch, which earns its own footnote.
@@ -358,7 +361,9 @@ public class StockPriceTools
                     // Trailing 52-week close range, anchored on the row's own session so a
                     // stock that stopped trading doesn't fabricate a fresh range. A completed
                     // provider refresh cannot certify the basis of raw rows, so a captured split
-                    // inside the requested year moves the comparison start to that split date.
+                    // inside the requested year moves the comparison start to that split date,
+                    // unless the split history confirms this exact US series restated across it.
+                    // The day change keeps the strict window either way.
                     var cutoff = price.Date.AddDays(-365);
                     var applicableSplits =
                         listing.Venue == null
@@ -378,6 +383,17 @@ public class StockPriceTools
                         price.Date,
                         applicableSplits
                     );
+                    var rangeWindow =
+                        listing.Venue == null
+                            ? ComparablePriceWindow.Resolve(
+                                cutoff,
+                                price.Date,
+                                CertifiedSplitBasis.RemainingRangeBoundaries(
+                                    applicableSplits,
+                                    listing.PriceTicker
+                                )
+                            )
+                            : comparableWindow;
                     var venueSessionSkipped =
                         listing.Venue != null
                         && previous != null
@@ -395,6 +411,11 @@ public class StockPriceTools
                             comparableWindow.SplitBoundaryDate,
                             listing.Venue != null
                         );
+                    changeAcrossSplit |=
+                        previousClose == null
+                        && previous != null
+                        && comparableWindow.SplitBoundaryDate is { } boundary
+                        && previous.Date < boundary;
                     var changeCell = "—";
                     var changePctCell = "—";
                     if (previousClose != null)
@@ -420,7 +441,7 @@ public class StockPriceTools
                     }
                     var range = await Traded(listing)
                         .Where(p =>
-                            p.Date >= comparableWindow.Start && p.Date <= price.Date && p.Close > 0
+                            p.Date >= rangeWindow.Start && p.Date <= price.Date && p.Close > 0
                         )
                         .GroupBy(p => 1)
                         .Select(g => new
@@ -440,13 +461,13 @@ public class StockPriceTools
                                 range.Low,
                                 range.Oldest,
                                 cutoff,
-                                comparableWindow.IsSplitLimited
+                                rangeWindow.IsSplitLimited
                             );
                     shortWindow |=
                         range != null
                         && range.Oldest > cutoff.AddDays(BaselineSlackDays)
-                        && !comparableWindow.IsSplitLimited;
-                    splitLimitedWindow |= comparableWindow.IsSplitLimited;
+                        && !rangeWindow.IsSplitLimited;
+                    splitLimitedWindow |= rangeWindow.IsSplitLimited;
 
                     rowDates.Add(price.Date);
                     result.AppendLine(
@@ -520,11 +541,20 @@ public class StockPriceTools
                 {
                     result.AppendLine();
                     result.AppendLine(
-                        "Note: a 52-week value marked \\* can begin at the latest recorded split "
-                            + "inside the requested year. A Change of \"—\" can also mean its "
-                            + "previous session falls before that split. Earlier raw bars are "
-                            + "withheld because stored rows do not identify their split basis; "
-                            + "the displayed figures compare only the post-split interval."
+                        "Note: a 52-week value marked \\* begins at the latest recorded split "
+                            + "inside the requested year, because the bars before it are not "
+                            + "confirmed restated onto today's basis (GetStockSplits says which "
+                            + "splits are); the figures compare only the post-split interval. A "
+                            + "split confirmed restated does not shorten the range."
+                    );
+                }
+
+                if (changeAcrossSplit)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        "Note: a Change of \"—\" can mean the previous session falls before a "
+                            + "recorded split, where the two closes are not compared."
                     );
                 }
 

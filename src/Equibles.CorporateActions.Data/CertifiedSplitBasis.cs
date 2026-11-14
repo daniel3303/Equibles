@@ -9,10 +9,43 @@ namespace Equibles.CorporateActions.Data;
 /// series: that stamp is written only after the full-history replacement rebased the whole
 /// series in one transaction and re-checked every effective split, and the worker keeps
 /// re-auditing a material marker against the stored closes at the boundary. Only the consumers
-/// that opt in cross such a split; every latest-price contract deliberately still clips.
+/// that opt in cross such a split: charts and backtests on <see cref="RemainingBoundaries"/>, the
+/// 52-week ranges on the stricter <see cref="RemainingRangeBoundaries"/>. Day changes still clip.
 /// </summary>
 public static class CertifiedSplitBasis
 {
+    /// <summary>
+    /// A split whose ratio sits strictly between these is stamped applied without the boundary
+    /// check against the stored closes, so its stamp alone confirms nothing.
+    /// </summary>
+    public const decimal MaterialRatioFloor = 0.5m;
+    public const decimal MaterialRatioCeiling = 2m;
+
+    /// <summary>
+    /// The splits that still bound a 52-week range: <see cref="RemainingBoundaries"/>, plus every
+    /// certified split whose ratio is not material. A published high or low is one figure a
+    /// reader cannot check against a chart, so it crosses only a split the split history itself
+    /// reports as confirmed restated.
+    /// </summary>
+    public static List<StockSplit> RemainingRangeBoundaries(
+        IReadOnlyList<StockSplit> applicableSplits,
+        string listedTicker
+    )
+    {
+        var remaining = RemainingBoundaries(applicableSplits, listedTicker);
+        return (applicableSplits ?? [])
+            .Where(split => remaining.Contains(split) || !HasMaterialRatio(split))
+            .ToList();
+    }
+
+    public static bool HasMaterialRatio(StockSplit split)
+    {
+        if (split.Numerator <= 0m || split.Denominator <= 0m)
+            return false;
+        var ratio = split.Numerator / split.Denominator;
+        return ratio <= MaterialRatioFloor || ratio >= MaterialRatioCeiling;
+    }
+
     /// <summary>
     /// The splits that still bound a raw-price window for <paramref name="listedTicker"/>:
     /// everything the caller scoped in, minus this series' own certified splits. A series whose

@@ -64,8 +64,8 @@ public class YahooPriceImportService
     private const double MinimumReferenceHistoryCoverageShare = 0.90;
     private const int InsertBatchSize = 500;
     private const int AppliedSplitBasisAuditLookbackDays = 180;
-    private const decimal MaterialSplitRatioFloor = 0.5m;
-    private const decimal MaterialSplitRatioCeiling = 2m;
+    private const decimal MaterialSplitRatioFloor = CertifiedSplitBasis.MaterialRatioFloor;
+    private const decimal MaterialSplitRatioCeiling = CertifiedSplitBasis.MaterialRatioCeiling;
     private const decimal SplitRatioMatchTolerance = 0.25m;
 
     // The audit loads stored bars from this far before the same-event window, so the window's

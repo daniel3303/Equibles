@@ -488,6 +488,61 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("compare only the post-split interval");
     }
 
+    // SOXX read at its 52-week high after a split although its restated bars put it 27% below:
+    // a split the split history confirms restated no longer shortens the range. A 3-for-2 is
+    // stamped without the boundary check, so it still does.
+    [Theory]
+    [InlineData(1, 5, "| 30.00 | 20.00 |", false)]
+    [InlineData(3, 2, "| 25.00\\* | 20.00\\* |", true)]
+    public async Task GetLatestClosingPrices_SplitStampedRestatedForTheListing_CrossesOnlyAMaterialRatio(
+        int numerator,
+        int denominator,
+        string rangeCells,
+        bool splitLimited
+    )
+    {
+        EquityIssuer stock = AaplStock();
+        var splitDate = new DateOnly(2026, 8, 4);
+        DbContext.Set<EquityIssuer>().Add(stock);
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    EquityIssuerId = stock.Id,
+                    EquityListingId = stock.Presentation.Listing.Id,
+                    PriceSeriesTicker = "AAPL",
+                    EffectiveDate = splitDate,
+                    Numerator = numerator,
+                    Denominator = denominator,
+                    Source = StockSplitSource.Yahoo,
+                    PriceAdjustmentAppliedTime = new DateTime(
+                        2026,
+                        8,
+                        6,
+                        0,
+                        0,
+                        0,
+                        DateTimeKind.Utc
+                    ),
+                }
+            );
+        DbContext
+            .Set<EquityDailyStockPrice>()
+            .AddRange(
+                PriceFor(stock, new DateOnly(2025, 8, 12), close: 22m),
+                PriceFor(stock, splitDate.AddDays(-1), close: 30m),
+                PriceFor(stock, splitDate, close: 20m),
+                PriceFor(stock, new DateOnly(2026, 8, 10), close: 25m)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLatestClosingPrices("AAPL");
+
+        result.Should().Contain(rangeCells);
+        result.Contains("latest recorded split").Should().Be(splitLimited);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("AAPL")]
@@ -522,7 +577,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         var result = await Sut().GetLatestClosingPrices("AAPL");
 
         result.Should().Contain("| AAPL | 2026-08-04 | 20.00 | — | — |");
-        result.Should().Contain("previous session falls before that split");
+        result.Should().Contain("previous session falls before a recorded split");
     }
 
     [Fact]
