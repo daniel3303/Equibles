@@ -339,6 +339,8 @@ public class StockPriceTools
                 }
 
                 var splitsByIssuer = new IssuerSplitIndex(batchSplits);
+                // Two spellings of one venue listing (SAP.DE and XETR:SAP) answer one row.
+                var answeredVenueListings = new HashSet<Guid>();
                 foreach (var ticker in tickerList)
                 {
                     if (!latestByTicker.TryGetValue(ticker, out var selection))
@@ -348,6 +350,8 @@ public class StockPriceTools
                     }
 
                     var listing = selection.Listing;
+                    if (listing.Venue != null && !answeredVenueListings.Add(listing.Venue.Id))
+                        continue;
                     EquityDailyStockPrice price = selection.Price;
                     EquityDailyStockPrice previous = selection.Previous;
 

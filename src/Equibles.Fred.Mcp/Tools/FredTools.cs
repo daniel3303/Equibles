@@ -247,8 +247,8 @@ public class FredTools
                     countryCode == "US"
                         ? "Latest Economic Indicators:"
                         : $"Latest Economic Indicators ({countryCode}):",
-                    "| Series | Title | Latest Date | Value | Previous | Change | Units |",
-                    "|--------|-------|-------------|-------|----------|--------|-------|"
+                    "| Series | Title | Latest Date | Value | Previous | Change | Units | Frequency |",
+                    "|--------|-------|-------------|-------|----------|--------|-------|-----------|"
                 );
 
                 var currentCategory = (FredSeriesCategory?)null;
@@ -258,7 +258,7 @@ public class FredTools
                     if (currentCategory != series.Category)
                     {
                         currentCategory = series.Category;
-                        result.AppendLine($"| **{series.Category}** | | | | | | |");
+                        result.AppendLine($"| **{series.Category}** | | | | | | | |");
                     }
 
                     latestObservations.TryGetValue(series.Id, out var latestObs);
@@ -278,7 +278,7 @@ public class FredTools
                             : McpFormat.OrDash(change, McpFormat.PlainDecimal);
 
                     result.AppendLine(
-                        $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {previousStr} | {changeStr} | {series.Units} |"
+                        $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {previousStr} | {changeStr} | {series.Units} | {FrequencyName(series.Frequency)} |"
                     );
                 }
 
@@ -362,7 +362,7 @@ public class FredTools
         ReadOnly = true
     )]
     [Description(
-        "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US and Canadian macro data releases, each row naming its market, with the FRED series each release updates and an importance tier per release (High = the tier-1 scheduled market movers: CPI, PPI, Employment Situation, GDP, PCE, retail sales; Medium = other genuine scheduled prints; Low = daily rate/market levels like SOFR or VIX). FOMC meetings are NOT included — FRED's release feed has no real FOMC meeting dates; use the Federal Reserve's published meeting calendar for those. Defaults to the next 30 days. Use minImportance=high to see only the market movers, and GetEconomicIndicator to fetch a series' data after it prints."
+        "Get the economic release calendar — scheduled (upcoming) and recent publication dates of US and Canadian macro data releases, each row naming its market, with the FRED series each release updates and an importance tier per release (High = the tier-1 scheduled market movers: CPI, PPI, Employment Situation, GDP, PCE, retail sales; Medium = other genuine scheduled prints; Low = daily rate/market levels like SOFR or VIX). FOMC meetings are NOT included — FRED's release feed has no real FOMC meeting dates; use the Federal Reserve's published meeting calendar for those. Defaults to the next 30 days. When a window holds more rows than maxResults, the lower tiers are left out first (the answer says how many), so the scheduled prints are never cut for daily rows. Use minImportance=high to see only the market movers, and GetEconomicIndicator to fetch a series' data after it prints."
     )]
     public Task<string> GetEconomicCalendar(
         [Description("Start date in YYYY-MM-DD format (defaults to today, UTC)")]
@@ -370,11 +370,11 @@ public class FredTools
         [Description("End date in YYYY-MM-DD format (defaults to 30 days after the start date)")]
             string endDate = null,
         [Description(
-            "Minimum importance tier to include: low, medium, or high (defaults to low = everything)"
+            "Minimum importance tier to include: low, medium, or high (defaults to low = everything that fits maxResults, lower tiers left out first)"
         )]
             string minImportance = null,
         [Description(
-            "Maximum number of release dates to return (default: 100, max: 500, chronological)"
+            "Maximum number of release dates to return (default: 100, max: 500, chronological; over the cap, lower importance tiers are left out before any date is cut)"
         )]
             int maxResults = 100,
         [Description("Market country code, US or CA (defaults to every market)")]
@@ -451,6 +451,30 @@ public class FredTools
 
                 var total = await inRange.CountAsync();
 
+                // Daily Low rows (rates, market levels) outnumber the scheduled prints many
+                // times over, so a chronological cut would fill the cap with them and drop CPI,
+                // jobs and GDP. A window over the cap leaves the lower tiers out first.
+                // A tier is dropped only while a higher one still has rows; a window holding
+                // nothing above it is cut chronologically instead.
+                var shownTier = minTier;
+                var matching = total;
+                while (matching > maxResults && shownTier < FredReleaseImportance.High)
+                {
+                    var tier = shownTier + 1;
+                    var above = await inRange.CountAsync(d => d.FredRelease.Importance >= tier);
+                    if (above == 0)
+                        break;
+                    shownTier = tier;
+                    matching = above;
+                }
+                var leftOut = total - matching;
+                if (leftOut > 0)
+                {
+                    var tier = shownTier;
+                    inRange = inRange.Where(d => d.FredRelease.Importance >= tier);
+                    total = matching;
+                }
+
                 var entries = await inRange
                     .OrderBy(d => d.Date)
                     .ThenByDescending(d => d.FredRelease.Importance)
@@ -496,6 +520,13 @@ public class FredTools
                         + McpOutput.TruncationNote(entries.Count, total)
                         + Environment.NewLine;
                 }
+                if (leftOut > 0)
+                {
+                    table +=
+                        Environment.NewLine
+                        + $"{leftOut} release date(s) below {shownTier} importance are left out to fit maxResults ({maxResults}). Narrow the date range or raise maxResults (max 500) to see them."
+                        + Environment.NewLine;
+                }
 
                 return table;
             },
@@ -503,6 +534,22 @@ public class FredTools
             $"startDate: {startDate}, endDate: {endDate}, minImportance: {minImportance}, country: {country}"
         );
     }
+
+    // Previous and Change span one observation, so the row states how far apart observations are:
+    // a daily rate and a quarterly output figure otherwise read as the same kind of move.
+    private static string FrequencyName(string code) =>
+        code?.Trim().ToUpperInvariant() switch
+        {
+            "D" => "Daily",
+            "W" => "Weekly",
+            "BW" => "Biweekly",
+            "M" => "Monthly",
+            "Q" => "Quarterly",
+            "SA" => "Semiannual",
+            "A" => "Annual",
+            null or "" => "—",
+            _ => code.Trim(),
+        };
 
     // A series from another country or publisher says so beside its units; a US FRED series reads as before.
     private static string SourceNote(FredSeries series) =>

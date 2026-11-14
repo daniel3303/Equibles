@@ -892,6 +892,15 @@ public class SecEdgarClient : ISecEdgarClient
             CompanyName = company,
             Cik = cik,
             DateFiled = ParseInvariantDateOr(dateFiled, fallbackDate),
+            StatedFilingDate = DateOnly.TryParseExact(
+                dateFiled,
+                "yyyyMMdd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var stated
+            )
+                ? stated
+                : null,
             AccessionNumber = accession,
         };
         return true;

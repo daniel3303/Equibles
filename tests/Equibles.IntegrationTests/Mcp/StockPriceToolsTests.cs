@@ -115,6 +115,10 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         (await Sut().GetLatestClosingPrices(["BP.L"]))
             .Should()
             .Contain("| XLON:BP | 2026-04-01 | 452.35 |");
+
+        // Two spellings of that listing in one batch answer one row, not the same row twice.
+        var twice = await Sut().GetLatestClosingPrices(["BP.L", "XLON:BP"]);
+        twice.Split("| XLON:BP | 2026-04-01 |").Should().HaveCount(2);
     }
 
     private async Task<EquityIssuer> SeedLondon(

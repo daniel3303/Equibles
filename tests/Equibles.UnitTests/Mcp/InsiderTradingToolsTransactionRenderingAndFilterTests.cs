@@ -131,7 +131,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
 
         var output = await Sut(db).GetInsiderTransactions("AAPL");
 
-        output.Should().Contain("| Conversion |");
+        output.Should().Contain("| Exercise/Conversion |");
         output.Should().NotContain("| Buy |");
     }
 

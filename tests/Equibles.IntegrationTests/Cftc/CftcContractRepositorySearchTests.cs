@@ -93,6 +93,45 @@ public class CftcContractRepositorySearchTests : ParadeDbMcpTestBase
         results.Should().ContainSingle().Which.MarketCode.Should().Be("13874A");
     }
 
+    // CFTC names the Treasury contracts "T-Notes" and "T-Bonds", so the word a user types
+    // matched no market name.
+    [Theory]
+    [InlineData("treasury")]
+    [InlineData("Treasuries")]
+    public async Task Search_TreasuryFamilyWord_ReturnsEveryTreasuryContract(string query)
+    {
+        DbContext.AddRange(
+            new CftcContract
+            {
+                MarketCode = "043602",
+                MarketName = "10-Year T-Notes (CBOT)",
+                Category = CftcContractCategory.InterestRates,
+            },
+            new CftcContract
+            {
+                MarketCode = "020601",
+                MarketName = "30-Year T-Bonds (CBOT)",
+                Category = CftcContractCategory.InterestRates,
+            },
+            new CftcContract
+            {
+                MarketCode = "088691",
+                MarketName = "Gold (COMEX)",
+                Category = CftcContractCategory.Metals,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new CftcContractRepository(verify)
+            .Search(query)
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Select(c => c.MarketCode).Should().BeEquivalentTo(["043602", "020601"]);
+    }
+
     [Fact]
     public async Task Search_ExactStoredCode_OutranksVerifiedAlias()
     {

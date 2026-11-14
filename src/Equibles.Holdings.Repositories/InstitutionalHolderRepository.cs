@@ -724,6 +724,20 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         if (normalizedExactIds.Count > 0)
             return await BuildExactResolution(normalizedExactIds, maxCandidates, cancellationToken);
 
+        // A name of several words that exactly one filer carries word for word is that filer:
+        // the substring match also admits a filer holding a word only inside another one
+        // ("PL Capital Advisors" against "Capital Planning Advisors").
+        var words = SearchTerms.Tokenize(search);
+        if (words.Count > 1)
+        {
+            var wholeWordIds = nameCandidates
+                .Where(m => words.All(SearchTerms.Tokenize(m.Name).Contains))
+                .Select(m => m.Id)
+                .ToList();
+            if (wholeWordIds.Count == 1)
+                return await BuildExactResolution(wholeWordIds, maxCandidates, cancellationToken);
+        }
+
         var aliasCik = InstitutionalHolderSearchAliases.ResolveCik(search);
         if (aliasCik != null)
         {

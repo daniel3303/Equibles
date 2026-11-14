@@ -557,6 +557,20 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task ListFilings_FormNameWithItsFormPrefix_FiltersLikeTheBareFormName()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            chunkContents: new[] { "Annual report content." }
+        );
+
+        var result = await Sut().ListFilings("AAPL", documentType: "Form 10-K");
+
+        result.Should().NotStartWith("Unknown documentType");
+        result.Should().Contain("10-K");
+    }
+
+    [Fact]
     public async Task ListFilings_UnknownDocumentType_ReturnsAcceptedValues()
     {
         await SeedDocumentWithChunks(
