@@ -4,6 +4,7 @@ using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
+using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Holdings;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,12 +21,16 @@ public class HoldingsActivityController : BaseController
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly AumQuarterlySnapshotRepository _aumSnapshotRepository;
     private readonly SectorQuarterlySnapshotRepository _sectorSnapshotRepository;
+    private readonly MarketActivityLoader _marketActivityLoader;
+    private readonly DoubleDownBoardLoader _doubleDownBoardLoader;
 
     public HoldingsActivityController(
         InstitutionalHoldingRepository holdingRepository,
         EquityIssuerRepository commonStockRepository,
         AumQuarterlySnapshotRepository aumSnapshotRepository,
         SectorQuarterlySnapshotRepository sectorSnapshotRepository,
+        MarketActivityLoader marketActivityLoader,
+        DoubleDownBoardLoader doubleDownBoardLoader,
         ILogger<HoldingsActivityController> logger
     )
         : base(logger)
@@ -34,6 +39,8 @@ public class HoldingsActivityController : BaseController
         _commonStockRepository = commonStockRepository;
         _aumSnapshotRepository = aumSnapshotRepository;
         _sectorSnapshotRepository = sectorSnapshotRepository;
+        _marketActivityLoader = marketActivityLoader;
+        _doubleDownBoardLoader = doubleDownBoardLoader;
     }
 
     [HttpGet("~/holdings/activity")]
@@ -96,51 +103,11 @@ public class HoldingsActivityController : BaseController
         return View(viewModel);
     }
 
-    // Snapshot-first load shared by the activity page: plain snapshot for closed
-    // quarters, the combined lane for the open window, live aggregation only when the
-    // matching snapshot is empty (historical gap, or the window just opened and the
-    // first combined drain has not landed).
-    private async Task<(
+    private Task<(
         List<MarketWideStockActivity> Activity,
         List<MarketWideStockChurn> Churn
-    )> LoadActivityAndChurn(DateOnly selectedDate, DateOnly previousDate, bool combined)
-    {
-        if (combined)
-        {
-            var lane = await _holdingRepository
-                .GetStockActivitySnapshotsCombined(selectedDate)
-                .ToListAsync();
-            if (lane.Count > 0)
-            {
-                return (
-                    lane.Select(s => s.ToActivity()).ToList(),
-                    lane.Select(s => s.ToChurn()).ToList()
-                );
-            }
-        }
-        else
-        {
-            var snapshot = await _holdingRepository
-                .GetStockActivitySnapshots(selectedDate)
-                .ToListAsync();
-            if (snapshot.Count > 0)
-            {
-                return (
-                    snapshot.Select(s => s.ToActivity()).ToList(),
-                    snapshot.Select(s => s.ToChurn()).ToList()
-                );
-            }
-        }
-
-        return (
-            await _holdingRepository
-                .GetQuarterlyActivity(selectedDate, previousDate, combined)
-                .ToListAsync(),
-            await _holdingRepository
-                .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined)
-                .ToListAsync()
-        );
-    }
+    )> LoadActivityAndChurn(DateOnly selectedDate, DateOnly previousDate, bool combined) =>
+        _marketActivityLoader.Load(selectedDate, previousDate, combined);
 
     [HttpGet("~/holdings/latest-13f-filings")]
     public async Task<IActionResult> LatestFilings(int page = 1)
@@ -215,21 +182,14 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var previousDate = viewModel.PreviousDate.Value;
 
-        var query = _holdingRepository
-            .GetDoubleDownPositions(
-                selectedDate,
-                previousDate,
-                threshold,
-                viewModel.IsCombinedSelected
-            )
-            .OrderByDescending(p =>
-                (double)(p.CurrentShares - p.PreviousShares) / p.PreviousShares
-            );
-
-        viewModel.TotalCount = await query.CountAsync();
-        viewModel.Positions = await query
-            .Page(viewModel.Page, DoubleDownViewModel.PageSize)
-            .ToListAsync();
+        (viewModel.Positions, viewModel.TotalCount) = await _doubleDownBoardLoader.LoadPage(
+            selectedDate,
+            previousDate,
+            threshold,
+            viewModel.IsCombinedSelected,
+            viewModel.Page,
+            DoubleDownViewModel.PageSize
+        );
 
         return View(viewModel);
     }

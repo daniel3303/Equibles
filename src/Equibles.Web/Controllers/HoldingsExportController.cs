@@ -21,12 +21,14 @@ public class HoldingsExportController : BaseController
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly StockTabService _stockTabService;
+    private readonly MarketActivityLoader _marketActivityLoader;
 
     public HoldingsExportController(
         EquityIssuerRepository stockRepository,
         InstitutionalHoldingRepository holdingRepository,
         InstitutionalHolderRepository holderRepository,
         StockTabService stockTabService,
+        MarketActivityLoader marketActivityLoader,
         ILogger<HoldingsExportController> logger
     )
         : base(logger)
@@ -35,6 +37,7 @@ public class HoldingsExportController : BaseController
         _holdingRepository = holdingRepository;
         _holderRepository = holderRepository;
         _stockTabService = stockTabService;
+        _marketActivityLoader = marketActivityLoader;
     }
 
     [HttpGet("~/holdings/export/holders")]
@@ -123,7 +126,7 @@ public class HoldingsExportController : BaseController
         var selectedDate = reportDates.ResolveSelectedDateOrFirst(date);
 
         var rowsRaw = await _holdingRepository
-            .GetByHolderWithStock(holder, selectedDate)
+            .Get13FByHolderWithStock(holder, selectedDate)
             .OrderByDescending(h => h.Value)
             .Select(h => new
             {
@@ -241,49 +244,11 @@ public class HoldingsExportController : BaseController
         return CsvFile(csv, $"13F-activity-{selectedDate:yyyy-MM-dd}.csv");
     }
 
-    private async Task<(
+    private Task<(
         List<MarketWideStockActivity> Activity,
         List<MarketWideStockChurn> Churn
-    )> LoadActivityAndChurn(DateOnly selectedDate, DateOnly previousDate, bool combined)
-    {
-        if (combined)
-        {
-            var lane = await _holdingRepository
-                .GetStockActivitySnapshotsCombined(selectedDate)
-                .AsNoTracking()
-                .ToListAsync();
-            if (lane.Count > 0)
-            {
-                return (
-                    lane.Select(s => s.ToActivity()).ToList(),
-                    lane.Select(s => s.ToChurn()).ToList()
-                );
-            }
-        }
-        else
-        {
-            var snapshots = await _holdingRepository
-                .GetStockActivitySnapshots(selectedDate)
-                .AsNoTracking()
-                .ToListAsync();
-            if (snapshots.Count > 0)
-            {
-                return (
-                    snapshots.Select(s => s.ToActivity()).ToList(),
-                    snapshots.Select(s => s.ToChurn()).ToList()
-                );
-            }
-        }
-
-        return (
-            await _holdingRepository
-                .GetQuarterlyActivity(selectedDate, previousDate, combined)
-                .ToListAsync(),
-            await _holdingRepository
-                .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined)
-                .ToListAsync()
-        );
-    }
+    )> LoadActivityAndChurn(DateOnly selectedDate, DateOnly previousDate, bool combined) =>
+        _marketActivityLoader.Load(selectedDate, previousDate, combined);
 
     private FileContentResult CsvFile(string csv, string filename)
     {

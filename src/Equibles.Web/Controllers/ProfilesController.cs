@@ -530,7 +530,7 @@ public class ProfilesController : BaseController
     private Task<List<InstitutionalHolding>> LoadHoldingsByHolderWithStock(
         InstitutionalHolder holder,
         DateOnly reportDate
-    ) => _institutionalHoldingRepository.GetByHolderWithStock(holder, reportDate).ToListAsync();
+    ) => _institutionalHoldingRepository.Get13FByHolderWithStock(holder, reportDate).ToListAsync();
 
     private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
         available.ResolveSelectedDateOrFirst(requested);

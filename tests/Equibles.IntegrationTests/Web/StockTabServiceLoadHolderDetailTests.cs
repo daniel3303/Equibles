@@ -119,6 +119,59 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
         result.Holdings.Should().OnlyContain(h => h.InstitutionalHolderId == holder.Id);
     }
 
+    // A quarter can carry shares, calls and puts side by side, and a 13G event row between
+    // quarter ends: each line changes against its own earlier quarter.
+    [Fact]
+    public async Task LoadHolderDetail_SeveralLinesAQuarter_ComparesEachLineWithItsOwnEarlierQuarter()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        var holder = new InstitutionalHolder { Cik = "0001446194", Name = "Market Maker" };
+        _dbContext.AddRange(stock, holder);
+        var earlier = new DateOnly(2025, 3, 31);
+        var latest = new DateOnly(2025, 6, 30);
+
+        InstitutionalHolding Line(
+            DateOnly report,
+            long shares,
+            OptionType? option = null,
+            FilingType type = FilingType.Form13F
+        ) =>
+            new()
+            {
+                EquityIssuerId = stock.Id,
+                InstitutionalHolderId = holder.Id,
+                FilingDate = report.AddDays(30),
+                ReportDate = report,
+                Value = shares * 10,
+                Shares = shares,
+                OptionType = option,
+                FilingType = type,
+            };
+
+        var shares = Line(latest, 10_000_000);
+        var call = Line(latest, 5_000_000, OptionType.Call);
+        var put = Line(latest, 4_000_000, OptionType.Put);
+        _dbContext.AddRange(
+            shares,
+            call,
+            put,
+            Line(earlier, 9_000_000),
+            Line(earlier, 2_500_000, OptionType.Call),
+            Line(new DateOnly(2025, 5, 12), 20_000_000, type: FilingType.Schedule13G)
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadHolderDetail(stock, holder);
+
+        result.Holdings.Should().HaveCount(5);
+        result.ChangePercent[shares.Id].Should().BeApproximately(11.1, 0.05);
+        result.ChangePercent[call.Id].Should().BeApproximately(100.0, 0.05);
+        result.ChangePercent.Should().NotContainKey(put.Id);
+    }
+
     [Fact]
     public async Task LoadHolderDetail_ShareEventConfirmedOnlyOnAMirrorListing_RestatesThePosition()
     {
