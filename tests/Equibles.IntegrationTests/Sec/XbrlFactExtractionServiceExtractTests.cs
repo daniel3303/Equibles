@@ -328,6 +328,11 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         (await sut.Extract(document, CancellationToken.None)).Should().Be(6);
 
         batches.FactBatchSizes.Should().Equal(expectedBatches.Concat(expectedBatches));
+        // A fact is never stored before the set its key names.
+        batches
+            .InsertedTables.IndexOf(nameof(FinancialDimensionSetMember))
+            .Should()
+            .BeInRange(0, batches.InsertedTables.IndexOf(nameof(FinancialFact)) - 1);
         (await DbContext.Set<FinancialFact>().CountAsync(f => f.DocumentId == document.Id))
             .Should()
             .Be(6);
