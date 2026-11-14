@@ -14,8 +14,8 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261114084325_DropFinancialFactDimension")]
-    partial class DropFinancialFactDimension
+    [Migration("20261114090516_BackfillFinancialDimensionSets")]
+    partial class BackfillFinancialDimensionSets
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
