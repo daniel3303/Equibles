@@ -37,7 +37,11 @@ public class ChunkTickerConvergenceServiceTests(ParadeDbFixture fixture)
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         var chunks = new ChunkRepository(DbContext);
-        var service = new ChunkTickerConvergenceService(new DocumentRepository(DbContext), chunks);
+        var service = new ChunkTickerConvergenceService(
+            new DocumentRepository(DbContext),
+            chunks,
+            DbContext
+        );
 
         (await chunks.HybridSearch("orbital revenue", 10, ticker: "newt"))
             .Select(chunk => chunk.DocumentId)

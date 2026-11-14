@@ -241,4 +241,104 @@ public class StockTabServiceLoadKeyMetricsQuarterlyEpsTests : IDisposable
         result.EpsDiluted.Should().Be((decimal?)expectedEps);
         result.PeRatio.Should().Be((decimal?)expectedPe);
     }
+
+    // A 10-for-1 split after the 10-K: the filed EPS is per old share, the close per new share.
+    [Fact]
+    public async Task LoadKeyMetrics_SplitAfterTheAnnualFiling_RestatesEpsOntoTheClosesShareBasis()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "SPLT",
+            Name: "Split Corp",
+            Cik: "0000999902",
+            MarketCapitalization: 1_000_000_000
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        _dbContext
+            .Set<EquityDailyStockPrice>()
+            .Add(
+                new EquityDailyStockPrice
+                {
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
+                    Date = new DateOnly(2026, 5, 23),
+                    Open = 200m,
+                    High = 200m,
+                    Low = 200m,
+                    Close = 200m,
+                    AdjustedClose = 200m,
+                    Volume = 1_000,
+                }
+            );
+        var epsConcept = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "EarningsPerShareDiluted",
+            Label = "Earnings Per Share (Diluted)",
+        };
+        _dbContext.Set<FinancialConcept>().Add(epsConcept);
+        _dbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    EquityIssuerId = stock.Id,
+                    FinancialConceptId = epsConcept.Id,
+                    Unit = "USD/shares",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2025, 1, 1),
+                    PeriodEnd = new DateOnly(2025, 12, 31),
+                    Value = 80m,
+                    FiscalYear = 2025,
+                    FiscalPeriod = SecFiscalPeriod.FullYear,
+                    Form = DocumentType.TenK,
+                    FiledDate = new DateOnly(2026, 2, 1),
+                    AccessionNumber = "0000999902-26-000001",
+                }
+            );
+        _dbContext
+            .Set<Equibles.CorporateActions.Data.Models.StockSplit>()
+            .Add(
+                new Equibles.CorporateActions.Data.Models.StockSplit
+                {
+                    EquityIssuerId = stock.Id,
+                    EquityListingId = stock.Presentation.Listing.Id,
+                    PriceSeriesTicker = "SPLT",
+                    EffectiveDate = new DateOnly(2026, 3, 2),
+                    Numerator = 10,
+                    Denominator = 1,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+        var sut = new StockTabService(
+            new InstitutionalHoldingRepository(_dbContext),
+            new InstitutionalHolderRepository(_dbContext),
+            new DailyShortVolumeRepository(_dbContext),
+            new ShortInterestRepository(_dbContext),
+            new FailToDeliverRepository(_dbContext),
+            new DocumentRepository(_dbContext),
+            new InsiderTransactionRepository(_dbContext),
+            new Form144FilingRepository(_dbContext),
+            new FormDFilingRepository(_dbContext),
+            new NCenFilingRepository(_dbContext),
+            new NportFilingRepository(_dbContext),
+            new CongressionalTradeRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
+            stockSplitRepository: new Equibles.CorporateActions.Repositories.StockSplitRepository(
+                _dbContext
+            )
+        );
+
+        var result = await sut.LoadKeyMetrics(stock);
+
+        result.EpsDiluted.Should().Be(8m);
+        result.PeRatio.Should().Be(25m);
+    }
 }

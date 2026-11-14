@@ -1,3 +1,5 @@
+using Equibles.Data;
+using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,15 +13,30 @@ namespace Equibles.Sec.HostedService.Services;
 /// </summary>
 public class ChunkTickerConvergenceService(
     DocumentRepository documentRepository,
-    ChunkRepository chunkRepository
+    ChunkRepository chunkRepository,
+    EquiblesFinancialDbContext dbContext
 )
 {
+    // The comparison probes one chunk of every document: seconds on a warm cache, longer cold.
+    private static readonly TimeSpan ScanTimeout = TimeSpan.FromMinutes(10);
+
     /// <summary>
     /// Documents whose chunks carry another ticker than their issuer presents now, newest filing
     /// first. One probe of each document's first chunk: a document's chunks are stamped together.
     /// </summary>
-    public Task<List<Guid>> FindStaleDocuments(CancellationToken cancellationToken) =>
-        StaleDocuments().ToListAsync(cancellationToken);
+    public async Task<List<Guid>> FindStaleDocuments(CancellationToken cancellationToken)
+    {
+        var originalTimeout = dbContext.Database.GetCommandTimeout();
+        dbContext.Database.SetCommandTimeout(ScanTimeout);
+        try
+        {
+            return await StaleDocuments().ToListAsync(cancellationToken);
+        }
+        finally
+        {
+            dbContext.Database.SetCommandTimeout(originalTimeout);
+        }
+    }
 
     internal IQueryable<Guid> StaleDocuments()
     {
@@ -28,6 +45,7 @@ public class ChunkTickerConvergenceService(
             .GetAll()
             .Where(document =>
                 document.Issuer.Presentation.Listing.Ticker != null
+                && document.Issuer.Presentation.Listing.Ticker.Length <= Chunk.TickerMaxLength
                 && chunks.Any(chunk =>
                     chunk.DocumentId == document.Id
                     && chunk.Index == 0
@@ -52,7 +70,8 @@ public class ChunkTickerConvergenceService(
             .Where(document => document.Id == documentId)
             .Select(document => document.Issuer.Presentation.Listing.Ticker)
             .FirstOrDefaultAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(ticker))
+        // A symbol the chunk column cannot hold stays out, as it does when the document is chunked.
+        if (string.IsNullOrWhiteSpace(ticker) || ticker.Length > Chunk.TickerMaxLength)
             return 0;
 
         // The same spelling DocumentProcessor writes: the vector arm compares it exactly.

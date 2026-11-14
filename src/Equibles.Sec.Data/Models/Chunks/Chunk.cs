@@ -63,9 +63,11 @@ public class Chunk
     /// impossible. <c>Fast = true</c> stores it columnar so the filter can be pushed
     /// into the BM25 index instead of post-filtering scored chunks on the heap (#2157).
     /// </remarks>
-    [MaxLength(20)]
+    [MaxLength(TickerMaxLength)]
     [Bm25Text(Tokenizer = Bm25Tokenizer.Raw, Fast = true)]
     public string Ticker { get; set; }
+
+    public const int TickerMaxLength = 20;
 
     /// <summary>
     /// The parent document's filing date at midnight UTC, indexed so a date window filters inside
