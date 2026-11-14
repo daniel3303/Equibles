@@ -2020,6 +2020,7 @@ public class YahooPriceImportService
                 )
                 .Select(split => new
                 {
+                    split.Id,
                     split.EquityListingId,
                     Boundary = new SplitBasisDefinition(
                         split.EffectiveDate,
@@ -2046,6 +2047,20 @@ public class YahooPriceImportService
                 ))
                 .ToListAsync(cancellationToken);
             var seriesBoundaries = responseBoundaries.ToList();
+            if (target.IsUs && unresolvedSplits.Any(split => split.EquityListingId == null))
+            {
+                var settled = await SettleUnattributedSplits(
+                    repo,
+                    stockRepo,
+                    splitRepo,
+                    target,
+                    settledBefore,
+                    prices,
+                    [.. capturedBoundaries, .. seriesBoundaries],
+                    cancellationToken
+                );
+                unresolvedSplits.RemoveAll(split => settled.Contains(split.Id));
+            }
             if (
                 unresolvedSplits.Any(split =>
                     target.IsUs
@@ -2127,6 +2142,141 @@ public class YahooPriceImportService
             throw;
         }
     }
+
+    // A split captured before splits recorded their listing bounds every series of its issuer and
+    // refuses every replacement, for ever. This US series' own evidence can settle one: its
+    // attached row states the same event, or the provider that captured it reports no split near
+    // that date any more and the fetched bars do not jump by its ratio there (an event the
+    // provider withdrew). The row is removed only when every other listing of the issuer whose
+    // stored bars straddle the date states the event itself; anything else keeps the refusal.
+    private async Task<HashSet<Guid>> SettleUnattributedSplits(
+        EquityDailyStockPriceRepository repo,
+        EquityIssuerRepository stockRepo,
+        StockSplitRepository splitRepo,
+        PriceSeriesTarget target,
+        DateOnly settledBefore,
+        List<HistoricalPrice> prices,
+        IReadOnlyCollection<SplitBasisDefinition> reported,
+        CancellationToken cancellationToken
+    )
+    {
+        var firstPriceDate = prices.Min(price => price.Date);
+        var lastPriceDate = prices.Max(price => price.Date);
+        var issuerSplits = await splitRepo
+            .GetEffectiveByStock(target.EquityIssuerId, settledBefore)
+            .ToListAsync(cancellationToken);
+        var unattributed = issuerSplits
+            .Where(split =>
+                split.EquityListingId == null
+                && split.PriceSeriesTicker == null
+                && split.EffectiveDate > firstPriceDate
+                && split.Numerator > 0m
+                && split.Denominator > 0m
+            )
+            .ToList();
+        var settled = new HashSet<Guid>();
+        if (unattributed.Count == 0)
+            return settled;
+
+        var servedBars = prices
+            .Where(price => !HasOverflowPrice(price) && !IsInvalidOhlc(price))
+            .Select(price => (price.Date, price.Close, price.Volume))
+            .ToList();
+        var otherListingIds = await stockRepo
+            .GetSecurities()
+            .Where(security => security.EquityIssuerId == target.EquityIssuerId)
+            .SelectMany(security => security.Listings)
+            .Where(listing => listing.Id != target.EquityListingId)
+            .Select(listing => listing.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var split in unattributed)
+        {
+            var statedByOwnRow = issuerSplits.Any(row =>
+                row.EquityListingId == target.EquityListingId && IsSameSplitEvent(row, split)
+            );
+            // The bars prove absence only where the detector can see a jump: a ratio it treats as
+            // material, and traded bars on both sides of the date inside the window.
+            var ratio = split.Numerator / split.Denominator;
+            var windowStart = split.EffectiveDate.AddDays(-SplitEvents.SameEventWindowDays);
+            var windowEnd = split.EffectiveDate.AddDays(SplitEvents.SameEventWindowDays);
+            var tradedAcrossDate =
+                servedBars.Any(bar =>
+                    bar.Volume > 0
+                    && bar.Close > 0m
+                    && bar.Date >= windowStart
+                    && bar.Date < split.EffectiveDate
+                )
+                && servedBars.Any(bar =>
+                    bar.Volume > 0
+                    && bar.Close > 0m
+                    && bar.Date >= split.EffectiveDate
+                    && bar.Date <= windowEnd
+                );
+            var withdrawn =
+                split.Source == StockSplitSource.Yahoo
+                && (ratio <= MaterialSplitRatioFloor || ratio >= MaterialSplitRatioCeiling)
+                && lastPriceDate >= windowEnd
+                && tradedAcrossDate
+                && !reported.Any(boundary =>
+                    Math.Abs(boundary.EffectiveDate.DayNumber - split.EffectiveDate.DayNumber)
+                    <= SplitEvents.SameEventWindowDays
+                )
+                && !HasSplitBasisJumpNearEffectiveDate(
+                    servedBars,
+                    split.EffectiveDate,
+                    split.Numerator,
+                    split.Denominator
+                );
+            if (!statedByOwnRow && !withdrawn)
+                continue;
+
+            var boundsAnotherSeries = false;
+            foreach (var listingId in otherListingIds)
+            {
+                if (
+                    issuerSplits.Any(row =>
+                        row.EquityListingId == listingId && IsSameSplitEvent(row, split)
+                    )
+                )
+                    continue;
+                var series = repo.GetByListing(listingId);
+                if (
+                    await series.AnyAsync(row => row.Date < split.EffectiveDate, cancellationToken)
+                    && await series.AnyAsync(
+                        row => row.Date >= split.EffectiveDate,
+                        cancellationToken
+                    )
+                )
+                {
+                    boundsAnotherSeries = true;
+                    break;
+                }
+            }
+            if (boundsAnotherSeries)
+                continue;
+
+            splitRepo.Delete(split);
+            settled.Add(split.Id);
+            _logger.LogInformation(
+                "Removed the unattributed {Numerator}:{Denominator} split of {EffectiveDate} for {Ticker}: {Reason}",
+                split.Numerator,
+                split.Denominator,
+                split.EffectiveDate,
+                target.Ticker,
+                statedByOwnRow
+                    ? "the listing's own row states the event"
+                    : "the provider no longer reports it and the fetched bars do not jump by its ratio"
+            );
+        }
+        if (settled.Count > 0)
+            await splitRepo.SaveChanges();
+        return settled;
+    }
+
+    private static bool IsSameSplitEvent(StockSplit row, StockSplit other) =>
+        row.Numerator * other.Denominator == other.Numerator * row.Denominator
+        && Math.Abs(row.EffectiveDate.DayNumber - other.EffectiveDate.DayNumber)
+            <= SplitEvents.SameEventWindowDays;
 
     // An issuer split no listing or series claims (a legacy capture from a sibling line) is moot
     // for a venue series that states the same event itself; one it does not state may be an
@@ -3118,6 +3268,78 @@ public class YahooPriceImportService
         await transaction.CommitAsync(cancellationToken);
         _logger.LogDebug("Corrected {Count} stored bars for {Ticker}", corrected, target.Ticker);
         return corrected;
+    }
+
+    /// <summary>
+    /// Re-reads the full history of up to <paramref name="batchSize"/> issuers not yet attempted
+    /// that hold a split captured before splits recorded their listing and are presented by an
+    /// active US line, so the replacement can settle the row. Returns the issuers attempted; an
+    /// empty result means the pass is done. A row the evidence cannot settle stays as it is.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> ResettleUnattributedSplits(
+        IReadOnlyCollection<Guid> attempted,
+        int batchSize,
+        CancellationToken cancellationToken
+    )
+    {
+        var attemptedIds = attempted.ToList();
+        List<PendingPriceReconciliationSeries> batch;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var splitRepo = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
+            var rows = await splitRepo
+                .GetAll()
+                .Where(split =>
+                    split.EquityListingId == null
+                    && split.PriceSeriesTicker == null
+                    && split.Issuer.Presentation.Listing.Active
+                    && split.Issuer.Presentation.Listing.MarketCountryCode == "US"
+                    && !attemptedIds.Contains(split.EquityIssuerId)
+                )
+                .Select(split => new
+                {
+                    split.EquityIssuerId,
+                    split.Issuer.Presentation.EquityListingId,
+                    split.Issuer.Presentation.Listing.Ticker,
+                })
+                .Distinct()
+                .OrderBy(row => row.EquityIssuerId)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+            batch = rows.Select(row => new PendingPriceReconciliationSeries(
+                    row.EquityIssuerId,
+                    row.Ticker,
+                    [],
+                    [],
+                    row.EquityListingId
+                ))
+                .ToList();
+        }
+
+        var floor = PriceHistoryFloor();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        foreach (var series in batch)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await ReconcileStock(series, floor, today, cancellationToken, DateTime.UtcNow);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            // A client timeout is an OperationCanceledException too; it is one issuer's failure.
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Full-history re-read for {Ticker} failed; leaving its unattributed split",
+                    series.ListedTicker
+                );
+            }
+        }
+        return batch.Select(series => series.EquityIssuerId).ToList();
     }
 
     /// <summary>
