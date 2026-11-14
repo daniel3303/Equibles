@@ -2,10 +2,13 @@ using Equibles.DelayedTrades.BusinessLogic;
 using Equibles.DelayedTrades.BusinessLogic.Bars;
 using Equibles.DelayedTrades.BusinessLogic.Configuration;
 using Equibles.DelayedTrades.BusinessLogic.Import;
+using Equibles.DelayedTrades.BusinessLogic.Schedule;
+using Equibles.DelayedTrades.BusinessLogic.Sessions;
 using Equibles.DelayedTrades.Data.Models;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.Integrations.DelayedTrades;
 using Equibles.Integrations.Euronext.DelayedTrades;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -177,6 +180,160 @@ public class DelayedTradeImportServiceTests
         third.Partition.BarsInserted.Should().Be(0);
         using (var context = db.NewContext())
             context.Set<DelayedTradeImportPartition>().Should().ContainSingle();
+    }
+
+    private sealed class RecordingSink(bool read = true, bool fail = false)
+        : IDelayedTradeSessionSink
+    {
+        public List<(DateOnly Session, DelayedTradeSettleOutcome Outcome)> Offers { get; } = [];
+        public List<DelayedTradeSessionPrint> Prints { get; } = [];
+
+        public async Task Accept(
+            DelayedTradeSettledSession session,
+            CancellationToken cancellationToken
+        )
+        {
+            Offers.Add((session.SessionDate, session.Outcome));
+            if (fail)
+                throw new InvalidOperationException("the sink's own store is down");
+            if (!read)
+                return;
+            Prints.Clear();
+            Prints.AddRange(await session.ReadPrints(cancellationToken));
+        }
+    }
+
+    private static DelayedTradeDbFixture LisbonWith(IDelayedTradeSessionSink sink)
+    {
+        var db =
+            sink == null
+                ? new DelayedTradeDbFixture()
+                : new DelayedTradeDbFixture(services => services.AddSingleton(sink));
+        db.SeedListing("PHR", "PTPTC0AM0009");
+        db.SeedListing("EDP", "PTEDP0AM0009");
+        db.SeedListing("RIZ", "PTRIZ0AM0009", mic: "ENXL");
+        return db;
+    }
+
+    [Fact]
+    public async Task Settle_OffersASinkThePrintsTheDailyBarsCounted()
+    {
+        var sink = new RecordingSink();
+        var db = LisbonWith(sink);
+        var session = new DateOnly(2026, 9, 15);
+
+        var result = await Service(db)
+            .SettleSession(
+                Lisbon,
+                new FixtureSource(TradesFixture.Lisbon()),
+                rederive: false,
+                SettleNow,
+                CancellationToken.None
+            );
+
+        sink.Offers.Should().Equal((session, DelayedTradeSettleOutcome.Imported));
+        var zone = DelayedTradeClock.Zone(Lisbon);
+        sink.Prints.Should()
+            .OnlyContain(row =>
+                DelayedTradeSessionAggregator.SessionDate(row.Print.TradedAtUtc, zone) == session
+            );
+        sink.Prints.Should()
+            .HaveCount(result.Partition.PrintCount - result.Partition.OutOfSessionCount);
+        var byListing = sink.Prints.ToLookup(row => row.Listing.EquityListingId);
+        byListing.Should().HaveCount(result.Partition.MatchedCount);
+        foreach (var prints in byListing)
+        {
+            var bar = db.Prices(prints.Key).Single();
+            ((long)Math.Floor(prints.Sum(row => row.Print.Quantity))).Should().Be(bar.Volume);
+        }
+        sink.Prints.Where(row => row.Listing.Ticker == "PHR")
+            .Sum(row => row.Print.Quantity)
+            .Should()
+            .Be(677_437m);
+    }
+
+    [Fact]
+    public async Task Settle_ParsesTheFileForASinkOnlyWhenItAsksForThePrints()
+    {
+        async Task<int> ParsesOverTwoPasses(RecordingSink sink)
+        {
+            var source = new FixtureSource(TradesFixture.Lisbon());
+            var service = Service(LisbonWith(sink));
+            await service.SettleSession(Lisbon, source, false, SettleNow, CancellationToken.None);
+            await service.SettleSession(
+                Lisbon,
+                source,
+                false,
+                SettleNow.AddHours(1),
+                CancellationToken.None
+            );
+            return source.Parses;
+        }
+
+        var withoutSink = await ParsesOverTwoPasses(null);
+
+        (await ParsesOverTwoPasses(new RecordingSink(read: false))).Should().Be(withoutSink);
+        (await ParsesOverTwoPasses(new RecordingSink())).Should().BeGreaterThan(withoutSink);
+    }
+
+    [Fact]
+    public async Task Settle_WithAFailingSink_KeepsTheSettledSession()
+    {
+        var sink = new RecordingSink(fail: true);
+        var db = LisbonWith(sink);
+
+        var result = await Service(db)
+            .SettleSession(
+                Lisbon,
+                new FixtureSource(TradesFixture.Lisbon()),
+                rederive: false,
+                SettleNow,
+                CancellationToken.None
+            );
+
+        sink.Offers.Should().ContainSingle();
+        result.Outcome.Should().Be(DelayedTradeSettleOutcome.Imported);
+        result.Partition.BarsInserted.Should().Be(3);
+        result.SinkFailures.Should().ContainSingle().Which.Sink.Should().Be(nameof(RecordingSink));
+        using var context = db.NewContext();
+        context.Set<DelayedTradeImportPartition>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Settle_FindingTheSessionMarked_OffersItAgainWithTheSamePrints()
+    {
+        var sink = new RecordingSink();
+        var db = LisbonWith(sink);
+        var source = new FixtureSource(TradesFixture.Lisbon());
+        var service = Service(db);
+        var session = new DateOnly(2026, 9, 15);
+
+        await service.SettleSession(Lisbon, source, false, SettleNow, CancellationToken.None);
+        var first = sink.Prints.Select(row => (row.Listing.EquityListingId, row.Print)).ToList();
+        await service.SettleSession(
+            Lisbon,
+            source,
+            false,
+            SettleNow.AddHours(1),
+            CancellationToken.None
+        );
+        var again = sink.Prints.Select(row => (row.Listing.EquityListingId, row.Print)).ToList();
+        await service.SettleSession(
+            Lisbon,
+            source,
+            true,
+            SettleNow.AddHours(9),
+            CancellationToken.None
+        );
+
+        sink.Offers.Should()
+            .Equal(
+                (session, DelayedTradeSettleOutcome.Imported),
+                (session, DelayedTradeSettleOutcome.AlreadyImported),
+                (session, DelayedTradeSettleOutcome.Rederived)
+            );
+        again.Should().Equal(first);
+        sink.Prints.Should().HaveCount(first.Count);
     }
 
     [Fact]

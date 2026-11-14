@@ -35,4 +35,10 @@ public sealed record DelayedTradeSettleResult(
     DateOnly? SessionDate,
     DelayedTradeImportPartition Partition,
     string Refusal
-);
+)
+{
+    /// <summary>The session sinks that threw on this session; the settle itself stands.</summary>
+    public IReadOnlyList<DelayedTradeSinkFailure> SinkFailures { get; init; } = [];
+}
+
+public sealed record DelayedTradeSinkFailure(string Sink, Exception Exception);

@@ -145,6 +145,14 @@ public class DelayedTradeScraperWorker(
                 );
                 if (result.Outcome != DelayedTradeSettleOutcome.NoSession)
                     capturedAt = utcNow;
+                // The settle stands, so the market shows no error; what a sink derives from the session is
+                // lost once the venue rotates the file, and nothing else would say so.
+                foreach (var failure in result.SinkFailures)
+                    await errorReporter.Report(
+                        ErrorSource.DelayedTradeScraper,
+                        $"SettleSession({market.Code}) sink {failure.Sink}",
+                        failure.Exception
+                    );
                 switch (result.Outcome)
                 {
                     case DelayedTradeSettleOutcome.Imported:

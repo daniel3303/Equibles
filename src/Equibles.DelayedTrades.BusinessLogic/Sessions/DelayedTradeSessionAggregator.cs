@@ -93,7 +93,8 @@ public static class DelayedTradeSessionAggregator
     private static long Floor(decimal quantity) =>
         quantity >= long.MaxValue ? long.MaxValue : (long)Math.Floor(quantity);
 
-    private static bool Precedes(DelayedTradePrint left, DelayedTradePrint right)
+    // The order two prints of one line traded in: trade time, then publication time, then the file's line.
+    public static bool Precedes(DelayedTradePrint left, DelayedTradePrint right)
     {
         var byTrade = left.TradedAtUtc.CompareTo(right.TradedAtUtc);
         if (byTrade != 0)
