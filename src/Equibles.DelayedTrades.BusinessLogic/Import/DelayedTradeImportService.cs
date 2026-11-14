@@ -174,12 +174,26 @@ public class DelayedTradeImportService(
                     latest.PartitionDate,
                     cancellationToken
                 );
+                var unchangedFailures = await OfferSession(
+                    market,
+                    source,
+                    file,
+                    zone,
+                    latest.PartitionDate,
+                    DelayedTradeSettleOutcome.AlreadyImported,
+                    null,
+                    null,
+                    cancellationToken
+                );
                 return new DelayedTradeSettleResult(
                     DelayedTradeSettleOutcome.AlreadyImported,
                     latest.PartitionDate,
                     latest,
                     null
-                );
+                )
+                {
+                    SinkFailures = unchangedFailures,
+                };
             }
         }
 
@@ -275,12 +289,28 @@ public class DelayedTradeImportService(
                 );
         }
         if (existing != null && !rederive)
+        {
+            var markedFailures = await OfferSession(
+                market,
+                source,
+                file,
+                zone,
+                sessionDate.Value,
+                DelayedTradeSettleOutcome.AlreadyImported,
+                ledger,
+                map,
+                cancellationToken
+            );
             return new DelayedTradeSettleResult(
                 DelayedTradeSettleOutcome.AlreadyImported,
                 sessionDate,
                 existing,
                 null
-            );
+            )
+            {
+                SinkFailures = markedFailures,
+            };
+        }
 
         var localToday = DelayedTradeClock.LocalDate(utcNow, zone);
         var currencyToken = market.Currency;
@@ -394,14 +424,141 @@ public class DelayedTradeImportService(
             partition.BarsSkippedBasis,
             partition.UnmatchedCount
         );
-        return new DelayedTradeSettleResult(
+        var settled =
             existing == null
                 ? DelayedTradeSettleOutcome.Imported
-                : DelayedTradeSettleOutcome.Rederived,
-            sessionDate,
-            marker,
-            null
+                : DelayedTradeSettleOutcome.Rederived;
+        var sinkFailures = await OfferSession(
+            market,
+            source,
+            file,
+            zone,
+            sessionDate.Value,
+            settled,
+            ledger,
+            map,
+            cancellationToken
         );
+        return new DelayedTradeSettleResult(settled, sessionDate, marker, null)
+        {
+            SinkFailures = sinkFailures,
+        };
+    }
+
+    // Offers a settled session to every registered sink and returns the ones that threw. The marker is
+    // already written, so nothing here may fail the settle: a sink that fails, or cannot even be built,
+    // costs only its own output, and the settle is not repeated for it.
+    private async Task<IReadOnlyList<DelayedTradeSinkFailure>> OfferSession(
+        EquityMarket market,
+        IDelayedTradeSource source,
+        DelayedTradeFile file,
+        TimeZoneInfo zone,
+        DateOnly sessionDate,
+        DelayedTradeSettleOutcome outcome,
+        DelayedTradeModificationLedger ledger,
+        DelayedTradeListingMap map,
+        CancellationToken cancellationToken
+    )
+    {
+        var failures = new List<DelayedTradeSinkFailure>();
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var sinks = scope.ServiceProvider.GetServices<IDelayedTradeSessionSink>().ToList();
+            if (sinks.Count == 0)
+                return failures;
+            // A pass that found the session already marked parsed nothing; the ledger and the listings
+            // are built only when a sink asks for the prints.
+            var session = new DelayedTradeSettledSession(
+                market,
+                sessionDate,
+                zone,
+                outcome,
+                async token =>
+                {
+                    ledger ??= DelayedTradeModificationLedger.Build(
+                        source.Parse(file, new DelayedTradeParseCounters())
+                    );
+                    map ??= await LoadListings(market, token);
+                    return SessionPrints(source, file, ledger, map, zone, sessionDate);
+                }
+            );
+            foreach (var sink in sinks)
+            {
+                try
+                {
+                    await sink.Accept(session, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(
+                        exception,
+                        "{Market} settle {Date}: session sink {Sink} failed; the settled bars stand",
+                        market.Code,
+                        sessionDate,
+                        sink.GetType().Name
+                    );
+                    failures.Add(new DelayedTradeSinkFailure(sink.GetType().Name, exception));
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Building the sinks or closing their scope failed, so no single sink can be named.
+            logger.LogError(
+                exception,
+                "{Market} settle {Date}: the session sinks could not be offered the session; the settled bars stand",
+                market.Code,
+                sessionDate
+            );
+            failures.Add(new DelayedTradeSinkFailure(nameof(IDelayedTradeSessionSink), exception));
+        }
+        return failures;
+    }
+
+    // The session's prints by the rules its daily bars count them with, in the aggregator's own order and
+    // with no counter touched: a sink may read them any number of times. A listing whose prints form no
+    // price gets no daily bar and is read here all the same.
+    private IEnumerable<DelayedTradeSessionPrint> SessionPrints(
+        IDelayedTradeSource source,
+        DelayedTradeFile file,
+        DelayedTradeModificationLedger ledger,
+        DelayedTradeListingMap map,
+        TimeZoneInfo zone,
+        DateOnly sessionDate
+    )
+    {
+        var seen = options.Value.DetectDuplicateTradeIds
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : null;
+        foreach (var print in source.Parse(file, new DelayedTradeParseCounters()))
+        {
+            if (!ledger.IsEffective(print) || !DelayedTradePrintFilter.IsCounted(print))
+                continue;
+            if (!map.TryResolve(print.Isin, print.Venue, out var listing))
+                continue;
+            if (
+                !DelayedTradePrintFilter.MatchesQuotation(
+                    print,
+                    listing.TradingCurrency,
+                    listing.QuoteUnitMultiplier
+                )
+            )
+                continue;
+            if (seen != null && !string.IsNullOrEmpty(print.TradeId) && !seen.Add(print.TradeId))
+                continue;
+            if (DelayedTradeSessionAggregator.SessionDate(print.TradedAtUtc, zone) != sessionDate)
+                continue;
+            yield return new DelayedTradeSessionPrint(listing, print);
+        }
     }
 
     public async Task<int> PruneCaptures(DateTime utcNow, CancellationToken cancellationToken)

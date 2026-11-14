@@ -5,6 +5,7 @@ using Equibles.DelayedTrades.Repositories;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.DelayedTrades;
 
@@ -145,6 +146,16 @@ public class DelayedTradeScraperWorker(
                 );
                 if (result.Outcome != DelayedTradeSettleOutcome.NoSession)
                     capturedAt = utcNow;
+                // The settle stands, so the market shows no error; what a sink derives from the session is
+                // lost once the venue rotates the file, and nothing else would say so. Reported as text:
+                // a sink's own timeout is a cancellation by type, which the exception overload drops.
+                foreach (var failure in result.SinkFailures)
+                    await errorReporter.Report(
+                        ErrorSource.DelayedTradeScraper,
+                        $"SettleSession({market.Code}) sink {failure.Sink}",
+                        failure.Exception.ToSummaryMessage(),
+                        failure.Exception.ToString()
+                    );
                 switch (result.Outcome)
                 {
                     case DelayedTradeSettleOutcome.Imported:

@@ -32,7 +32,7 @@ internal sealed class DelayedTradeDbFixture
     public IServiceScopeFactory ScopeFactory { get; }
     public IServiceProvider Services { get; }
 
-    public DelayedTradeDbFixture()
+    public DelayedTradeDbFixture(Action<IServiceCollection> configure = null)
     {
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString(), new InMemoryDatabaseRoot())
@@ -53,6 +53,7 @@ internal sealed class DelayedTradeDbFixture
         services.AddScoped<DelayedTradeImportPartitionRepository>();
         services.AddScoped<DelayedTradeFileCaptureRepository>();
         services.AddScoped<EquityMarketRegistrationRepository>();
+        configure?.Invoke(services);
         Services = services.BuildServiceProvider();
         ScopeFactory = Services.GetRequiredService<IServiceScopeFactory>();
     }
