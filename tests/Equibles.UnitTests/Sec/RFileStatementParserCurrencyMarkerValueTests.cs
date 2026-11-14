@@ -41,6 +41,8 @@ public class RFileStatementParserCurrencyMarkerValueTests
     [InlineData("R$ 16,046,218", 16_046_218)]
     [InlineData("kr 11,583,000", 11_583_000)]
     [InlineData("$ 0.35", 0.35)]
+    [InlineData("($862)", -862)]
+    [InlineData("-$5", -5)]
     public void Parse_AnyCurrencyMarker_KeepsTheFigureAndTheRowIsNotAHeading(
         string cell,
         decimal expected

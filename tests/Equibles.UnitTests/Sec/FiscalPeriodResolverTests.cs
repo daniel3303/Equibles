@@ -197,11 +197,38 @@ public class FiscalPeriodResolverTests
         result.Should().Be((2025, SecFiscalPeriod.Q1));
     }
 
+    // Spans of 52/53-week filers whose quarters are not 13 weeks, as filed: Kroger (16-week first
+    // quarter, year end near 30 January), PepsiCo and Costco (12-week quarters). Refused, each took
+    // its filing's own label and sat a year apart from the rest of its fiscal year.
+    [Theory]
+    [InlineData("2024-02-04", "2024-05-25", 1, 30, 2025, SecFiscalPeriod.Q1)]
+    [InlineData("2024-02-04", "2024-08-17", 1, 30, 2025, SecFiscalPeriod.Q2)]
+    [InlineData("2024-05-26", "2024-08-17", 1, 30, 2025, SecFiscalPeriod.Q2)]
+    [InlineData("2024-02-04", "2024-11-09", 1, 30, 2025, SecFiscalPeriod.Q3)]
+    [InlineData("2024-12-29", "2025-06-14", 12, 26, 2025, SecFiscalPeriod.Q2)]
+    [InlineData("2024-12-29", "2025-09-06", 12, 26, 2025, SecFiscalPeriod.Q3)]
+    [InlineData("2024-09-02", "2025-02-16", 8, 30, 2025, SecFiscalPeriod.Q2)]
+    [InlineData("2024-09-02", "2025-05-11", 8, 30, 2025, SecFiscalPeriod.Q3)]
+    public void Resolve_LongAndShortWeekQuarters_ShareTheirFiscalYearsLabel(
+        string start,
+        string end,
+        int fyeMonth,
+        int fyeDay,
+        int year,
+        SecFiscalPeriod period
+    )
+    {
+        FiscalPeriodResolver
+            .Resolve(DateOnly.Parse(start), DateOnly.Parse(end), fyeMonth, fyeDay)
+            .Should()
+            .Be((year, period));
+    }
+
     [Fact]
     public void Resolve_200DayDuration_ReturnsNull()
     {
-        // 200 days falls between valid ranges (quarterly 80-100, half-year 170-190,
-        // nine-month 260-280, annual 350-380) — should return null.
+        // 200 days falls between valid ranges (quarterly 80-119, half-year 160-199,
+        // nine-month 250-292, annual 350-380) — should return null.
         var result = FiscalPeriodResolver.Resolve(
             periodStart: new DateOnly(2024, 1, 1),
             periodEnd: new DateOnly(2024, 7, 19), // 200 days

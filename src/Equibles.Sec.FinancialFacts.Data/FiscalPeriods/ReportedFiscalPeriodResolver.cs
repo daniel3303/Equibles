@@ -1,4 +1,5 @@
 using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.Sec.FinancialFacts.Data.FiscalPeriods;
 
@@ -11,11 +12,19 @@ public static class ReportedFiscalPeriodResolver
     private const int EarlyJanuaryFiscalYearEndDay = 7;
     private const int AnnualMinDays = 350;
     private const int AnnualMaxDays = 380;
-    private const int QuarterMinDays = 80;
-    private const int QuarterMaxDays = 100;
-    private const int HalfYearMinDays = 170;
-    private const int HalfYearMaxDays = 190;
-    private const int NineMonthMinDays = 260;
+
+    // One set of quarter bounds for every lane: a 16-week quarter (111 days) that this resolver
+    // refused took the filing's own label instead, a year apart from the rest of its fiscal year.
+    private const int QuarterMinDays = FiscalPeriodSpanDays.MinQuarter;
+    private const int QuarterMaxDays = FiscalPeriodSpanDays.MaxQuarter;
+
+    // Two quarters, at most one of them long: 24 weeks is 167 days, 28 weeks 195.
+    private const int HalfYearMinDays = 2 * FiscalPeriodSpanDays.MinQuarter;
+    private const int HalfYearMaxDays =
+        FiscalPeriodSpanDays.MinQuarter + FiscalPeriodSpanDays.MaxQuarter;
+
+    // A 36-week cumulative third quarter spans 251 days.
+    private const int NineMonthMinDays = 250;
 
     // A 41-week cumulative third quarter spans 286 days. Keep the same bounded
     // tolerance used by the reported-statement lane for non-calendar filers.

@@ -34,6 +34,7 @@ namespace Equibles.UnitTests.Sec;
 /// <c>CommonStockRepository</c>. <see cref="IPdfTextExtractor"/> was extracted from the
 /// concrete <c>PdfTextExtractor</c> specifically to make this scaffolding mockable.
 /// </summary>
+[Collection(CompanySyncThrottleCollection.Name)]
 public class DocumentScraperTests
 {
     private static readonly DateOnly FilingDateAlpha = new(2025, 1, 14);
@@ -1186,4 +1187,12 @@ public class DocumentScraperTests
             );
         }
     }
+}
+
+// The directory sync throttle is one static stamp that every scraper run in the process writes, so
+// the class asserting on it runs apart from the other test classes.
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class CompanySyncThrottleCollection
+{
+    public const string Name = "Company sync throttle";
 }

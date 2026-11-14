@@ -164,10 +164,9 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
     }
 
     // Below TargetedReplayFloor everything reruns. Between the floor and CurrentVersion two kinds
-    // rerun: 10-Q/10-K filings below PeriodicFormReplayVersion, when filed since
-    // TargetedReplayFiledSince or newer than their issuer's Company Facts watermark (the documents
-    // a Company Facts gap can still affect), and standalone instances. A whole-corpus re-drain
-    // would re-parse every captured filing for nothing.
+    // rerun: 10-Q/10-K filings filed since TargetedReplayFiledSince or newer than their issuer's
+    // Company Facts watermark (the documents a Company Facts gap can still affect), and standalone
+    // instances. A whole-corpus re-drain would re-parse every captured filing for nothing.
     internal static IQueryable<Document> SelectDueDocuments(
         IQueryable<Document> documents,
         IQueryable<FinancialFactsSyncStatus> checkpoints
@@ -185,7 +184,7 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                 && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
             )
             || (
-                d.XbrlFactsVersion < XbrlFactExtractionService.PeriodicFormReplayVersion
+                d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
                 && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
                 // XbrlFactExtractionService.DomesticPeriodicForms, spelled out for EF.
                 && (

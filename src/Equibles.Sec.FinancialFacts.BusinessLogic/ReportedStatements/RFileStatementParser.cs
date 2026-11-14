@@ -600,6 +600,8 @@ public static class RFileStatementParser
         cleaned = cleaned
             .Replace("(", string.Empty)
             .Replace(")", string.Empty)
+            // A sign inside the parentheses or after a minus ("($862)", "-$5").
+            .Replace("$", string.Empty)
             .Replace(",", string.Empty)
             .Replace("%", string.Empty)
             .Trim();

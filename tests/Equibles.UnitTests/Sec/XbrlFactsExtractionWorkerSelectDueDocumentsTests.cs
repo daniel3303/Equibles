@@ -24,20 +24,8 @@ public class XbrlFactsExtractionWorkerSelectDueDocumentsTests
     [InlineData(XbrlFactExtractionService.TargetedReplayFloor, "EightK", "2026-07-29", false)]
     [InlineData(XbrlFactExtractionService.TargetedReplayFloor, "SixK", "2026-07-29", false)]
     // A recent quarterly read by the previous version rejoins, so its cover statement is recorded.
-    [InlineData(
-        XbrlFactExtractionService.PeriodicFormReplayVersion - 1,
-        "TenQ",
-        "2026-07-29",
-        true
-    )]
-    [InlineData(
-        XbrlFactExtractionService.PeriodicFormReplayVersion - 1,
-        "EightK",
-        "2026-07-29",
-        false
-    )]
-    // A later version that changes another kind of document leaves a read quarterly alone.
-    [InlineData(XbrlFactExtractionService.PeriodicFormReplayVersion, "TenQ", "2026-07-29", false)]
+    [InlineData(XbrlFactExtractionService.CurrentVersion - 1, "TenQ", "2026-07-29", true)]
+    [InlineData(XbrlFactExtractionService.CurrentVersion - 1, "EightK", "2026-07-29", false)]
     [InlineData(XbrlFactExtractionService.CurrentVersion, "TenQ", "2026-07-29", false)]
     public void SelectDueDocuments_PicksOnlyTheTargetedReplay(
         int version,
