@@ -24,7 +24,7 @@ public class SharesOutstandingAsOfReaderPickTests
     }
 
     [Fact]
-    public void Pick_ClassCountsAsLateAsTheConsolidatedOne_SumEachClassOnce()
+    public void Pick_ClassCountsLaterThanTheConsolidatedOne_SumEachClassOnce()
     {
         var classA = Fact(600, new DateOnly(2026, 4, 20), "a2", consolidated: false);
         var classB = Fact(400, new DateOnly(2026, 4, 20), "a2", consolidated: false);
@@ -42,6 +42,61 @@ public class SharesOutstandingAsOfReaderPickTests
         picked
             .Should()
             .Be(new SharesOutstandingAsOf(1_000, new DateOnly(2026, 4, 20), true, false));
+    }
+
+    // The filer's main class is tagged as the common-stock member beside its Class B: dropped as a
+    // roll-up, the count was Class B alone and every holder's share of the company a multiple of it.
+    [Fact]
+    public void Pick_CommonStockMemberBesideAnotherClass_CountsBoth()
+    {
+        var common = Fact(35_000_000, new DateOnly(2026, 4, 20), "a2", consolidated: false);
+        var classB = Fact(5_600_000, new DateOnly(2026, 4, 20), "a2", consolidated: false);
+        var picked = SharesOutstandingAsOfReader.Pick(
+            [common, classB],
+            new Dictionary<Guid, (string, string)>
+            {
+                [common.Id] = ("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonStockMember"),
+                [classB.Id] = ("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonClassBMember"),
+            }
+        );
+
+        picked
+            .Should()
+            .Be(new SharesOutstandingAsOf(40_600_000, new DateOnly(2026, 4, 20), true, false));
+    }
+
+    [Fact]
+    public void Pick_ConsolidatedCountForTheSameDate_IsTheEntityFigure()
+    {
+        var classB = Fact(5_600_000, new DateOnly(2026, 4, 20), "a2", consolidated: false);
+        var picked = SharesOutstandingAsOfReader.Pick(
+            [Fact(40_600_000, new DateOnly(2026, 4, 20), "a2"), classB],
+            new Dictionary<Guid, (string, string)>
+            {
+                [classB.Id] = ("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonClassBMember"),
+            }
+        );
+
+        picked
+            .Should()
+            .Be(new SharesOutstandingAsOf(40_600_000, new DateOnly(2026, 4, 20), false, false));
+    }
+
+    [Fact]
+    public void Pick_ClassDatedOnlyAtAnotherDate_FallsBackToTheConsolidatedCount()
+    {
+        var classA = Fact(600, new DateOnly(2026, 4, 20), "a2", consolidated: false);
+        var classB = Fact(400, new DateOnly(2026, 3, 31), "a2", consolidated: false);
+        var picked = SharesOutstandingAsOfReader.Pick(
+            [Fact(900, new DateOnly(2026, 1, 20), "a1"), classA, classB],
+            new Dictionary<Guid, (string, string)>
+            {
+                [classA.Id] = ("us-gaap:StatementClassOfStockAxis", "ClassA"),
+                [classB.Id] = ("us-gaap:StatementClassOfStockAxis", "ClassB"),
+            }
+        );
+
+        picked.Should().Be(new SharesOutstandingAsOf(900, new DateOnly(2026, 1, 20), false, false));
     }
 
     [Fact]

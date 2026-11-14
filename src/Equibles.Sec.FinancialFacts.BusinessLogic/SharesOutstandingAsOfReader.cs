@@ -107,7 +107,7 @@ public class SharesOutstandingAsOfReader
                     && members.Count(other => other.DimensionSetKey == dimension.DimensionSetKey)
                         == 1
                     && SharesOutstandingProvider.ClassOfStockAxes.Contains(dimension.Axis)
-                    && !SharesOutstandingProvider.NonClassMembers.Contains(dimension.Member)
+                    && !ShareClassTotal.ExcludedMembers.Contains(dimension.Member)
                 )
                 .Select(dimension => new
                 {
@@ -133,8 +133,8 @@ public class SharesOutstandingAsOfReader
 
     /// <summary>
     /// The latest-dated count: the consolidated fact of the latest filing for that date, or, when
-    /// per-class counts are stated for a date at least as late, their sum from one filing and one
-    /// axis, each class once.
+    /// per-class counts are stated for a later date, their <see cref="ShareClassTotal"/> from one
+    /// filing and one axis. A consolidated count for the same date is the entity figure itself.
     /// </summary>
     internal static SharesOutstandingAsOf Pick(
         IReadOnlyList<FactRow> facts,
@@ -155,18 +155,26 @@ public class SharesOutstandingAsOfReader
             .FirstOrDefault();
         if (
             latestClass != null
-            && (consolidated == null || latestClass.PeriodEnd >= consolidated.PeriodEnd)
+            && (consolidated == null || latestClass.PeriodEnd > consolidated.PeriodEnd)
         )
         {
             var axis = classMembers[latestClass.Id].Axis;
-            var total = classFacts
+            var axisFacts = classFacts
                 .Where(fact =>
                     fact.AccessionNumber == latestClass.AccessionNumber
-                    && fact.PeriodEnd == latestClass.PeriodEnd
                     && classMembers[fact.Id].Axis == axis
                 )
-                .GroupBy(fact => classMembers[fact.Id].Member, StringComparer.Ordinal)
-                .Sum(group => group.First().Value);
+                .ToList();
+            var total = ShareClassTotal.StatesEveryClassAt(
+                axisFacts.Select(fact => (classMembers[fact.Id].Member, fact.PeriodEnd)),
+                latestClass.PeriodEnd
+            )
+                ? ShareClassTotal.Of(
+                    axisFacts
+                        .Where(fact => fact.PeriodEnd == latestClass.PeriodEnd)
+                        .Select(fact => (classMembers[fact.Id].Member, fact.Value))
+                )
+                : null;
             if (total > 0 && total <= long.MaxValue)
                 return new SharesOutstandingAsOf(
                     (long)total,
