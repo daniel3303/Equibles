@@ -99,4 +99,26 @@ public class SecEdgarClientTryParseMasterIndexLineSuccessTests
         entry.DateFiled.Should().Be(new DateOnly(2024, 11, 14));
         entry.AccessionNumber.Should().Be("0000950123-24-009876");
     }
+
+    // master.20260825.idx re-listed a registration statement filed on 2024-10-08; the row states its own date as
+    // yyyyMMdd, which DateFiled never read.
+    [Fact]
+    public void TryParseMasterIndexLineForForms_RowReListedOnALaterDay_StatesItsOwnFilingDate()
+    {
+        const string line =
+            "2039505|Canary XRP ETF|S-1|20241008|edgar/data/2039505/0001999371-24-013130.txt";
+        var indexDay = new DateOnly(2026, 8, 25);
+
+        var method = typeof(SecEdgarClient).GetMethod(
+            "TryParseMasterIndexLineForForms",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        var args = new object[] { line, indexDay, new[] { "S-1" }, null };
+        var success = (bool)method!.Invoke(null, args);
+
+        success.Should().BeTrue();
+        var entry = (EdgarDailyIndexEntry)args[3];
+        entry.StatedFilingDate.Should().Be(new DateOnly(2024, 10, 8));
+        entry.DateFiled.Should().Be(indexDay);
+    }
 }
