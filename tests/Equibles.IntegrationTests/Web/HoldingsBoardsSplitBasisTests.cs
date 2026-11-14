@@ -76,6 +76,32 @@ public class HoldingsBoardsSplitBasisTests
         html.Should().NotContain("Forward Split Co.");
     }
 
+    // An issuer presented by a listing outside the US directory has no primary US series to restate
+    // on, so its split quarter is judged on the counts as filed, as on the activity boards.
+    [Fact]
+    public async Task DoubleDown_SplitIssuerOutsideTheUsDirectory_IsJudgedOnItsFiledCounts()
+    {
+        var abroadId = Guid.NewGuid();
+        var holderId = Guid.NewGuid();
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            var abroad = Issuer(abroadId, "TSPL", "Toronto Split Co.", "0009600003");
+            abroad.Presentation.Listing.MarketCountryCode = "CA";
+            db.Add(abroad);
+            db.Add(Holder(holderId, "0009600102", "Adding Holder"));
+            db.Add(Split(abroadId, "TSPL", numerator: 4, denominator: 1));
+            // As filed the position grew 150%; restated across the 4-for-1 it would have shrunk.
+            db.Add(Holding(abroadId, holderId, Prior, 1_000_000));
+            db.Add(Holding(abroadId, holderId, Current, 2_500_000));
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync("/holdings/double-down-report");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("Toronto Split Co.");
+    }
+
     private static EquityIssuer Issuer(Guid id, string ticker, string name, string cik) =>
         Equibles.TestSupport.EquityIssuerSeed.Create(Id: id, Ticker: ticker, Name: name, Cik: cik);
 
