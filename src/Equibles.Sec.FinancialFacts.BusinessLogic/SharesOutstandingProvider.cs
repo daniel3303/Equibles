@@ -457,6 +457,8 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 )
             )
             .Include(f => f.Document)
+            // Ties between same-day filings and repeated class rows resolve to the lowest fact id.
+            .OrderBy(f => f.Id)
             .ToListAsync(cancellationToken);
         if (perClassFacts.Count == 0)
             return null;
@@ -551,6 +553,8 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 )
             )
             .Include(f => f.Document)
+            // Ties between same-day filings and repeated class rows resolve to the lowest fact id.
+            .OrderBy(f => f.Id)
             .ToListAsync(cancellationToken);
         if (perClassFacts.Count == 0)
             return null;
