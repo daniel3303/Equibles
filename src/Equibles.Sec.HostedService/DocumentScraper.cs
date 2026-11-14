@@ -79,10 +79,7 @@ public class DocumentScraper : IDocumentScraper
             _logger.LogInformation("Starting document scraping process...");
 
             if (ShouldSyncCompanies())
-            {
-                await _companySyncService.SyncCompaniesFromSecApi();
-                _lastCompanySyncAtUtc = DateTime.UtcNow;
-            }
+                await SyncCompanies(result);
 
             var companiesUntracked = await GetAllCompaniesWithNoTracking();
 
@@ -141,6 +138,29 @@ public class DocumentScraper : IDocumentScraper
 
         return result;
     }
+
+    // Event-driven cycles run every few seconds and ingest filings against the directory already
+    // stored, so a failed sync is reported and retried after a short wait: rethrowing it dropped
+    // every cycle's filings, and left the throttle unset so each cycle fetched the directory again.
+    private async Task SyncCompanies(ScrapingResult result)
+    {
+        try
+        {
+            await _companySyncService.SyncCompaniesFromSecApi();
+            _lastCompanySyncAtUtc = DateTime.UtcNow;
+        }
+        catch (Exception ex) when (_options.UseEventDrivenDiscovery)
+        {
+            _logger.LogError(ex, "Company directory sync failed; filings use the stored directory");
+            RecordError(result, "Company directory sync", ex);
+            await ReportError("SyncCompanies", ex);
+            var interval = TimeSpan.FromMinutes(_options.CompanySyncIntervalMinutes);
+            var retryIn = interval < CompanySyncRetryDelay ? interval : CompanySyncRetryDelay;
+            _lastCompanySyncAtUtc = DateTime.UtcNow - interval + retryIn;
+        }
+    }
+
+    private static readonly TimeSpan CompanySyncRetryDelay = TimeSpan.FromMinutes(5);
 
     // Test seam: the throttle stamp is static (it must outlive the per-cycle
     // scraper), so suites reset it to stay order-independent.

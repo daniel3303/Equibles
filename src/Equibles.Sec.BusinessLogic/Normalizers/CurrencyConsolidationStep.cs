@@ -33,6 +33,23 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
 
+    // "$" is the sign of every dollar and "¥" of the yen and the yuan, so a table that shows only
+    // the sign is noted by the sign; the currency's name needs the table's own words.
+    private static readonly Dictionary<string, (string Sign, Regex Named)> SharedSigns = new()
+    {
+        ["USD"] = (
+            "dollars ($)",
+            new Regex(
+                @"\bUS\$|\bUSD\b|\bU\.?S\.?\s+dollars?\b|\bUnited\s+States\s+dollars?\b",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase
+            )
+        ),
+        ["JPY"] = (
+            "yen or yuan (¥)",
+            new Regex(@"\bJPY\b|\byen\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)
+        ),
+    };
+
     public void Execute(IHtmlDocument doc)
     {
         var tables = doc.QuerySelectorAll("table").ToList();
@@ -41,10 +58,15 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
 
         foreach (var table in tables)
         {
+            // Read before the consolidation removes the sign cells.
+            var cellTexts = table
+                .QuerySelectorAll("td, th")
+                .Select(cell => cell.TextContent)
+                .ToList();
             var detectedCurrency = ConsolidateCurrencyColumns(table);
             if (detectedCurrency != null)
             {
-                AddCurrencyNote(table, detectedCurrency, doc);
+                AddCurrencyNote(table, CurrencyNoteName(detectedCurrency, cellTexts), doc);
             }
         }
     }
@@ -232,12 +254,17 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
         return text.Trim();
     }
 
-    private void AddCurrencyNote(IElement table, string currencyCode, IHtmlDocument doc)
+    private string CurrencyNoteName(string currencyCode, List<string> cellTexts) =>
+        SharedSigns.TryGetValue(currencyCode, out var shared)
+        && !cellTexts.Any(text => shared.Named.IsMatch(text))
+            ? shared.Sign
+            : GetCurrencyName(currencyCode);
+
+    private void AddCurrencyNote(IElement table, string currencyName, IHtmlDocument doc)
     {
         if (table.ParentElement == null)
             return;
 
-        var currencyName = GetCurrencyName(currencyCode);
         var p = doc.CreateElement("p");
         var em = doc.CreateElement("em");
         em.TextContent = $"All values are in {currencyName}.";

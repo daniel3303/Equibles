@@ -128,7 +128,10 @@ public class SplitShareCountEvidenceReconciler
                         dimension.Member,
                     }
             )
-            .Where(fact => SharesOutstandingProvider.ClassOfStockAxes.Contains(fact.Axis))
+            .Where(fact =>
+                SharesOutstandingProvider.ClassOfStockAxes.Contains(fact.Axis)
+                && !ShareClassTotal.ExcludedMembers.Contains(fact.Member)
+            )
             .ToListAsync(cancellationToken);
 
         var statedTotals = consolidated
@@ -141,33 +144,29 @@ public class SplitShareCountEvidenceReconciler
             )
         )
         {
-            // The filing's latest date, and only when it states every class the filing names: a
-            // class stated only at another date would silently drop out of the total, the rule
-            // SharesOutstandingProvider applies to the same cover-page facts.
+            // The filing's latest date, under the rule every reader of these counts shares. A
+            // filing that also states the consolidated count is already a witness through it.
             var asOf = filing.Max(fact => fact.PeriodEnd);
-            var current = filing.Where(fact => fact.PeriodEnd == asOf).ToList();
-            var members = current.Select(fact => fact.Member).ToHashSet(StringComparer.Ordinal);
-            // A non-class member makes the sum ambiguous: filers tag their only common class as
-            // us-gaap:CommonStockMember beside preferred or note members, so dropping it as a roll-up
-            // leaves an unchanged preferred count that would contradict a real split.
             if (
-                filing.Any(fact => !members.Contains(fact.Member))
-                || members.Any(SharesOutstandingProvider.NonClassMembers.Contains)
+                !ShareClassTotal.StatesEveryClassAt(
+                    filing.Select(fact => (fact.Member, fact.PeriodEnd)),
+                    asOf
+                )
                 || statedTotals.Contains(
                     (filing.Key.EquityIssuerId, filing.Key.AccessionNumber, asOf)
                 )
             )
                 continue;
+            var current = filing.Where(fact => fact.PeriodEnd == asOf).ToList();
+            if (
+                ShareClassTotal.Of(current.Select(fact => (fact.Member, fact.Value)))
+                is not { } total
+            )
+                continue;
             classSums.Add(
                 (
                     filing.Key.EquityIssuerId,
-                    new ShareCountObservation(
-                        asOf,
-                        current.Max(fact => fact.FiledDate),
-                        current
-                            .GroupBy(fact => fact.Member, StringComparer.Ordinal)
-                            .Sum(member => member.First().Value)
-                    )
+                    new ShareCountObservation(asOf, current.Max(fact => fact.FiledDate), total)
                 )
             );
         }

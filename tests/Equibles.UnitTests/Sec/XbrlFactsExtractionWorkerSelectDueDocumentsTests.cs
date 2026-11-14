@@ -68,6 +68,35 @@ public class XbrlFactsExtractionWorkerSelectDueDocumentsTests
             .ContainSingle();
     }
 
+    // Every standalone instance parsed to zero facts before the current version, whatever its form
+    // or age; an inline filing of the same form and date was read correctly and stays put.
+    [Theory]
+    [InlineData(XbrlType.StandaloneXbrl, XbrlFactExtractionService.CurrentVersion - 1, true)]
+    [InlineData(XbrlType.StandaloneXbrl, XbrlFactExtractionService.CurrentVersion, false)]
+    [InlineData(XbrlType.InlineIxbrl, XbrlFactExtractionService.CurrentVersion - 1, false)]
+    public void SelectDueDocuments_StandaloneInstanceBelowTheCurrentVersion_IsReplayed(
+        XbrlType type,
+        int version,
+        bool due
+    )
+    {
+        var document = Filing(version, "TwentyF", "2020-04-28");
+        document.XbrlType = type;
+        var checkpoints = new[]
+        {
+            new FinancialFactsSyncStatus
+            {
+                EquityIssuerId = IssuerId,
+                LastFiledDateSeen = new DateOnly(2025, 11, 15),
+            },
+        };
+
+        XbrlFactsExtractionWorker
+            .SelectDueDocuments(new[] { document }.AsQueryable(), checkpoints.AsQueryable())
+            .Should()
+            .HaveCount(due ? 1 : 0);
+    }
+
     [Fact]
     public void SelectDueDocuments_ExhaustedAttempts_AreNotReplayed()
     {

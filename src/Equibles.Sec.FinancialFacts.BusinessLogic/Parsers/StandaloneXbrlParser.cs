@@ -59,18 +59,8 @@ public class StandaloneXbrlParser
         if (string.IsNullOrWhiteSpace(xml))
             return [];
 
-        XDocument document;
-        try
-        {
-            document = XDocument.Parse(xml);
-        }
-        catch (System.Xml.XmlException)
-        {
-            return [];
-        }
-
-        var root = document.Root;
-        if (root == null || root.Name != XbrlRoot)
+        var root = LoadInstance(xml);
+        if (root == null)
             return [];
 
         var contexts = BuildContextMap(root);
@@ -86,35 +76,41 @@ public class StandaloneXbrlParser
         return facts;
     }
 
-    public List<ParsedFiscalYearEnd> ParseFiscalYearEnds(string xml)
+    // The one way an instance is read: a stored SEC TEXT body keeps the SGML <XBRL> wrapper around
+    // the XML, whose inner declaration no XML reader accepts.
+    private static XElement LoadInstance(string xml)
     {
-        if (string.IsNullOrWhiteSpace(xml))
-            return [];
-        // Stored SEC TEXT bodies retain this SGML wrapper around the XML instance.
         xml = xml.Trim();
         if (
             xml.StartsWith("<XBRL>", StringComparison.Ordinal)
             && xml.EndsWith("</XBRL>", StringComparison.Ordinal)
         )
             xml = xml[6..^7].Trim();
-        XDocument document;
         try
         {
             using var reader = XmlReader.Create(
                 new StringReader(xml),
                 new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }
             );
-            document = XDocument.Load(reader);
+            var root = XDocument.Load(reader).Root;
+            return root?.Name == XbrlRoot ? root : null;
         }
-        catch (System.Xml.XmlException)
+        catch (XmlException)
         {
-            return [];
+            return null;
         }
-        if (document.Root?.Name != XbrlRoot)
+    }
+
+    public List<ParsedFiscalYearEnd> ParseFiscalYearEnds(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml))
             return [];
-        var contexts = BuildContextMap(document.Root);
+        var root = LoadInstance(xml);
+        if (root == null)
+            return [];
+        var contexts = BuildContextMap(root);
         var observations = new List<ParsedFiscalYearEnd>();
-        foreach (var element in document.Root.Elements())
+        foreach (var element in root.Elements())
         {
             if (
                 element.Name.LocalName != "CurrentFiscalYearEndDate"

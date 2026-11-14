@@ -242,11 +242,13 @@ public static class FinancialConceptAliases
         ],
         ["operating-lease-assets"] = [G("OperatingLeaseRightOfUseAsset"), I("RightofuseAssets")],
         ["goodwill"] = [G("Goodwill"), I("Goodwill")],
+        // The total first: the finite-lived figure leaves out indefinite-lived brands and licences,
+        // so it stands in only for a filer that never states the total.
         ["intangible-assets"] =
         [
-            G("FiniteLivedIntangibleAssetsNet"),
             G("IntangibleAssetsNetExcludingGoodwill"),
             I("IntangibleAssetsOtherThanGoodwill"),
+            G("FiniteLivedIntangibleAssetsNet"),
         ],
         ["long-term-investments"] = [G("LongTermInvestments"), G("MarketableSecuritiesNoncurrent")],
         ["total-assets"] = [G("Assets"), I("Assets")],

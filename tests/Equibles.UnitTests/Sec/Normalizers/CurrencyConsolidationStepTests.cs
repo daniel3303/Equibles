@@ -31,7 +31,34 @@ public class CurrencyConsolidationStepTests
 
         var note = doc.QuerySelector("table + p em");
         note.Should().NotBeNull();
-        note.TextContent.Should().Be("All values are in US Dollars.");
+        note.TextContent.Should().Be("All values are in dollars ($).");
+    }
+
+    // A Canadian 40-F statement headed "(millions of Canadian dollars)" prints a bare "$" too, and
+    // a Chinese filer prints "¥" for the yuan: the sign alone names no currency.
+    [Theory]
+    [InlineData("$", "Net income", "All values are in dollars ($).")]
+    [InlineData("$", "Net income (millions of Canadian dollars)", "All values are in dollars ($).")]
+    [InlineData("$", "Net income (in thousands of U.S. dollars)", "All values are in US Dollars.")]
+    [InlineData("¥", "Net income (RMB in thousands)", "All values are in yen or yuan (¥).")]
+    [InlineData("¥", "Net income (millions of yen)", "All values are in Japanese Yen.")]
+    public void SharedSign_NamesItsCurrencyOnlyWhenTheTableDoes(
+        string sign,
+        string label,
+        string expectedNote
+    )
+    {
+        var html = $"""
+            <table>
+              <tr><td>{label}</td><td>{sign}</td><td></td><td>100</td></tr>
+              <tr><td>Total</td><td>{sign}</td><td></td><td>200</td></tr>
+            </table>
+            """;
+        var doc = new HtmlParser().ParseDocument(html);
+
+        new CurrencyConsolidationStep().Execute(doc);
+
+        doc.QuerySelector("p em").TextContent.Should().Be(expectedNote);
     }
 
     [Fact]
@@ -154,7 +181,7 @@ public class CurrencyConsolidationStepTests
 
         var note = doc.QuerySelector("table + p em");
         note.Should().NotBeNull();
-        note.TextContent.Should().Be("All values are in US Dollars.");
+        note.TextContent.Should().Be("All values are in dollars ($).");
     }
 
     [Fact]

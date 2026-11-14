@@ -245,7 +245,14 @@ public class FinancialStatementTools
                 )
                 .ToListAsync();
 
-        var facts = allEvidence.Where(f => f.DimensionsKey == "").ToList();
+        // The evidence keeps every dimension for the interim check below, so the consolidated
+        // lines pass the repository's cost-of-sales gate here instead of at the query.
+        var byNatureCostOfSales = (
+            await _financialFactRepository.GetByNatureCostOfSalesIds(stock.Id).ToListAsync()
+        ).ToHashSet();
+        var facts = allEvidence
+            .Where(f => f.DimensionsKey == "" && !byNatureCostOfSales.Contains(f.Id))
+            .ToList();
         facts = StatementLineFacts.RejectAmbiguousInterimAnnualFacts(
             facts,
             allEvidence,
@@ -291,8 +298,8 @@ public class FinancialStatementTools
         // statement to one actual period end before selecting line values so it cannot
         // silently combine different balance dates or flow endpoints. A balance sheet
         // loaded by its date already shares one; the anchor is a no-op there.
-        // No balance-sheet dates are loaded, and none are needed: this tool reads
-        // GetConsolidatedByStock, so the latest conforming span IS the entity's own
+        // No balance-sheet dates are loaded, and none are needed: the lines above are
+        // consolidated only, so the latest conforming span IS the entity's own
         // measured endpoint and the rule provably cannot move a consolidated-only
         // fact set (StatementLineFactsAnchorTests). A surface that also loads
         // DIMENSIONAL facts must pass them — see FinancialStatementsHelper.
@@ -764,7 +771,7 @@ public class FinancialStatementTools
     // the instant ending latest so a comparative column never stands in for the current
     // one, then the latest restatement among same-ending candidates (#1546). Mirrors
     // FinancialStatementsHelper.PickCurrentlyReportedFact on the web surfaces; facts are
-    // already consolidated-only here via GetConsolidatedByStock.
+    // already consolidated-only here.
     internal static FinancialFact PickCurrentlyReportedFact(
         IEnumerable<FinancialFact> facts,
         SecFiscalPeriod fiscalPeriod

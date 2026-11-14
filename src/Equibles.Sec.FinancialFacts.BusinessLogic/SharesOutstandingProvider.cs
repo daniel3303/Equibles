@@ -48,16 +48,14 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // is replaced by the balance-sheet count that contradicted it.
     private const decimal CoverPageCollapseFactor = 5m;
 
-    // Members observed on the class-of-stock axes that are not share classes by taxonomy
-    // definition, excluded from any per-class sum: the consolidated roll-up (summing it with the
-    // classes it totals double-counts the company), treasury shares (issued but not outstanding),
-    // and the ADS listing (a different unit from the ordinary-share classes beside it).
+    // Members left out of the balance-sheet per-class sum: treasury shares, the ADS listing, and
+    // the common-stock member. On the balance sheet that member is a roll-up that rarely equals the
+    // classes beside it to the share, so the equality test of ShareClassTotal, which cover-page
+    // counts pass, cannot tell it from a class there.
     internal static readonly string[] NonClassMembers =
     [
-        "us-gaap:CommonStockMember",
-        "us-gaap:TreasuryStockMember",
-        "us-gaap:TreasuryStockCommonMember",
-        "dei:AdrMember",
+        ShareClassTotal.CommonStockMember,
+        .. ShareClassTotal.ExcludedMembers,
     ];
 
     // How far back the collapse check's history anchor looks. The anchor asks whether the issuer
@@ -549,7 +547,9 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 && f.Unit == SharesUnit
                 && members.Count(d => d.DimensionSetKey == f.DimensionsKey) == 1
                 && members.Any(d =>
-                    d.DimensionSetKey == f.DimensionsKey && ClassOfStockAxes.Contains(d.Axis)
+                    d.DimensionSetKey == f.DimensionsKey
+                    && ClassOfStockAxes.Contains(d.Axis)
+                    && !ShareClassTotal.ExcludedMembers.Contains(d.Member)
                 )
             )
             .Include(f => f.Document)
@@ -568,14 +568,15 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         if (latest == null)
             return null;
 
-        var total = perClassFacts
-            .Where(f =>
-                f.AccessionNumber == latest.AccessionNumber
-                && f.PeriodEnd == latest.PeriodEnd
-                && classOf[f.DimensionsKey].Axis == classOf[latest.DimensionsKey].Axis
-            )
-            .GroupBy(f => classOf[f.DimensionsKey].Member)
-            .Sum(g => g.First().Value);
+        var total = ShareClassTotal.Of(
+            perClassFacts
+                .Where(f =>
+                    f.AccessionNumber == latest.AccessionNumber
+                    && f.PeriodEnd == latest.PeriodEnd
+                    && classOf[f.DimensionsKey].Axis == classOf[latest.DimensionsKey].Axis
+                )
+                .Select(f => (classOf[f.DimensionsKey].Member, f.Value))
+        );
 
         // Same range-check: a corrupt per-class count can push the sum past Int64; degrade to null
         // rather than let the decimal->long cast throw.
