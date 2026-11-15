@@ -131,7 +131,7 @@ public class FinancialStatementToolsOwnFiscalYearNamingTests : ParadeDbMcpTestBa
 
         var result = await Sut().GetFinancialStatement("HD", statement: "income", year: 2026);
 
-        result.Should().Contain("no income statement data for FY2026");
+        result.Should().Contain("no income statement data for 2026");
         result.Should().Contain("Latest available: FY2025 FY");
     }
 

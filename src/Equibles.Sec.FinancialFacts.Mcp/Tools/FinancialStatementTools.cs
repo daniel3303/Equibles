@@ -712,7 +712,7 @@ public class FinancialStatementTools
         {
             var latest = ordered[0];
             var wanted =
-                $"{(year is { } stored ? $"FY{FiscalYearLabel.For(stored, stock)}" : "the latest year")} "
+                $"{(year is { } stored ? FiscalYearLabel.For(stored, stock).ToString() : "the latest year")} "
                 + $"{(requestedPeriod?.NameForHumans() ?? "period")}";
             var message =
                 $"{EquityListingSymbol.Display(stock)} has no {statementName} data for {wanted}. Latest available: "
