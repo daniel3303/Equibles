@@ -69,10 +69,15 @@ public static class HoldingsPositionGrouper
         foreach (var (holderId, current) in currentByHolder)
         {
             previousByHolder.TryGetValue(holderId, out var previous);
-            var changeType = ClassifyChange(current.TotalShares, previous?.TotalShares ?? 0);
+            // Presence decides New, never a zero share count: totals are common shares only, so
+            // a holder that reported only options last quarter is compared from zero and has
+            // increased, and one that enters through options alone is new with no shares.
+            var changeType =
+                previous == null
+                    ? PositionChangeType.New
+                    : ClassifyChange(current.TotalShares, previous.TotalShares);
             if (
                 previous == null
-                && changeType == PositionChangeType.New
                 && filersWithPreviousQuarterFilings != null
                 && !filersWithPreviousQuarterFilings.Contains(holderId)
             )
@@ -131,8 +136,6 @@ public static class HoldingsPositionGrouper
     {
         if (currentShares == previousShares)
             return PositionChangeType.Unchanged;
-        if (previousShares == 0)
-            return PositionChangeType.New;
         return currentShares > previousShares
             ? PositionChangeType.Increased
             : PositionChangeType.Reduced;
