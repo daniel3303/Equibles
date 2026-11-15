@@ -658,6 +658,9 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)");
 
+                    b.Property<bool>("WasReferenceListed")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("YahooEnrichmentAttemptedAt")
                         .HasColumnType("timestamp with time zone");
 
