@@ -12,7 +12,7 @@ public sealed class HistoricalEquityDbFixture : ParadeDbFixture
 
     // Added by 20261029100726_AddCashDividendPriceAdjustmentUnservedTime (the reconcile selection
     // filters on it), by AddGovernmentContractCountry (every contract insert writes it) and by
-    // AddEquityListingWasReferenceListed (every listing insert writes it).
+    // AddEquityListingWasReferenceListed (the issuer merge carries the mark over in SQL).
     protected override string PostMigrationSql =>
         "ALTER TABLE \"CashDividend\" ADD COLUMN \"PriceAdjustmentUnservedTime\" timestamp with time zone NULL;"
         + "ALTER TABLE \"GovernmentContract\" ADD COLUMN \"CountryCode\" character varying(2) NOT NULL DEFAULT 'US';"

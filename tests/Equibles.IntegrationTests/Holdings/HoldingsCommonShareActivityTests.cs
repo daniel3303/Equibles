@@ -32,6 +32,8 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
     private InstitutionalHolder _steady;
     private InstitutionalHolder _doubler;
     private InstitutionalHolder _optionFiler;
+    private InstitutionalHolder _firstFiler;
+    private InstitutionalHolder _lapsed;
 
     public HoldingsCommonShareActivityTests(ParadeDbFixture fixture) => _fixture = fixture;
 
@@ -50,6 +52,8 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         _steady = await SeedHolder(seed, "H001");
         _doubler = await SeedHolder(seed, "H002");
         _optionFiler = await SeedHolder(seed, "H003");
+        _firstFiler = await SeedHolder(seed, "H004");
+        _lapsed = await SeedHolder(seed, "H005");
         seed.AddRange(
             // Steady: 1,000 common shares both quarters, plus a put and a principal row this
             // quarter, each far larger than the shares.
@@ -66,7 +70,15 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             Leg(_held, _optionFiler, QPrev, 400_000, 40_000_000, option: OptionType.Call),
             Leg(_held, _optionFiler, QCur, 700_000, 70_000_000, option: OptionType.Call),
             Leg(_optionsOnly, _optionFiler, QPrev, 50_000, 5_000_000, option: OptionType.Put),
-            Leg(_optionsOnly, _optionFiler, QCur, 80_000, 8_000_000, option: OptionType.Put)
+            Leg(_optionsOnly, _optionFiler, QCur, 80_000, 8_000_000, option: OptionType.Put),
+            // First filer: no 13F for the previous quarter, so its position is no trade. Only
+            // its common shares are set apart from the like-for-like change.
+            Leg(_held, _firstFiler, QCur, 700, 70_000),
+            Leg(_held, _firstFiler, QCur, 9_000, 900_000, option: OptionType.Put),
+            // Lapsed: filed last quarter and not yet this one, so the combined view carries its
+            // position forward. Only its common shares are carried into the totals.
+            Leg(_held, _lapsed, QPrev, 400, 40_000),
+            Leg(_held, _lapsed, QPrev, 20_000, 2_000_000, option: OptionType.Put)
         );
         await seed.SaveChangesAsync();
     }
@@ -90,13 +102,18 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
                 CancellationToken.None
             );
         held.CurrentShares.Should()
-            .Be(6_000, "1,000 + 5,000 common shares; options and principal add none");
-        held.PreviousShares.Should().Be(3_000);
-        held.CurrentValue.Should().Be(600_000, "the value of the common shares only");
-        held.PreviousValue.Should().Be(300_000);
+            .Be(6_700, "1,000 + 5,000 + 700 common shares; options and principal add none");
+        held.PreviousShares.Should().Be(3_400);
+        held.CurrentValue.Should().Be(670_000, "the value of the common shares only");
+        held.PreviousValue.Should().Be(340_000);
         held.CurrentFilerCount.Should()
-            .Be(3, "a filer holding only options still reported the stock");
-        held.PreviousFilerCount.Should().Be(3);
+            .Be(4, "a filer holding only options still reported the stock");
+        held.UnmatchedCurrentShares.Should().Be(700, "the first filer's put is not shares either");
+        held.UnmatchedCurrentValue.Should().Be(70_000);
+        held.PreviousFilerCount.Should().Be(4);
+        held.UnmatchedPreviousShares.Should()
+            .Be(400, "the lapsed filer's put is not shares either");
+        held.UnmatchedPreviousValue.Should().Be(40_000);
 
         var optionsOnly = await read.Set<StockQuarterlyActivity>()
             .SingleAsync(
@@ -111,10 +128,10 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             .Where(row => row.ReportDate == QCur && !row.IsCombined)
             .ToListAsync(CancellationToken.None);
         var heldListing = listings.Single(row => row.EquityIssuerId == _held.Id);
-        heldListing.CurrentShares.Should().Be(6_000);
-        heldListing.PreviousShares.Should().Be(3_000);
-        heldListing.CurrentValue.Should().Be(600_000);
-        heldListing.CurrentFilerCount.Should().Be(3);
+        heldListing.CurrentShares.Should().Be(6_700);
+        heldListing.PreviousShares.Should().Be(3_400);
+        heldListing.CurrentValue.Should().Be(670_000);
+        heldListing.CurrentFilerCount.Should().Be(4);
         heldListing
             .TopOneValue.Should()
             .Be(500_000, "the largest common-share position, not an option's");
@@ -166,9 +183,9 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             live
         ).GetStockActivitySnapshotsByStockSnapshotBacked(_held, CancellationToken.None);
         var liveCurrent = liveHistory.Single(row => row.ReportDate == QCur);
-        liveCurrent.CurrentShares.Should().Be(6_000);
-        liveCurrent.CurrentValue.Should().Be(600_000);
-        liveCurrent.CurrentFilerCount.Should().Be(3);
+        liveCurrent.CurrentShares.Should().Be(6_700);
+        liveCurrent.CurrentValue.Should().Be(670_000);
+        liveCurrent.CurrentFilerCount.Should().Be(4);
 
         await BuildService().RebuildQuarterAsync(QPrev, CancellationToken.None);
         await BuildService().RebuildQuarterAsync(QCur, CancellationToken.None);
@@ -207,15 +224,30 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         );
 
         var held = activity.Single(row => row.CommonStockId == _held.Id);
-        held.CurrentShares.Should().Be(6_000);
-        held.CurrentValue.Should().Be(600_000);
-        held.PreviousShares.Should().Be(3_000);
-        held.CurrentFilerCount.Should().Be(3);
-        listings.Single(row => row.EquityIssuerId == _held.Id).CurrentShares.Should().Be(6_000);
+        held.CurrentShares.Should().Be(7_100, "the lapsed filer's 400 common shares are carried");
+        held.CurrentValue.Should().Be(710_000);
+        held.PreviousShares.Should().Be(3_400);
+        held.CurrentFilerCount.Should().Be(5);
+        listings.Single(row => row.EquityIssuerId == _held.Id).CurrentShares.Should().Be(7_100);
         listings
             .Single(row => row.EquityIssuerId == _optionsOnly.Id)
             .CurrentShares.Should()
             .Be(0, "the combined snapshot refuses a stock with no listing row");
+    }
+
+    [Fact]
+    public async Task CombinedStockActivity_CarriesOnlyTheCommonSharesOfAFilerYetToFile()
+    {
+        await using var read = FreshContext();
+
+        var combined = await new InstitutionalHoldingRepository(
+            read
+        ).GetCombinedStockActivitySnapshotBacked(_held, QCur, QPrev, CancellationToken.None);
+
+        combined.CurrentShares.Should().Be(7_100);
+        combined.CurrentValue.Should().Be(710_000, "the carried put adds no value");
+        combined.PreviousValue.Should().Be(340_000);
+        combined.CurrentFilerCount.Should().Be(5);
     }
 
     [Fact]
@@ -272,10 +304,10 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             .ToListAsync(CancellationToken.None);
 
         var held = rows.Single(row => row.CommonStockId == _held.Id);
-        held.CurrentShares.Should().Be(6_000);
-        held.CurrentValue.Should().Be(600_000);
-        held.PreviousValue.Should().Be(300_000);
-        held.CurrentFilerCount.Should().Be(3);
+        held.CurrentShares.Should().Be(6_700);
+        held.CurrentValue.Should().Be(670_000);
+        held.PreviousValue.Should().Be(340_000);
+        held.CurrentFilerCount.Should().Be(4);
     }
 
     private static (long, long, long, long, long, long, int, int) Figures(
