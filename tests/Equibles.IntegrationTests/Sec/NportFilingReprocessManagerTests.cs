@@ -281,6 +281,50 @@ public class NportFilingReprocessManagerTests
         await secClient.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
     }
 
+    // A version that only adds a fact shown for a fund's newest report re-reads that report and
+    // leaves the rest of the series' history as stored.
+    [Fact]
+    public async Task Run_FilingsAtTheWholeHistoryVersion_RereadsOnlyTheReportTheSeriesServes()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        var stock = SeedStock(dbContext);
+        var older = SeedFiling(
+            dbContext,
+            stock,
+            NportFiling.WholeHistoryParserVersion,
+            "0001104659-26-000098"
+        );
+        var served = SeedFiling(dbContext, stock, NportFiling.WholeHistoryParserVersion);
+        dbContext.Add(
+            new FundSeries
+            {
+                IdentityKey = $"cs:{stock.Id}",
+                Slug = "big-tech-index-etf",
+                SeriesId = "S000087771",
+                EquityIssuerId = stock.Id,
+                LatestNportFilingId = served.Id,
+            }
+        );
+        dbContext.SaveChanges();
+        dbContext.ChangeTracker.Clear();
+        secClient
+            .GetDocumentContent(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(ValidNportSubmission);
+
+        var result = await manager.Run();
+
+        result.Total.Should().Be(1);
+        result.Processed.Should().Be(1);
+        await secClient
+            .DidNotReceive()
+            .GetDocumentContent(older.AccessionNumber, Arg.Any<string>());
+        var versions = await dbContext
+            .Set<NportFiling>()
+            .ToDictionaryAsync(f => f.AccessionNumber, f => f.ParserVersion);
+        versions[served.AccessionNumber].Should().Be(NportFiling.CurrentParserVersion);
+        versions[older.AccessionNumber].Should().Be(NportFiling.WholeHistoryParserVersion);
+    }
+
     // ── Helpers ──
 
     private static IReadOnlySet<string> SeriesSet(params string[] seriesIds) =>
@@ -340,14 +384,15 @@ public class NportFilingReprocessManagerTests
     private static NportFiling SeedFiling(
         Equibles.Data.EquiblesFinancialDbContext dbContext,
         EquityIssuer stock,
-        int parserVersion
+        int parserVersion,
+        string accessionNumber = "0001104659-26-000099"
     )
     {
         var filing = new NportFiling
         {
             Id = Guid.NewGuid(),
             EquityIssuerId = stock.Id,
-            AccessionNumber = "0001104659-26-000099",
+            AccessionNumber = accessionNumber,
             FilingDate = new DateOnly(2026, 3, 30),
             ReportPeriodDate = new DateOnly(2026, 2, 28),
             ReportPeriodEnd = new DateOnly(2026, 2, 28),

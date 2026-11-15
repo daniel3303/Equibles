@@ -134,6 +134,65 @@ public class FundPortfolioSnapshotTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .And.Contain($"coverage: {coverage}");
     }
 
+    // Invesco KBW Property & Casualty Insurance ETF's rows of 2026-08-31: the two funds holding its
+    // lending cash are labelled where they appear, and the total counts the one beyond the page.
+    [Fact]
+    public async Task ProfileLabelsLendingCollateralAndTotalsItOverTheWholeSchedule()
+    {
+        var filing = Filing(3);
+        filing.Holdings.Add(Position("RLI Corp.", "EC", 4272356.11m, 1.505172926868m));
+        filing.Holdings.Add(
+            Position("Invesco Private Prime Fund", "STIV", 3861222.09m, 1.360328307111m, true)
+        );
+        filing.Holdings.Add(
+            Position("Invesco Private Government Fund", "STIV", 1486717.33m, 0.523778125560m, true)
+        );
+        var series = new FundSeries
+        {
+            IdentityKey = "rc:0000000991:S000000001",
+            Slug = "fund-s000000001",
+            SeriesId = filing.SeriesId,
+            RegistrantCik = filing.RegistrantCik,
+            SeriesName = "Selected fund",
+            LatestNportFilingId = filing.Id,
+        };
+        DbContext.AddRange(filing, series);
+        await DbContext.SaveChangesAsync();
+        var tools = new FundDirectoryTools(
+            new FundSeriesRepository(DbContext),
+            new NportFilingRepository(DbContext),
+            ErrorManager,
+            NullLogger<FundDirectoryTools>()
+        );
+
+        var result = await tools.GetFundProfile(series.Slug, maxResults: 2);
+
+        result
+            .Should()
+            .Contain("| EC (equity-common) |")
+            .And.Contain("| STIV (short-term investment vehicle), securities-lending collateral |")
+            .And.NotContain("Invesco Private Government Fund")
+            .And.Contain(
+                "Securities-lending collateral: 2 rows, $5,347,939.42 (1.88% of net assets)."
+            );
+    }
+
+    private static NportHolding Position(
+        string name,
+        string assetCategory,
+        decimal value,
+        decimal percent,
+        bool collateral = false
+    ) =>
+        new()
+        {
+            Name = name,
+            AssetCategory = assetCategory,
+            ValueUsd = value,
+            PercentValue = percent,
+            LendingCashCollateralValue = collateral ? value : null,
+        };
+
     [Fact]
     public async Task CanceledSnapshotPropagatesCancellation()
     {

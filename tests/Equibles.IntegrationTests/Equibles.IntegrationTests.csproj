@@ -56,6 +56,11 @@
 
   <ItemGroup>
     <Content
+      Include="../Equibles.UnitTests/TestAssets/Sec/Nport/*.txt"
+      Link="TestAssets/Sec/Nport/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
       Include="../Equibles.UnitTests/TestAssets/Esef/dila-tff-2026.xhtml"
       Link="TestAssets/Esef/dila-tff-2026.xhtml"
       CopyToOutputDirectory="PreserveNewest"

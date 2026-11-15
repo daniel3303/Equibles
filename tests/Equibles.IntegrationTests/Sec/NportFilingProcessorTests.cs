@@ -125,6 +125,51 @@ public class NportFilingProcessorTests
         swap.ValueUsd.Should().Be(-477163.89m);
     }
 
+    // Invesco KBW Property & Casualty Insurance ETF's report for 2026-08-31, as EDGAR serves it: the
+    // two funds its lending cash is parked in state their whole value as cash collateral, while a
+    // loaned share and the fund's own cash vehicle state none.
+    [Fact]
+    public async Task Process_RecordedReport_ReadsEachHoldingsLendingCashCollateral()
+    {
+        var (processor, repo, secClient) = CreateProcessorWithDeps();
+        var submission = await File.ReadAllTextAsync(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Sec",
+                "Nport",
+                "nport-p-0001378872-26-001853.txt"
+            )
+        );
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(submission);
+
+        var result = await processor.Process(MakeFiling("0001378872-26-001853"), MakeCompany());
+
+        result.Should().BeTrue();
+        var filing = await repo.GetAll().Include(f => f.Holdings).SingleAsync();
+        filing.Holdings.Should().HaveCount(27);
+        var prime = filing.Holdings.Single(h => h.Name == "Invesco Private Prime Fund");
+        prime.LendingCashCollateralValue.Should().Be(3861222.09m);
+        prime.IsLendingCollateral.Should().BeTrue();
+        filing
+            .Holdings.Single(h => h.Name == "Invesco Private Government Fund")
+            .LendingCashCollateralValue.Should()
+            .Be(1486717.33m);
+        filing
+            .Holdings.Where(h => h.IsLendingCollateral)
+            .Sum(h => h.PercentValue)
+            .Should()
+            .BeApproximately(1.8841m, 0.0001m);
+        filing
+            .Holdings.Single(h => h.Name == "RLI Corp.")
+            .LendingCashCollateralValue.Should()
+            .BeNull("a share out on loan is not collateral");
+        filing
+            .Holdings.Single(h => h.Name == "Invesco Government & Agency Portfolio")
+            .LendingCashCollateralValue.Should()
+            .BeNull("the fund's own cash vehicle states no collateral");
+    }
+
     [Fact]
     public async Task Process_Amendment_SetsIsAmendment()
     {

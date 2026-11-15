@@ -35,9 +35,18 @@ public class NportFiling
     /// Current holdings-parsing algorithm version. Bump this whenever the NPORT-P parse changes so
     /// the reprocess worker re-derives every filing's <see cref="Holdings"/> from EDGAR. Version 1
     /// is the first that reads the portfolio schedule from the correct <c>formData</c> element;
-    /// version 2 also preserves the pre-filter <see cref="ReportedHoldingCount"/>.
+    /// version 2 also preserves the pre-filter <see cref="ReportedHoldingCount"/>; version 3 also
+    /// reads each holding's securities-lending cash collateral.
     /// </summary>
-    public const int CurrentParserVersion = 2;
+    public const int CurrentParserVersion = 3;
+
+    /// <summary>
+    /// The version every stored filing must reach, whatever its place in a series' history. A
+    /// filing at or above it but below <see cref="CurrentParserVersion"/> is re-read only while it
+    /// is the report its series serves and holds a whole schedule: what version 3 adds is shown
+    /// for a fund's newest report alone, and a narrowed schedule never stored the rows it marks.
+    /// </summary>
+    public const int WholeHistoryParserVersion = 2;
 
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();

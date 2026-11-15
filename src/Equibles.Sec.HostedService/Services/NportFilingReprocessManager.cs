@@ -21,11 +21,13 @@ namespace Equibles.Sec.HostedService.Services;
 /// submission from EDGAR, re-parses it through <see cref="NportFilingProcessor.ParseEntity"/>,
 /// replaces the stored holdings and header facts, and stamps the current version.
 ///
-/// The parser version is the single selector: once a filing is stamped at the current version it
-/// drops out, so the run terminates and is resumable — an interrupted run continues where it left
-/// off next invocation, and bumping <see cref="NportFiling.CurrentParserVersion"/> after a parser
-/// change re-enrolls every filing automatically. Filings that imported before holdings were parsed
-/// correctly default to version 0 and are backfilled on the first pass.
+/// The parser version is the selector (<see cref="NportFilingRepository.GetAwaitingReprocess"/>):
+/// once a filing is stamped at the current version it drops out, so the run terminates and is
+/// resumable — an interrupted run continues where it left off next invocation. Raising
+/// <see cref="NportFiling.WholeHistoryParserVersion"/> re-enrolls every filing; raising only
+/// <see cref="NportFiling.CurrentParserVersion"/> re-enrolls the report each series serves.
+/// Filings that imported before holdings were parsed correctly default to version 0 and are
+/// backfilled on the first pass.
 ///
 /// Filings are processed strictly ONE at a time and the stored schedule is replaced with a
 /// set-based delete: a single filing can carry hundreds of thousands of holdings, so loading a
@@ -76,7 +78,7 @@ public class NportFilingReprocessManager
     }
 
     /// <summary>
-    /// Brings every filing below <see cref="NportFiling.CurrentParserVersion"/> up to date.
+    /// Brings every filing awaiting reprocess up to <see cref="NportFiling.CurrentParserVersion"/>.
     /// Filings of a series in <paramref name="fullFidelitySeriesIds"/> keep their whole schedule
     /// rather than being re-narrowed to tracked-stock positions, and any of that series' filings
     /// still holding a narrowed schedule are re-enrolled first so the opt-in heals history too.
@@ -92,8 +94,7 @@ public class NportFilingReprocessManager
         var result = new NportFilingReprocessResult
         {
             Total = await _filingRepository
-                .GetAll()
-                .Where(f => f.ParserVersion < NportFiling.CurrentParserVersion)
+                .GetAwaitingReprocess(fullFidelitySeriesIds.ToList())
                 .CountAsync(cancellationToken),
         };
 
@@ -113,8 +114,7 @@ public class NportFilingReprocessManager
         while (!cancellationToken.IsCancellationRequested)
         {
             var page = await _filingRepository
-                .GetAll()
-                .Where(f => f.ParserVersion < NportFiling.CurrentParserVersion)
+                .GetAwaitingReprocess(fullFidelitySeriesIds.ToList())
                 .Where(f => !failedThisRun.Contains(f.Id))
                 .OrderBy(f => f.FilingDate)
                 .Select(f => f.Id)
@@ -224,7 +224,7 @@ public class NportFilingReprocessManager
 
         var narrowed = await _filingRepository
             .GetNarrowedBelowReportedCount(fullFidelitySeriesIds.ToList())
-            .Where(f => f.ParserVersion >= NportFiling.CurrentParserVersion)
+            .Where(f => f.ParserVersion >= NportFiling.WholeHistoryParserVersion)
             .Where(f => f.ReprocessAttempts < MaxReprocessAttempts)
             .Select(f => f.Id)
             .ToListAsync(cancellationToken);

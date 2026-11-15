@@ -36,6 +36,17 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         // Added by 20261105144620_AddEquityIssuerWebsiteLivenessCheck.
         builder.Entity<EquityIssuer>().Ignore(issuer => issuer.WebsiteLivenessCheckedAt);
 
+        // Added by 20261106020552_AddCashDividendRecordAndPaymentDates.
+        builder.Entity<CashDividend>().Ignore(dividend => dividend.RecordDate);
+        builder.Entity<CashDividend>().Ignore(dividend => dividend.PaymentDate);
+
+        // Added by 20261114233511_AddFiscalYearEndMonthChange.
+        builder.Entity<EquityIssuer>().Ignore(issuer => issuer.FiscalYearEndMonthBeforeChange);
+        builder.Entity<EquityIssuer>().Ignore(issuer => issuer.FiscalYearEndMonthChangedAt);
+
+        // Added by 20261115031017_NportHoldingLendingCashCollateral.
+        builder.Entity<NportHolding>().Ignore(holding => holding.LendingCashCollateralValue);
+
         // Added by 20260916043012_AddDelayedTrades.
         builder.Entity<EquityListing>().Ignore(listing => listing.YahooPriceSyncAttemptedAt);
 

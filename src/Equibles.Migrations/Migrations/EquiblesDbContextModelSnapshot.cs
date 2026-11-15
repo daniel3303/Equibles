@@ -6914,6 +6914,9 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<decimal?>("LendingCashCollateralValue")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("Name")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
