@@ -145,6 +145,8 @@ public class ListedCusipTransferService
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            if (dbContext.Database.IsRelational())
+                dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(2));
             candidates = await BuildCandidateQuery(dbContext, null, null)
                 .ToListAsync(cancellationToken);
         }
@@ -189,10 +191,20 @@ public class ListedCusipTransferService
             }
             if (moved == null)
                 continue;
+            if (moved.Value.Occupied > 0)
+            {
+                occupied += moved.Value.Occupied;
+                _logger.LogWarning(
+                    "Listed-CUSIP transfer: {ListedTicker} of issuer {FromIssuerId} stays, {Occupied} of its stored position(s) could not move with it",
+                    fund.Key.ListedTicker,
+                    fund.Key.FromIssuerId,
+                    moved.Value.Occupied
+                );
+                continue;
+            }
             funds++;
             claims += fund.Count();
             positions += moved.Value.Positions;
-            occupied += moved.Value.Occupied;
         }
 
         if (funds > 0)
@@ -201,11 +213,6 @@ public class ListedCusipTransferService
                 funds,
                 claims,
                 positions
-            );
-        if (occupied > 0)
-            _logger.LogWarning(
-                "Listed-CUSIP transfer: {Occupied} stored position(s) stayed with their earlier issuer because the listing issuer already holds that position",
-                occupied
             );
         return new Result(funds, claims, positions, occupied, failed);
     }
@@ -246,7 +253,7 @@ public class ListedCusipTransferService
             return null;
 
         var evidenceIds = claims.Select(claim => claim.EvidenceId).ToArray();
-        var cusips = claims.Select(claim => claim.Cusip).ToArray();
+        var cusips = claims.Select(claim => claim.Cusip.ToUpperInvariant()).ToArray();
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
             UPDATE "EquityListingCusipEvidence" SET "EquityIssuerId" = {toIssuerId}
@@ -258,8 +265,8 @@ public class ListedCusipTransferService
         // A position keeps the CUSIP as its filer spelled it, so the match ignores case; a row
         // left behind for its spelling would be filed a second time under the listing issuer.
         // The label is matched with '=' so the unique index serves it. A position the listing
-        // issuer already holds under the same key stays where it is; moving it would merge two
-        // stored rows. Manager legs hang on the position's id and travel with it.
+        // issuer already holds under the same key is not moved; moving it would merge two stored
+        // rows. Manager legs hang on the position's id and travel with it.
         var dates = await dbContext
             .Database.SqlQuery<DateOnly>(
                 $"""
@@ -280,16 +287,16 @@ public class ListedCusipTransferService
                 """
             )
             .ToListAsync(cancellationToken);
-        var occupied = await dbContext
-            .Database.SqlQuery<int>(
-                $"""
-                SELECT count(*)::int AS "Value" FROM "InstitutionalHolding" AS h
-                WHERE h."EquityIssuerId" = {fromIssuerId}
-                  AND h."ListedTicker" = {listedTicker}
-                  AND upper(h."Cusip") = ANY ({cusips})
-                """
-            )
-            .SingleAsync(cancellationToken);
+        // A fund moves whole or not at all: a position left under the earlier issuer, whether the
+        // listing issuer already holds its key or it was stored with no label because the symbol
+        // was that issuer's presentation, would split its filer across two issuers and be filed
+        // again under the listing issuer on replay. Label and no label are read separately so the
+        // index serves each.
+        var occupied =
+            await CountLeftBehind(dbContext, fromIssuerId, listedTicker, cusips, cancellationToken)
+            + await CountLeftBehind(dbContext, fromIssuerId, null, cusips, cancellationToken);
+        if (occupied > 0)
+            return (0, occupied);
         // The move and its rebuild intent commit together: once the positions sit under the
         // listing issuer, a retry cannot tell which quarters they left.
         await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
@@ -299,8 +306,37 @@ public class ListedCusipTransferService
         );
         if (transaction != null)
             await transaction.CommitAsync(cancellationToken);
-        return (dates.Count, occupied);
+        return (dates.Count, 0);
     }
+
+    private static Task<int> CountLeftBehind(
+        EquiblesFinancialDbContext dbContext,
+        Guid fromIssuerId,
+        string listedTicker,
+        string[] cusips,
+        CancellationToken cancellationToken
+    ) =>
+        listedTicker == null
+            ? dbContext
+                .Database.SqlQuery<int>(
+                    $"""
+                    SELECT count(*)::int AS "Value" FROM "InstitutionalHolding" AS h
+                    WHERE h."EquityIssuerId" = {fromIssuerId}
+                      AND h."ListedTicker" IS NULL
+                      AND upper(h."Cusip") = ANY ({cusips})
+                    """
+                )
+                .SingleAsync(cancellationToken)
+            : dbContext
+                .Database.SqlQuery<int>(
+                    $"""
+                    SELECT count(*)::int AS "Value" FROM "InstitutionalHolding" AS h
+                    WHERE h."EquityIssuerId" = {fromIssuerId}
+                      AND h."ListedTicker" = {listedTicker}
+                      AND upper(h."Cusip") = ANY ({cusips})
+                    """
+                )
+                .SingleAsync(cancellationToken);
 }
 
 /// <summary>

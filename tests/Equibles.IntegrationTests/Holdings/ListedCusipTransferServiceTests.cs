@@ -155,7 +155,7 @@ public class ListedCusipTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Transfer_PositionTheListingIssuerAlreadyHolds_StaysWithTheEarlierIssuer()
+    public async Task Transfer_PositionTheListingIssuerAlreadyHolds_KeepsTheWholeFundWithTheEarlierIssuer()
     {
         await Seed(Doubt.None);
         var blocked = await SeedHolding(_sponsorId, FundCusip, FundTicker, shares: 5);
@@ -169,11 +169,33 @@ public class ListedCusipTransferServiceTests : IAsyncLifetime
 
         var result = await CreateService().Transfer(CancellationToken.None);
 
-        // Merging two stored rows would lose one of them; the count says one was left behind.
-        result.Should().Be(new ListedCusipTransferService.Result(1, 1, 1, 1));
+        // Merging two stored rows would lose one, and moving the rest would split the filer.
+        result.Should().Be(new ListedCusipTransferService.Result(0, 0, 0, 1));
+        (await ClaimOwner(_claimId)).Should().Be(_sponsorId);
         (await Reload(blocked)).EquityIssuerId.Should().Be(_sponsorId);
         (await Reload(held)).Shares.Should().Be(9);
-        (await Reload(free)).EquityIssuerId.Should().Be(_trustId);
+        (await Reload(free)).EquityIssuerId.Should().Be(_sponsorId);
+    }
+
+    [Fact]
+    public async Task Transfer_PositionStoredWithNoLabel_KeepsTheWholeFundWithTheEarlierIssuer()
+    {
+        await Seed(Doubt.None);
+        // Stored while the symbol was the earlier issuer's presentation, so with no label.
+        var unlabelled = await SeedHolding(_sponsorId, FundCusip, null);
+        var labelled = await SeedHolding(
+            _sponsorId,
+            FundCusip,
+            FundTicker,
+            reportDate: Quarter.AddMonths(-3)
+        );
+
+        var result = await CreateService().Transfer(CancellationToken.None);
+
+        result.Should().Be(new ListedCusipTransferService.Result(0, 0, 0, 1));
+        (await ClaimOwner(_claimId)).Should().Be(_sponsorId);
+        (await Reload(unlabelled)).EquityIssuerId.Should().Be(_sponsorId);
+        (await Reload(labelled)).EquityIssuerId.Should().Be(_sponsorId);
     }
 
     [Fact]
