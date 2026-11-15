@@ -325,7 +325,12 @@ public class FinancialFactsTools
                 + "unknown value to list supported aliases."
         )]
             string concept,
-        [Description("Fiscal year, e.g. 2023")] int fiscalYear,
+        [Description(
+            "Fiscal year as the calendar year each company's period ends in, e.g. 2025, so every "
+                + "row covers the same months; a company that names that year for the year it "
+                + "starts in (most January year-end retailers) is labelled with its own name"
+        )]
+            int fiscalYear,
         [Description("Fiscal period: 'FY' (default) or 'Q1'..'Q4'")] string fiscalPeriod = "FY"
     )
     {
@@ -578,6 +583,7 @@ public class FinancialFactsTools
                     .ToList();
                 if (rows.Any(row => DepreciationTotal.IsSum(row.Fact)))
                     table += SumFootnote;
+                table += OwnNamingFootnote(rows, stocks);
                 return mistaggedTickers.Count == 0
                     ? table
                     : table
@@ -608,6 +614,25 @@ public class FinancialFactsTools
             fiscalYear,
             fiscalPeriod
         );
+
+    // The year compared is the calendar year each period ends in; a company that names that year
+    // for the year it starts in is told apart, so its own documents still read as the same year.
+    internal static string OwnNamingFootnote(
+        IEnumerable<(string Ticker, string Name, FinancialFact Fact)> rows,
+        IEnumerable<EquityIssuer> stocks
+    )
+    {
+        var issuers = stocks.GroupBy(stock => stock.Id).ToDictionary(g => g.Key, g => g.First());
+        var named = rows.Where(row =>
+                issuers.TryGetValue(row.Fact.EquityIssuerId, out var issuer)
+                && FiscalYearLabel.For(row.Fact.FiscalYear, issuer) != row.Fact.FiscalYear
+            )
+            .Select(row =>
+                $"{row.Ticker} names this year FY{FiscalYearLabel.For(row.Fact.FiscalYear, issuers[row.Fact.EquityIssuerId])}"
+            )
+            .ToList();
+        return named.Count == 0 ? "" : $"\n_Own naming: {string.Join("; ", named)}._\n";
+    }
 
     // A summed depreciation and amortization is marked on its own row, so a table that mixes
     // reported totals and sums says which is which; the footnote explains the mark.
@@ -650,7 +675,7 @@ public class FinancialFactsTools
                 var unresolved = restated.Unresolved;
                 unresolvedBasis |= unresolved;
                 splitAdjusted |= restated.Adjusted;
-                return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
+                return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {FiscalYearLabel.For(f.FiscalYear, stock)} | "
                     + $"{f.FiscalPeriod.NameForHumans()} | "
                     + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(f)} | "
                     + $"{FactMarkdown.Cell(f.Unit)} | "
@@ -664,6 +689,8 @@ public class FinancialFactsTools
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
         if (unresolvedBasis)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
+        if (FiscalYearLabel.Note(stock) is { } namingNote)
+            result.AppendLine($"\n_{namingNote}_");
 
         // Rows are newest first, so "first N" reads correctly; a no-op empty
         // line when nothing was cut off.
