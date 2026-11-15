@@ -445,7 +445,7 @@ This self-hosted build exposes 71 tools over MCP. The hosted server at `https://
 
 - GetStockPrices — daily OHLCV plus the stored auxiliary adjusted close when it differs
 - GetLatestClosingPrices — latest close/change/volume
-- GetDividendHistory — stored declared cash dividends for an exact stock or ETF listing
+- GetDividendHistory — stored cash dividends for an exact stock or ETF listing
 - GetStochasticOscillator — stochastic oscillator (%K/%D)
 - GetAverageTrueRange — average true range (ATR)
 - GetOnBalanceVolume — on-balance volume (OBV)

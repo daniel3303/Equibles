@@ -3076,6 +3076,10 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × tracked 13F value), where the per-share price proxy is the current quarter's Value / Shares._"
         );
+        // The style measurements count issuers on the common-share book, so the two blocks can differ.
+        result.AppendLine(
+            "_# Positions and the top 10 / top 25 concentration count each listed share class as its own position and include option notional. The style measurements count issuers on the common-share book (share classes of one company are one stock, options are left out), so their stock count and top 10 weight can differ from these._"
+        );
 
         AppendHolderProfile(result, profile, links ?? [], reportingParent);
         AppendConfidentialTreatmentWarning(result, holder, "portfolio");

@@ -78,7 +78,9 @@ public class DividendToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetDividendHistory("AAPL");
 
-        result.Should().Contain("Declared cash dividends for Apple Inc. (AAPL), newest first:");
+        result
+            .Should()
+            .Contain("Cash dividends for Apple Inc. (AAPL) by ex-dividend date, newest first:");
         result.IndexOf("2025-05-12").Should().BeLessThan(result.IndexOf("2025-02-10"));
         result.Should().Contain("2025-05-12 | $0.26");
         result.Should().NotContain("External");
@@ -120,7 +122,7 @@ public class DividendToolsTests : ParadeDbMcpTestBase
         var primary = await Sut().GetDividendHistory("BRK-B");
 
         withoutOwnPayments.Should().Contain("No cash-dividend records are stored for BRK-A.");
-        ownPayments.Should().Contain("Declared cash dividends for BRK-A, newest first:");
+        ownPayments.Should().Contain("Cash dividends for BRK-A by ex-dividend date, newest first:");
         ownPayments.Should().Contain("2025-03-10 | $375");
         ownPayments.Should().NotContain("2025-02-10");
         primary.Should().Contain("2025-02-10 | $0.25");
@@ -136,7 +138,7 @@ public class DividendToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetDividendHistory("SCHD");
 
-        result.Should().Contain("Declared cash dividends for SCHD, newest first:");
+        result.Should().Contain("Cash dividends for SCHD by ex-dividend date, newest first:");
         result.Should().Contain("2026-09-24 | $0.26");
         result.Should().NotContain("$0.22");
         result.Should().NotContain("Schwab Strategic Trust");
