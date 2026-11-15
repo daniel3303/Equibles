@@ -795,6 +795,10 @@ public class ShortDataTools
             : (fraction > 0 ? "+" : "")
                 + fraction.Value.ToString("P1", CultureInfo.InvariantCulture);
 
+    // EarningsSoon stays on for the days just after a call, while the reaction can still squeeze shorts.
+    private static readonly string EarningsCatalystWindow =
+        $"EarningsSoon, an earnings call from {ShortSqueezeScoreManager.EarningsProximityLeadWeekdays} weekdays ahead to {ShortSqueezeScoreManager.EarningsProximityTrailWeekdays} weekdays past";
+
     private static string FormatCatalysts(ShortSqueezeScore score)
     {
         var active = new List<string>(3);
@@ -904,7 +908,7 @@ public class ShortDataTools
                 );
                 sb.AppendLine();
                 sb.AppendLine(
-                    "Score = weighted mean of the available factor percentiles (0-100, peer-relative) plus catalyst boosts (price spike / volume surge / earnings within a few weekdays, capped at +20). Avg $ Volume is approximate (FINRA share volume × market-cap-implied price)."
+                    $"Score = weighted mean of the available factor percentiles (0-100, peer-relative) plus catalyst boosts (price spike / volume surge / {EarningsCatalystWindow}; capped at +20). Avg $ Volume is approximate (FINRA share volume × market-cap-implied price)."
                 );
                 sb.AppendLine();
                 sb.AppendLine(
@@ -1005,7 +1009,7 @@ public class ShortDataTools
         );
         sb.AppendLine();
         sb.AppendLine(
-            "Score = weighted mean of the available factor percentiles (0-100, peer-relative; a dash means the factor had no data and dropped out) plus catalyst boosts (price spike / volume surge / earnings within a few weekdays, capped at +20). Use GetShortInterest for the underlying series."
+            $"Score = weighted mean of the available factor percentiles (0-100, peer-relative; a dash means the factor had no data and dropped out) plus catalyst boosts (price spike / volume surge / {EarningsCatalystWindow}; capped at +20). Use GetShortInterest for the underlying series."
         );
         return sb.ToString();
     }

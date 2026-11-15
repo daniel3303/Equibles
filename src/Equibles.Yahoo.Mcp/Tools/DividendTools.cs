@@ -36,7 +36,7 @@ public class DividendTools
 
     [McpServerTool(Name = "GetDividendHistory", Title = "Dividend History", ReadOnly = true)]
     [Description(
-        "Get the stored declared cash dividends of an exact stock or ETF listing, newest first. Each row gives the ex-dividend date and cash amount per share: in USD for a US listing, and in the listing's trading currency for a listing on another exchange (MIC:TICKER). Date filters apply to the ex-dividend date. Future ex-dates can appear after a dividend is declared. Each listing reports its own payments: a share class (BRK-A beside BRK-B) or a fund series sharing its trust's filer (SCHD beside FNDA) never inherits another listing's dividends."
+        "Get the stored cash dividends of an exact stock or ETF listing, newest first. Each row gives the ex-dividend date and cash amount per share: in USD for a US listing, and in the listing's trading currency for a listing on another exchange (MIC:TICKER). Amounts are as the data source states them today: a dividend paid before a later split is normally restated to the post-split share count, so it can differ from the amount declared at the time. Date filters apply to the ex-dividend date. Future ex-dates can appear after a dividend is declared. Each listing reports its own payments: a share class (BRK-A beside BRK-B) or a fund series sharing its trust's filer (SCHD beside FNDA) never inherits another listing's dividends."
     )]
     public Task<string> GetDividendHistory(
         [Description(
@@ -95,7 +95,7 @@ public class DividendTools
                     dividend.RecordDate.HasValue || dividend.PaymentDate.HasValue
                 );
                 var result = MarkdownTable.Start(
-                    $"Declared cash dividends for {label}, newest first:",
+                    $"Cash dividends for {label} by ex-dividend date, newest first:",
                     dated
                         ? "Ex-Date | Record Date | Payment Date | Amount Per Share"
                         : "Ex-Date | Amount Per Share",
