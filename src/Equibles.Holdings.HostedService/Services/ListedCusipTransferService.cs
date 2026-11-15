@@ -18,14 +18,21 @@ namespace Equibles.Holdings.HostedService.Services;
 /// showed no holders and its sponsor's page showed the fund's.
 /// </para>
 /// <para>
-/// A fund moves only on stored facts, never a name or a ticker shape: the earlier issuer's listing
-/// of the symbol is retired, was never reference listed and carries no delisting date (a listing
-/// that never was the security's market, not a fund that closed and gave up its symbol); exactly
-/// one other issuer lists the exact symbol live, as a reference listing that is not its
-/// presentation; exactly one SEC fund series carries the symbol as a class ticker and belongs to
-/// that issuer; and that issuer holds no CUSIP or claim of its own for the symbol. Every claim
-/// the earlier issuer holds for the symbol moves together, as an exact reference ticker admits
-/// each of its fails-archive CUSIPs.
+/// A claim moves only on stored facts, never a name or a ticker shape: the earlier issuer's
+/// listing of the symbol is retired, was never reference listed and carries no delisting date (a
+/// listing that never was the security's market, not a fund that closed and gave up its symbol);
+/// exactly one other issuer lists the exact symbol live, as a reference listing that is not its
+/// presentation and holds no CUSIP of its own; exactly one SEC fund series carries the symbol as
+/// a class ticker and belongs to that issuer; and the claim's CUSIP carries an issuer number
+/// (<see cref="Equibles.CommonStocks.Data.Helpers.CusipIdentity"/>) that issuer already holds in
+/// a security, an alias or another claim.
+/// </para>
+/// <para>
+/// The issuer number is what keeps a recycled symbol out. The earlier issuer can hold two claims
+/// for one symbol: the fund's CUSIP and the CUSIP of the security that used the symbol before it,
+/// its own stock included. Only the fund's shares an issuer number with the trust's other funds,
+/// so the earlier security's positions stay where they are, as do a fund's whose trust holds no
+/// CUSIP yet to compare with.
 /// </para>
 /// <para>
 /// The claims and their positions move in one transaction under the CUSIP identity lock and both
@@ -36,7 +43,7 @@ namespace Equibles.Holdings.HostedService.Services;
 public class ListedCusipTransferService
 {
     /// <summary>What one pass moved, and what it had to leave behind.</summary>
-    public sealed record Result(int Funds, int Claims, int Positions, int Occupied);
+    public sealed record Result(int Funds, int Claims, int Positions, int Occupied, int Failed = 0);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ListedCusipTransferService> _logger;
@@ -104,10 +111,19 @@ public class ListedCusipTransferService
             SELECT live."Id" AS "EvidenceId", live."EquityIssuerId" AS "FromIssuerId",
                    live."ToIssuerId", live."ListedTicker", live."Cusip"
             FROM live
-            WHERE NOT EXISTS (
+            WHERE length(live."Cusip") >= 6
+              AND (EXISTS (
                       SELECT 1 FROM "EquityListingCusipEvidence" AS held
                       WHERE held."EquityIssuerId" = live."ToIssuerId"
-                        AND held."ListedTicker" = live."ListedTicker")
+                        AND upper(left(held."Cusip", 6)) = upper(left(live."Cusip", 6)))
+                   OR EXISTS (
+                      SELECT 1 FROM "EquitySecurity" AS held
+                      WHERE held."EquityIssuerId" = live."ToIssuerId"
+                        AND upper(left(held."Cusip", 6)) = upper(left(live."Cusip", 6)))
+                   OR EXISTS (
+                      SELECT 1 FROM "EquityIssuerCusipAlias" AS held
+                      WHERE held."EquityIssuerId" = live."ToIssuerId"
+                        AND upper(left(held."Cusip", 6)) = upper(left(live."Cusip", 6))))
               AND (SELECT count(*) FROM "FundSeries" AS f
                    WHERE f."ClassTickers" @> ARRAY[live."ListedTicker"::text]) = 1
               AND EXISTS (
@@ -133,6 +149,7 @@ public class ListedCusipTransferService
         var claims = 0;
         var positions = 0;
         var occupied = 0;
+        var failed = 0;
         foreach (
             var fund in candidates.GroupBy(candidate =>
                 (candidate.FromIssuerId, candidate.ListedTicker)
@@ -144,7 +161,24 @@ public class ListedCusipTransferService
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
             var stockRepo = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-            var moved = await TransferFund(dbContext, stockRepo, [.. fund], cancellationToken);
+            (int Positions, int Occupied)? moved;
+            try
+            {
+                moved = await TransferFund(dbContext, stockRepo, [.. fund], cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // One fund's lock timeout or deadlock with an import must not starve the funds
+                // behind it; its transaction rolled back whole, so the next cycle retries it.
+                failed++;
+                _logger.LogWarning(
+                    exception,
+                    "Listed-CUSIP transfer: {ListedTicker} of issuer {FromIssuerId} was not moved",
+                    fund.Key.ListedTicker,
+                    fund.Key.FromIssuerId
+                );
+                continue;
+            }
             if (moved == null)
                 continue;
             funds++;
@@ -165,7 +199,7 @@ public class ListedCusipTransferService
                 "Listed-CUSIP transfer: {Occupied} stored position(s) stayed with their earlier issuer because the listing issuer already holds that position",
                 occupied
             );
-        return new Result(funds, claims, positions, occupied);
+        return new Result(funds, claims, positions, occupied, failed);
     }
 
     private static async Task<(int Positions, int Occupied)?> TransferFund(
@@ -180,7 +214,8 @@ public class ListedCusipTransferService
         var listedTicker = claims[0].ListedTicker;
 
         // The CUSIP identity lock comes before the issuer locks, the order every identity writer
-        // takes them in; an import takes issuer locks only, so the two never wait on each other.
+        // takes them in. The two issuers are locked in id order, as an import locks its batch, so
+        // the pass and an import wait for each other and never deadlock on these rows.
         await using var transaction = await stockRepo.BeginCusipIdentityWrite(cancellationToken);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
