@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -115,9 +116,11 @@ public class HoldingsListingSnapshotReadTests : IAsyncLifetime
                 && !row.IsCombined
                 && row.PriceSeriesTicker == Sibling
             );
+        // Every filer of the listing counts, with the value of its common shares only: the put
+        // row adds a filer's presence, never value.
         var siblingValues = rows.Where(row => row.ListedTicker == Sibling && row.ReportDate == QCur)
             .GroupBy(row => row.InstitutionalHolderId)
-            .Select(group => group.Sum(row => row.Value))
+            .Select(group => group.Where(row => row.IsCommonShareLeg()).Sum(row => row.Value))
             .OrderByDescending(value => value)
             .ToList();
         sibling.CurrentFilerCount.Should().Be(siblingValues.Count);

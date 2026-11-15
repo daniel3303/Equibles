@@ -797,6 +797,7 @@ public class HoldingsAggregateRefreshService
                 && h.FilingType == FilingType.Form13F
                 && h.Issuer.Presentation.Listing.Active
             )
+            .AsActivityLegs()
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new
             {
@@ -845,6 +846,7 @@ public class HoldingsAggregateRefreshService
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
             )
+            .AsActivityLegs()
             .Join(
                 dbContext.Set<EquityIssuer>(),
                 holding => holding.EquityIssuerId,
@@ -1038,7 +1040,8 @@ public class HoldingsAggregateRefreshService
             .RunAsync(cancellationToken);
     }
 
-    // Per-listing concentration numerators for the quarter: each filer's value summed over its
+    // Per-listing concentration numerators for the quarter: each filer's common-share value (the
+    // rule of HoldingActivityLegQueries.AsActivityLegs, restated in both branches) summed over its
     // rows in that exact listing, then counted, totalled, squared and ranked, the figures the
     // exact-listing request reads need without grouping the holdings corpus. Npgsql ranks in
     // SQL over the same joins as the listing-shares query; other providers rank in memory.
@@ -1057,7 +1060,9 @@ public class HoldingsAggregateRefreshService
                         SELECT i."EquityIssuerId",
                                COALESCE(i."ListedTicker", e1."Ticker") AS "PriceSeriesTicker",
                                i."InstitutionalHolderId",
-                               sum(i."Value") AS "Value"
+                               sum(CASE WHEN i."ShareType" = {(int)ShareType.Shares}
+                                             AND i."OptionType" IS NULL
+                                        THEN i."Value" ELSE 0 END) AS "Value"
                         FROM "InstitutionalHolding" AS i
                         INNER JOIN "EquityIssuer" AS e ON i."EquityIssuerId" = e."Id"
                         LEFT JOIN "EquityIssuerPresentation" AS e0 ON e."Id" = e0."EquityIssuerId"
@@ -1099,7 +1104,7 @@ public class HoldingsAggregateRefreshService
                 h.EquityIssuerId,
                 PriceSeriesTicker = h.ListedTicker ?? h.Issuer.Presentation.Listing.Ticker,
                 h.InstitutionalHolderId,
-                h.Value,
+                Value = h.ShareType == ShareType.Shares && h.OptionType == null ? h.Value : 0L,
             })
             .ToListAsync(cancellationToken);
         return filerValues

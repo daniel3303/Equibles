@@ -14,6 +14,7 @@ using Equibles.Finra.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -209,11 +210,15 @@ public class StockTabService
             AvailableDates = reportDates,
             SelectedDate = selectedDate,
             Ticker = stock.Presentation.Listing.Ticker,
-            TotalValue = allCurrent.Sum(h => h.Value),
+            // Common-share legs only, as the ownership trend counts them: a put, call or
+            // principal row is shown in the table but is not shares held.
+            TotalValue = allCurrent.Where(h => h.IsCommonShareLeg()).Sum(h => h.Value),
             // Restated onto today's split basis so the header stat matches the ownership
             // trend's latest point (the trend is restated by MarketActivityShareRestater)
             // and stays comparable to today's SharesOutStanding.
-            TotalShares = allCurrent.Sum(h =>
+            TotalShares = allCurrent
+                .Where(h => h.IsCommonShareLeg())
+                .Sum(h =>
                 HoldingShareRestatement.RestateToToday(
                     h,
                     effectiveSplits,
@@ -315,8 +320,10 @@ public class StockTabService
             AvailableDates = reportDates,
             SelectedDate = current,
             Ticker = stock.Presentation.Listing.Ticker,
-            TotalValue = allCombined.Sum(h => h.Value),
-            TotalShares = allCombined.Sum(h =>
+            TotalValue = allCombined.Where(h => h.IsCommonShareLeg()).Sum(h => h.Value),
+            TotalShares = allCombined
+                .Where(h => h.IsCommonShareLeg())
+                .Sum(h =>
                 HoldingShareRestatement.RestateToToday(
                     h,
                     effectiveSplits,

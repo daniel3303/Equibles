@@ -95,11 +95,9 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
         // Numeric cells must render with en-US separators on every host locale:
         // Total Shares (:N0) and Total Value $M (:N1). de-DE would produce
         // 1.234.567 and 123,5.
-        output.Should().Contain("| 1,236,567 |");
-        output.Should().Contain("| 123.7 |");
-        output.Should().Contain("put/call notional-underlying rows");
-        output.Should().Contain("principal-denominated rows");
-        output.Should().Contain("rather than pure share ownership");
+        output.Should().Contain("| 1,234,567 |");
+        output.Should().Contain("| 123.5 |");
+        output.Should().Contain("Put, call and principal-denominated rows are left out");
         output.Should().Contain("Published values normally use report-date closing prices");
     }
 

@@ -658,7 +658,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the historical trend of aggregate reported 13F exposure for an exact stock or ETF listing across multiple quarters. The legacy Total Shares field sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows, so it is not a pure share-ownership measure. Shows total reported quantity, published position value, and filer count. Share Chg (QoQ) is like-for-like: it compares only filers with an observed 13F in both quarters, and each quarter notes how many filers and shares it excluded (the largest named), so missing filings and filer identity changes are not trades. Values normally use report-date closing prices, may fall back to filer values, and can include zero when unavailable. While the newest quarter's filing window is open, non-ETF primary stocks use a provisional combined view; ETF listings remain exact and as-filed because carry-forward is filer-wide."
+        "Get the historical trend of institutional (13F) ownership for an exact stock or ETF listing across multiple quarters. Shows total shares, published position value, and filer count. Total Shares and Total Value count common-share positions only: put, call and principal-denominated rows are left out of both, because they state the shares under an option or a debt amount, not shares held. The filer count includes every 13F filer reporting any position, options included. Share Chg (QoQ) is like-for-like: it compares only filers with an observed 13F in both quarters, and each quarter notes how many filers and shares it excluded (the largest named), so missing filings and filer identity changes are not trades. Values normally use report-date closing prices, may fall back to filer values, and can include zero when unavailable. While the newest quarter's filing window is open, non-ETF primary stocks use a provisional combined view; ETF listings remain exact and as-filed because carry-forward is filer-wide."
     )]
     public Task<string> GetInstitutionalOwnershipHistory(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -795,7 +795,7 @@ public class InstitutionalHoldingsTools
             "_Share Chg (QoQ) is like-for-like: the change in split-adjusted shares across filers with an observed 13F in both quarters. Filers missing a 13F on one side (late or confidential filings, first filings, identity changes) are excluded as noted, because a missing filing is not a trade._"
         );
         result.AppendLine(
-            "_The legacy Total Shares column sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows; it is aggregate reported 13F exposure rather than pure share ownership._"
+            "_Total Shares and Total Value count common-share positions only. Put, call and principal-denominated rows are left out of both: they state the shares under an option or a debt amount, not shares held._"
         );
         result.AppendLine(
             "_The Institutions column counts every 13F filer reporting any position in the issuer, including filers holding only options on it, so it can exceed the number of filers holding the listing's shares._"

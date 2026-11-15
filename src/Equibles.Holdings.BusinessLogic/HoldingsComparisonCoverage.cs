@@ -4,6 +4,7 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,9 +30,12 @@ public static class HoldingsComparisonCoverage
                 ? repository.Get13FHistoryByStock(stock)
                 : repository.Get13FHistoryByListing(stock, listedTicker);
         // One read carries presence and the shares both like-for-like totals sum, so the change
-        // never mixes these live rows with a lagging activity snapshot.
+        // never mixes these live rows with a lagging activity snapshot. The shares are common
+        // shares only, as the totals beside the change are; a filer holding only options is
+        // still present, with zero shares.
         var positions = await holdings
             .Where(h => ordered.Contains(h.ReportDate))
+            .AsActivityLegs()
             .GroupBy(h => new
             {
                 h.ReportDate,
