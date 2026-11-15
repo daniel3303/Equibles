@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -266,13 +267,13 @@ public class NportSeriesHolderBenchmarkProvider : IHolderBenchmarkProvider
             .Where(cusip => cusip != null)
             .Distinct()
             .ToList();
-        var claims = await HoldingCusipResolution.Load(
+        var claims = await CusipResolution.Load(
             _issuerRepository,
             _issuerRepository.GetAll(),
             cusips,
             cancellationToken
         );
-        var issuersByCusip = HoldingCusipResolution.Resolve(claims, []);
+        var issuersByCusip = CusipResolution.Resolve(claims, []);
 
         var holdingsByFiling = holdings.ToLookup(holding => holding.NportFilingId);
         var benchmarks = new List<HolderBenchmark>();

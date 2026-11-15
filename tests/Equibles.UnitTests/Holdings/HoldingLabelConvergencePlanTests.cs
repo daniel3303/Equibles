@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
 using static Equibles.Holdings.HostedService.Services.HoldingLabelConvergenceService;
@@ -144,19 +145,19 @@ public class HoldingLabelConvergencePlanTests
     [Fact]
     public void Resolve_ListingClaimNamingThePresentationTicker_ResolvesToPrimary()
     {
-        var mapping = HoldingCusipResolution.Resolve(
-            new HoldingCusipResolution.Claims
+        var mapping = CusipResolution.Resolve(
+            new CusipResolution.Claims
             {
                 Listed =
                 [
-                    new HoldingCusipResolution.ListedClaim
+                    new CusipResolution.ListedClaim
                     {
                         EquityIssuerId = Issuer,
                         ListedTicker = "BEAT",
                         Cusip = "42238H108",
                         PresentationTicker = "BEAT",
                     },
-                    new HoldingCusipResolution.ListedClaim
+                    new CusipResolution.ListedClaim
                     {
                         EquityIssuerId = Issuer,
                         ListedTicker = "BEATW",
@@ -176,12 +177,12 @@ public class HoldingLabelConvergencePlanTests
     public void Resolve_CusipClaimedAsAliasAndListing_IsDroppedAsContested()
     {
         var contested = new List<string>();
-        var mapping = HoldingCusipResolution.Resolve(
-            new HoldingCusipResolution.Claims
+        var mapping = CusipResolution.Resolve(
+            new CusipResolution.Claims
             {
                 Listed =
                 [
-                    new HoldingCusipResolution.ListedClaim
+                    new CusipResolution.ListedClaim
                     {
                         EquityIssuerId = Issuer,
                         ListedTicker = "BF-A",
@@ -191,11 +192,7 @@ public class HoldingLabelConvergencePlanTests
                 ],
                 Aliases =
                 [
-                    new HoldingCusipResolution.AliasClaim
-                    {
-                        EquityIssuerId = Issuer,
-                        Cusip = "115637100",
-                    },
+                    new CusipResolution.AliasClaim { EquityIssuerId = Issuer, Cusip = "115637100" },
                 ],
             },
             contested
@@ -233,12 +230,12 @@ public class HoldingLabelConvergencePlanTests
     public void Resolve_RetiredSecurityTradingUnderThePresentationTicker_ResolvesToPrimary()
     {
         var primarySecurity = Guid.NewGuid();
-        var mapping = HoldingCusipResolution.Resolve(
-            new HoldingCusipResolution.Claims
+        var mapping = CusipResolution.Resolve(
+            new CusipResolution.Claims
             {
                 Securities =
                 [
-                    new HoldingCusipResolution.SecurityClaim
+                    new CusipResolution.SecurityClaim
                     {
                         Id = Guid.NewGuid(),
                         EquityIssuerId = Issuer,
@@ -247,7 +244,7 @@ public class HoldingLabelConvergencePlanTests
                         PresentationTicker = "IDXG",
                         UsTickers = ["IDXG"],
                     },
-                    new HoldingCusipResolution.SecurityClaim
+                    new CusipResolution.SecurityClaim
                     {
                         Id = Guid.NewGuid(),
                         EquityIssuerId = Issuer,

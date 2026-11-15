@@ -121,6 +121,37 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetTopHolders_TotalSaysHowMuchOfItIsOptions()
+    {
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc");
+        var berkshire = CreateHolder("0001067983", "Berkshire Hathaway");
+        DbContext.Set<EquityIssuer>().Add(stock);
+        DbContext.Set<InstitutionalHolder>().Add(berkshire);
+        await DbContext.SaveChangesAsync();
+        var reportDate = new DateOnly(2024, 3, 31);
+        var call = CreateHolding(stock, berkshire, reportDate, shares: 3_000, value: 400_000);
+        call.OptionType = OptionType.Call;
+        var put = CreateHolding(stock, berkshire, reportDate, shares: 2_000, value: 300_000);
+        put.OptionType = OptionType.Put;
+        DbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                CreateHolding(stock, berkshire, reportDate, shares: 10_000, value: 1_500_000),
+                call,
+                put
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetTopHolders("AAPL");
+
+        result
+            .Should()
+            .Contain(
+                "Total: 15,000 shares, $2.2M value (10,000 shares held outright; the total also counts calls on 3,000 and puts on 2,000 underlying shares)"
+            );
+    }
+
+    [Fact]
     public async Task GetTopHolders_StockNotFound_ReturnsNotFoundMessage()
     {
         var result = await Sut().GetTopHolders("ZZZZ");

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
 using Equibles.Data;

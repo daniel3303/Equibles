@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -517,13 +518,13 @@ public class FundOwnershipRefreshService
         var cusips = lines.Select(line => line.Cusip).Distinct().ToList();
         if (cusips.Count == 0)
             return [];
-        var claims = await HoldingCusipResolution.Load(
+        var claims = await CusipResolution.Load(
             _issuerRepository,
             _issuerRepository.GetAll(),
             cusips,
             cancellationToken
         );
-        return HoldingCusipResolution.Resolve(claims, []);
+        return CusipResolution.Resolve(claims, []);
     }
 
     private async Task<FundShareRestater> LoadRestater(

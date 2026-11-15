@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -406,13 +407,13 @@ public class HoldingLabelConvergenceService
         var registrations = await CoverPageRegistration.Load(dbContext, null, cancellationToken);
         foreach (var candidate in candidates)
             AdmitRetiredSiblings(candidate, registrations.GetValueOrDefault(candidate.Id, []));
-        var claims = await HoldingCusipResolution.Load(
+        var claims = await CusipResolution.Load(
             stockRepo,
             stockRepo.GetAll(),
             null,
             cancellationToken
         );
-        var mapping = HoldingCusipResolution.Resolve(claims, []);
+        var mapping = CusipResolution.Resolve(claims, []);
         var resolvingTickers = mapping
             .Values.Where(target => target.ListedTicker != null)
             .ToLookup(target => target.CommonStockId, target => target.ListedTicker);
@@ -684,7 +685,7 @@ public class HoldingLabelConvergenceService
             cancellationToken
         );
         AdmitRetiredSiblings(issuer, registrations.GetValueOrDefault(issuerId, []));
-        var own = await HoldingCusipResolution.Load(
+        var own = await CusipResolution.Load(
             stockRepo,
             stockRepo.GetAll().Where(stock => stock.Id == issuerId),
             null,
@@ -695,13 +696,13 @@ public class HoldingLabelConvergenceService
             .Concat(own.Aliases.Select(claim => claim.Cusip))
             .Concat(own.Securities.Select(claim => claim.Cusip))
             .ToList();
-        var claims = await HoldingCusipResolution.Load(
+        var claims = await CusipResolution.Load(
             stockRepo,
             stockRepo.GetAll(),
             cusips,
             cancellationToken
         );
-        var mapping = HoldingCusipResolution.Resolve(claims, []);
+        var mapping = CusipResolution.Resolve(claims, []);
         MarkVacatedTickers(
             issuer,
             mapping

@@ -1,17 +1,16 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
-using Equibles.Holdings.HostedService.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Equibles.Holdings.HostedService.Services;
+namespace Equibles.CommonStocks.BusinessLogic;
 
 /// <summary>
-/// The single CUSIP precedence shared by the importer and the stored-label convergence, so a
-/// position's stored listing label is always the label an import would write today.
+/// The single CUSIP precedence shared by the 13F importer, the stored-label convergence and the
+/// fund-holding readers, so a filed CUSIP names the same security wherever it is read.
 /// </summary>
-internal static class HoldingCusipResolution
+public static class CusipResolution
 {
-    internal sealed class ListedClaim
+    public sealed class ListedClaim
     {
         public Guid EquityIssuerId { get; init; }
         public string ListedTicker { get; init; }
@@ -19,13 +18,13 @@ internal static class HoldingCusipResolution
         public string PresentationTicker { get; init; }
     }
 
-    internal sealed class AliasClaim
+    public sealed class AliasClaim
     {
         public Guid EquityIssuerId { get; init; }
         public string Cusip { get; init; }
     }
 
-    internal sealed class SecurityClaim
+    public sealed class SecurityClaim
     {
         public Guid Id { get; init; }
         public Guid EquityIssuerId { get; init; }
@@ -35,7 +34,7 @@ internal static class HoldingCusipResolution
         public List<string> UsTickers { get; init; } = [];
     }
 
-    internal sealed class Claims
+    public sealed class Claims
     {
         public List<ListedClaim> Listed { get; init; } = [];
         public List<AliasClaim> Aliases { get; init; } = [];
@@ -46,7 +45,7 @@ internal static class HoldingCusipResolution
     /// Loads every claim on <paramref name="cusips"/> (every claimed CUSIP when null) made by an
     /// issuer in <paramref name="issuers"/>.
     /// </summary>
-    internal static async Task<Claims> Load(
+    public static async Task<Claims> Load(
         EquityIssuerRepository stockRepo,
         IQueryable<EquityIssuer> issuers,
         IReadOnlyCollection<string> cusips,
@@ -119,7 +118,7 @@ internal static class HoldingCusipResolution
     /// which wins over a listing claim; a CUSIP claimed as both an alias and a listing, or by two
     /// securities, is dropped, because resolving it either way would merge two securities.
     /// </summary>
-    internal static Dictionary<string, CusipTarget> Resolve(Claims claims, List<string> contested)
+    public static Dictionary<string, CusipTarget> Resolve(Claims claims, List<string> contested)
     {
         var cusipMapping = new Dictionary<string, CusipTarget>(StringComparer.OrdinalIgnoreCase);
         foreach (var listed in claims.Listed)
