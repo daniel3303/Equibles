@@ -41,7 +41,22 @@ public class EquityListing : IActivable
     public DateOnly? DelistedOn { get; set; }
 
     public bool IsDirectoryListed { get; set; }
-    public bool IsReferenceListed { get; set; }
+    private bool _isReferenceListed;
+
+    public bool IsReferenceListed
+    {
+        get => _isReferenceListed;
+        set
+        {
+            _isReferenceListed = value;
+            WasReferenceListed |= value;
+        }
+    }
+
+    // True once the U.S. reference directory has claimed this listing as an exchange-traded product.
+    // IsReferenceListed ends when the product is retired; this stays, so a past corporate action of
+    // the product remains its own and is never read as one of the issuer's other securities.
+    public bool WasReferenceListed { get; set; }
     public bool PriceHistoryBackfilled { get; set; }
     public DateTime? YahooEnrichmentAttemptedAt { get; set; }
 
