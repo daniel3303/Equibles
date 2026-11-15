@@ -27,7 +27,8 @@ public class NportLendingCollateralRelationalTests : ParadeDbMcpTestBase
             Holding(filing, "Unmarked", 100m, collateral: null),
             Holding(filing, "Wholly collateral", 100m, collateral: 100m),
             Holding(filing, "Mostly collateral", 100m, collateral: 60m),
-            Holding(filing, "Partly collateral", 100m, collateral: 40m)
+            Holding(filing, "Partly collateral", 100m, collateral: 40m),
+            Holding(filing, "Short, marked without an amount", -100m, collateral: 0m)
         );
         await DbContext.SaveChangesAsync();
         var repository = new NportFilingRepository(DbContext);
@@ -41,7 +42,8 @@ public class NportLendingCollateralRelationalTests : ParadeDbMcpTestBase
             .Select(h => h.Name)
             .ToListAsync();
 
-        kept.Should().BeEquivalentTo("Unmarked", "Partly collateral");
+        kept.Should()
+            .BeEquivalentTo("Unmarked", "Partly collateral", "Short, marked without an amount");
         collateral.Should().BeEquivalentTo("Wholly collateral", "Mostly collateral");
         // The in-memory rule a loaded row answers with is the same one.
         (await repository.GetHoldings(filing).ToListAsync())

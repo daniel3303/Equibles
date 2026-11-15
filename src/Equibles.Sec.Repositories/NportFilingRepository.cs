@@ -63,10 +63,12 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     // NportHolding.IsLendingCollateral for SQL, and its complement spelled out: negating the first
     // would drop every row with no stated collateral, since NOT of an unknown is unknown.
     private static readonly Expression<Func<NportHolding, bool>> LendingCollateral = h =>
-        h.LendingCashCollateralValue != null && h.LendingCashCollateralValue * 2 > h.ValueUsd;
+        h.LendingCashCollateralValue > 0 && h.LendingCashCollateralValue * 2 > h.ValueUsd;
 
     private static readonly Expression<Func<NportHolding, bool>> NotLendingCollateral = h =>
-        h.LendingCashCollateralValue == null || h.LendingCashCollateralValue * 2 <= h.ValueUsd;
+        h.LendingCashCollateralValue == null
+        || h.LendingCashCollateralValue <= 0
+        || h.LendingCashCollateralValue * 2 <= h.ValueUsd;
 
     /// <summary>
     /// Reads one selected filing's facts, complete stored count and bounded portfolio page in

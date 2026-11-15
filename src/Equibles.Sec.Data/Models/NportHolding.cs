@@ -93,7 +93,10 @@ public class NportHolding
     public bool IsLendingCollateral =>
         MostlyLendingCollateral(LendingCashCollateralValue, ValueUsd);
 
-    /// <summary>The rule itself, for a projection that carries the two values without the entity.</summary>
+    /// <summary>
+    /// The rule itself, for a projection that carries the two values without the entity. A mark
+    /// with no positive amount proves nothing, or a short position would always pass.
+    /// </summary>
     public static bool MostlyLendingCollateral(decimal? cashCollateralValue, decimal valueUsd) =>
-        cashCollateralValue is { } collateral && collateral * 2 > valueUsd;
+        cashCollateralValue is { } collateral && collateral > 0 && collateral * 2 > valueUsd;
 }
