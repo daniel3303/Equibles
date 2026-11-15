@@ -78,7 +78,10 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             // Lapsed: filed last quarter and not yet this one, so the combined view carries its
             // position forward. Only its common shares are carried into the totals.
             Leg(_held, _lapsed, QPrev, 400, 40_000),
-            Leg(_held, _lapsed, QPrev, 20_000, 2_000_000, option: OptionType.Put)
+            Leg(_held, _lapsed, QPrev, 20_000, 2_000_000, option: OptionType.Put),
+            // Steady files both quarters and opens a put on the options-only stock: a new filer
+            // of that stock, with no shares.
+            Leg(_optionsOnly, _steady, QCur, 30_000, 3_000_000, option: OptionType.Put)
         );
         await seed.SaveChangesAsync();
     }
@@ -122,7 +125,8 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             );
         optionsOnly.CurrentShares.Should().Be(0);
         optionsOnly.CurrentValue.Should().Be(0);
-        optionsOnly.CurrentFilerCount.Should().Be(1);
+        optionsOnly.CurrentFilerCount.Should().Be(2);
+        optionsOnly.NewFilerCount.Should().Be(1, "an option position still makes a new filer");
 
         var listings = await read.Set<StockQuarterlyListingActivity>()
             .Where(row => row.ReportDate == QCur && !row.IsCombined)
@@ -163,15 +167,9 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             var liveRow = liveRows.Single(row => row.CommonStockId == snapshot.CommonStockId);
             Figures(liveRow).Should().Be(Figures(snapshot));
             liveRow
-                .ListingShares.Select(row =>
-                    (row.PriceSeriesTicker, row.CurrentShares, row.PreviousShares)
-                )
+                .ListingShares.Select(ListingFigures)
                 .Should()
-                .BeEquivalentTo(
-                    snapshot.ListingShares.Select(row =>
-                        (row.PriceSeriesTicker, row.CurrentShares, row.PreviousShares)
-                    )
-                );
+                .BeEquivalentTo(snapshot.ListingShares.Select(ListingFigures));
         }
     }
 
@@ -194,6 +192,12 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             read
         ).GetStockActivitySnapshotsByStockSnapshotBacked(_held, CancellationToken.None);
         var snapshotCurrent = snapshotHistory.Single(row => row.ReportDate == QCur);
+        (
+            await read.Set<StockQuarterlyActivity>()
+                .CountAsync(row => row.EquityIssuerId == _held.Id, CancellationToken.None)
+        )
+            .Should()
+            .Be(2, "the second read is served by the stored rows, not by the live queries again");
 
         (
             snapshotCurrent.CurrentShares,
@@ -228,6 +232,8 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         held.CurrentValue.Should().Be(710_000);
         held.PreviousShares.Should().Be(3_400);
         held.CurrentFilerCount.Should().Be(5);
+        held.UnmatchedCurrentShares.Should().Be(700);
+        held.UnmatchedCurrentValue.Should().Be(70_000);
         listings.Single(row => row.EquityIssuerId == _held.Id).CurrentShares.Should().Be(7_100);
         listings
             .Single(row => row.EquityIssuerId == _optionsOnly.Id)
@@ -308,9 +314,12 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         held.CurrentValue.Should().Be(670_000);
         held.PreviousValue.Should().Be(340_000);
         held.CurrentFilerCount.Should().Be(4);
+        rows.Single(row => row.CommonStockId == _optionsOnly.Id)
+            .NewFilerCount.Should()
+            .Be(1, "the screener counts the option entrant as the snapshot does");
     }
 
-    private static (long, long, long, long, long, long, int, int) Figures(
+    private static (long, long, long, long, long, long, long, long, int, int) Figures(
         MarketWideStockActivity row
     ) =>
         (
@@ -320,8 +329,21 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             row.PreviousValue,
             row.UnmatchedCurrentShares,
             row.UnmatchedCurrentValue,
+            row.UnmatchedPreviousShares,
+            row.UnmatchedPreviousValue,
             row.CurrentFilerCount,
             row.PreviousFilerCount
+        );
+
+    private static (string, long, long, long, long) ListingFigures(
+        StockQuarterlyListingActivity row
+    ) =>
+        (
+            row.PriceSeriesTicker,
+            row.CurrentShares,
+            row.PreviousShares,
+            row.UnmatchedCurrentShares,
+            row.UnmatchedPreviousShares
         );
 
     private Equibles.Data.EquiblesFinancialDbContext FreshContext()

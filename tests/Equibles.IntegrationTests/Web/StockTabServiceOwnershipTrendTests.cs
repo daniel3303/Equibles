@@ -163,6 +163,41 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
             Cik = cik,
         };
 
+    // A put far larger than every shareholding: the header still equals the trend's latest
+    // point, and the filer that opened it is no buyer of shares.
+    [Fact]
+    public async Task LoadHoldingsTab_AnOptionRow_AddsNoSharesToTheHeaderOrTheBuyers()
+    {
+        EquityIssuer stock = NewStock();
+        var holderA = NewHolder("Alpha", "1");
+        var holderB = NewHolder("Beta", "2");
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        _dbContext.Set<InstitutionalHolder>().AddRange(holderA, holderB);
+
+        var prior = new DateOnly(2024, 9, 30);
+        var current = new DateOnly(2024, 12, 31);
+        var put = Make(stock.Id, holderB.Id, current, 9_000, "put");
+        put.OptionType = OptionType.Put;
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                Make(stock.Id, holderA.Id, prior, 100, "cl-a"),
+                Make(stock.Id, holderB.Id, prior, 50, "cl-a"),
+                Make(stock.Id, holderA.Id, current, 150, "cl-a"),
+                Make(stock.Id, holderB.Id, current, 50, "cl-a"),
+                put
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _sut.LoadHoldingsTab(stock, date: null);
+
+        result.TotalShares.Should().Be(200, "the put states shares under an option, not held");
+        result.TotalValue.Should().Be(2_000);
+        result.HolderCount.Should().Be(2);
+        result.OwnershipTrend[^1].TotalShares.Should().Be(result.TotalShares);
+        result.TopBuyers.Select(buyer => buyer.InstitutionalHolderId).Should().Equal(holderA.Id);
+    }
+
     private static InstitutionalHolding Make(
         Guid stockId,
         Guid holderId,

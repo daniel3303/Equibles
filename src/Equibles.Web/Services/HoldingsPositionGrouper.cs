@@ -1,5 +1,6 @@
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Web.ViewModels.Stocks;
 
 namespace Equibles.Web.Services;
@@ -160,10 +161,18 @@ public static class HoldingsPositionGrouper
                     // classes, and a sibling-class count only moves on its own series'
                     // splits — one factor over the mixed sum would restate the sibling's
                     // part by the primary's ratio.
-                    TotalShares = g.Sum(h =>
-                        HoldingShareRestatement.RestateToToday(h, effectiveSplits, primaryTicker)
-                    ),
-                    TotalValue = g.Sum(h => h.Value),
+                    // Common shares only, as the stock's activity snapshots count them: a
+                    // holder with only a put or call stays a holder, with no shares, so a new
+                    // option position never ranks as buying.
+                    TotalShares = g.Where(h => h.IsCommonShareLeg())
+                        .Sum(h =>
+                            HoldingShareRestatement.RestateToToday(
+                                h,
+                                effectiveSplits,
+                                primaryTicker
+                            )
+                        ),
+                    TotalValue = g.Where(h => h.IsCommonShareLeg()).Sum(h => h.Value),
                 }
             );
     }

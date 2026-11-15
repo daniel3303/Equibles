@@ -29,4 +29,10 @@ public static class HoldingActivityLegQueries
                     ? holding.Value
                     : 0L,
         });
+
+    // The same rule for rows already loaded: a per-holder or per-stock total summed in memory
+    // beside a snapshot figure (a holders table over its trend) has to count the legs the
+    // snapshot counts.
+    public static bool IsCommonShareLeg(this InstitutionalHolding holding) =>
+        holding.ShareType == ShareType.Shares && holding.OptionType == null;
 }
