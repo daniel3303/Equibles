@@ -196,7 +196,14 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
 
         output.Should().Contain("Combined view");
         output.Should().Contain("200 shares");
-        output.Should().Contain("| Carried Fund | Common (CARR.B) | 100 |");
+        output.Should().Contain("| Carried Fund \\* | Common (CARR.B) | 100 |");
+        // Only the filer that has not filed yet is marked, and the footnote names its quarter.
+        output.Should().Contain("| Current Fund | Common | 100 |");
+        output
+            .Should()
+            .Contain(
+                $"\\* Carried, not yet filed for the newest quarter: the row is the filer's {previous:yyyy-MM-dd} position"
+            );
     }
 
     private static InstitutionalHolding MakeHolding(

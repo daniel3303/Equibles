@@ -168,7 +168,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetTopHolders", Title = "Top Institutional Holders", ReadOnly = true)]
     [Description(
-        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership. Each holder shows its entity type from regulatory records (Form ADV, SEC filer profile, 13D/13G, N-CEN), filtered by holderTypes, and its style band measured from its filed book, filtered by styles."
+        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions, each marked as carried and valued at its own quarter's close; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership. Each holder shows its entity type from regulatory records (Form ADV, SEC filer profile, 13D/13G, N-CEN), filtered by holderTypes, and its style band measured from its filed book, filtered by styles."
     )]
     public Task<string> GetTopHolders(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -349,7 +349,8 @@ public class InstitutionalHoldingsTools
                     ),
                     filterDescription,
                     styleAsOf,
-                    totalComposition
+                    totalComposition,
+                    presentCombined ? RequirePreviousReportDate(anchor) : null
                 );
                 var advisedNote = await AdvisedFundsNote(
                     stock,
@@ -554,7 +555,8 @@ public class InstitutionalHoldingsTools
         string combinedNote,
         string filterDescription = null,
         DateOnly? styleAsOf = null,
-        string totalComposition = null
+        string totalComposition = null,
+        DateOnly? carriedFrom = null
     )
     {
         var first = holdings.Count == 0 ? 0 : offset + 1;
@@ -586,7 +588,12 @@ public class InstitutionalHoldingsTools
                     h.ListedTicker == null
                         ? PositionType(h.OptionType, h.ShareType)
                         : $"{PositionType(h.OptionType, h.ShareType)} ({h.ListedTicker})";
-                return $"| {offset + rank} | {h.InstitutionName} | "
+                // The combined view prices a carried row at its own quarter's close, so the row
+                // says which quarter it is; unmarked, it reads as a position filed for targetDate.
+                var institution = IsCarried(h, carriedFrom)
+                    ? $"{h.InstitutionName} \\*"
+                    : h.InstitutionName;
+                return $"| {offset + rank} | {institution} | "
                     + $"{positionType} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
@@ -597,6 +604,10 @@ public class InstitutionalHoldingsTools
         );
 
         result.AppendLine();
+        if (carriedFrom is { } carried && holdings.Any(h => IsCarried(h, carriedFrom)))
+            result.AppendLine(
+                $"\\* Carried, not yet filed for the newest quarter: the row is the filer's {FormatDate(carried)} position, valued at that quarter's close. The total value above adds carried rows at the {FormatDate(carried)} close to filed rows at the {FormatDate(targetDate)} close."
+            );
         result.AppendLine(
             "_% of Inst. Total = the position's share of all institutional 13F shares in the stock, not of shares outstanding._"
         );
@@ -617,6 +628,9 @@ public class InstitutionalHoldingsTools
 
         return result.ToString();
     }
+
+    private static bool IsCarried(TopHolderRow row, DateOnly? carriedFrom) =>
+        carriedFrom is { } previous && row.ReportDate == previous;
 
     private sealed class TopHolderRow
     {
