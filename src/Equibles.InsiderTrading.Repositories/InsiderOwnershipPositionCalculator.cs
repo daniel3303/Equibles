@@ -126,6 +126,10 @@ public class InsiderOwnershipPositionCalculator
         return new InsiderOwnershipPosition(ordered[0], direct, indirect)
         {
             IndirectBalancesAmbiguous = balances.IndirectAmbiguous,
+            LastTransaction = ordered.FirstOrDefault(row =>
+                row.TransactionCode != TransactionCode.Holding
+                && row.TransactionCode != TransactionCode.IngestMarker
+            ),
         };
     }
 }

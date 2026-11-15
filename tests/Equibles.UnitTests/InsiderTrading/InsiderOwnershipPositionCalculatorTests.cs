@@ -222,6 +222,50 @@ public class InsiderOwnershipPositionCalculatorTests
     }
 
     [Fact]
+    public void Build_FilingListsAHoldingAfterItsTrade_NamesTheTradeAsTheLastTransaction()
+    {
+        // The rows of a real Form 4 (accession 0002020286-26-000011): an indirect purchase of
+        // 2,000 shares, then the insider's untouched direct holding as its own line.
+        var stock = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "MTDR");
+        var owner = new InsiderOwner { OwnerCik = "0002020286", Name = "Officer" };
+        var date = new DateOnly(2026, 11, 5);
+        var purchase = Row(
+            stock,
+            owner,
+            date,
+            46_000,
+            "0002020286-26-000011",
+            order: 0,
+            nature: OwnershipNature.Indirect,
+            code: TransactionCode.Purchase,
+            shares: 2_000,
+            direction: AcquiredDisposed.Acquired
+        );
+        var holding = Row(
+            stock,
+            owner,
+            date,
+            85_624,
+            "0002020286-26-000011",
+            order: 1,
+            code: TransactionCode.Holding,
+            shares: 85_624,
+            direction: AcquiredDisposed.Acquired
+        );
+
+        var traded = InsiderOwnershipPositionCalculator.Build([purchase, holding], []);
+        var holdingsOnly = InsiderOwnershipPositionCalculator.Build([holding], []);
+
+        traded.Anchor.Should().BeSameAs(holding);
+        traded.LastTransaction.Should().BeSameAs(purchase);
+        traded.LatestActivity.TransactionCode.Should().Be(TransactionCode.Purchase);
+        traded.TotalShares.Should().Be(131_624);
+        // A filing that reports positions only has no trade to name.
+        holdingsOnly.LastTransaction.Should().BeNull();
+        holdingsOnly.LatestActivity.Should().BeSameAs(holding);
+    }
+
+    [Fact]
     public void Build_SeveralBalancesOnOneIndirectLine_AreAmbiguous()
     {
         // A filing keeps one balance per indirect vehicle without naming it, so two balances
@@ -255,7 +299,7 @@ public class InsiderOwnershipPositionCalculatorTests
     private const string GoldenOutput = """
 Insider ownership summary for NVIDIA Corp. (NVDA):
 Showing 4 insiders with most recent data
-_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Former insiders may linger with stale dates or zero shares._
+_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Last Transaction is the newest trade that filing reports, or Holding when it reports positions only. Former insiders may linger with stale dates or zero shares._
 
 | Insider | Role | Direct Shares | Indirect Shares | Total | Last Transaction | Last Date |
 |---------|------|--------------|-----------------|-------|-----------------|-----------|
@@ -267,7 +311,7 @@ _Each row is as-of that insider's most recent filing: the filing's closing balan
 ====
 Insider ownership summary for NVIDIA Corp. (NVDA):
 Showing 2 insiders with most recent data
-_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Former insiders may linger with stale dates or zero shares._
+_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Last Transaction is the newest trade that filing reports, or Holding when it reports positions only. Former insiders may linger with stale dates or zero shares._
 
 | Insider | Role | Direct Shares | Indirect Shares | Total | Last Transaction | Last Date |
 |---------|------|--------------|-----------------|-------|-----------------|-----------|
