@@ -97,7 +97,7 @@ public class FundDirectoryTools
         ReadOnly = true
     )]
     [Description(
-        "Get a registered fund's profile and largest stored holdings from its latest SEC Form NPORT-P report. Accepts a profile ID, SEC series ID, stored ticker, or verified alias from SearchFunds. Returns registrant, series, assets, reported and stored holding counts, and the largest stored positions. Some multi-series trusts store only tracked-stock positions; reported counts and asset totals still describe the full filing. Use GetFundsHoldingStock for the inverse lookup."
+        "Get a registered fund's profile and largest stored holdings from its latest SEC Form NPORT-P report. Accepts a profile ID, SEC series ID, stored ticker, or verified alias from SearchFunds. Returns registrant, series, assets, reported and stored holding counts, and the largest stored positions. Some multi-series trusts store only tracked-stock positions; reported counts and asset totals still describe the full filing. A row the report marks as securities-lending cash collateral is labelled in its category, and one line totals those rows. Use GetFundsHoldingStock for the inverse lookup."
     )]
     public Task<string> GetFundProfile(
         [Description(
@@ -164,8 +164,20 @@ public class FundDirectoryTools
                 result.AppendRows(
                     holdings,
                     h =>
-                        $"| {MarkdownText(h.Name) ?? "-"} | {MarkdownText(h.Cusip) ?? "-"} | {FundCodes.Balance(h.Balance)} | {MarkdownText(NportCodes.Unit(h.Units))} | ${FormatAmount(h.ValueUsd)} | {FormatPercent(h.PercentValue)} | {MarkdownText(NportCodes.AssetCategory(h.AssetCategory))} | {MarkdownText(h.InvestmentCountry) ?? "-"} |"
+                        $"| {MarkdownText(h.Name) ?? "-"} | {MarkdownText(h.Cusip) ?? "-"} | {FundCodes.Balance(h.Balance)} | {MarkdownText(NportCodes.Unit(h.Units))} | ${FormatAmount(h.ValueUsd)} | {FormatPercent(h.PercentValue)} | {MarkdownText(NportCodes.AssetCategory(h.AssetCategory))}{(h.IsLendingCollateral ? NportLendingCollateralLabels.CategorySuffix : "")} | {MarkdownText(h.InvestmentCountry) ?? "-"} |"
                 );
+
+                if (latest.LendingCollateralCount > 0)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        NportLendingCollateralLabels.Total(
+                            latest.LendingCollateralCount,
+                            latest.LendingCollateralValueUsd,
+                            latest.LendingCollateralPercent
+                        )
+                    );
+                }
 
                 var pagingNote = McpOutput.PagedTruncationNote(
                     holdings.Count,

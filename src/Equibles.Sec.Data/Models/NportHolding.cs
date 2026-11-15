@@ -75,4 +75,25 @@ public class NportHolding
     /// <summary>The investment's country code, e.g. "US".</summary>
     [MaxLength(8)]
     public string InvestmentCountry { get; set; }
+
+    /// <summary>
+    /// The part of the holding's value the report states is reinvested cash collateral received
+    /// for loaned securities (Item C.12.a). Null when the report marks none, and on every schedule
+    /// stored before <see cref="NportFiling.CurrentParserVersion"/> 3 read it.
+    /// </summary>
+    public decimal? LendingCashCollateralValue { get; set; }
+
+    /// <summary>
+    /// Whether the report marks most of the holding's value as lending collateral. Such a row is
+    /// where the fund parks borrowers' cash, not a position it chose, so readers leave it out of
+    /// top holdings, concentration and allocations. NportFilingRepository states the same rule
+    /// for queries.
+    /// </summary>
+    [NotMapped]
+    public bool IsLendingCollateral =>
+        MostlyLendingCollateral(LendingCashCollateralValue, ValueUsd);
+
+    /// <summary>The rule itself, for a projection that carries the two values without the entity.</summary>
+    public static bool MostlyLendingCollateral(decimal? cashCollateralValue, decimal valueUsd) =>
+        cashCollateralValue is { } collateral && collateral * 2 > valueUsd;
 }

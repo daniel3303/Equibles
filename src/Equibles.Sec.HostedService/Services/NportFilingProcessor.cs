@@ -143,7 +143,18 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
             AssetCategory = Truncate(Clean(Val(element, "assetCat")), 16),
             IssuerCategory = Truncate(ParseIssuerCategory(element), 16),
             InvestmentCountry = Truncate(Clean(Val(element, "invCountry")), 8),
+            LendingCashCollateralValue = ParseCashCollateral(element),
         };
+    }
+
+    // A holding with no cash collateral carries <isCashCollateral>N</isCashCollateral>; one that has
+    // some replaces it with <cashCollateralCondition isCashCollateral="Y" cashCollateralVal="..."/>.
+    private static decimal? ParseCashCollateral(XElement element)
+    {
+        var condition = El(El(element, "securityLending"), "cashCollateralCondition");
+        return ParseYesNo(Attr(condition, "isCashCollateral"))
+            ? ParseDecimal(Attr(condition, "cashCollateralVal"))
+            : null;
     }
 
     // NPORT reports the issuer category either as an <issuerCat> element or, for conditional

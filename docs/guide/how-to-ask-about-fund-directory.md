@@ -33,6 +33,8 @@ The assistant calls the `GetFundProfile` tool and replies with the fund's regist
 
 Coverage is full when the stored and reported counts match, partial when fewer positions are stored, and unknown when the reported count is unavailable or the counts are inconsistent. The profile uses the report selected by the fund directory, and pages its holdings in the database; assets and counts refer to that same report.
 
+A fund that lends its securities reinvests the cash borrowers post, and reports that vehicle as a holding. Such a row is labelled "securities-lending collateral" in its category, and one line under the table states how many there are, their value and their share of net assets. Reports stored before this was read carry no label until the fund's newest report is re-read.
+
 ## What you should see
 
 A Markdown table in the assistant's reply for each step. If nothing comes back, the most likely reasons are that the worker hasn't built the directory yet, or the search term is too specific — try a broader term (for example a fund family like "iShares" or "Vanguard") to confirm the directory is populated, then drill in with the profile id it returns.

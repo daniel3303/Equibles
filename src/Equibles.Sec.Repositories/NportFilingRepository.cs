@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
@@ -43,6 +44,31 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     }
 
     /// <summary>
+    /// The filing's holdings a reader ranks and aggregates: every row but the ones the report
+    /// marks as mostly lending collateral (<see cref="NportHolding.IsLendingCollateral"/>). A row
+    /// with no stated collateral stays, which is every row of a schedule stored before the parser
+    /// read the mark.
+    /// </summary>
+    public IQueryable<NportHolding> GetHoldingsExcludingLendingCollateral(NportFiling filing)
+    {
+        return GetHoldings(filing).Where(NotLendingCollateral);
+    }
+
+    /// <summary>The filing's rows the report marks as mostly lending collateral.</summary>
+    public IQueryable<NportHolding> GetLendingCollateral(NportFiling filing)
+    {
+        return GetHoldings(filing).Where(LendingCollateral);
+    }
+
+    // NportHolding.IsLendingCollateral for SQL, and its complement spelled out: negating the first
+    // would drop every row with no stated collateral, since NOT of an unknown is unknown.
+    private static readonly Expression<Func<NportHolding, bool>> LendingCollateral = h =>
+        h.LendingCashCollateralValue != null && h.LendingCashCollateralValue * 2 > h.ValueUsd;
+
+    private static readonly Expression<Func<NportHolding, bool>> NotLendingCollateral = h =>
+        h.LendingCashCollateralValue == null || h.LendingCashCollateralValue * 2 <= h.ValueUsd;
+
+    /// <summary>
     /// Reads one selected filing's facts, complete stored count and bounded portfolio page in
     /// one statement, so a concurrent parser replay cannot mix the header and schedule revisions.
     /// Directory callers pass FundSeries.LatestNportFilingId; this read never selects a report.
@@ -69,6 +95,15 @@ public class NportFilingRepository : BaseRepository<NportFiling>
                 TotalAssets = f.TotalAssets,
                 TotalHoldings = f.Holdings.Count,
                 ReportedHoldingCount = f.ReportedHoldingCount,
+                LendingCollateralCount = f.Holdings.AsQueryable().Count(LendingCollateral),
+                LendingCollateralValueUsd = f
+                    .Holdings.AsQueryable()
+                    .Where(LendingCollateral)
+                    .Sum(h => h.ValueUsd),
+                LendingCollateralPercent = f
+                    .Holdings.AsQueryable()
+                    .Where(LendingCollateral)
+                    .Sum(h => h.PercentValue),
                 Holdings = f
                     .Holdings.Where(h => h.NportFilingId == filingId)
                     .OrderByDescending(h => h.ValueUsd)
@@ -190,6 +225,35 @@ public class NportFilingRepository : BaseRepository<NportFiling>
                 && (
                     f.SeriesId == seriesId
                     || (string.IsNullOrEmpty(f.SeriesId) && string.IsNullOrEmpty(seriesId))
+                )
+            );
+    }
+
+    /// <summary>
+    /// The filings the reprocess pass must re-read from EDGAR. Every filing below
+    /// <see cref="NportFiling.WholeHistoryParserVersion"/> is one. Above it, a filing short of
+    /// <see cref="NportFiling.CurrentParserVersion"/> is one only while a series serves it as its
+    /// latest report and its schedule is stored whole (a tracked issuer's own feed, or a series
+    /// opted into full fidelity), so a version that adds a fact shown for the newest report alone
+    /// re-reads thousands of filings instead of the whole table. A report that becomes a series'
+    /// latest later enrolls by itself.
+    /// </summary>
+    public IQueryable<NportFiling> GetAwaitingReprocess(
+        IReadOnlyCollection<string> fullFidelitySeriesIds
+    )
+    {
+        var wholeSeries = fullFidelitySeriesIds.Select(s => s.ToUpperInvariant()).ToList();
+
+        return GetAll()
+            .Where(f =>
+                f.ParserVersion < NportFiling.WholeHistoryParserVersion
+                || (
+                    f.ParserVersion < NportFiling.CurrentParserVersion
+                    && (
+                        f.EquityIssuerId != null
+                        || (f.SeriesId != null && wholeSeries.Contains(f.SeriesId.ToUpper()))
+                    )
+                    && DbContext.Set<FundSeries>().Any(s => s.LatestNportFilingId == f.Id)
                 )
             );
     }

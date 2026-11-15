@@ -11,11 +11,10 @@ namespace Equibles.Sec.HostedService;
 
 /// <summary>
 /// Continuously brings NPORT-P filings up to the current holdings-parser version. Each cycle drains
-/// every filing whose <see cref="Equibles.Sec.Data.Models.NportFiling.ParserVersion"/> sits below
-/// <see cref="Equibles.Sec.Data.Models.NportFiling.CurrentParserVersion"/> — re-fetching the
-/// submission from EDGAR and re-deriving its schedule of holdings. The work is version-driven and
-/// resumable, so it survives restarts and automatically re-enrolls every filing after a
-/// parser-version bump — no manual trigger needed.
+/// every filing <see cref="Equibles.Sec.Repositories.NportFilingRepository.GetAwaitingReprocess"/>
+/// selects — re-fetching the submission from EDGAR and re-deriving its schedule of holdings. The
+/// work is version-driven and resumable, so it survives restarts and re-enrolls the filings a
+/// parser-version bump names — no manual trigger needed.
 ///
 /// Runs in the worker process so it shares the single SEC rate-limiter with the other EDGAR
 /// scrapers, and starts after a stagger so its initial EDGAR burst doesn't collide with them at
