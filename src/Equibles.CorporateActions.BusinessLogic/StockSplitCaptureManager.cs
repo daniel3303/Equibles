@@ -286,8 +286,13 @@ public class StockSplitCaptureManager
         var sameEvent = existing
             .Where(action =>
                 action.EquityListingId == listing.Id
-                && action.Numerator == split.Numerator
-                && action.Denominator == split.Denominator
+                // By value: a row another source spelled 1:1.5 is the event this one calls 2:3.
+                && SplitEvents.IsSameRatio(
+                    action.Numerator,
+                    action.Denominator,
+                    split.Numerator,
+                    split.Denominator
+                )
                 && SplitEvents.IsSameEvent(
                     action.EffectiveDate,
                     action.Source,
