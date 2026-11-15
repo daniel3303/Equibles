@@ -291,6 +291,7 @@ public class InstitutionalHoldingsTools
                 // Totals and percentages stay over every institution; a filter only selects rows.
                 var totalShares = holdings.Sum(h => h.Shares);
                 var totalValue = holdings.Sum(h => h.Value);
+                var totalComposition = OptionShareComposition(holdings, totalShares);
                 if (typeFilter != null)
                 {
                     await LoadEntityTypes(holdings);
@@ -347,7 +348,8 @@ public class InstitutionalHoldingsTools
                         presentCombined ? CombinedViewNote(targetDate, anchor) : null
                     ),
                     filterDescription,
-                    styleAsOf
+                    styleAsOf,
+                    totalComposition
                 );
                 var advisedNote = await AdvisedFundsNote(
                     stock,
@@ -361,6 +363,17 @@ public class InstitutionalHoldingsTools
             "GetTopHolders",
             $"ticker: {ticker}, reportDate: {reportDate}, offset: {offset}, holderTypes: {JoinTokens(holderTypes)}, styles: {JoinTokens(styles)}"
         );
+    }
+
+    // The total and the percent column count option rows at their underlying share count, so the
+    // line says how much of the total is held outright whenever an option row is in it.
+    private static string OptionShareComposition(List<TopHolderRow> holdings, long totalShares)
+    {
+        var callShares = holdings.Where(h => h.OptionType == OptionType.Call).Sum(h => h.Shares);
+        var putShares = holdings.Where(h => h.OptionType == OptionType.Put).Sum(h => h.Shares);
+        return callShares == 0 && putShares == 0
+            ? null
+            : $" ({McpFormat.WholeNumber(totalShares - callShares - putShares)} shares held outright; the total also counts calls on {McpFormat.WholeNumber(callShares)} and puts on {McpFormat.WholeNumber(putShares)} underlying shares)";
     }
 
     // The registered funds inside the shown filers' positions, a floor: only series whose sole
@@ -540,7 +553,8 @@ public class InstitutionalHoldingsTools
         int offset,
         string combinedNote,
         string filterDescription = null,
-        DateOnly? styleAsOf = null
+        DateOnly? styleAsOf = null,
+        string totalComposition = null
     )
     {
         var first = holdings.Count == 0 ? 0 : offset + 1;
@@ -551,7 +565,7 @@ public class InstitutionalHoldingsTools
                 : $"Showing rows {first}-{last} of {totalRows} from {filterDescription}, across {totalInstitutions} institutions. All institutions: ";
         subtitle +=
             $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
-            + $"${FormatMillions(totalValueAll)}M value";
+            + $"${FormatMillions(totalValueAll)}M value{totalComposition}";
         if (combinedNote != null)
             subtitle = $"{subtitle}\n{combinedNote}";
         var result = MarkdownTable.Start(
