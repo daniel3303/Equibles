@@ -1119,8 +1119,8 @@ public class StockTabService
         return dates.ToList();
     }
 
-    // Mirrors the header-stat semantics per report date: Shares summed over every
-    // row (share classes included), holders counted distinct — so the trend's
+    // Mirrors the header-stat semantics per report date: common shares summed over every
+    // share class, holders counted distinct over every leg — so the trend's
     // latest point matches the stats shown for the latest quarter.
     private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(EquityIssuer stock)
     {

@@ -40,7 +40,7 @@ public static class HoldingsTopMoversSelector
         params PositionChangeType[] types
     )
     {
-        var combined = types.SelectMany(type => EnumerateOrEmpty(groupedHolders, type));
+        var combined = Movers(groupedHolders, buying: descending, types);
         var ordered = descending
             ? combined.OrderByDescending(e => e.DeltaShares)
             : combined.OrderBy(e => e.DeltaShares);
@@ -49,16 +49,32 @@ public static class HoldingsTopMoversSelector
 
     public static int CountBuyers(
         Dictionary<PositionChangeType, List<HolderPositionChange>> groupedHolders
-    ) => CountIn(groupedHolders, PositionChangeType.New, PositionChangeType.Increased);
+    ) =>
+        Movers(groupedHolders, buying: true, PositionChangeType.New, PositionChangeType.Increased)
+            .Count();
 
     public static int CountSellers(
         Dictionary<PositionChangeType, List<HolderPositionChange>> groupedHolders
-    ) => CountIn(groupedHolders, PositionChangeType.Reduced, PositionChangeType.SoldOut);
+    ) =>
+        Movers(
+                groupedHolders,
+                buying: false,
+                PositionChangeType.Reduced,
+                PositionChangeType.SoldOut
+            )
+            .Count();
 
-    private static int CountIn(
+    // A mover changed its share count. Shares are common shares only, so a holder whose legs
+    // are all options enters or leaves at zero shares: it is in its bucket, and is neither a
+    // buyer nor a seller.
+    private static IEnumerable<HolderPositionChange> Movers(
         Dictionary<PositionChangeType, List<HolderPositionChange>> groupedHolders,
+        bool buying,
         params PositionChangeType[] types
-    ) => types.Sum(type => groupedHolders.TryGetValue(type, out var list) ? list.Count : 0);
+    ) =>
+        types
+            .SelectMany(type => EnumerateOrEmpty(groupedHolders, type))
+            .Where(change => buying ? change.DeltaShares > 0 : change.DeltaShares < 0);
 
     private static IEnumerable<HolderPositionChange> EnumerateOrEmpty(
         Dictionary<PositionChangeType, List<HolderPositionChange>> groupedHolders,

@@ -132,6 +132,8 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             .Where(row => row.ReportDate == QCur && !row.IsCombined)
             .ToListAsync(CancellationToken.None);
         var heldListing = listings.Single(row => row.EquityIssuerId == _held.Id);
+        heldListing.UnmatchedCurrentShares.Should().Be(700);
+        heldListing.UnmatchedPreviousShares.Should().Be(400);
         heldListing.CurrentShares.Should().Be(6_700);
         heldListing.PreviousShares.Should().Be(3_400);
         heldListing.CurrentValue.Should().Be(670_000);
@@ -198,6 +200,9 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         )
             .Should()
             .Be(2, "the second read is served by the stored rows, not by the live queries again");
+        snapshotCurrent
+            .UnmatchedCurrentShares.Should()
+            .Be(700, "only a stored row carries the unmatched part");
 
         (
             snapshotCurrent.CurrentShares,

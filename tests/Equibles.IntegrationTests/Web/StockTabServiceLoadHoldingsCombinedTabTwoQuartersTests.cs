@@ -120,10 +120,17 @@ public class StockTabServiceLoadHoldingsCombinedTabTwoQuartersTests : IDisposabl
         _dbContext
             .Set<InstitutionalHolding>()
             .Add(Make(stock.Id, droppedOff.Id, prior, 80, 800_000));
+        // Option rows, one filed now and one carried: neither adds shares or value.
+        var filedPut = Make(stock.Id, newFiler.Id, current, 7_000, 70_000_000);
+        filedPut.OptionType = OptionType.Put;
+        var carriedPut = Make(stock.Id, droppedOff.Id, prior, 9_000, 90_000_000);
+        carriedPut.OptionType = OptionType.Put;
+        _dbContext.Set<InstitutionalHolding>().AddRange(filedPut, carriedPut);
         await _dbContext.SaveChangesAsync();
 
         var result = await _sut.LoadHoldingsCombinedTab(stock);
 
+        result.TotalValue.Should().Be(1_500_000 + 500_000 + 800_000);
         result.IsCombinedView.Should().BeTrue();
         result.IsCombinedAvailable.Should().BeTrue("two quarters exist");
         result.HolderCount.Should().Be(3); // one row per distinct holder
