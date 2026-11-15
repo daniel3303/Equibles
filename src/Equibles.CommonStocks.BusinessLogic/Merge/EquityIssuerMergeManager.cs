@@ -563,6 +563,7 @@ public class EquityIssuerMergeManager
             issuer.IndustryId,
             issuer.FiscalYearEndMonth,
             issuer.FiscalYearEndDay,
+            issuer.FiscalYearLabelOffset,
             Securities = issuer.Securities.Select(security => new
             {
                 security.Id,

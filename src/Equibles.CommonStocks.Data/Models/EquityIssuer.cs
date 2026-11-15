@@ -67,6 +67,15 @@ public class EquityIssuer
 
     public int? FiscalYearEndMonthBeforeChange { get; set; }
 
+    /// <summary>
+    /// How the company names its fiscal year against the calendar year that year ends in: 0 when
+    /// it names the year for the calendar year it ends in (a year ended January 2026 is fiscal
+    /// 2026), -1 when it names it for the year it starts in (the same year is fiscal 2025), null
+    /// while its annual reports do not settle it. Stored fiscal years always carry the year the
+    /// period ends in; this only changes the label a reader sees (<see cref="Helpers.FiscalYearLabel"/>).
+    /// </summary>
+    public int? FiscalYearLabelOffset { get; set; }
+
     [MaxLength(8)]
     public string Sic { get; set; }
 

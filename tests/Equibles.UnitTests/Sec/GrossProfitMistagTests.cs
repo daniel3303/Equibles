@@ -111,6 +111,17 @@ public class GrossProfitMistagTests
         GrossProfitMistag.Warning([]).Should().BeNull();
     }
 
+    // A company naming its year for the year it starts in reads its own year in the warning, as
+    // in the rows beside it.
+    [Fact]
+    public void Warning_StartYearNaming_NamesTheCompanysYear()
+    {
+        GrossProfitMistag
+            .Warning([Quarter(2027, SecFiscalPeriod.Q1, new DateOnly(2026, 2, 2), 1m)], -1)
+            .Should()
+            .StartWith("Tag warning: for FY2026 Q1 the figure tagged as gross profit");
+    }
+
     private static FinancialFact Valued(FinancialFact fact, decimal value) =>
         Quarter(fact.FiscalYear, fact.FiscalPeriod, fact.PeriodStart, value);
 

@@ -761,7 +761,7 @@ public class StockTabService
             .Select(p => new FinancialsPeriodOption(
                 p.FiscalYear,
                 p.FiscalPeriod,
-                $"FY{p.FiscalYear} {p.FiscalPeriod.NameForHumans()}"
+                $"FY{FiscalYearLabel.For(p.FiscalYear, stock)} {p.FiscalPeriod.NameForHumans()}"
             ))
             .ToList();
     }

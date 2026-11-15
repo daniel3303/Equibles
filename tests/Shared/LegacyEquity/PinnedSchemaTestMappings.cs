@@ -44,6 +44,9 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         builder.Entity<EquityIssuer>().Ignore(issuer => issuer.FiscalYearEndMonthBeforeChange);
         builder.Entity<EquityIssuer>().Ignore(issuer => issuer.FiscalYearEndMonthChangedAt);
 
+        // Added by 20261115205700_AddFiscalYearLabelOffset.
+        builder.Entity<EquityIssuer>().Ignore(issuer => issuer.FiscalYearLabelOffset);
+
         // Added by 20261115031017_NportHoldingLendingCashCollateral.
         builder.Entity<NportHolding>().Ignore(holding => holding.LendingCashCollateralValue);
 

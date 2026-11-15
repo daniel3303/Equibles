@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
@@ -67,6 +68,8 @@ public class FinancialFactsImportServiceIdempotencyTests : IAsyncLifetime
                     .Returns(new FinancialConceptRepository(ctx));
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
                     .Returns(new FinancialFactsSyncStatusRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(DocumentRepository)).Returns(new DocumentRepository(ctx));
                 sp.GetService(typeof(ISharesOutstandingProvider))
                     .Returns(Substitute.For<ISharesOutstandingProvider>());

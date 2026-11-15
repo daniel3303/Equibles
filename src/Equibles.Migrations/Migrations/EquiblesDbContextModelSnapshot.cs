@@ -334,6 +334,9 @@ namespace Equibles.Migrations.Migrations
                     b.Property<DateTime?>("FiscalYearEndMonthChangedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("FiscalYearLabelOffset")
+                        .HasColumnType("integer");
+
                     b.Property<string>("IdentitySourceUrl")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
