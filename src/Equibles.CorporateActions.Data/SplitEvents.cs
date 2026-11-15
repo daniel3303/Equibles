@@ -23,6 +23,29 @@ public static class SplitEvents
     // revised close or ordinary share-count drift between filings, far below any split ratio.
     public const decimal SameBasisTolerance = 0.01m;
 
+    // Relative width within which two ratios are one ratio spelled twice: a source states 4:3 as
+    // 1:1.333333 and 1:30 as 30.0003:1. Far below the step between two ratios a company can choose.
+    public const decimal SameRatioTolerance = 0.0001m;
+
+    /// <summary>
+    /// Whether two ratios are one ratio by value: sources spell a ratio differently (2:3 beside
+    /// 1:1.5) and round it. Checked before <see cref="IsRevisedRatio"/>, which reads a rounded
+    /// spelling as a revision.
+    /// </summary>
+    public static bool IsSameRatio(
+        decimal numerator,
+        decimal denominator,
+        decimal otherNumerator,
+        decimal otherDenominator
+    )
+    {
+        if (numerator <= 0m || denominator <= 0m || otherNumerator <= 0m || otherDenominator <= 0m)
+            return false;
+        var one = numerator * otherDenominator;
+        var other = otherNumerator * denominator;
+        return Math.Abs(one - other) <= Math.Max(one, other) * SameRatioTolerance;
+    }
+
     /// <summary>Whether <paramref name="value"/> sits on the same share basis as <paramref name="reference"/>.</summary>
     public static bool IsSameBasis(decimal value, decimal reference) =>
         reference > 0m && Math.Abs(value - reference) <= reference * SameBasisTolerance;

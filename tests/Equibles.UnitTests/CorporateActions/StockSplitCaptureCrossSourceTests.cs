@@ -129,6 +129,131 @@ public class StockSplitCaptureCrossSourceTests
         (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
     }
 
+    // One ratio has several spellings and a source may round it: a three-for-four consolidation is
+    // 3:4, 0.75:1 or 1:1.333333. A lower source's later observation of a stored event under another
+    // spelling is still that event, never a second split restating the series again.
+    [Theory]
+    [InlineData(1, 1.5, 2, 3)]
+    [InlineData(1, 1.333333, 3, 4)]
+    [InlineData(30.0003, 1, 30, 1)]
+    public async Task CaptureForListing_LowerSourceSpellsTheStoredRatioAnotherWayADayLater_KeepsTheStoredRowAlone(
+        double storedNumerator,
+        double storedDenominator,
+        double numerator,
+        double denominator
+    )
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var applied = Utc(2026, 9, 2);
+        var stored = Stored(
+            stock,
+            ExecutedDate,
+            StockSplitSource.External,
+            applied,
+            (decimal)storedNumerator,
+            (decimal)storedDenominator
+        );
+        context.Add(stored);
+        await context.SaveChangesAsync();
+
+        (
+            await Capture(
+                NewManager(context),
+                stock,
+                Reported(
+                    ExecutedDate.AddDays(1),
+                    StockSplitSource.Yahoo,
+                    (decimal)numerator,
+                    (decimal)denominator
+                )
+            )
+        )
+            .Should()
+            .Be(0);
+
+        context.ChangeTracker.Clear();
+        var row = await context.Set<StockSplit>().SingleAsync();
+        row.Id.Should().Be(stored.Id);
+        row.EffectiveDate.Should().Be(ExecutedDate);
+        row.Source.Should().Be(StockSplitSource.External);
+        row.Numerator.Should().Be((decimal)storedNumerator);
+        row.PriceAdjustmentAppliedTime.Should()
+            .Be(applied, "the stored closes already carry this split once");
+    }
+
+    [Fact]
+    public async Task CaptureForListing_HigherSourceSpellsAStoredLowerRowAnotherWay_MovesItInsteadOfAddingASecond()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var stored = Stored(
+            stock,
+            ExecutedDate.AddDays(1),
+            StockSplitSource.Yahoo,
+            Utc(2026, 9, 3),
+            numerator: 2m,
+            denominator: 3m
+        );
+        context.Add(stored);
+        await context.SaveChangesAsync();
+
+        (
+            await Capture(
+                NewManager(context),
+                stock,
+                Reported(ExecutedDate, StockSplitSource.External, numerator: 1m, denominator: 1.5m)
+            )
+        )
+            .Should()
+            .Be(1);
+
+        context.ChangeTracker.Clear();
+        var row = await context.Set<StockSplit>().SingleAsync();
+        row.Id.Should().Be(stored.Id);
+        row.EffectiveDate.Should().Be(ExecutedDate);
+        row.Source.Should().Be(StockSplitSource.External);
+        row.PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    // The width is a rounding width, not a likeness: 751:1000 beside 75:100 is a per-thousand
+    // approximation, which one source's two rows keep apart as they did before.
+    [Fact]
+    public async Task CaptureForListing_OneSourceStatesRatiosAPerThousandApartDaysApart_StaysTwoRows()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        context.Add(
+            Stored(
+                stock,
+                ExecutedDate,
+                StockSplitSource.Yahoo,
+                Utc(2026, 9, 2),
+                numerator: 751m,
+                denominator: 1000m
+            )
+        );
+        await context.SaveChangesAsync();
+
+        (
+            await Capture(
+                NewManager(context),
+                stock,
+                Reported(
+                    ExecutedDate.AddDays(2),
+                    StockSplitSource.Yahoo,
+                    numerator: 75m,
+                    denominator: 100m
+                )
+            )
+        )
+            .Should()
+            .Be(1);
+
+        context.ChangeTracker.Clear();
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
+    }
+
     private static Task<int> Capture(
         StockSplitCaptureManager manager,
         EquityIssuer stock,
