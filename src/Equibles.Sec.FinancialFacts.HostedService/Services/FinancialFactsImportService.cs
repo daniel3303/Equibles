@@ -157,7 +157,7 @@ public class FinancialFactsImportService
             return;
         var attemptId = claim.Value;
 
-        var incomingAnnualPeriods = responses
+        var annualReportValues = responses
             .SelectMany(response => response.Facts.Values)
             .SelectMany(concepts => concepts.Values)
             .SelectMany(concept => concept.Units.Values)
@@ -167,6 +167,8 @@ public class FinancialFactsImportService
                 && value.Form is "10-K" or "20-F" or "40-F"
                 && value.End.DayNumber - value.Start.Value.DayNumber is >= 350 and <= 380
             )
+            .ToList();
+        var incomingAnnualPeriods = annualReportValues
             .Select(value => (Start: value.Start.Value, End: value.End))
             .Distinct()
             .ToArray();
@@ -196,6 +198,10 @@ public class FinancialFactsImportService
             );
             return;
         }
+        // Ahead of every return below: a company that files nothing new is still read, so the
+        // naming fills on the first sync after this ships and needs no replay of stored facts.
+        await RecordFiscalYearNaming(stock, annualReportValues, calendar, cancellationToken);
+
         var parsed = responses
             .SelectMany(response => ParseFacts(response, stock, calendar))
             .ToList();
@@ -255,6 +261,67 @@ public class FinancialFactsImportService
             cancellationToken
         );
     }
+
+    // Stores how the company names its fiscal year (FiscalYearNaming), read from the annual
+    // reports in the payload. A payload without one says nothing, so a stored naming stands;
+    // reports that contradict each other clear it, and readers then print the stored year.
+    private async Task RecordFiscalYearNaming(
+        EquityIssuer stock,
+        IReadOnlyCollection<CompanyFactValue> annualReportValues,
+        HistoricalFiscalCalendar calendar,
+        CancellationToken cancellationToken
+    )
+    {
+        var reports = AnnualReportFiscalYears(annualReportValues, calendar);
+        if (reports.Count == 0)
+            return;
+        var naming = FiscalYearNaming.Read(reports);
+        if (naming == stock.FiscalYearLabelOffset)
+            return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        var tracked = await stockRepository
+            .GetByIds([stock.Id])
+            .FirstOrDefaultAsync(cancellationToken);
+        if (tracked == null)
+            return;
+        tracked.FiscalYearLabelOffset = naming;
+        await stockRepository.SaveChanges();
+        stock.FiscalYearLabelOffset = naming;
+    }
+
+    // One entry per annual report: the fiscal year SEC records for the filing against the year
+    // this importer stamps on the report's own period, its latest-ending full-year span. Every
+    // value of a filing carries the filing's fiscal year, comparatives included, so the read is
+    // by accession and never by span. A report whose own period this importer cannot place as a
+    // full year, or that states two fiscal years, is no evidence.
+    internal static List<AnnualReportFiscalYear> AnnualReportFiscalYears(
+        IEnumerable<CompanyFactValue> annualReportValues,
+        HistoricalFiscalCalendar calendar
+    ) =>
+        annualReportValues
+            .Where(value => value.Fy.HasValue && !string.IsNullOrWhiteSpace(value.Accn))
+            .GroupBy(value => value.Accn)
+            .Select(filing =>
+            {
+                var periodEnd = filing.Max(value => value.End);
+                var own = filing.Where(value => value.End == periodEnd).ToList();
+                var years = own.Select(value => value.Fy.Value).Distinct().ToList();
+                var stored = calendar.Resolve(own.Min(value => value.Start.Value), periodEnd);
+                return years.Count == 1 && stored is { Period: SecFiscalPeriod.FullYear }
+                    ? new AnnualReportFiscalYear(
+                        filing.Key,
+                        own.Max(value => value.Filed),
+                        periodEnd,
+                        years[0],
+                        stored.Value.Year
+                    )
+                    : (AnnualReportFiscalYear?)null;
+            })
+            .Where(report => report != null)
+            .Select(report => report.Value)
+            .ToList();
 
     // Sets the stock's share count from the authoritative SEC cover-page fact the import just
     // ingested, so the lagging per-share-class Yahoo figure no longer drives market cap and
