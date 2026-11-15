@@ -178,7 +178,7 @@ public class NportTools
                 result.AppendRows(
                     positions,
                     p =>
-                        $"| {MarkdownText(p.RegistrantName) ?? "-"} | {MarkdownText(p.SeriesName) ?? "-"} | {p.ReportPeriodDate:yyyy-MM-dd} | {FormatAmount(p.Balance)} | {MarkdownText(FundCodes.Unit(p.Units))} | ${FormatAmount(p.ValueUsd)} | {FormatPercent(p.PercentValue)} | {MarkdownText(p.PayoffProfile) ?? "-"} |"
+                        $"| {MarkdownText(p.RegistrantName) ?? "-"} | {MarkdownText(p.SeriesName) ?? "-"} | {p.ReportPeriodDate:yyyy-MM-dd} | {FormatAmount(p.Balance)} | {MarkdownText(NportCodes.Unit(p.Units))} | ${FormatAmount(p.ValueUsd)} | {FormatPercent(p.PercentValue)} | {MarkdownText(p.PayoffProfile) ?? "-"} |"
                 );
 
                 var pagingNote = McpOutput.PagedTruncationNote(positions.Count, totalCount, offset);

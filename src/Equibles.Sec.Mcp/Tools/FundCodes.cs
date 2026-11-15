@@ -4,50 +4,11 @@ namespace Equibles.Sec.Mcp.Tools;
 
 /// <summary>
 /// Render-time glosses for the raw SEC enumeration codes the fund tools would otherwise leak
-/// verbatim ("NS", "EC", "S-6"). Each gloss keeps the original code visible and appends a short
-/// human label, so an LLM consumer needs no out-of-band legend while a consumer keying on the raw
-/// code still finds it. Unknown codes pass through unchanged — the glosses annotate, never gate.
+/// verbatim ("S-6"); the NPORT-P holding codes live in <c>NportCodes</c>. Each gloss keeps the
+/// original code visible and appends a short human label. Unknown codes pass through unchanged.
 /// </summary>
 internal static class FundCodes
 {
-    /// <summary>NPORT-P holding unit codes (Item C.7): what <c>Balance</c> is denominated in.</summary>
-    internal static string Unit(string code) =>
-        code switch
-        {
-            null or "" => "-",
-            "NS" => "NS (shares)",
-            "PA" => "PA (principal amount)",
-            "NC" => "NC (contracts)",
-            _ => code,
-        };
-
-    /// <summary>NPORT-P asset-category codes (Item C.4.a).</summary>
-    internal static string AssetCategory(string code) =>
-        code switch
-        {
-            null or "" => "-",
-            "EC" => "EC (equity-common)",
-            "EP" => "EP (equity-preferred)",
-            "DBT" => "DBT (debt)",
-            "STIV" => "STIV (short-term investment vehicle)",
-            "RA" => "RA (repurchase agreement)",
-            "LON" => "LON (loan)",
-            "SN" => "SN (structured note)",
-            "RE" => "RE (real estate)",
-            "COMM" => "COMM (commodity)",
-            "DE" => "DE (derivative-equity)",
-            "DCO" => "DCO (derivative-commodity)",
-            "DCR" => "DCR (derivative-credit)",
-            "DFE" => "DFE (derivative-foreign exchange)",
-            "DIR" => "DIR (derivative-interest rate)",
-            "DO" => "DO (derivative-other)",
-            "ABS-MBS" => "ABS-MBS (mortgage-backed security)",
-            "ABS-APCP" => "ABS-APCP (asset-backed commercial paper)",
-            "ABS-CBDO" => "ABS-CBDO (collateralized bond/debt obligation)",
-            "ABS-O" => "ABS-O (other asset-backed security)",
-            _ => code,
-        };
-
     /// <summary>
     /// N-CEN registrant classification: the registration form the investment company is organised
     /// under. These double as the <c>FundSeries.FundType</c> values.

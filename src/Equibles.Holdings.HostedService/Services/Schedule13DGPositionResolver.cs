@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -44,13 +45,13 @@ internal static class Schedule13DGPositionResolver
         var filed = filedCusip?.Trim();
         if (!NeedsSubjectCompany(filed))
         {
-            var claims = await HoldingCusipResolution.Load(
+            var claims = await CusipResolution.Load(
                 issuers,
                 issuers.GetAll(),
                 [filed],
                 cancellationToken
             );
-            return HoldingCusipResolution.Resolve(claims, []).ContainsKey(filed) ? filed : null;
+            return CusipResolution.Resolve(claims, []).ContainsKey(filed) ? filed : null;
         }
 
         var canonical = CikNormalizer.Canonicalize(issuerCik);
@@ -168,13 +169,13 @@ internal static class Schedule13DGPositionResolver
         if (candidates.Count == 0)
             return [];
 
-        var claims = await HoldingCusipResolution.Load(
+        var claims = await CusipResolution.Load(
             issuers,
             issuers.GetAll(),
             candidates.Values.Select(candidate => candidate.Security.Cusip).ToList(),
             cancellationToken
         );
-        var resolved = HoldingCusipResolution.Resolve(claims, []);
+        var resolved = CusipResolution.Resolve(claims, []);
         return candidates
             .Where(candidate =>
                 resolved.TryGetValue(candidate.Value.Security.Cusip, out var target)

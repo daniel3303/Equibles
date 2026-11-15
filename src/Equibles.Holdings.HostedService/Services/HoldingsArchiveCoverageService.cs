@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;

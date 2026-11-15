@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Xml;
+using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
@@ -513,13 +514,13 @@ public class Schedule13DGCoverageService
         var resolvable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (cusips.Count > 0)
         {
-            var claims = await HoldingCusipResolution.Load(
+            var claims = await CusipResolution.Load(
                 issuers,
                 issuers.GetAll(),
                 cusips,
                 cancellationToken
             );
-            resolvable.UnionWith(HoldingCusipResolution.Resolve(claims, []).Keys);
+            resolvable.UnionWith(CusipResolution.Resolve(claims, []).Keys);
         }
 
         // Only a filing with no usable CUSIP falls back to the subject company.
