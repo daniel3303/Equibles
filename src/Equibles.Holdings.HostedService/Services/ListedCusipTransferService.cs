@@ -19,11 +19,12 @@ namespace Equibles.Holdings.HostedService.Services;
 /// </para>
 /// <para>
 /// A claim moves only on stored facts, never a name or a ticker shape: the earlier issuer's
-/// listing of the symbol is retired, was never reference listed and carries no delisting date (a
-/// listing that never was the security's market, not a fund that closed and gave up its symbol);
-/// exactly one other issuer lists the exact symbol live, as a reference listing that is not its
-/// presentation and holds no CUSIP of its own; exactly one SEC fund series carries the symbol as
-/// a class ticker and belongs to that issuer; and the claim's CUSIP carries an issuer number
+/// listing of the symbol is retired, is not its presentation, was never reference listed and
+/// carries no delisting date (a listing that never was the security's market, not a fund that
+/// closed and gave up its symbol); exactly one other issuer lists the exact symbol live, as a
+/// reference listing that is not its presentation and holds no CUSIP of its
+/// own; exactly one SEC fund series carries the symbol as a class ticker and belongs to that
+/// issuer; and the claim's CUSIP carries an issuer number
 /// (<see cref="Equibles.CommonStocks.Data.Helpers.CusipIdentity"/>) that issuer already holds in
 /// a security, an alias or another claim.
 /// </para>
@@ -88,7 +89,10 @@ public class ListedCusipTransferService
                       WHERE l."MarketCountryCode" = 'US' AND l."Ticker" = e."ListedTicker"
                         AND s."EquityIssuerId" = e."EquityIssuerId"
                         AND (l."Active" OR l."WasReferenceListed" OR l."IsReferenceListed"
-                             OR l."DelistedOn" IS NOT NULL))
+                             OR l."DelistedOn" IS NOT NULL
+                             OR EXISTS (
+                                 SELECT 1 FROM "EquityIssuerPresentation" AS p
+                                 WHERE p."EquityListingId" = l."Id")))
             ), live AS MATERIALIZED (
                 SELECT own."Id", own."EquityIssuerId", own."ListedTicker", own."Cusip",
                        lister."ToIssuerId"
@@ -161,6 +165,10 @@ public class ListedCusipTransferService
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
             var stockRepo = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+            // A large fund's move rewrites every index entry of its positions; under the default
+            // command timeout it would roll back and retry on every cycle.
+            if (dbContext.Database.IsRelational())
+                dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
             (int Positions, int Occupied)? moved;
             try
             {
@@ -247,6 +255,8 @@ public class ListedCusipTransferService
             cancellationToken
         );
         // Every filing type: a Schedule 13D/G row filed under the CUSIP names the same security.
+        // A position keeps the CUSIP as its filer spelled it, so the match ignores case; a row
+        // left behind for its spelling would be filed a second time under the listing issuer.
         // The label is matched with '=' so the unique index serves it. A position the listing
         // issuer already holds under the same key stays where it is; moving it would merge two
         // stored rows. Manager legs hang on the position's id and travel with it.
@@ -256,7 +266,7 @@ public class ListedCusipTransferService
                 UPDATE "InstitutionalHolding" AS h SET "EquityIssuerId" = {toIssuerId}
                 WHERE h."EquityIssuerId" = {fromIssuerId}
                   AND h."ListedTicker" = {listedTicker}
-                  AND h."Cusip" = ANY ({cusips})
+                  AND upper(h."Cusip") = ANY ({cusips})
                   AND NOT EXISTS (
                       SELECT 1 FROM "InstitutionalHolding" AS o
                       WHERE o."EquityIssuerId" = {toIssuerId}
@@ -276,7 +286,7 @@ public class ListedCusipTransferService
                 SELECT count(*)::int AS "Value" FROM "InstitutionalHolding" AS h
                 WHERE h."EquityIssuerId" = {fromIssuerId}
                   AND h."ListedTicker" = {listedTicker}
-                  AND h."Cusip" = ANY ({cusips})
+                  AND upper(h."Cusip") = ANY ({cusips})
                 """
             )
             .SingleAsync(cancellationToken);

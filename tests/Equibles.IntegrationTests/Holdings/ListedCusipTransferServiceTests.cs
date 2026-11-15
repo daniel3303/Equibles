@@ -64,6 +64,7 @@ public class ListedCusipTransferServiceTests : IAsyncLifetime
         EarlierListingWasReferenceListed,
         EarlierListingDelisted,
         EarlierIssuerNeverListedTheSymbol,
+        SymbolIsTheEarlierIssuersPresentation,
         SecondIssuerListsTheSymbol,
         LiveListingIsNotAReferenceListing,
         SymbolIsTheListersPresentation,
@@ -176,6 +177,47 @@ public class ListedCusipTransferServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Transfer_PositionWhoseFilerSpelledTheCusipInLowerCase_MovesToo()
+    {
+        await Seed(Doubt.None);
+        // A position keeps the filer's spelling; left behind, a replay would file it twice.
+        var lowerCase = await SeedHolding(_sponsorId, FundCusip.ToLowerInvariant(), FundTicker);
+
+        var result = await CreateService().Transfer(CancellationToken.None);
+
+        result.Should().Be(new ListedCusipTransferService.Result(1, 1, 1, 0));
+        var moved = await Reload(lowerCase);
+        moved.EquityIssuerId.Should().Be(_trustId);
+        moved.Cusip.Should().Be(FundCusip.ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task Transfer_ThenLabelConvergence_KeepsTheMovedPositionOnItsLabel()
+    {
+        await Seed(Doubt.None);
+        var fund = await SeedHolding(_sponsorId, FundCusip, FundTicker);
+        var sponsorShares = await SeedHolding(_sponsorId, SponsorCusip, null);
+        await CreateService().Transfer(CancellationToken.None);
+
+        // The convergence pass runs right after the transfer in the same worker cycle.
+        var context = FreshContext();
+        await new HoldingLabelConvergenceService(
+            ServiceScopeSubstitute.Create(
+                (typeof(EquiblesFinancialDbContext), context),
+                (typeof(EquityIssuerRepository), new EquityIssuerRepository(context))
+            ),
+            Substitute.For<ILogger<HoldingLabelConvergenceService>>()
+        ).Converge(CancellationToken.None);
+
+        var moved = await Reload(fund);
+        moved.EquityIssuerId.Should().Be(_trustId);
+        moved.ListedTicker.Should().Be(FundTicker);
+        var own = await Reload(sponsorShares);
+        own.EquityIssuerId.Should().Be(_sponsorId);
+        own.ListedTicker.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Transfer_SecondPass_MovesNothing()
     {
         await Seed(Doubt.None);
@@ -245,6 +287,7 @@ public class ListedCusipTransferServiceTests : IAsyncLifetime
     [InlineData(Doubt.EarlierListingWasReferenceListed)]
     [InlineData(Doubt.EarlierListingDelisted)]
     [InlineData(Doubt.EarlierIssuerNeverListedTheSymbol)]
+    [InlineData(Doubt.SymbolIsTheEarlierIssuersPresentation)]
     [InlineData(Doubt.SecondIssuerListsTheSymbol)]
     [InlineData(Doubt.LiveListingIsNotAReferenceListing)]
     [InlineData(Doubt.SymbolIsTheListersPresentation)]
@@ -272,7 +315,7 @@ public class ListedCusipTransferServiceTests : IAsyncLifetime
     private async Task Seed(Doubt doubt)
     {
         var sponsor = Equibles.TestSupport.EquityIssuerSeed.Create(
-            Ticker: "STT",
+            Ticker: doubt == Doubt.SymbolIsTheEarlierIssuersPresentation ? FundTicker : "STT",
             Name: "Sponsor Corp",
             Cik: "93751",
             Cusip: SponsorCusip
