@@ -219,12 +219,12 @@ public class StockTabService
             TotalShares = allCurrent
                 .Where(h => h.IsCommonShareLeg())
                 .Sum(h =>
-                HoldingShareRestatement.RestateToToday(
-                    h,
-                    effectiveSplits,
-                    stock.Presentation.Listing.Ticker
-                )
-            ),
+                    HoldingShareRestatement.RestateToToday(
+                        h,
+                        effectiveSplits,
+                        stock.Presentation.Listing.Ticker
+                    )
+                ),
             HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
             SharesOutstanding = stock.Presentation.Listing.Security.SharesOutstanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),
@@ -324,12 +324,12 @@ public class StockTabService
             TotalShares = allCombined
                 .Where(h => h.IsCommonShareLeg())
                 .Sum(h =>
-                HoldingShareRestatement.RestateToToday(
-                    h,
-                    effectiveSplits,
-                    stock.Presentation.Listing.Ticker
-                )
-            ),
+                    HoldingShareRestatement.RestateToToday(
+                        h,
+                        effectiveSplits,
+                        stock.Presentation.Listing.Ticker
+                    )
+                ),
             HolderCount = holders.Count,
             SharesOutstanding = stock.Presentation.Listing.Security.SharesOutstanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),

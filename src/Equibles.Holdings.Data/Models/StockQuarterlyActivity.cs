@@ -26,6 +26,8 @@ public class StockQuarterlyActivity
 
     public DateOnly? PreviousReportDate { get; set; }
 
+    // Shares and value count common-share rows only (HoldingActivityLegQueries.AsActivityLegs):
+    // a put, call or principal row adds its filer to the counts below and nothing here.
     public long CurrentShares { get; set; }
     public long PreviousShares { get; set; }
     public long CurrentValue { get; set; }

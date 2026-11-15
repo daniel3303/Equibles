@@ -89,11 +89,13 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
                 row => row.EquityIssuerId == _held.Id && row.ReportDate == QCur,
                 CancellationToken.None
             );
-        held.CurrentShares.Should().Be(6_000, "1,000 + 5,000 common shares; options and principal add none");
+        held.CurrentShares.Should()
+            .Be(6_000, "1,000 + 5,000 common shares; options and principal add none");
         held.PreviousShares.Should().Be(3_000);
         held.CurrentValue.Should().Be(600_000, "the value of the common shares only");
         held.PreviousValue.Should().Be(300_000);
-        held.CurrentFilerCount.Should().Be(3, "a filer holding only options still reported the stock");
+        held.CurrentFilerCount.Should()
+            .Be(3, "a filer holding only options still reported the stock");
         held.PreviousFilerCount.Should().Be(3);
 
         var optionsOnly = await read.Set<StockQuarterlyActivity>()
@@ -113,7 +115,9 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         heldListing.PreviousShares.Should().Be(3_000);
         heldListing.CurrentValue.Should().Be(600_000);
         heldListing.CurrentFilerCount.Should().Be(3);
-        heldListing.TopOneValue.Should().Be(500_000, "the largest common-share position, not an option's");
+        heldListing
+            .TopOneValue.Should()
+            .Be(500_000, "the largest common-share position, not an option's");
         var optionsOnlyListing = listings.Single(row => row.EquityIssuerId == _optionsOnly.Id);
         optionsOnlyListing.CurrentShares.Should().Be(0, "the listing keeps its row with no shares");
         optionsOnlyListing.CurrentValue.Should().Be(0);
@@ -123,21 +127,18 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
     public async Task LiveMarketActivity_MatchesTheRebuiltSnapshot()
     {
         await using var live = FreshContext();
-        var liveRows = await new InstitutionalHoldingRepository(live).GetMarketActivitySnapshotBacked(
-            QCur,
-            QPrev,
-            combined: false,
-            CancellationToken.None
-        );
-        liveRows.Should().HaveCount(2, "with no snapshot yet the live queries answer for both stocks");
+        var liveRows = await new InstitutionalHoldingRepository(
+            live
+        ).GetMarketActivitySnapshotBacked(QCur, QPrev, combined: false, CancellationToken.None);
+        liveRows
+            .Should()
+            .HaveCount(2, "with no snapshot yet the live queries answer for both stocks");
 
         await BuildService().RebuildQuarterAsync(QCur, CancellationToken.None);
         await using var read = FreshContext();
-        var snapshotRows = await new InstitutionalHoldingRepository(read).GetMarketActivitySnapshots(
-            QCur,
-            combined: false,
-            CancellationToken.None
-        );
+        var snapshotRows = await new InstitutionalHoldingRepository(
+            read
+        ).GetMarketActivitySnapshots(QCur, combined: false, CancellationToken.None);
 
         snapshotRows.Should().HaveCount(2);
         foreach (var snapshot in snapshotRows)
@@ -145,7 +146,9 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             var liveRow = liveRows.Single(row => row.CommonStockId == snapshot.CommonStockId);
             Figures(liveRow).Should().Be(Figures(snapshot));
             liveRow
-                .ListingShares.Select(row => (row.PriceSeriesTicker, row.CurrentShares, row.PreviousShares))
+                .ListingShares.Select(row =>
+                    (row.PriceSeriesTicker, row.CurrentShares, row.PreviousShares)
+                )
                 .Should()
                 .BeEquivalentTo(
                     snapshot.ListingShares.Select(row =>
@@ -175,9 +178,15 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         ).GetStockActivitySnapshotsByStockSnapshotBacked(_held, CancellationToken.None);
         var snapshotCurrent = snapshotHistory.Single(row => row.ReportDate == QCur);
 
-        (snapshotCurrent.CurrentShares, snapshotCurrent.CurrentValue, snapshotCurrent.CurrentFilerCount)
+        (
+            snapshotCurrent.CurrentShares,
+            snapshotCurrent.CurrentValue,
+            snapshotCurrent.CurrentFilerCount
+        )
             .Should()
-            .Be((liveCurrent.CurrentShares, liveCurrent.CurrentValue, liveCurrent.CurrentFilerCount));
+            .Be(
+                (liveCurrent.CurrentShares, liveCurrent.CurrentValue, liveCurrent.CurrentFilerCount)
+            );
     }
 
     [Fact]
@@ -218,12 +227,16 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             .ToListAsync(CancellationToken.None);
 
         var steady = rows.Single(row => row.InstitutionalHolderId == _steady.Id);
-        steady.CurrentShares.Should().Be(1_000, "the put and the principal amount are not shares bought");
+        steady
+            .CurrentShares.Should()
+            .Be(1_000, "the put and the principal amount are not shares bought");
         steady.PreviousShares.Should().Be(1_000);
         steady.CurrentValue.Should().Be(100_000);
         var optionFiler = rows.Single(row => row.InstitutionalHolderId == _optionFiler.Id);
         optionFiler.CurrentShares.Should().Be(0);
-        optionFiler.CurrentPositionCount.Should().Be(1, "the filer still reported a position in the stock");
+        optionFiler
+            .CurrentPositionCount.Should()
+            .Be(1, "the filer still reported a position in the stock");
     }
 
     [Fact]
@@ -239,7 +252,10 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
             .GetDoubleDownPositionsCombined(QCur, QPrev, 50)
             .ToListAsync(CancellationToken.None);
 
-        var doubler = positions.Should().ContainSingle("only the filer that bought shares doubled down").Subject;
+        var doubler = positions
+            .Should()
+            .ContainSingle("only the filer that bought shares doubled down")
+            .Subject;
         doubler.InstitutionalHolderId.Should().Be(_doubler.Id);
         doubler.CurrentShares.Should().Be(5_000);
         doubler.PreviousShares.Should().Be(2_000);
@@ -262,7 +278,9 @@ public class HoldingsCommonShareActivityTests : IAsyncLifetime
         held.CurrentFilerCount.Should().Be(3);
     }
 
-    private static (long, long, long, long, long, long, int, int) Figures(MarketWideStockActivity row) =>
+    private static (long, long, long, long, long, long, int, int) Figures(
+        MarketWideStockActivity row
+    ) =>
         (
             row.CurrentShares,
             row.PreviousShares,
