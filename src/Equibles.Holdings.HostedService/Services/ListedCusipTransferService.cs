@@ -254,6 +254,31 @@ public class ListedCusipTransferService
 
         var evidenceIds = claims.Select(claim => claim.EvidenceId).ToArray();
         var cusips = claims.Select(claim => claim.Cusip.ToUpperInvariant()).ToArray();
+        // A fund moves whole or not at all: a position that cannot follow, because the listing
+        // issuer already holds its key or it was stored with no label while the symbol was the
+        // earlier issuer's presentation, would split its filer across two issuers and be filed
+        // again under the listing issuer on replay. Checked before any write, so a fund held back
+        // costs two indexed counts per cycle, not a rewrite that rolls back. Label and no label
+        // are read separately so the index serves each.
+        var blocked =
+            await CountBlocked(
+                dbContext,
+                fromIssuerId,
+                toIssuerId,
+                listedTicker,
+                cusips,
+                cancellationToken
+            )
+            + await CountBlocked(
+                dbContext,
+                fromIssuerId,
+                toIssuerId,
+                null,
+                cusips,
+                cancellationToken
+            );
+        if (blocked > 0)
+            return (0, blocked);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
             UPDATE "EquityListingCusipEvidence" SET "EquityIssuerId" = {toIssuerId}
@@ -264,9 +289,9 @@ public class ListedCusipTransferService
         // Every filing type: a Schedule 13D/G row filed under the CUSIP names the same security.
         // A position keeps the CUSIP as its filer spelled it, so the match ignores case; a row
         // left behind for its spelling would be filed a second time under the listing issuer.
-        // The label is matched with '=' so the unique index serves it. A position the listing
-        // issuer already holds under the same key is not moved; moving it would merge two stored
-        // rows. Manager legs hang on the position's id and travel with it.
+        // The label is matched with '=' so the unique index serves it. Under the locks no blocked
+        // row can appear after the check; the NOT EXISTS keeps a merge of two stored rows
+        // impossible regardless. Manager legs hang on the position's id and travel with it.
         var dates = await dbContext
             .Database.SqlQuery<DateOnly>(
                 $"""
@@ -287,16 +312,6 @@ public class ListedCusipTransferService
                 """
             )
             .ToListAsync(cancellationToken);
-        // A fund moves whole or not at all: a position left under the earlier issuer, whether the
-        // listing issuer already holds its key or it was stored with no label because the symbol
-        // was that issuer's presentation, would split its filer across two issuers and be filed
-        // again under the listing issuer on replay. Label and no label are read separately so the
-        // index serves each.
-        var occupied =
-            await CountLeftBehind(dbContext, fromIssuerId, listedTicker, cusips, cancellationToken)
-            + await CountLeftBehind(dbContext, fromIssuerId, null, cusips, cancellationToken);
-        if (occupied > 0)
-            return (0, occupied);
         // The move and its rebuild intent commit together: once the positions sit under the
         // listing issuer, a retry cannot tell which quarters they left.
         await HoldingsRollupRefresher.MarkAumSnapshotsDirty(
@@ -309,9 +324,12 @@ public class ListedCusipTransferService
         return (dates.Count, 0);
     }
 
-    private static Task<int> CountLeftBehind(
+    // Rows with the ticker's label block only where the listing issuer holds the same key; rows
+    // with no label always block, since the move carries the ticker's label only.
+    private static Task<int> CountBlocked(
         EquiblesFinancialDbContext dbContext,
         Guid fromIssuerId,
+        Guid toIssuerId,
         string listedTicker,
         string[] cusips,
         CancellationToken cancellationToken
@@ -334,6 +352,15 @@ public class ListedCusipTransferService
                     WHERE h."EquityIssuerId" = {fromIssuerId}
                       AND h."ListedTicker" = {listedTicker}
                       AND upper(h."Cusip") = ANY ({cusips})
+                      AND EXISTS (
+                          SELECT 1 FROM "InstitutionalHolding" AS o
+                          WHERE o."EquityIssuerId" = {toIssuerId}
+                            AND o."InstitutionalHolderId" = h."InstitutionalHolderId"
+                            AND o."ReportDate" = h."ReportDate"
+                            AND o."ShareType" = h."ShareType"
+                            AND o."OptionType" IS NOT DISTINCT FROM h."OptionType"
+                            AND o."FilingType" = h."FilingType"
+                            AND o."ListedTicker" = h."ListedTicker")
                     """
                 )
                 .SingleAsync(cancellationToken);
