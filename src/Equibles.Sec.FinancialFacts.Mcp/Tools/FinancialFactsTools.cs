@@ -247,7 +247,8 @@ public class FinancialFactsTools
                 // operating income is named, and the statement shows the derived figure.
                 var tagWarning = GrossProfitMistag.IsGrossProfit(conceptRefs)
                     ? GrossProfitMistag.Warning(
-                        await MistaggedGrossProfitRows(issuerFacts, shown, asOriginallyReported)
+                        await MistaggedGrossProfitRows(issuerFacts, shown, asOriginallyReported),
+                        stock.FiscalYearLabelOffset
                     )
                     : null;
                 return tagWarning == null

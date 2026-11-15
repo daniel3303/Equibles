@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 
@@ -94,15 +95,20 @@ public static class GrossProfitMistag
 
     /// <summary>
     /// The warning a gross-profit series carries for its mis-tagged rows, or null when none is.
+    /// <paramref name="labelOffset"/> names each period in the company's own fiscal-year naming
+    /// (<see cref="FiscalYearLabel"/>), as the rows beside the warning print it.
     /// </summary>
-    public static string Warning(IReadOnlyCollection<FinancialFact> mistagged) =>
+    public static string Warning(
+        IReadOnlyCollection<FinancialFact> mistagged,
+        int? labelOffset = null
+    ) =>
         WarningForPeriods(
             mistagged
                 .OrderByDescending(f => f.PeriodEnd)
                 .Select(f =>
                     f.FiscalPeriod == SecFiscalPeriod.FullYear
-                        ? $"FY{f.FiscalYear}"
-                        : $"FY{f.FiscalYear} {f.FiscalPeriod}"
+                        ? $"FY{FiscalYearLabel.For(f.FiscalYear, labelOffset)}"
+                        : $"FY{FiscalYearLabel.For(f.FiscalYear, labelOffset)} {f.FiscalPeriod}"
                 )
                 .ToList()
         );

@@ -295,13 +295,20 @@ public class FinancialFactsImportService
     // this importer stamps on the report's own period, its latest-ending full-year span. Every
     // value of a filing carries the filing's fiscal year, comparatives included, so the read is
     // by accession and never by span. A report whose own period this importer cannot place as a
-    // full year, or that states two fiscal years, is no evidence.
+    // full year, or that states two fiscal years, is no evidence. A span ending after its filing
+    // date is a schedule for a later year (the quality filter drops it from the stored facts too),
+    // so it can never be the report's own period: taken as one, it read the next year against the
+    // filing's fiscal year and named an end-year filer for its start.
     internal static List<AnnualReportFiscalYear> AnnualReportFiscalYears(
         IEnumerable<CompanyFactValue> annualReportValues,
         HistoricalFiscalCalendar calendar
     ) =>
         annualReportValues
-            .Where(value => value.Fy.HasValue && !string.IsNullOrWhiteSpace(value.Accn))
+            .Where(value =>
+                value.Fy.HasValue
+                && !string.IsNullOrWhiteSpace(value.Accn)
+                && (value.Filed == default || value.End <= value.Filed)
+            )
             .GroupBy(value => value.Accn)
             .Select(filing =>
             {

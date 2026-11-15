@@ -206,6 +206,29 @@ public class FinancialFactsImportFiscalYearNamingTests : IAsyncLifetime
         years.Select(year => year.FiscalYear).Should().Equal(2026, 2025, 2024);
     }
 
+    // A 10-K that also tags next year's span (a schedule ending after the filing date) must not
+    // read that span as the report's own year: the end-year filer would read one year low.
+    [Fact]
+    public async Task Import_ReportTaggingNextYearsSpan_ReadsItsOwnYear()
+    {
+        var stock = await SeedRetailer();
+        var nextYear = (Start: new DateOnly(2026, 2, 2), End: new DateOnly(2027, 1, 31));
+        var importer = Importer([
+            .. AnnualReport(
+                "0001045810-26-000021",
+                2026,
+                new DateOnly(2026, 3, 18),
+                nextYear,
+                Year2025,
+                Year2024
+            ),
+        ]);
+
+        await importer.Import(stock, CancellationToken.None);
+
+        (await StoredNaming(stock.Id)).Should().Be(0);
+    }
+
     [Fact]
     public async Task Import_NothingNewFiled_StillStoresTheNaming()
     {
