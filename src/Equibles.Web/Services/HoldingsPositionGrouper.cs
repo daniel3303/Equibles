@@ -1,5 +1,6 @@
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Web.ViewModels.Stocks;
 
 namespace Equibles.Web.Services;
@@ -68,10 +69,15 @@ public static class HoldingsPositionGrouper
         foreach (var (holderId, current) in currentByHolder)
         {
             previousByHolder.TryGetValue(holderId, out var previous);
-            var changeType = ClassifyChange(current.TotalShares, previous?.TotalShares ?? 0);
+            // Presence decides New, never a zero share count: totals are common shares only, so
+            // a holder that reported only options last quarter is compared from zero and has
+            // increased, and one that enters through options alone is new with no shares.
+            var changeType =
+                previous == null
+                    ? PositionChangeType.New
+                    : ClassifyChange(current.TotalShares, previous.TotalShares);
             if (
                 previous == null
-                && changeType == PositionChangeType.New
                 && filersWithPreviousQuarterFilings != null
                 && !filersWithPreviousQuarterFilings.Contains(holderId)
             )
@@ -130,8 +136,6 @@ public static class HoldingsPositionGrouper
     {
         if (currentShares == previousShares)
             return PositionChangeType.Unchanged;
-        if (previousShares == 0)
-            return PositionChangeType.New;
         return currentShares > previousShares
             ? PositionChangeType.Increased
             : PositionChangeType.Reduced;
@@ -160,10 +164,18 @@ public static class HoldingsPositionGrouper
                     // classes, and a sibling-class count only moves on its own series'
                     // splits — one factor over the mixed sum would restate the sibling's
                     // part by the primary's ratio.
-                    TotalShares = g.Sum(h =>
-                        HoldingShareRestatement.RestateToToday(h, effectiveSplits, primaryTicker)
-                    ),
-                    TotalValue = g.Sum(h => h.Value),
+                    // Common shares only, as the stock's activity snapshots count them: a
+                    // holder with only a put or call stays a holder, with no shares, so a new
+                    // option position never ranks as buying.
+                    TotalShares = g.Where(h => h.IsCommonShareLeg())
+                        .Sum(h =>
+                            HoldingShareRestatement.RestateToToday(
+                                h,
+                                effectiveSplits,
+                                primaryTicker
+                            )
+                        ),
+                    TotalValue = g.Where(h => h.IsCommonShareLeg()).Sum(h => h.Value),
                 }
             );
     }

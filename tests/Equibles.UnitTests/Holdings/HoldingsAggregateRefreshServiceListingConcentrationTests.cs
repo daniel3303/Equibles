@@ -64,7 +64,8 @@ public class HoldingsAggregateRefreshServiceListingConcentrationTests
         primary.ValueSquaredSum.Should().Be(50_000d * 50_000 + 40_000d * 40_000);
 
         var sibling = rows.Single(row => row.PriceSeriesTicker == "TRST.B");
-        var expected = new List<long> { 500, 1_000, 0 }
+        // The first filer's put row adds no value: concentration is over common shares.
+        var expected = new List<long> { 300, 1_000, 0 }
             .Concat(Enumerable.Range(2, 9).Select(i => 10L * (i + 1)))
             .OrderByDescending(value => value)
             .ToList();

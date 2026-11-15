@@ -14,6 +14,7 @@ using Equibles.Finra.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -209,17 +210,19 @@ public class StockTabService
             AvailableDates = reportDates,
             SelectedDate = selectedDate,
             Ticker = stock.Presentation.Listing.Ticker,
-            TotalValue = allCurrent.Sum(h => h.Value),
-            // Restated onto today's split basis so the header stat matches the ownership
-            // trend's latest point (the trend is restated by MarketActivityShareRestater)
-            // and stays comparable to today's SharesOutStanding.
-            TotalShares = allCurrent.Sum(h =>
-                HoldingShareRestatement.RestateToToday(
-                    h,
-                    effectiveSplits,
-                    stock.Presentation.Listing.Ticker
-                )
-            ),
+            // Common-share legs only and restated onto today's split basis, so the header
+            // stats match the ownership trend's latest point (common shares, restated by
+            // MarketActivityShareRestater) and stay comparable to today's SharesOutStanding.
+            TotalValue = allCurrent.Where(h => h.IsCommonShareLeg()).Sum(h => h.Value),
+            TotalShares = allCurrent
+                .Where(h => h.IsCommonShareLeg())
+                .Sum(h =>
+                    HoldingShareRestatement.RestateToToday(
+                        h,
+                        effectiveSplits,
+                        stock.Presentation.Listing.Ticker
+                    )
+                ),
             HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
             SharesOutstanding = stock.Presentation.Listing.Security.SharesOutstanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),
@@ -284,14 +287,15 @@ public class StockTabService
                     CurrentHolding = g.OrderBy(h => h.ListedTicker == null ? 0 : 1)
                         .ThenByDescending(h => h.FilingDate)
                         .First(),
-                    CurrentShares = g.Sum(h =>
-                        HoldingShareRestatement.RestateToToday(
-                            h,
-                            effectiveSplits,
-                            stock.Presentation.Listing.Ticker
-                        )
-                    ),
-                    CurrentValue = g.Sum(h => h.Value),
+                    CurrentShares = g.Where(h => h.IsCommonShareLeg())
+                        .Sum(h =>
+                            HoldingShareRestatement.RestateToToday(
+                                h,
+                                effectiveSplits,
+                                stock.Presentation.Listing.Ticker
+                            )
+                        ),
+                    CurrentValue = g.Where(h => h.IsCommonShareLeg()).Sum(h => h.Value),
                     ChangeType = PositionChangeType.Unchanged,
                     LatestReportDate = latestDate,
                 };
@@ -315,14 +319,16 @@ public class StockTabService
             AvailableDates = reportDates,
             SelectedDate = current,
             Ticker = stock.Presentation.Listing.Ticker,
-            TotalValue = allCombined.Sum(h => h.Value),
-            TotalShares = allCombined.Sum(h =>
-                HoldingShareRestatement.RestateToToday(
-                    h,
-                    effectiveSplits,
-                    stock.Presentation.Listing.Ticker
-                )
-            ),
+            TotalValue = allCombined.Where(h => h.IsCommonShareLeg()).Sum(h => h.Value),
+            TotalShares = allCombined
+                .Where(h => h.IsCommonShareLeg())
+                .Sum(h =>
+                    HoldingShareRestatement.RestateToToday(
+                        h,
+                        effectiveSplits,
+                        stock.Presentation.Listing.Ticker
+                    )
+                ),
             HolderCount = holders.Count,
             SharesOutstanding = stock.Presentation.Listing.Security.SharesOutstanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),
@@ -1113,8 +1119,8 @@ public class StockTabService
         return dates.ToList();
     }
 
-    // Mirrors the header-stat semantics per report date: Shares summed over every
-    // row (share classes included), holders counted distinct — so the trend's
+    // Mirrors the header-stat semantics per report date: common shares summed over every
+    // share class, holders counted distinct over every leg — so the trend's
     // latest point matches the stats shown for the latest quarter.
     private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(EquityIssuer stock)
     {

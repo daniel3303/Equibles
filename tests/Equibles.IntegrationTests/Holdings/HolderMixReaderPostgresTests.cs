@@ -98,8 +98,8 @@ public class HolderMixReaderPostgresTests(ParadeDbFixture fixture) : IAsyncLifet
         mix.Total.Shares.Should().Be(1_200 + 100 + 40);
         mix.Total.PutShares.Should().Be(50);
         mix.Total.ExcludedPreviousShares.Should().Be(500);
-        // The ownership history also sums the put leg, which the mix reports apart.
-        history[Current].LikeForLike.Should().Be((1_200L + 100 + 50 + 40, 1_000L + 300));
+        // The ownership history counts the same common shares; the put leg is in neither total.
+        history[Current].LikeForLike.Should().Be((1_200L + 100 + 40, 1_000L + 300));
         (mix.Total.LikeForLikeCurrent, mix.Total.LikeForLikePrevious)
             .Should()
             .Be((1_200L + 100 + 40, 1_000L + 300));

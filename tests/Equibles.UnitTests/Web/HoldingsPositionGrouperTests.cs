@@ -137,6 +137,56 @@ public class HoldingsPositionGrouperTests
         result[PositionChangeType.Unchanged][0].DeltaValue.Should().Be(100);
     }
 
+    // Totals are common shares only, so a zero share count does not prove a holder was out of
+    // the stock: presence in the prior quarter decides New.
+    [Fact]
+    public void Group_OptionOnlyQuarters_AreComparedFromZeroAndNeverReadAsAbsence()
+    {
+        var callsForShares = Guid.NewGuid();
+        var sharesForPuts = Guid.NewGuid();
+        var putEntrant = Guid.NewGuid();
+        var putsBothQuarters = Guid.NewGuid();
+
+        var result = HoldingsPositionGrouper.Group(
+            [
+                Holding(callsForShares, shares: 100, value: 1000),
+                Option(sharesForPuts, OptionType.Put),
+                Option(putEntrant, OptionType.Put),
+                Option(putsBothQuarters, OptionType.Put),
+            ],
+            [
+                Option(callsForShares, OptionType.Call),
+                Holding(sharesForPuts, shares: 70, value: 700),
+                Option(putsBothQuarters, OptionType.Put),
+            ],
+            filersWithCurrentQuarterFilings: null
+        );
+
+        var increased = result[PositionChangeType.Increased].Should().ContainSingle().Which;
+        increased.InstitutionalHolderId.Should().Be(callsForShares);
+        increased.PreviousShares.Should().Be(0);
+        increased.DeltaShares.Should().Be(100);
+        result[PositionChangeType.Reduced]
+            .Should()
+            .ContainSingle()
+            .Which.InstitutionalHolderId.Should()
+            .Be(sharesForPuts);
+        var entrant = result[PositionChangeType.New].Should().ContainSingle().Which;
+        entrant.InstitutionalHolderId.Should().Be(putEntrant);
+        entrant.CurrentShares.Should().Be(0);
+        result[PositionChangeType.Unchanged]
+            .Should()
+            .ContainSingle()
+            .Which.InstitutionalHolderId.Should()
+            .Be(putsBothQuarters);
+        result[PositionChangeType.SoldOut].Should().BeEmpty();
+        HoldingsTopMoversSelector
+            .CountBuyers(result)
+            .Should()
+            .Be(1, "entering through a put buys no shares");
+        HoldingsTopMoversSelector.CountSellers(result).Should().Be(1);
+    }
+
     [Fact]
     public void Group_MultipleFilingsPerHolder_AggregatesShares()
     {
@@ -253,6 +303,13 @@ public class HoldingsPositionGrouperTests
             .ContainSingle()
             .Which.InstitutionalHolderId.Should()
             .Be(holderId);
+    }
+
+    private static InstitutionalHolding Option(Guid holderId, OptionType type)
+    {
+        var holding = Holding(holderId, shares: 900_000, value: 90_000_000);
+        holding.OptionType = type;
+        return holding;
     }
 
     private static InstitutionalHolding Holding(Guid holderId, long shares, long value)

@@ -122,6 +122,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 h.ReportDate == currentReportDate
                 || (previousReportDate.HasValue && h.ReportDate == previousReportDate.Value)
             )
+            .AsActivityLegs()
             .GroupBy(h => new { h.InstitutionalHolderId, h.ListedTicker })
             .Select(g => new HolderStockActivity
             {
@@ -158,6 +159,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 h.ReportDate == currentReportDate
                 || (previousReportDate.HasValue && h.ReportDate == previousReportDate.Value)
             )
+            .AsActivityLegs()
             .GroupBy(h => h.InstitutionalHolderId)
             .Select(g => new HolderStockActivity
             {
@@ -1019,6 +1021,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var comparedCurrent = DbContext.Compared13FHolderIds(current, previous);
         var comparedPrevious = DbContext.Compared13FHolderIds(previous, current);
         return BothQuarters(current, previous)
+            .AsActivityLegs()
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockActivity
             {
@@ -1360,6 +1363,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var aggregates = await holdings
+            .AsActivityLegs()
             .GroupBy(holding => holding.ReportDate)
             .Select(group => new
             {
@@ -1459,10 +1463,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
         var current = await Get13FByStock(stock, currentReportDate)
             .AsNoTracking()
+            .AsActivityLegs()
             .Select(row => new { row.InstitutionalHolderId, row.Value })
             .ToListAsync(cancellationToken);
         var previous = await Get13FByStock(stock, previousReportDate)
             .AsNoTracking()
+            .AsActivityLegs()
             .Select(row => new { row.InstitutionalHolderId, row.Value })
             .ToListAsync(cancellationToken);
         if (current.Count == 0 && previous.Count == 0)
@@ -1628,6 +1634,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var aggregates = await Get13FHistoryByStock(stock)
+            .AsActivityLegs()
             .GroupBy(holding => holding.ReportDate)
             .Select(group => new
             {
@@ -1642,6 +1649,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .OrderBy(row => row.ReportDate)
             .ToListAsync(cancellationToken);
         var exact = await Get13FHistoryByStock(stock)
+            .AsActivityLegs()
             // A primary-listing holding can be stored either with a null ListedTicker (legacy
             // meaning "the stock's primary ticker") or with that ticker stated explicitly. Coalesce
             // before grouping so the two identities sum into one series instead of colliding when
@@ -1872,6 +1880,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     commonStockIds.Contains(holding.EquityIssuerId)
                     && (holding.ReportDate == current || holding.ReportDate == previous)
                 )
+                .AsActivityLegs()
                 .Join(
                     DbContext.Set<EquityIssuer>(),
                     holding => holding.EquityIssuerId,
@@ -1920,6 +1929,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Select(succession => succession.PredecessorHolderId);
         var currentRows = await GetCombinedQuarter(current, previous)
             .Where(holding => commonStockIds.Contains(holding.EquityIssuerId))
+            .AsActivityLegs()
             .Join(
                 DbContext.Set<EquityIssuer>(),
                 holding => holding.EquityIssuerId,
@@ -1960,6 +1970,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(holding =>
                 commonStockIds.Contains(holding.EquityIssuerId) && holding.ReportDate == previous
             )
+            .AsActivityLegs()
             .Join(
                 DbContext.Set<EquityIssuer>(),
                 holding => holding.EquityIssuerId,
@@ -2075,6 +2086,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         return DoubleDownRows(current, previous, issuerIds)
+            .AsActivityLegs()
             .GroupBy(h => new
             {
                 h.InstitutionalHolderId,
@@ -2220,6 +2232,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var filedCurrent = DbContext.Filed13FHolderIds(current);
         var filedPrevious = DbContext.Filed13FHolderIds(previous);
         var aggregated = BothQuarters(current, previous)
+            .AsActivityLegs()
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new
             {
@@ -2436,6 +2449,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             var affectedIds = affectedRows.Select(r => r.CommonStockId).Distinct().ToList();
             var listingShares = await BothQuarters(current, previous)
                 .Where(h => h.ReportDate == current && affectedIds.Contains(h.EquityIssuerId))
+                .AsActivityLegs()
                 .GroupBy(h => new { h.EquityIssuerId, h.ListedTicker })
                 .Select(g => new ScreenerListingShares
                 {
@@ -2656,6 +2670,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .ComparableSuccessionsAcross(current, previous)
             .Select(succession => succession.PredecessorHolderId);
         return BothQuarters(current, previous)
+            .AsActivityLegs()
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockActivity
             {
@@ -2871,6 +2886,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var aggregated = BothQuarters(current, previous)
+            .AsActivityLegs()
             .GroupBy(h => new
             {
                 h.InstitutionalHolderId,

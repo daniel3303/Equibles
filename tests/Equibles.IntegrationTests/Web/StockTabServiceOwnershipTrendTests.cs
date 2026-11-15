@@ -18,6 +18,7 @@ using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Services;
+using Equibles.Web.ViewModels.Stocks;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Repositories;
 
@@ -25,8 +26,8 @@ namespace Equibles.IntegrationTests.Web;
 
 /// <summary>
 /// Pins the per-quarter institutional ownership trend on the holdings tab:
-/// one point per report date ordered oldest first, shares summed over every
-/// row (share classes included) and holders counted distinct — matching the
+/// one point per report date ordered oldest first, common shares summed over every
+/// share class and holders counted distinct — matching the
 /// header-stat semantics for the latest quarter.
 /// </summary>
 public class StockTabServiceOwnershipTrendTests : IDisposable
@@ -162,6 +163,57 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
             Name = name,
             Cik = cik,
         };
+
+    // A put far larger than every shareholding: the header still equals the trend's latest
+    // point, and the filer that opened it is no buyer of shares.
+    [Fact]
+    public async Task LoadHoldingsTab_AnOptionRow_AddsNoSharesToTheHeaderOrTheBuyers()
+    {
+        EquityIssuer stock = NewStock();
+        var holderA = NewHolder("Alpha", "1");
+        var holderB = NewHolder("Beta", "2");
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        _dbContext.Set<InstitutionalHolder>().AddRange(holderA, holderB);
+
+        var prior = new DateOnly(2024, 9, 30);
+        var current = new DateOnly(2024, 12, 31);
+        var put = Make(stock.Id, holderB.Id, current, 9_000, "put");
+        put.OptionType = OptionType.Put;
+        // Gamma held only a put last quarter and nothing now: it leaves at zero shares.
+        var holderC = NewHolder("Gamma", "3");
+        _dbContext.Set<InstitutionalHolder>().Add(holderC);
+        var closedPut = Make(stock.Id, holderC.Id, prior, 4_000, "put");
+        closedPut.OptionType = OptionType.Put;
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                Make(stock.Id, holderA.Id, prior, 100, "cl-a"),
+                Make(stock.Id, holderB.Id, prior, 50, "cl-a"),
+                Make(stock.Id, holderA.Id, current, 150, "cl-a"),
+                Make(stock.Id, holderB.Id, current, 50, "cl-a"),
+                put,
+                closedPut
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _sut.LoadHoldingsTab(stock, date: null);
+
+        result.TotalShares.Should().Be(200, "the put states shares under an option, not held");
+        result.TotalValue.Should().Be(2_000);
+        result.HolderCount.Should().Be(2);
+        result.OwnershipTrend[^1].TotalShares.Should().Be(result.TotalShares);
+        result.TopBuyers.Select(buyer => buyer.InstitutionalHolderId).Should().Equal(holderA.Id);
+        result.TotalBuyerCount.Should().Be(1);
+        var beta = result
+            .GroupedHolders[PositionChangeType.Unchanged]
+            .Should()
+            .ContainSingle()
+            .Subject;
+        beta.InstitutionalHolderId.Should().Be(holderB.Id);
+        beta.CurrentShares.Should().Be(50, "its row, Own % and export read shares held");
+        result.TopSellers.Should().BeEmpty("closing a put sells no shares");
+        result.TotalSellerCount.Should().Be(0);
+    }
 
     private static InstitutionalHolding Make(
         Guid stockId,

@@ -50,6 +50,9 @@ internal sealed class PinnedSchemaTestMappings : IModuleConfiguration
         // Added by 20260916043012_AddDelayedTrades.
         builder.Entity<EquityListing>().Ignore(listing => listing.YahooPriceSyncAttemptedAt);
 
+        // Added by 20261115153855_AddEquityListingWasReferenceListed.
+        builder.Entity<EquityListing>().Ignore(listing => listing.WasReferenceListed);
+
         // Added by 20260928022742_AddDurableImportRecovery.
         builder.Entity<FinancialFactsSyncStatus>().Ignore(status => status.ImportAttemptId);
         builder.Entity<FinancialFactsSyncStatus>().Ignore(status => status.ImportAttempts);

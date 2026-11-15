@@ -115,9 +115,11 @@ public class HoldingsListingSnapshotReadTests : IAsyncLifetime
                 && !row.IsCombined
                 && row.PriceSeriesTicker == Sibling
             );
+        // Every filer of the listing counts, with the value of its common shares only: the put
+        // row adds a filer's presence, never value.
         var siblingValues = rows.Where(row => row.ListedTicker == Sibling && row.ReportDate == QCur)
             .GroupBy(row => row.InstitutionalHolderId)
-            .Select(group => group.Sum(row => row.Value))
+            .Select(group => group.Where(row => row.OptionType == null).Sum(row => row.Value))
             .OrderByDescending(value => value)
             .ToList();
         sibling.CurrentFilerCount.Should().Be(siblingValues.Count);
