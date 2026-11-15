@@ -297,7 +297,7 @@ public class InsiderTradingTools
         ReadOnly = true
     )]
     [Description(
-        "Get a summary of insider ownership for a stock, ranked by total shares held. Shares come from each insider's most recent SEC Form 3/4/5 filing: the filing's closing balance per security, held directly or through each indirect vehicle the filing names (a trust, partnership or LLC, told apart by its stated nature of ownership and by which balance each trade continues), actual shares only (options and other derivative holdings are excluded), summed into Direct and Indirect columns and restated onto today's split basis, so they can differ from the raw figures in older filings. A vehicle the newest filing does not list is not counted. Former insiders may linger with stale dates or zero shares. Returns at most maxResults insiders (default 30). Use this to understand the insider ownership structure of a company; use GetInsiderTransactions for the underlying trades."
+        "Get a summary of insider ownership for a stock, ranked by total shares held. Shares come from each insider's most recent SEC Form 3/4/5 filing: the filing's closing balance per security, held directly or through each indirect vehicle the filing names (a trust, partnership or LLC, told apart by its stated nature of ownership and by which balance each trade continues), actual shares only (options and other derivative holdings are excluded), summed into Direct and Indirect columns and restated onto today's split basis, so they can differ from the raw figures in older filings. A vehicle the newest filing does not list is not counted. Last Transaction is the newest trade that filing reports, or Holding when it reports positions only. Former insiders may linger with stale dates or zero shares. Returns at most maxResults insiders (default 30). Use this to understand the insider ownership structure of a company; use GetInsiderTransactions for the underlying trades."
     )]
     public Task<string> GetInsiderOwnership(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -357,7 +357,7 @@ public class InsiderTradingTools
                 );
                 sb.AppendLine($"Showing {ranked.Count} insiders with most recent data");
                 sb.AppendLine(
-                    "_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Former insiders may linger with stale dates or zero shares._"
+                    "_Each row is as-of that insider's most recent filing: the filing's closing balance per security, held directly or through each indirect vehicle it names (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A vehicle the newest filing does not list is not counted. Last Transaction is the newest trade that filing reports, or Holding when it reports positions only. Former insiders may linger with stale dates or zero shares._"
                 );
                 sb.AppendLine();
                 sb.AppendLine(
@@ -374,9 +374,10 @@ public class InsiderTradingTools
                             p.Anchor.InsiderOwner,
                             p.Anchor.OwnerRelationship
                         );
-                        var lastType = TypeLabel(p.Anchor.TransactionCode);
+                        var latest = p.LatestActivity;
+                        var lastType = TypeLabel(latest.TransactionCode);
                         var total = McpFormat.WholeNumber(p.DirectShares + p.IndirectShares);
-                        return $"| {p.Anchor.InsiderOwner.Name} | {role} | {McpFormat.WholeNumber(p.DirectShares)} | {McpFormat.WholeNumber(p.IndirectShares)} | {total} | {lastType} | {p.Anchor.TransactionDate:yyyy-MM-dd} |";
+                        return $"| {p.Anchor.InsiderOwner.Name} | {role} | {McpFormat.WholeNumber(p.DirectShares)} | {McpFormat.WholeNumber(p.IndirectShares)} | {total} | {lastType} | {latest.TransactionDate:yyyy-MM-dd} |";
                     }
                 );
 
