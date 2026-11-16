@@ -6,10 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.UnitTests.Holdings;
 
-// Pins the holder-rank aggregate's access path. The rank query filters one
-// stock+quarter to common-share 13F rows, groups by holder and sums Value. A
-// partial covering index keeps that read off the churned holdings heap during
-// filing-season ingestion pressure (#6049).
+// Pins the partial index built for the holder-rank aggregate (#6049) while it remains in
+// the schema. The rank now also filters ShareType and reads the per-stock exposure index;
+// this index is dropped by a migration once production shows no scans of it.
 public class HoldingsModuleStockQuarterCommonValueIndexTests
 {
     private const string IndexName = "IX_InstitutionalHolding_StockQuarterCommonValue";
@@ -17,7 +16,7 @@ public class HoldingsModuleStockQuarterCommonValueIndexTests
     private const string IndexConcurrentAnnotation = "Npgsql:CreatedConcurrently";
 
     [Fact]
-    public void StockQuarterCommonValueIndex_CoversTheRankAggregate()
+    public void StockQuarterCommonValueIndex_KeepsItsShapeUntilDropped()
     {
         using var db = NewDb();
 

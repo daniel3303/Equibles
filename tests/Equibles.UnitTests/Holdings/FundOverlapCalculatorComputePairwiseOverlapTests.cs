@@ -7,8 +7,8 @@ namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
 /// Contract: ComputePairwiseOverlap builds an n×n symmetric matrix where
-/// SharedTickerCounts[i][j] = stocks with Value > 0 shared by fund i and j.
-/// Diagonal [i][i] = stocks with Value > 0 held by fund i.
+/// SharedTickerCounts[i][j] = stocks both fund i and fund j hold.
+/// Diagonal [i][i] = stocks held by fund i.
 /// </summary>
 public class FundOverlapCalculatorComputePairwiseOverlapTests
 {

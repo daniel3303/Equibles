@@ -3550,7 +3550,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Compare two institutions' 13F portfolios on their latest common report date. Returns Jaccard and dollar-weighted overlap, portfolio totals, and shared or unique positions. Published values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Resolve filer names with SearchInstitutions. For mutual-fund or ETF NPORT portfolios, use GetFundProfile."
+        "Compare two institutions' 13F portfolios on their latest common report date. Returns Jaccard and dollar-weighted overlap, portfolio totals, and shared or unique positions. Counts common shares only; puts, calls and principal amounts are left out. Published values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Resolve filer names with SearchInstitutions. For mutual-fund or ETF NPORT portfolios, use GetFundProfile."
     )]
     public Task<string> CompareInstitutionPortfolios(
         [Description(
@@ -3721,7 +3721,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Combine 2-25 institutions' 13F portfolios on their latest common report date. Ranks stocks by holder count, then combined value. Published values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Set minInstitutions to 2 or more for positions shared by multiple filers."
+        "Combine 2-25 institutions' 13F portfolios on their latest common report date. Ranks stocks by holder count, then combined value. Counts common shares only; puts, calls and principal amounts are left out. Published values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Set minInstitutions to 2 or more for positions shared by multiple filers."
     )]
     public Task<string> GetInstitutionConsensusHoldings(
         [Description(

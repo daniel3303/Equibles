@@ -38,12 +38,12 @@ public class FundOverlapRow
     // Per-fund slice indexed by the same order as FundOverlapResult.Funds.
     public List<FundOverlapRowSlice> Slices { get; set; } = [];
 
-    // True when every listed fund reports this stock.
+    // True when every listed fund holds this stock (see FundOverlapRowSlice.Held).
     public bool IsCommon { get; set; }
     public long CombinedValue { get; set; }
 
-    // How many of the listed funds report this stock. Presence, not value: a reported position
-    // whose value is pending or unavailable is still held. The one rule every consensus reads.
+    // How many of the listed funds hold this stock. Presence, not value: a position whose value
+    // is pending or unavailable is still held. The one rule every consensus reads.
     public int HeldByCount => Slices.Count(slice => slice.Held);
 }
 
@@ -51,7 +51,9 @@ public class FundOverlapRowSlice
 {
     public Guid HolderId { get; set; }
 
-    // The fund's filing reports this stock, whatever its value.
+    // The fund holds this stock: its common-share rows report shares or a value, whatever the
+    // value. Option and principal rows never make a fund a holder; Shares and Value are its
+    // common shares alone.
     public bool Held { get; set; }
     public long Shares { get; set; }
     public long Value { get; set; }
