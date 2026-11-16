@@ -15,7 +15,8 @@ public class ZeroWithdrawnPositionManagerLegValuesMigrationTests : ParadeDbMcpTe
     public ZeroWithdrawnPositionManagerLegValuesMigrationTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    // A withdrawn position's legs lose their value; a valued position's legs keep theirs.
+    // A withdrawn position's legs lose their value; a valued position's legs keep theirs, and so
+    // do a merged position's, which is unavailable but still carries a value.
     [Fact]
     public async Task Up_ZeroesOnlyTheLegsOfWithdrawnPositions()
     {
@@ -29,7 +30,9 @@ public class ZeroWithdrawnPositionManagerLegValuesMigrationTests : ParadeDbMcpTe
         var withdrawn = Position(stock, holder, value: 0, unavailable: true, legValue: 100_800);
         var valued = Position(stock, holder, value: 500, unavailable: false, legValue: 500);
         valued.ShareType = ShareType.Principal;
-        DbContext.AddRange(withdrawn, valued);
+        var merged = Position(stock, holder, value: 700, unavailable: true, legValue: 700);
+        merged.FilingType = FilingType.Schedule13G;
+        DbContext.AddRange(withdrawn, valued, merged);
         await DbContext.SaveChangesAsync();
 
         var commands = DbContext
@@ -44,6 +47,7 @@ public class ZeroWithdrawnPositionManagerLegValuesMigrationTests : ParadeDbMcpTe
             .ToDictionaryAsync(h => h.Id, h => h.ManagerEntries.Single().Value);
         legs[withdrawn.Id].Should().Be(0L);
         legs[valued.Id].Should().Be(500L);
+        legs[merged.Id].Should().Be(700L);
     }
 
     private static InstitutionalHolding Position(

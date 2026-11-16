@@ -1029,7 +1029,7 @@ public class InstitutionalHoldingsTools
             );
         if (changeAcrossSplitBases)
             result.AppendLine(
-                "Chg (QoQ) is not shown: the two latest quarters are not on the same split basis."
+                "Chg (QoQ) is not shown: the two latest quarters may not be on the same split basis."
             );
         if (quarters.Any(quarter => quarter.SplitUnresolved))
             result.AppendLine(
