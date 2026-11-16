@@ -6,7 +6,7 @@ namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
 /// Contract: ComputePairwiseOverlap builds an n×n matrix; the diagonal [i][i] is fund
-/// i's own count of stocks with Value &gt; 0. The n=1 boundary is the smallest valid
+/// i's own count of stocks it holds. The n=1 boundary is the smallest valid
 /// matrix — the nested `for j = i` loop degenerates so the `i != j` mirror branch never
 /// runs. The multi-fund happy-path and zero-value tests never exercise n=1, where an
 /// off-by-one in the matrix sizing (e.g. `new int[n-1][]` or `j &lt;= n`) would surface.

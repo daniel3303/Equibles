@@ -5,22 +5,22 @@ using Equibles.Holdings.Repositories;
 namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
-/// Contract: SharedTickerCounts counts stocks with Value &gt; 0. A position that is
-/// present but reported at Value 0 must NOT count toward a fund's own diagonal nor
-/// toward any pairwise shared count — even though that fund "has" the position. This
-/// exercises the `Value &lt;= 0` guard, which the all-positive happy-path test never hits.
+/// Contract: SharedTickerCounts counts the stocks each fund holds. A row reporting zero shares
+/// and $0 (a position left during the quarter) is no holding, so it counts toward neither the
+/// fund's own diagonal nor any pairwise shared count, which the all-positive happy-path test
+/// never exercises.
 /// </summary>
 public class FundOverlapCalculatorComputePairwiseOverlapZeroValueTests
 {
     private static readonly DateOnly Report = new(2024, 12, 31);
 
     [Fact]
-    public void ComputePairwiseOverlap_FundHoldsStockAtZeroValue_ExcludedFromDiagonalAndSharedCounts()
+    public void ComputePairwiseOverlap_FundRowWithNoSharesAndNoValue_ExcludedFromDiagonalAndSharedCounts()
     {
         // Fund A: AAPL@100, MSFT@200 (two real positions).
-        // Fund B: AAPL@0 (present but zero-valued), MSFT@50 (one real position).
-        // Per the Value > 0 contract, B's AAPL is not a holding: B's diagonal is 1,
-        // and the only shared stock is MSFT. A guardless count would report 2 and 2.
+        // Fund B: AAPL with zero shares and $0 (left during the quarter), MSFT@50.
+        // B's AAPL is not a holding: B's diagonal is 1, and the only shared stock is MSFT.
+        // A guardless count would report 2 and 2.
         EquityIssuer aapl = MakeStock("AAPL");
         EquityIssuer msft = MakeStock("MSFT");
         var holderA = MakeHolder("Fund A");
@@ -36,15 +36,15 @@ public class FundOverlapCalculatorComputePairwiseOverlapZeroValueTests
 
         var matrix = FundOverlapCalculator.ComputePairwiseOverlap(overlap);
 
-        matrix.SharedTickerCounts[0][0].Should().Be(2, "Fund A holds AAPL + MSFT, both Value > 0");
+        matrix.SharedTickerCounts[0][0].Should().Be(2, "Fund A holds AAPL + MSFT");
         matrix
             .SharedTickerCounts[1][1]
             .Should()
-            .Be(1, "Fund B's only Value > 0 position is MSFT; the AAPL@0 row is excluded");
+            .Be(1, "Fund B holds only MSFT; the zero-share $0 AAPL row is excluded");
         matrix
             .SharedTickerCounts[0][1]
             .Should()
-            .Be(1, "shared = {MSFT} only; AAPL is not shared because B holds it at Value 0");
+            .Be(1, "shared = {MSFT} only; B does not hold AAPL");
         matrix.SharedTickerCounts[1][0].Should().Be(1, "symmetry: B∩A = A∩B");
     }
 

@@ -169,6 +169,92 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
         overlap.IntersectionPositionCount.Should().Be(1);
     }
 
+    // A fund holds a stock through its common shares: a fund holding only puts on it, or only
+    // its notes, does not hold it, and a fund holding shares beside a call and notes shows its
+    // shares alone, weighted against its common-share total.
+    [Fact]
+    public void Calculate_CountsCommonShareRowsOnly()
+    {
+        EquityIssuer xyz = MakeStock("XYZ", "XYZ Corp.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
+        var fundA = MakeHolder("Fund A", "C001");
+        var fundB = MakeHolder("Fund B", "C002");
+        var fundC = MakeHolder("Fund C", "C003");
+
+        var result = FundOverlapCalculator.Calculate(
+            [
+                (
+                    fundA,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [
+                            MakeHolding(fundA, xyz, shares: 1_000, value: 50_000),
+                            MakeHolding(fundA, msft, shares: 10, value: 1_000),
+                        ]
+                ),
+                (
+                    fundB,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [
+                            MakeHolding(
+                                fundB,
+                                xyz,
+                                shares: 5_000,
+                                value: 250_000,
+                                optionType: OptionType.Put
+                            ),
+                            MakeHolding(fundB, msft, shares: 100, value: 10_000),
+                            MakeHolding(
+                                fundB,
+                                msft,
+                                shares: 900,
+                                value: 90_000,
+                                optionType: OptionType.Call
+                            ),
+                            MakeHolding(
+                                fundB,
+                                msft,
+                                shares: 7_000,
+                                value: 7_000,
+                                shareType: ShareType.Principal
+                            ),
+                        ]
+                ),
+                (
+                    fundC,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [
+                            MakeHolding(
+                                fundC,
+                                xyz,
+                                shares: 20_000,
+                                value: 20_000,
+                                shareType: ShareType.Principal
+                            ),
+                            MakeHolding(fundC, msft, shares: 30, value: 3_000),
+                        ]
+                ),
+            ],
+            Report
+        );
+
+        var xyzRow = result.Rows.Single(r => r.Ticker == "XYZ");
+        xyzRow.HeldByCount.Should().Be(1, "only Fund A holds XYZ's shares");
+        xyzRow.IsCommon.Should().BeFalse();
+        xyzRow
+            .CombinedValue.Should()
+            .Be(50_000, "a put's notional and a note's amount add no value");
+
+        var msftRow = result.Rows.Single(r => r.Ticker == "MSFT");
+        msftRow.IsCommon.Should().BeTrue();
+        var fundBSlice = msftRow.Slices.Single(s => s.HolderId == fundB.Id);
+        fundBSlice.Shares.Should().Be(100);
+        fundBSlice.Value.Should().Be(10_000);
+        fundBSlice
+            .PercentOfPortfolio.Should()
+            .BeApproximately(100.0, 1e-9, "its common-share total is MSFT's $10,000");
+        result.IntersectionPositionCount.Should().Be(1);
+    }
+
     private static EquityIssuer MakeStock(string ticker, string name) =>
         Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
@@ -189,7 +275,9 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
         InstitutionalHolder holder,
         EquityIssuer stock,
         long shares,
-        long value
+        long value,
+        OptionType? optionType = null,
+        ShareType shareType = ShareType.Shares
     ) =>
         new()
         {
@@ -201,7 +289,8 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
             ReportDate = Report,
             Shares = shares,
             Value = value,
-            ShareType = ShareType.Shares,
+            ShareType = shareType,
+            OptionType = optionType,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
         };
 }

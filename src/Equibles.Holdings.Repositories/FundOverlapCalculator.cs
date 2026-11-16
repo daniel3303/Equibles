@@ -160,16 +160,21 @@ public static class FundOverlapCalculator
     // Aggregate each fund's positions per security. The aggregation collapses multiple
     // discretion rows for the same security so the per-fund slice is one entry per issuer
     // and listed ticker: a multi-series trust files every fund under one issuer.
-    // A fund holds a security when its rows for it report shares or a value. Some filers list a
-    // position they left during the quarter with zero shares and $0; that is no holding, so it
-    // never counts toward consensus, the intersection or the pairwise matrix. A position whose
-    // value is pending or unavailable still reports its shares and counts.
+    // A fund holds a security when its common-share rows for it report shares or a value. A put
+    // or call row states the shares under the option at full notional value and a principal row
+    // a debt amount, so a fund holding only those does not hold the stock, and a fund holding
+    // shares and options shows its shares alone; each institution's own portfolio still lists
+    // every row. Some filers list a position they left during the quarter with zero shares and
+    // $0; that is no holding either, so it never counts toward consensus, the intersection or
+    // the pairwise matrix. A position whose value is pending or unavailable still reports its
+    // shares and counts. Portfolio weights divide by the fund's common-share total.
     private static FundAggregate BuildFundAggregate(
         (InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings) fund
     )
     {
         var perStock = fund
-            .Holdings.GroupBy(h => (CommonStockId: h.EquityIssuerId, h.ListedTicker))
+            .Holdings.Where(h => h.ShareType == ShareType.Shares && h.OptionType == null)
+            .GroupBy(h => (CommonStockId: h.EquityIssuerId, h.ListedTicker))
             .Select(g => new FundStockAggregate
             {
                 CommonStockId = g.Key.CommonStockId,
