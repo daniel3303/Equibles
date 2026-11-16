@@ -41,11 +41,18 @@ public class FundOverlapRow
     // True when every listed fund reports this stock.
     public bool IsCommon { get; set; }
     public long CombinedValue { get; set; }
+
+    // How many of the listed funds report this stock. Presence, not value: a reported position
+    // whose value is pending or unavailable is still held. The one rule every consensus reads.
+    public int HeldByCount => Slices.Count(slice => slice.Held);
 }
 
 public class FundOverlapRowSlice
 {
     public Guid HolderId { get; set; }
+
+    // The fund's filing reports this stock, whatever its value.
+    public bool Held { get; set; }
     public long Shares { get; set; }
     public long Value { get; set; }
     public double PercentOfPortfolio { get; set; }

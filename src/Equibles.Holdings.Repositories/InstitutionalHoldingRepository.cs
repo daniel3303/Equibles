@@ -2488,13 +2488,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             : rows;
     }
 
+    // 13F-only, like the listing overload: the summary is labelled 13F activity, and a Schedule
+    // 13D/G stake would add a filing and a filer the 13F count never had.
     public IQueryable<FilingActivitySummary> GetFilingActivitySummary(
         EquityIssuer stock,
         DateOnly since
     )
     {
-        return GetAll()
-            .Where(h => h.EquityIssuerId == stock.Id && h.FilingDate >= since)
+        return Get13FHistoryByStock(stock)
+            .Where(h => h.FilingDate >= since)
             .GroupBy(h => h.EquityIssuerId)
             .Select(g => new FilingActivitySummary
             {

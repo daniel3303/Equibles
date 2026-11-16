@@ -62,6 +62,26 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
         (await service.Repair(CancellationToken.None)).Should().Be(0);
     }
 
+    // The manager breakdown sums the legs, so a leg left valued would keep showing the withdrawn
+    // figure.
+    [Fact]
+    public async Task Repair_WithdrawnPosition_ZeroesItsManagerLegValues()
+    {
+        var holding = await SeedHolding(
+            sharesOutstanding: 200_000_000,
+            marketCapitalization: 5_000_000_000,
+            shares: 32_098_694_296,
+            value: 100_800_000_000
+        );
+
+        (await CreateService().Repair(CancellationToken.None)).Should().Be(1);
+
+        var actual = await Reload(holding.Id);
+        actual.ManagerEntries.Should().ContainSingle();
+        actual.ManagerEntries[0].Value.Should().Be(0L);
+        actual.ManagerEntries[0].Shares.Should().Be(32_098_694_296, "the filed count is kept");
+    }
+
     [Fact]
     public async Task Repair_JudgesAMicroFloatAtItsOwnBarBelowTheFloor()
     {
