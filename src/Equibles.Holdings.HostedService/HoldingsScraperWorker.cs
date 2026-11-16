@@ -123,6 +123,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
         CoverageAuditDueAt = null;
         await ApplyPendingCusipRescan(stoppingToken);
 
+        // Before label convergence and the walk, so both find a fund's positions under the
+        // issuer that lists it today.
+        await TransferListedCusips(stoppingToken);
+
         // Before the walk, so a replay finds each stored position under its current label.
         await ConvergeHoldingLabels(stoppingToken);
 
@@ -385,6 +389,21 @@ public class HoldingsScraperWorker : BaseScraperWorker
             "Bulk replay finished; reopened realtime filings from {From:yyyy-MM-dd}",
             replayFrom
         );
+    }
+
+    private async Task TransferListedCusips(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var transfer = scope.ServiceProvider.GetRequiredService<ListedCusipTransferService>();
+            await transfer.Transfer(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Maintenance, not ingestion: the import still files under the earlier issuer.
+            Logger.LogWarning(exception, "Listed-CUSIP transfer pass failed");
+        }
     }
 
     private async Task ConvergeHoldingLabels(CancellationToken cancellationToken)
