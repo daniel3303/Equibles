@@ -158,6 +158,61 @@ public class ProfilesCombinedInstitutionsTests
         msftIdx.Should().BeLessThan(nvdaIdx);
     }
 
+    // The # Funds column counts presence: a fund whose position value is pending still holds it.
+    [Fact]
+    public async Task GetCombined_PositionValuedAtZero_CountsBothFunds()
+    {
+        var aaplId = Guid.NewGuid();
+        var (cikA, cikB) = ("0003000005", "0003000006");
+        var idA = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var date = new DateOnly(2024, 12, 31);
+
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
+            );
+            db.AddRange(
+                new InstitutionalHolder
+                {
+                    Id = idA,
+                    Cik = cikA,
+                    Name = "Fund A",
+                },
+                new InstitutionalHolder
+                {
+                    Id = idB,
+                    Cik = cikB,
+                    Name = "Fund B",
+                }
+            );
+            db.Add(MakeHolding(aaplId, idA, date, value: 1_000_000));
+            var pending = MakeHolding(aaplId, idB, date, value: 0);
+            pending.Shares = 5_000;
+            pending.ValuePending = true;
+            pending.AccessionNumber += "-b";
+            db.Add(pending);
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync(
+            $"/Institutions/Combined?ciks={cikA}&ciks={cikB}"
+        );
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        var table = html.Substring(
+            html.IndexOf("data-testid=\"combined-portfolio-table\"", StringComparison.Ordinal)
+        );
+        table.Should().Contain("2 / 2");
+    }
+
     [Fact]
     public async Task GetCombined_UnknownCik_ReportsMissing()
     {

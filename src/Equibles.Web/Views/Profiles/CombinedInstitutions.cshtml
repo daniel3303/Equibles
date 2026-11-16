@@ -67,8 +67,9 @@
                         @foreach (var row in overlap.Rows) {
                             var heldBy = Model.FundsHoldingByStock.TryGetValue(row, out var n) ? n : 0;
                             var heldByCss = heldBy == overlap.Funds.Count ? "badge-success" : heldBy >= overlap.Funds.Count / 2.0 ? "badge-info" : "badge-ghost";
-                            // Avg % across only the funds that actually hold the stock — averaging across
-                            // the zero slices would dilute and mislead.
+                            // Avg % across the holding funds whose value is known: a fund's share of its
+                            // portfolio is unknown while its value is pending, and averaging the empty
+                            // slices of funds that do not hold the stock would dilute it.
                             var heldSlices = row.Slices.Where(s => s.Value > 0).ToList();
                             var avgPercent = heldSlices.Count > 0
                                 ? heldSlices.Average(s => s.PercentOfPortfolio)

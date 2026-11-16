@@ -80,11 +80,13 @@ public static class FundOverlapCalculator
         {
             for (var i = 0; i < n; i++)
             {
-                if (row.Slices[i].Value <= 0)
+                // Shared by presence, the rule consensus and the intersection read: a held
+                // position whose value is pending or unavailable is still shared.
+                if (!row.Slices[i].Held)
                     continue;
                 for (var j = i; j < n; j++)
                 {
-                    if (row.Slices[j].Value <= 0)
+                    if (!row.Slices[j].Held)
                         continue;
                     matrix[i][j]++;
                     if (i != j)
@@ -158,23 +160,27 @@ public static class FundOverlapCalculator
     // Aggregate each fund's positions per security. The aggregation collapses multiple
     // discretion rows for the same security so the per-fund slice is one entry per issuer
     // and listed ticker: a multi-series trust files every fund under one issuer.
+    // A fund holds a security when its rows for it report shares or a value. Some filers list a
+    // position they left during the quarter with zero shares and $0; that is no holding, so it
+    // never counts toward consensus, the intersection or the pairwise matrix. A position whose
+    // value is pending or unavailable still reports its shares and counts.
     private static FundAggregate BuildFundAggregate(
         (InstitutionalHolder Holder, IReadOnlyList<InstitutionalHolding> Holdings) fund
     )
     {
         var perStock = fund
             .Holdings.GroupBy(h => (CommonStockId: h.EquityIssuerId, h.ListedTicker))
-            .ToDictionary(
-                g => g.Key,
-                g => new FundStockAggregate
-                {
-                    CommonStockId = g.Key.CommonStockId,
-                    Ticker = g.Key.ListedTicker ?? g.First().Issuer?.Presentation?.Listing?.Ticker,
-                    Name = ProductName(g.First().Issuer, g.Key.ListedTicker),
-                    Shares = g.Sum(h => h.Shares),
-                    Value = g.Sum(h => h.Value),
-                }
-            );
+            .Select(g => new FundStockAggregate
+            {
+                CommonStockId = g.Key.CommonStockId,
+                ListedTicker = g.Key.ListedTicker,
+                Ticker = g.Key.ListedTicker ?? g.First().Issuer?.Presentation?.Listing?.Ticker,
+                Name = ProductName(g.First().Issuer, g.Key.ListedTicker),
+                Shares = g.Sum(h => h.Shares),
+                Value = g.Sum(h => h.Value),
+            })
+            .Where(position => position.Shares > 0 || position.Value > 0)
+            .ToDictionary(position => (position.CommonStockId, position.ListedTicker));
         return new FundAggregate
         {
             Holder = fund.Holder,
@@ -206,6 +212,7 @@ public static class FundOverlapCalculator
     private class FundStockAggregate
     {
         public Guid CommonStockId { get; set; }
+        public string ListedTicker { get; set; }
         public string Ticker { get; set; }
         public string Name { get; set; }
         public long Shares { get; set; }

@@ -122,6 +122,46 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
         output.Should().NotContain("NVDA");
     }
 
+    // Consensus counts presence: a held position whose value is pending still counts its fund,
+    // and a zero-share $0 row (a position left during the quarter) counts none.
+    [Fact]
+    public async Task GetInstitutionConsensusHoldings_PositionValuedAtZero_CountsItsFund()
+    {
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer nvda = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
+        var fundA = new InstitutionalHolder { Cik = "CH00008", Name = "Presence A LP" };
+        var fundB = new InstitutionalHolder { Cik = "CH00009", Name = "Presence B LP" };
+        DbContext.AddRange(aapl, nvda, fundA, fundB);
+        var date = new DateOnly(2024, 12, 31);
+        DbContext.Add(MakeHolding(aapl, fundA, date, value: 1_000_000));
+        var pending = MakeHolding(aapl, fundB, date, value: 0, shares: 5_000);
+        pending.ValuePending = true;
+        DbContext.Add(pending);
+        DbContext.Add(MakeHolding(nvda, fundA, date, value: 300_000));
+        DbContext.Add(MakeHolding(nvda, fundB, date, value: 0, shares: 0));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = NewSut(verify);
+
+        var output = await sut.GetInstitutionConsensusHoldings(
+            "Presence A LP, Presence B LP",
+            minFunds: 2
+        );
+
+        output.Should().Contain("AAPL");
+        output.Should().NotContain("NVDA");
+    }
+
     [Fact]
     public async Task GetInstitutionConsensusHoldings_NoCommonQuarter_ReportsNoOverlap()
     {
@@ -164,7 +204,8 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
         EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
-        long value
+        long value,
+        long? shares = null
     ) =>
         new()
         {
@@ -172,7 +213,7 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
-            Shares = value / 100,
+            Shares = shares ?? value / 100,
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,

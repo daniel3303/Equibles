@@ -90,6 +90,85 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
         result.Rows.Single(r => r.Ticker == "AAPL").HeldByCount.Should().Be(1);
     }
 
+    // A row with zero shares and $0 is a position the filer left during the quarter, not a
+    // holding: it counts toward no consensus, intersection or position count, and a security
+    // only such rows name has no row at all.
+    [Fact]
+    public void Calculate_PositionReportingNoSharesAndNoValue_IsNotAHolding()
+    {
+        EquityIssuer xyz = MakeStock("XYZ", "XYZ Corp.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
+        var fundA = MakeHolder("Fund A", "C001");
+        var fundB = MakeHolder("Fund B", "C002");
+
+        var result = FundOverlapCalculator.Calculate(
+            [
+                (
+                    fundA,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [MakeHolding(fundA, xyz, shares: 1_000, value: 50_000)]
+                ),
+                (
+                    fundB,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [
+                            MakeHolding(fundB, xyz, shares: 0, value: 0),
+                            MakeHolding(fundB, msft, shares: 0, value: 0),
+                            MakeHolding(fundB, aapl, shares: 10, value: 2_000),
+                        ]
+                ),
+            ],
+            Report
+        );
+
+        var xyzRow = result.Rows.Single(r => r.Ticker == "XYZ");
+        xyzRow.HeldByCount.Should().Be(1);
+        xyzRow.IsCommon.Should().BeFalse();
+        result.Rows.Should().NotContain(r => r.Ticker == "MSFT");
+        result.IntersectionPositionCount.Should().Be(0);
+        result.Funds.Single(f => f.HolderId == fundB.Id).PositionCount.Should().Be(1);
+    }
+
+    // The pairwise matrix reads the same presence: a zero-valued held position is shared, a
+    // zero-share $0 row is not.
+    [Fact]
+    public void ComputePairwiseOverlap_ReadsTheSamePresenceAsConsensus()
+    {
+        EquityIssuer xyz = MakeStock("XYZ", "XYZ Corp.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
+        var fundA = MakeHolder("Fund A", "C001");
+        var fundB = MakeHolder("Fund B", "C002");
+
+        var overlap = FundOverlapCalculator.Calculate(
+            [
+                (
+                    fundA,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [
+                            MakeHolding(fundA, xyz, shares: 1_000, value: 50_000),
+                            MakeHolding(fundA, msft, shares: 500, value: 25_000),
+                        ]
+                ),
+                (
+                    fundB,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [
+                            MakeHolding(fundB, xyz, shares: 400, value: 0),
+                            MakeHolding(fundB, msft, shares: 0, value: 0),
+                        ]
+                ),
+            ],
+            Report
+        );
+
+        var matrix = FundOverlapCalculator.ComputePairwiseOverlap(overlap);
+
+        matrix.SharedTickerCounts[0][1].Should().Be(1);
+        matrix.SharedTickerCounts[1][1].Should().Be(1);
+        overlap.IntersectionPositionCount.Should().Be(1);
+    }
+
     private static EquityIssuer MakeStock(string ticker, string name) =>
         Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
