@@ -985,8 +985,13 @@ public class InstitutionalHoldingsTools
             percent
                 ? $"{McpFormat.Invariant(share.PercentOfOutstanding.Value, "F2")}%"
                 : McpFormat.WholeNumber(share.Shares);
+        // A quarter whose later split could not be attributed keeps its own quarter-end basis, so
+        // a change across it would show the split as a fund buy or sale.
+        var changeAcrossSplitBases =
+            previous != null && (latest.SplitUnresolved || previous.SplitUnresolved);
         string Change(FundOwnershipBucketShare current, FundOwnershipBucketShare before) =>
-            before is { Shares: > 0 } ? FormatShareChange(current.Shares, before.Shares)
+            changeAcrossSplitBases ? "—"
+            : before is { Shares: > 0 } ? FormatShareChange(current.Shares, before.Shares)
             : current.Shares > 0 && before != null ? "new"
             : "—";
         string Dates(FundOwnershipBucketShare share) =>
@@ -1021,6 +1026,10 @@ public class InstitutionalHoldingsTools
         if (unclassified.Shares > 0 && latest.Total.Shares > 0)
             result.AppendLine(
                 $"Unclassified holds {FormatPercent((double)unclassified.Shares / latest.Total.Shares * 100)}% of these fund shares: series with no Form N-CEN fund report on or before the quarter end, such as unit investment trusts (their N-CEN reports no fund type) and new series before their first N-CEN."
+            );
+        if (changeAcrossSplitBases)
+            result.AppendLine(
+                "Chg (QoQ) is not shown: the two latest quarters are not on the same split basis."
             );
         if (quarters.Any(quarter => quarter.SplitUnresolved))
             result.AppendLine(
@@ -1163,8 +1172,11 @@ public class InstitutionalHoldingsTools
                 // page — so the answer can say "7 of the 8 declared positions" instead of
                 // presenting the tracked subset as the whole filing. Null on rows ingested
                 // before declared totals were captured; the renderer then says only "tracked".
+                // 13F only: a Schedule 13D/G dated on the quarter end and filed later declares no
+                // portfolio totals and would hide the 13F's declaration.
                 var declaringFiling = await _holdingRepository
                     .GetFilingsByHolder(holder, targetDate)
+                    .Where(f => f.FilingType == FilingType.Form13F)
                     .OrderByDescending(f => f.FilingDate)
                     .ThenByDescending(f => f.AccessionNumber)
                     .FirstOrDefaultAsync();
@@ -3793,7 +3805,7 @@ public class InstitutionalHoldingsTools
                 var overlap = FundOverlapCalculator.Calculate(perFund, selected);
 
                 var matchingRows = overlap
-                    .Rows.Select(r => (Row: r, HeldBy: r.Slices.Count(s => s.Value > 0)))
+                    .Rows.Select(r => (Row: r, HeldBy: r.HeldByCount))
                     .Where(x => x.HeldBy >= Math.Max(1, minInstitutions))
                     .OrderByDescending(x => x.HeldBy)
                     .ThenByDescending(x => x.Row.CombinedValue)

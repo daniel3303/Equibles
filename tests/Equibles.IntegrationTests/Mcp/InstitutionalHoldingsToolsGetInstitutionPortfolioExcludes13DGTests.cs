@@ -88,6 +88,67 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioExcludes13DGTests
         output.Should().NotContain("2026-05-20");
     }
 
+    // An annual 13G amendment often carries the year-end event date and is filed after the 13F:
+    // it declares no portfolio totals, so it must not stand in for the 13F's declaration.
+    [Fact]
+    public async Task GetInstitutionPortfolio_Later13GOnTheQuarterEnd_KeepsThe13FsDeclaredTotals()
+    {
+        var holder = new InstitutionalHolder { Cik = "1", Name = "Pinnacle Capital Management" };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        DbContext.AddRange(holder, apple);
+        var quarterEnd = new DateOnly(2025, 12, 31);
+        DbContext.Add(MakeHolding(holder, apple, quarterEnd, FilingType.Form13F, 1_000, 200_000));
+        DbContext.AddRange(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-13f",
+                InstitutionalHolderId = holder.Id,
+                FilingDate = new DateOnly(2026, 2, 10),
+                ReportDate = quarterEnd,
+                FilingType = FilingType.Form13F,
+                PositionCount = 1,
+                TotalValue = 200_000,
+                DeclaredPositionCount = 8,
+                DeclaredTotalValue = 9_000_000,
+            },
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-13g-a",
+                InstitutionalHolderId = holder.Id,
+                FilingDate = new DateOnly(2026, 2, 14),
+                ReportDate = quarterEnd,
+                FilingType = FilingType.Schedule13G,
+                IsAmendment = true,
+                PositionCount = 1,
+                TotalValue = 200_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new EquityIssuerRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetInstitutionPortfolio("Pinnacle");
+
+        output.Should().Contain("The filing itself declares 8 positions");
+    }
+
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
         EquityIssuer stock,

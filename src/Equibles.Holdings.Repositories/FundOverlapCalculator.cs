@@ -121,6 +121,7 @@ public static class FundOverlapCalculator
             var slice = new FundOverlapRowSlice
             {
                 HolderId = fund.Holder.Id,
+                Held = perStock != null,
                 Shares = perStock?.Shares ?? 0,
                 Value = perStock?.Value ?? 0,
                 PercentOfPortfolio =

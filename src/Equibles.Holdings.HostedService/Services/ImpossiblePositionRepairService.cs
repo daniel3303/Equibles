@@ -395,6 +395,10 @@ public class ImpossiblePositionRepairService
                 holding.Value = 0L;
                 holding.ValuePending = false;
                 holding.ValueUnavailable = true;
+                // The manager breakdown sums its legs' values; legs left valued would still show
+                // the withdrawn figure. Owned legs load with their position.
+                foreach (var entry in holding.ManagerEntries)
+                    entry.Value = 0L;
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);

@@ -318,13 +318,13 @@ public class ProfilesController : BaseController
         {
             viewModel.Overlap = combinedOverlap;
 
-            // Consensus count per stock = number of funds whose slice has Value > 0. This is
-            // the primary sort key for the combined-portfolio view; the calculator already
-            // sorts by combined value, so we apply consensus on top as a stable secondary
-            // re-sort.
+            // Consensus count per stock = number of funds that report it (FundOverlapRow
+            // .HeldByCount). This is the primary sort key for the combined-portfolio view; the
+            // calculator already sorts by combined value, so we apply consensus on top as a
+            // stable secondary re-sort.
             foreach (var row in viewModel.Overlap.Rows)
             {
-                var heldBy = row.Slices.Count(s => s.Value > 0);
+                var heldBy = row.HeldByCount;
                 viewModel.FundsHoldingByStock[row] = heldBy;
             }
             viewModel.Overlap.Rows = viewModel

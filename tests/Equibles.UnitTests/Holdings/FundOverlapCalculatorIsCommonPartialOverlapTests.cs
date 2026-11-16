@@ -57,6 +57,39 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
         nvdaRow.IsCommon.Should().BeFalse();
     }
 
+    // A reported position whose value is pending or unavailable is still held: the consensus
+    // count reads presence, so two funds reporting XYZ count two even when one row is at $0.
+    [Fact]
+    public void Calculate_PositionValuedAtZero_StillCountsItsFundAsHolding()
+    {
+        EquityIssuer xyz = MakeStock("XYZ", "XYZ Corp.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
+        var fundA = MakeHolder("Fund A", "C001");
+        var fundB = MakeHolder("Fund B", "C002");
+
+        var result = FundOverlapCalculator.Calculate(
+            [
+                (
+                    fundA,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [MakeHolding(fundA, xyz, shares: 1_000, value: 50_000)]
+                ),
+                (
+                    fundB,
+                    (IReadOnlyList<InstitutionalHolding>)
+                        [
+                            MakeHolding(fundB, xyz, shares: 400, value: 0),
+                            MakeHolding(fundB, aapl, shares: 10, value: 2_000),
+                        ]
+                ),
+            ],
+            Report
+        );
+
+        result.Rows.Single(r => r.Ticker == "XYZ").HeldByCount.Should().Be(2);
+        result.Rows.Single(r => r.Ticker == "AAPL").HeldByCount.Should().Be(1);
+    }
+
     private static EquityIssuer MakeStock(string ticker, string name) =>
         Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),

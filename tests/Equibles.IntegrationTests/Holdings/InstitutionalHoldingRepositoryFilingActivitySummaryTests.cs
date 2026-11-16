@@ -65,6 +65,37 @@ public class InstitutionalHoldingRepositoryFilingActivitySummaryTests : IAsyncLi
         result.FilerCount.Should().Be(1, "same holder in both rows is still one filer");
     }
 
+    // The summary is labelled 13F activity: a Schedule 13G stake in the same window adds no
+    // filing and no filer, as the listing overload already counted.
+    [Fact]
+    public async Task GetFilingActivitySummary_Schedule13GInTheWindow_CountsOnly13FFilingsAndFilers()
+    {
+        await using var seed = FreshContext();
+        EquityIssuer stock = await SeedStock(seed, "AAPL");
+        var filer13F = await SeedHolder(seed, "H001");
+        var filer13G = await SeedHolder(seed, "H002");
+        var filingDate = new DateOnly(2025, 2, 14);
+        var stake = MakeHolding(stock, filer13G, filingDate, 90_000, "acc-13g", ShareType.Shares);
+        stake.FilingType = FilingType.Schedule13G;
+        stake.ReportDate = filingDate.AddDays(-3);
+
+        seed.AddRange(
+            MakeHolding(stock, filer13F, filingDate, 100_000, "acc-13f", ShareType.Shares),
+            stake
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var result = await sut.GetFilingActivitySummary(stock, filingDate.AddDays(-30))
+            .FirstOrDefaultAsync();
+
+        result.Should().NotBeNull();
+        result.FilingCount.Should().Be(1);
+        result.FilerCount.Should().Be(1);
+    }
+
     private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
