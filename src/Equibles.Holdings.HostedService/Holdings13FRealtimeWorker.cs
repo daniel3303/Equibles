@@ -45,9 +45,10 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     private bool _hasMoreFilings;
     private bool _storedReplaysRestated;
 
-    // Set when the wait ended on a recovery request alone: that cycle imports the queued filings
-    // and leaves the daily-index sweep to its own interval.
-    private bool _recoveryWake;
+    // True from start and after a replay request until a sweep completes: the daily-index sweep
+    // then runs even inside its interval. Every other wake (a queued filing, a due retry, a
+    // backlog) only recovers until the sweep is due.
+    private bool _sweepRequested = true;
 
     // When the sweep is next owed after a cycle that skipped it, so a run of recovery wakes
     // cannot keep pushing the sweep a full interval away.
@@ -100,11 +101,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         var recovery = signal.WaitForRecoveryAsync(wait.Token);
         var elapsed = Task.Delay(interval, wait.Token);
         await Task.WhenAny(requested, recovery, elapsed);
-        // A replay request or an elapsed interval owes the full cycle even beside a recovery one.
-        _recoveryWake =
-            recovery.IsCompletedSuccessfully
-            && !requested.IsCompletedSuccessfully
-            && !elapsed.IsCompleted;
+        _sweepRequested = _sweepRequested || requested.IsCompletedSuccessfully;
         await wait.CancelAsync();
     }
 
@@ -119,8 +116,6 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     {
         var sweepContinues = _hasMoreFilings;
         _hasMoreFilings = false;
-        var recoveryWake = _recoveryWake;
-        _recoveryWake = false;
         _sweepDueAt = null;
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
         var minReportDate = DateOnly.FromDateTime(startDate);
@@ -171,13 +166,13 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             _hasMoreFilings = sweepContinues;
             return;
         }
-        // A replay backlog wakes this worker every few seconds, and a newly queued filing wakes
-        // it at once. A sweep that already reaches today then repeats on its own interval
-        // instead of re-reading the same daily indexes.
+        // A replay backlog wakes this worker every few seconds, a queued filing at once and a
+        // retry within minutes. A sweep that already reaches today repeats on its own interval
+        // instead of re-reading the same daily indexes on each of those wakes.
         if (
             sweepReachesToday
             && !sweepContinues
-            && (recoveryWake || _nextRecoveryAt <= now)
+            && !_sweepRequested
             && now - state.UpdatedAt < SleepInterval
         )
         {
@@ -247,6 +242,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             return;
         }
 
+        _sweepRequested = false;
         Logger.LogInformation(
             "13F real-time ingestion cycle complete: {Count} filings processed, swept through {Watermark:yyyy-MM-dd}",
             result.FilingsImported,

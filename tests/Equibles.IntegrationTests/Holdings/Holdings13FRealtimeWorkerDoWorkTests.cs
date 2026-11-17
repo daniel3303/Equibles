@@ -353,10 +353,6 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
     public async Task DoWork_FeedFiling_WakesARecoveryOnlyCycleUnlessTheSweepIsDue(bool sweepDue)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        // Swept recently: the next sweep is owed in 15 seconds. Overdue: it was owed an hour ago.
-        var sweptAt = sweepDue
-            ? DateTime.UtcNow.AddHours(-7)
-            : DateTime.UtcNow.AddHours(-6).AddSeconds(15);
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<RealtimeSweepState>()
@@ -365,7 +361,6 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                     {
                         WorkerName = Holdings13FRealtimeWorker.WorkerStateName,
                         SweptThrough = today,
-                        UpdatedAt = sweptAt,
                     }
                 );
             await seed.SaveChangesAsync();
@@ -388,6 +383,16 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
             signal,
             out var scopes
         );
+        // The worker's first cycle always sweeps; the feed reaches a worker that already has.
+        await worker.InvokeDoWork(CancellationToken.None);
+        // Swept recently: the next sweep is owed in 15 seconds. Overdue: it was owed an hour ago.
+        var sweptAt = sweepDue
+            ? DateTime.UtcNow.AddHours(-7)
+            : DateTime.UtcNow.AddHours(-6).AddSeconds(15);
+        await using (var aged = _fixture.CreateDbContext())
+            await aged.Set<RealtimeSweepState>()
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.UpdatedAt, sweptAt));
+        edgarClient.ClearReceivedCalls();
         var ingestion = (Realtime13FIngestionService)
             scopes.CreateScope().ServiceProvider.GetService(typeof(Realtime13FIngestionService));
         var sink = new Recent13FFilingSink(ingestion, signal);
@@ -439,6 +444,17 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
             (await SweepState(verify))
                 .UpdatedAt.Should()
                 .BeCloseTo(sweptAt, TimeSpan.FromSeconds(1));
+            // The retry minutes later is a timer wake: it recovers again and still reads no index.
+            await using (var due = _fixture.CreateDbContext())
+                await due.Set<HoldingsImportFailure>()
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(r => r.NextAttemptAt, DateTime.UtcNow.AddSeconds(-1))
+                    );
+            await worker.InvokeDoWork(CancellationToken.None);
+            FetchedDates(edgarClient).Should().BeEmpty();
+            await edgarClient
+                .Received(2)
+                .GetCompanyFilings("9999", null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>());
             // The sweep owed in seconds ends the next wait, not the filing's retry minutes away.
             await worker.InvokeWait(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(45));
         }
