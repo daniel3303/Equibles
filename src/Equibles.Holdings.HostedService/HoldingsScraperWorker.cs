@@ -824,16 +824,55 @@ public class HoldingsScraperWorker : BaseScraperWorker
     }
 
     internal const int ConfidentialFilingsPerCycle = 500;
+    internal const string ConfidentialGapStateName = "Holdings13FConfidentialGap";
 
-    // Filings closed as withholding their positions before such reports were recorded.
-    private async Task FillConfidentialFilingGap(CancellationToken cancellationToken)
+    /// <summary>
+    /// Records the confidential-treatment reports of filings imported before such reports were
+    /// recorded: the ones the recovery queue closed, then the ones the sweep imported, newest day
+    /// first, down to the day after the newest data set read (a data set records its own). The
+    /// cursor is the earliest day done, so the walk ends by itself.
+    /// </summary>
+    internal async Task FillConfidentialFilingGap(CancellationToken cancellationToken)
     {
         try
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
-            await scope
-                .ServiceProvider.GetRequiredService<Realtime13FIngestionService>()
-                .RecordClosedConfidentialFilings(ConfidentialFilingsPerCycle, cancellationToken);
+            var ingestion = scope.ServiceProvider.GetRequiredService<Realtime13FIngestionService>();
+            await ingestion.RecordClosedConfidentialFilings(
+                ConfidentialFilingsPerCycle,
+                cancellationToken
+            );
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            var readThrough = (
+                await dbContext
+                    .Set<Form13FNoticeDataSet>()
+                    .AsNoTracking()
+                    .Where(dataSet =>
+                        dataSet.ParserVersion >= Form13FNoticeDataSet.CurrentParserVersion
+                    )
+                    .Select(dataSet => dataSet.FileName)
+                    .ToListAsync(cancellationToken)
+            )
+                .Select(Holdings13FRealtimeWorker.ParseDataSetEndDate)
+                .Max();
+            // Until a data set is read there is no lower bound, and the walk would cover all history.
+            if (readThrough == null)
+                return;
+
+            var states = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
+            var state = await states
+                .GetByWorker(ConfidentialGapStateName)
+                .AsNoTracking()
+                .SingleOrDefaultAsync(cancellationToken);
+            var day = state?.SweptThrough.AddDays(-1) ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            for (; day > readThrough; day = day.AddDays(-1))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!await ingestion.RecordConfidentialFilingsOf(day, cancellationToken))
+                    return;
+                await states.Rewind(ConfidentialGapStateName, day, cancellationToken);
+            }
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {

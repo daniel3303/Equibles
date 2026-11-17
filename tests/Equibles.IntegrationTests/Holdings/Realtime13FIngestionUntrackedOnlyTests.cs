@@ -698,6 +698,123 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
             .Be(2, "a filing closed for another reason has no report");
     }
 
+    // Recorded source: TestAssets/Holdings/13f-confidential-treatment-submission.txt (see README).
+    [Fact]
+    public async Task RecordConfidentialFilingsOf_ReadsOnlyImportedFilingsThatStoredNoRow_AndReportsAnUnreadDay()
+    {
+        const string cik = "1374170";
+        const string accession = "0001374170-26-000023";
+        var day = new DateOnly(2026, 5, 11);
+        using var db = FreshContext();
+        var tracked = EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cusip: "037833100"
+        );
+        db.AddRange(
+            tracked,
+            // The sweep imported the withheld book on its first attempt: ledgered, nothing stored.
+            new ProcessedFiling { AccessionNumber = accession },
+            new ProcessedFiling { AccessionNumber = "stored-rows" },
+            new InstitutionalHolding
+            {
+                Issuer = tracked,
+                InstitutionalHolder = new InstitutionalHolder
+                {
+                    Cik = "777",
+                    Name = "Disclosing Fund",
+                },
+                FilingDate = day,
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                AccessionNumber = "stored-rows",
+                Cusip = "037833100",
+                Shares = 10,
+                Value = 100,
+            }
+        );
+        await db.SaveChangesAsync();
+        var submission = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Holdings",
+                "13f-confidential-treatment-submission.txt"
+            )
+        );
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar.GetDocumentContent(accession, cik, Arg.Any<CancellationToken>()).Returns(submission);
+        foreach (
+            Match artifact in Regex.Matches(
+                submission,
+                @"<FILENAME>(?<name>\S+)\s*<TEXT>\s*<XML>\s*(?<xml>.*?)\s*</XML>",
+                RegexOptions.Singleline
+            )
+        )
+            edgar
+                .GetDocumentFileBytes(
+                    cik,
+                    accession,
+                    artifact.Groups["name"].Value,
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(System.Text.Encoding.UTF8.GetBytes(artifact.Groups["xml"].Value));
+        edgar
+            .GetDailyIndex(day, Arg.Any<CancellationToken>())
+            .Returns(
+                new[] { (accession, cik), ("stored-rows", "777"), ("not-imported", "999") }
+                    .Select(filing => new EdgarDailyIndexEntry
+                    {
+                        AccessionNumber = filing.Item1,
+                        Cik = filing.Item2,
+                        DateFiled = day,
+                        FormType = "13F-HR",
+                    })
+                    .ToList()
+            );
+        edgar
+            .GetDailyIndex(day.AddDays(1), Arg.Any<CancellationToken>())
+            .Returns<Task<List<EdgarDailyIndexEntry>>>(_ => throw new HttpRequestException("down"));
+        var ingestion = new Realtime13FIngestionService(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            null,
+            CreateScopeFactory(),
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+
+        (await ingestion.RecordConfidentialFilingsOf(day, CancellationToken.None))
+            .Should()
+            .BeTrue();
+        (await ingestion.RecordConfidentialFilingsOf(day.AddDays(1), CancellationToken.None))
+            .Should()
+            .BeFalse("a day that could not be read is retried, never skipped");
+
+        using var verify = FreshContext();
+        var report = await verify.Set<Form13FConfidentialFiling>().SingleAsync();
+        report.AccessionNumber.Should().Be(accession);
+        report.ReportDate.Should().Be(new DateOnly(2026, 3, 31));
+        report.DisclosedPositionCount.Should().Be(0);
+        // A filing with stored rows is no withheld book, and one not imported records itself.
+        await edgar
+            .DidNotReceive()
+            .GetDocumentContent(
+                Arg.Is<string>(read => read != accession),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            );
+
+        edgar.ClearReceivedCalls();
+        (await ingestion.RecordConfidentialFilingsOf(day, CancellationToken.None))
+            .Should()
+            .BeTrue();
+        await edgar
+            .DidNotReceive()
+            .GetDocumentContent(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     private static HoldingsImportFailure ClosedFailure(
         string accession,
         string cik,

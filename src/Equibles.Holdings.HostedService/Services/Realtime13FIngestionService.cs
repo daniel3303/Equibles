@@ -717,9 +717,10 @@ public class Realtime13FIngestionService
     }
 
     /// <summary>
-    /// Records the confidential-treatment report of filings closed as withholding their positions
-    /// before such reports were recorded. Each one leaves the set once recorded, here or by the
-    /// data set that carries its summary page, so the pass ends by itself.
+    /// Records the confidential-treatment report of filings the recovery queue closed as
+    /// withholding their positions before such reports were recorded. Each one leaves the set
+    /// once recorded, here or by the data set that carries its summary page, so the pass ends by
+    /// itself.
     /// </summary>
     public virtual async Task<int> RecordClosedConfidentialFilings(
         int limit,
@@ -748,10 +749,10 @@ public class Realtime13FIngestionService
                 DateFiled = row.FilingDate,
                 FormType = "13F-HR",
             };
-            Parsed13FFiling filing;
             try
             {
-                filing = await ParseFiling(entry, cancellationToken);
+                if (await RecordConfidentialFilingOf(entry, cancellationToken))
+                    recorded++;
             }
             catch (HttpRequestException exception)
             {
@@ -762,23 +763,6 @@ public class Realtime13FIngestionService
                 );
                 break;
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                // An unreadable filing stays to the data set that carries its summary page.
-                _logger.LogWarning(
-                    exception,
-                    "Could not read 13F {Accession} for its confidential-treatment report",
-                    row.AccessionNumber
-                );
-                continue;
-            }
-            if (
-                filing is not { ConfidentialOmitted: true }
-                || filing.PeriodOfReport == DateOnly.MinValue
-            )
-                continue;
-            await RecordConfidentialFiling(entry, filing, cancellationToken);
-            recorded++;
         }
 
         if (recorded > 0)
@@ -787,6 +771,116 @@ public class Realtime13FIngestionService
                 recorded
             );
         return recorded;
+    }
+
+    /// <summary>
+    /// Records the confidential-treatment reports among one day's filings that the sweep imported,
+    /// before such reports were recorded, without storing a row: a withheld book stores none, and
+    /// a filing with stored rows is left to the data set that carries its summary page. Returns
+    /// false when the day could not be read whole, so the caller retries it.
+    /// </summary>
+    public virtual async Task<bool> RecordConfidentialFilingsOf(
+        DateOnly day,
+        CancellationToken cancellationToken
+    )
+    {
+        List<EdgarDailyIndexEntry> entries;
+        try
+        {
+            entries = await _edgarClient.GetDailyIndex(day, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to fetch the {Date:yyyy-MM-dd} daily index for confidential-treatment reports",
+                day
+            );
+            return false;
+        }
+
+        var imported = await LoadProcessedAccessions(
+            entries
+                .Where(entry => !string.IsNullOrEmpty(entry.AccessionNumber))
+                .Select(entry => entry.AccessionNumber),
+            cancellationToken
+        );
+        var stored = await LoadRetainedAccessions(imported.ToList(), cancellationToken);
+        HashSet<string> reported;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+            reported = (
+                await scope
+                    .ServiceProvider.GetRequiredService<Form13FConfidentialFilingRepository>()
+                    .GetAll()
+                    .Where(report => imported.Contains(report.AccessionNumber))
+                    .Select(report => report.AccessionNumber)
+                    .ToListAsync(cancellationToken)
+            ).ToHashSet();
+
+        var recorded = 0;
+        foreach (
+            var entry in entries.Where(entry =>
+                imported.Contains(entry.AccessionNumber)
+                && !stored.Contains(entry.AccessionNumber)
+                && !reported.Contains(entry.AccessionNumber)
+            )
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                if (await RecordConfidentialFilingOf(entry, cancellationToken))
+                    recorded++;
+            }
+            catch (HttpRequestException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Failed to fetch 13F {Accession} for its confidential-treatment report; retrying the day",
+                    entry.AccessionNumber
+                );
+                return false;
+            }
+        }
+
+        if (recorded > 0)
+            _logger.LogInformation(
+                "Recorded {Count} confidential-treatment 13F reports filed {Date:yyyy-MM-dd}",
+                recorded,
+                day
+            );
+        return true;
+    }
+
+    // An unreadable filing stays to the data set that carries its summary page; an unreachable
+    // source throws, so the caller retries.
+    private async Task<bool> RecordConfidentialFilingOf(
+        EdgarDailyIndexEntry entry,
+        CancellationToken cancellationToken
+    )
+    {
+        Parsed13FFiling filing;
+        try
+        {
+            filing = await ParseFiling(entry, cancellationToken);
+        }
+        catch (Exception exception)
+            when (exception is not (OperationCanceledException or HttpRequestException))
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not read 13F {Accession} for its confidential-treatment report",
+                entry.AccessionNumber
+            );
+            return false;
+        }
+        if (
+            filing is not { ConfidentialOmitted: true }
+            || filing.PeriodOfReport == DateOnly.MinValue
+        )
+            return false;
+        await RecordConfidentialFiling(entry, filing, cancellationToken);
+        return true;
     }
 
     private async Task RecordFailure(
