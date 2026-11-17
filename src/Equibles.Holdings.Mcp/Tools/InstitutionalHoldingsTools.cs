@@ -360,7 +360,18 @@ public class InstitutionalHoldingsTools
                     styleAsOf,
                     totalComposition,
                     presentCombined ? RequirePreviousReportDate(anchor) : null,
-                    withheld
+                    withheld,
+                    presentCombined
+                        ? await HoldingsComparisonCoverage.WithheldHolderIds(
+                            _holdingRepository,
+                            targetDate,
+                            holdings
+                                .Where(h => h.ReportDate != targetDate)
+                                .Select(h => h.InstitutionalHolderId)
+                                .Distinct()
+                                .ToList()
+                        )
+                        : null
                 );
                 var advisedNote = await AdvisedFundsNote(
                     stock,
@@ -567,10 +578,11 @@ public class InstitutionalHoldingsTools
         DateOnly? styleAsOf = null,
         string totalComposition = null,
         DateOnly? carriedFrom = null,
-        IReadOnlyList<Equibles.Holdings.BusinessLogic.Models.HoldingsExcludedFiler> withheld = null
+        IReadOnlyList<Equibles.Holdings.BusinessLogic.Models.HoldingsExcludedFiler> withheld = null,
+        IReadOnlySet<Guid> withheldCarried = null
     )
     {
-        var withheldIds = (withheld ?? []).Select(filer => filer.InstitutionalHolderId).ToHashSet();
+        IReadOnlySet<Guid> withheldIds = withheldCarried ?? new HashSet<Guid>();
         var first = holdings.Count == 0 ? 0 : offset + 1;
         var last = offset + holdings.Count;
         var subtitle =

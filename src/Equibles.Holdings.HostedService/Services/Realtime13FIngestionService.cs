@@ -717,39 +717,37 @@ public class Realtime13FIngestionService
     }
 
     /// <summary>
-    /// Records the confidential-treatment reports among one day's filings that were imported
-    /// before such reports were recorded. A filing not imported yet is left to its import, which
-    /// records it. Returns false when the day could not be read whole, so the caller retries it.
+    /// Records the confidential-treatment report of filings closed as withholding their positions
+    /// before such reports were recorded. Each one leaves the set once recorded, here or by the
+    /// data set that carries its summary page, so the pass ends by itself.
     /// </summary>
-    public virtual async Task<bool> RecordConfidentialFilingsOf(
-        DateOnly day,
+    public virtual async Task<int> RecordClosedConfidentialFilings(
+        int limit,
         CancellationToken cancellationToken
     )
     {
-        List<EdgarDailyIndexEntry> entries;
-        try
-        {
-            entries = await _edgarClient.GetDailyIndex(day, cancellationToken);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            _logger.LogWarning(
-                exception,
-                "Failed to fetch the {Date:yyyy-MM-dd} daily index for confidential-treatment reports",
-                day
-            );
-            return false;
-        }
+        List<HoldingsImportFailure> closed;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+            closed = await scope
+                .ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>()
+                .GetConfidentialClosuresWithoutReport()
+                .AsNoTracking()
+                .OrderByDescending(row => row.FilingDate)
+                .ThenBy(row => row.AccessionNumber)
+                .Take(limit)
+                .ToListAsync(cancellationToken);
 
-        entries = entries.Where(entry => !string.IsNullOrEmpty(entry.AccessionNumber)).ToList();
-        var imported = await LoadProcessedAccessions(
-            entries.Select(entry => entry.AccessionNumber),
-            cancellationToken
-        );
         var recorded = 0;
-        foreach (var entry in entries.Where(entry => imported.Contains(entry.AccessionNumber)))
+        foreach (var row in closed)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var entry = new EdgarDailyIndexEntry
+            {
+                AccessionNumber = row.AccessionNumber,
+                Cik = row.Cik,
+                DateFiled = row.FilingDate,
+                FormType = "13F-HR",
+            };
             Parsed13FFiling filing;
             try
             {
@@ -759,18 +757,18 @@ public class Realtime13FIngestionService
             {
                 _logger.LogWarning(
                     exception,
-                    "Failed to fetch 13F {Accession} for confidential-treatment reports; retrying the day",
-                    entry.AccessionNumber
+                    "Failed to fetch 13F {Accession} for its confidential-treatment report; the rest waits for the next cycle",
+                    row.AccessionNumber
                 );
-                return false;
+                break;
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 // An unreadable filing stays to the data set that carries its summary page.
                 _logger.LogWarning(
                     exception,
-                    "Could not read 13F {Accession} for confidential-treatment reports",
-                    entry.AccessionNumber
+                    "Could not read 13F {Accession} for its confidential-treatment report",
+                    row.AccessionNumber
                 );
                 continue;
             }
@@ -785,11 +783,10 @@ public class Realtime13FIngestionService
 
         if (recorded > 0)
             _logger.LogInformation(
-                "Recorded {Count} confidential-treatment 13F reports filed {Date:yyyy-MM-dd}",
-                recorded,
-                day
+                "Recorded the confidential-treatment report of {Count} earlier 13F filings",
+                recorded
             );
-        return true;
+        return recorded;
     }
 
     private async Task RecordFailure(

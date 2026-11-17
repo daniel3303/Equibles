@@ -206,6 +206,60 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
             );
     }
 
+    [Fact]
+    public async Task GetTopHolders_CombinedView_MarksACarriedRowOfAFilerThatWithheldTheQuarter()
+    {
+        var current = DateOnly
+            .FromDateTime(DateTime.UtcNow)
+            .AddDays(-(CombinedQuarterHelper.FilingDeadlineDays - 1));
+        var previous = current.AddMonths(-3);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "WHLD",
+            Name: "Withheld Book Corp.",
+            Cik: "0000000201"
+        );
+        var currentFiler = new InstitutionalHolder { Cik = "203", Name = "Current Fund" };
+        var withholding = new InstitutionalHolder { Cik = "204", Name = "Withholding Fund" };
+        // It held only an option on the stock, so no common-share list names it.
+        var put = MakeHolding(stock, withholding, previous, shares: 50);
+        put.OptionType = OptionType.Put;
+        DbContext.AddRange(stock, currentFiler, withholding);
+        DbContext.AddRange(
+            MakeHolding(stock, currentFiler, current, shares: 100),
+            put,
+            new Form13FConfidentialFiling
+            {
+                AccessionNumber = "withheld",
+                FilerCik = withholding.Cik,
+                ReportDate = current,
+                FilingDate = current.AddDays(40),
+                DisclosedPositionCount = 0,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new EquityIssuerRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetTopHolders(stock.Presentation.Listing.Ticker);
+
+        output.Should().Contain("| Withholding Fund \u2020 | Put | 50 |");
+        output.Should().Contain("\u2020 Withheld under confidential treatment");
+        output.Should().NotContain("Carried, not yet filed", "it filed, and withheld the book");
+    }
+
     private static InstitutionalHolding MakeHolding(
         EquityIssuer stock,
         InstitutionalHolder holder,

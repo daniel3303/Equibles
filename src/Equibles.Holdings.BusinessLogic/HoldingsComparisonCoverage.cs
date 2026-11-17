@@ -13,6 +13,26 @@ namespace Equibles.Holdings.BusinessLogic;
 public static class HoldingsComparisonCoverage
 {
     /// <summary>
+    /// The given holders whose 13F for <paramref name="reportDate"/> withholds its whole book: a
+    /// row carried for one of them is withheld, not "not yet filed". Any position counts, where
+    /// <see cref="WithheldFilers"/> lists common-share holders only.
+    /// </summary>
+    public static async Task<HashSet<Guid>> WithheldHolderIds(
+        InstitutionalHoldingRepository repository,
+        DateOnly reportDate,
+        IReadOnlyCollection<Guid> holderIds,
+        CancellationToken cancellationToken = default
+    ) =>
+        holderIds.Count == 0
+            ? []
+            : (
+                await repository
+                    .GetWithheldBooks([reportDate], holderIds)
+                    .Select(book => book.HolderId)
+                    .ToListAsync(cancellationToken)
+            ).ToHashSet();
+
+    /// <summary>
     /// The previous quarter's holders of the stock whose 13F for <paramref name="reportDate"/>
     /// withholds its whole book under confidential treatment, largest first, each with the shares
     /// it last disclosed.

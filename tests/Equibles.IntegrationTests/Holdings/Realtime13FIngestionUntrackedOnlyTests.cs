@@ -601,14 +601,35 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
 
     // Recorded source: TestAssets/Holdings/13f-confidential-treatment-submission.txt (see README).
     [Fact]
-    public async Task RecordConfidentialFilingsOf_RecordsOnlyFilingsAlreadyImported_AndReportsAnUnreadDay()
+    public async Task RecordClosedConfidentialFilings_RecordsEachClosedFilingOnce_AndWaitsWhenTheSourceIsDown()
     {
         const string cik = "1374170";
         const string accession = "0001374170-26-000023";
-        var day = new DateOnly(2026, 5, 11);
+        var filed = new DateOnly(2026, 5, 11);
         using var db = FreshContext();
-        // Imported before confidential-treatment reports were recorded.
-        db.Add(new ProcessedFiling { AccessionNumber = accession });
+        // Closed before confidential-treatment reports were recorded.
+        db.AddRange(
+            ClosedFailure(accession, cik, filed, HoldingsImportFailureReason.ConfidentialTreatment),
+            ClosedFailure(
+                "already-recorded",
+                "555",
+                filed,
+                HoldingsImportFailureReason.ConfidentialTreatment
+            ),
+            ClosedFailure(
+                "nothing-tracked",
+                "666",
+                filed,
+                HoldingsImportFailureReason.NoTrackedPositions
+            ),
+            new Form13FConfidentialFiling
+            {
+                AccessionNumber = "already-recorded",
+                FilerCik = "555",
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingDate = filed,
+            }
+        );
         await db.SaveChangesAsync();
         var submission = File.ReadAllText(
             Path.Combine(
@@ -619,7 +640,9 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
             )
         );
         var edgar = Substitute.For<ISecEdgarClient>();
-        edgar.GetDocumentContent(accession, cik, Arg.Any<CancellationToken>()).Returns(submission);
+        edgar
+            .GetDocumentContent(accession, cik, Arg.Any<CancellationToken>())
+            .Returns<Task<string>>(_ => throw new HttpRequestException("down"));
         // The declared totals disagree with the public table, so the reader takes the standalone
         // artifacts the envelope names; EDGAR serves them with the envelope's XML bodies.
         foreach (
@@ -637,28 +660,6 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
                     Arg.Any<CancellationToken>()
                 )
                 .Returns(System.Text.Encoding.UTF8.GetBytes(artifact.Groups["xml"].Value));
-        edgar
-            .GetDailyIndex(day, Arg.Any<CancellationToken>())
-            .Returns([
-                new EdgarDailyIndexEntry
-                {
-                    AccessionNumber = accession,
-                    Cik = cik,
-                    DateFiled = day,
-                    FormType = "13F-HR",
-                },
-                // Not imported yet: its own import records it.
-                new EdgarDailyIndexEntry
-                {
-                    AccessionNumber = "not-imported",
-                    Cik = "999",
-                    DateFiled = day,
-                    FormType = "13F-HR",
-                },
-            ]);
-        edgar
-            .GetDailyIndex(day.AddDays(1), Arg.Any<CancellationToken>())
-            .Returns<Task<List<EdgarDailyIndexEntry>>>(_ => throw new HttpRequestException("down"));
         var ingestion = new Realtime13FIngestionService(
             edgar,
             new Filing13FXmlParser(),
@@ -668,23 +669,48 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
             Substitute.For<ILogger<Realtime13FIngestionService>>()
         );
 
-        (await ingestion.RecordConfidentialFilingsOf(day, CancellationToken.None))
+        (await ingestion.RecordClosedConfidentialFilings(10, CancellationToken.None))
             .Should()
-            .BeTrue();
-        (await ingestion.RecordConfidentialFilingsOf(day.AddDays(1), CancellationToken.None))
+            .Be(0, "an unreachable source leaves the filing for the next cycle");
+        edgar.GetDocumentContent(accession, cik, Arg.Any<CancellationToken>()).Returns(submission);
+        (await ingestion.RecordClosedConfidentialFilings(10, CancellationToken.None))
             .Should()
-            .BeFalse("a day that could not be read is retried, never skipped");
+            .Be(1);
+        edgar.ClearReceivedCalls();
+        (await ingestion.RecordClosedConfidentialFilings(10, CancellationToken.None))
+            .Should()
+            .Be(0);
 
-        using var verify = FreshContext();
-        var confidential = await verify.Set<Form13FConfidentialFiling>().SingleAsync();
-        confidential.AccessionNumber.Should().Be(accession);
-        confidential.ReportDate.Should().Be(new DateOnly(2026, 3, 31));
-        confidential.DisclosedPositionCount.Should().Be(0);
         await edgar
             .DidNotReceive()
-            .GetDocumentContent("not-imported", Arg.Any<string>(), Arg.Any<CancellationToken>());
-        (await verify.Set<InstitutionalHolding>().AnyAsync())
+            .GetDocumentContent(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        using var verify = FreshContext();
+        var report = await verify
+            .Set<Form13FConfidentialFiling>()
+            .SingleAsync(filing => filing.AccessionNumber == accession);
+        report.FilerCik.Should().Be(cik);
+        report.ReportDate.Should().Be(new DateOnly(2026, 3, 31));
+        report.FilingDate.Should().Be(filed);
+        report.DeclaredEntryTotal.Should().Be(1507);
+        report.DisclosedPositionCount.Should().Be(0);
+        (await verify.Set<Form13FConfidentialFiling>().CountAsync())
             .Should()
-            .BeFalse("the pass reads the filing and imports nothing");
+            .Be(2, "a filing closed for another reason has no report");
     }
+
+    private static HoldingsImportFailure ClosedFailure(
+        string accession,
+        string cik,
+        DateOnly filed,
+        HoldingsImportFailureReason reason
+    ) =>
+        new()
+        {
+            AccessionNumber = accession,
+            Cik = cik,
+            FilingDate = filed,
+            ReportDate = new DateOnly(2026, 3, 31),
+            Reason = reason,
+            ResolvedAt = DateTime.UtcNow,
+        };
 }
