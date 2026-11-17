@@ -75,9 +75,14 @@ public static class HoldingsComparisonCoverage
         CancellationToken cancellationToken = default
     )
     {
-        var books = await repository
-            .GetUndisclosedWithheldBooks(reportDates)
-            .ToListAsync(cancellationToken);
+        // A delisted security leaves the 13F list, so no one holds it at a later quarter end and
+        // a position from before the delisting stands in for nothing.
+        var delistedOn = await repository.GetDelistedOn(stock, listedTicker, cancellationToken);
+        var books = (
+            await repository.GetUndisclosedWithheldBooks(reportDates).ToListAsync(cancellationToken)
+        )
+            .Where(book => delistedOn == null || book.ReportDate <= delistedOn)
+            .ToList();
         if (books.Count == 0)
             return [];
         var holderIds = books.Select(book => book.HolderId).Distinct().ToArray();

@@ -250,6 +250,63 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
             );
     }
 
+    [Fact]
+    public async Task WithheldFilers_AreNotListedForAQuarterEndingAfterTheListingWasDelisted()
+    {
+        var dates = Enumerable
+            .Range(0, 3)
+            .Select(i => new DateOnly(2025, 10, 1).AddMonths(i * 3).AddDays(-1))
+            .ToArray();
+        // Delisted inside the second withheld quarter, as when an acquisition closes.
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Acquired company",
+            Active: false,
+            DelistedOn: dates[1].AddDays(35)
+        );
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["GONE.B"]);
+        var secondary = stock
+            .Securities.SelectMany(security => security.Listings)
+            .Single(listing => listing.Ticker == "GONE.B");
+        secondary.Active = false;
+        secondary.DelistedOn = dates[1].AddDays(35);
+        var withholding = new InstitutionalHolder { Cik = "10", Name = "Withholds after the deal" };
+        await using (var seed = fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, withholding);
+            seed.Add(Holding(stock, withholding, dates[0], shares: 800));
+            seed.Add(Holding(stock, withholding, dates[0], shares: 80, listedTicker: "GONE.B"));
+            seed.Add(ConfidentialFiling(withholding, dates[1], disclosedPositions: 0));
+            seed.Add(ConfidentialFiling(withholding, dates[2], disclosedPositions: 0));
+            await seed.SaveChangesAsync();
+        }
+        await using var db = fixture.CreateDbContext();
+        var repository = new InstitutionalHoldingRepository(db);
+
+        var issuerWide = await HoldingsComparisonCoverage.WithheldFilersByQuarter(
+            repository,
+            stock,
+            [dates[1], dates[2]],
+            []
+        );
+        var exactListing = await HoldingsComparisonCoverage.WithheldFilersByQuarter(
+            repository,
+            stock,
+            [dates[1], dates[2]],
+            [],
+            listedTicker: "GONE.B"
+        );
+
+        issuerWide.Keys.Should().Equal([dates[1]], "the quarter ending after the delisting is out");
+        issuerWide[dates[1]]
+            .Should()
+            .ContainSingle()
+            .Which.Shares.Should()
+            .Be(880, "every class of the issuer");
+        exactListing.Keys.Should().Equal([dates[1]]);
+        exactListing[dates[1]].Should().ContainSingle().Which.Shares.Should().Be(80);
+    }
+
     private static Form13FConfidentialFiling ConfidentialFiling(
         InstitutionalHolder holder,
         DateOnly reportDate,
