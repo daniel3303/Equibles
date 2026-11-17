@@ -388,6 +388,7 @@ public class McpModuleToolDiscoveryTests
                     "GetInstitutionStyleHistory",
                     "GetHolderMix",
                     "GetHolderTypeFlows",
+                    "GetLatest13FFilings",
                     "GetInstitutionSectorAllocation",
                     "GetInstitutionBeneficialOwnership",
                     "GetInstitutionQuarterlyActivity",
