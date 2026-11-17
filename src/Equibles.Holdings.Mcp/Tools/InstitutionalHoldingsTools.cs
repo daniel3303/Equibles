@@ -805,7 +805,7 @@ public class InstitutionalHoldingsTools
         );
     }
 
-    // Names, per quarter, the previous quarter's holders whose 13F withholds its positions under
+    // Names, per quarter, the holders whose 13F withholds its positions under
     // confidential treatment: the position is undisclosed, so it is neither a sale nor in the total.
     private static void AppendConfidentialFilers(
         StringBuilder result,

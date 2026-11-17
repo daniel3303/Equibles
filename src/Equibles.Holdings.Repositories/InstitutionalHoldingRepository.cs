@@ -2132,40 +2132,36 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             );
 
     /// <summary>
-    /// The quarters, from <paramref name="from"/> up to but not including
-    /// <paramref name="before"/>, that each given holder disclosed a 13F for: stored positions or
-    /// a zero-holdings restatement.
+    /// The given holders that disclosed a 13F for a quarter strictly between the two: stored
+    /// positions or a zero-holdings restatement. Each holder is probed for one row, as
+    /// <see cref="GetFiledHolderIdsAmong"/> does; reading quarters off positions scans whole books.
     /// </summary>
-    public IQueryable<HolderQuarter> GetDisclosed13FQuarters(
+    public IQueryable<Guid> GetHolderIdsDisclosing13FBetween(
         IReadOnlyCollection<Guid> holderIds,
-        DateOnly from,
+        DateOnly after,
         DateOnly before
-    ) =>
-        GetAll()
+    )
+    {
+        var between = GetAll()
             .Where(Is13F)
-            .Where(h =>
-                holderIds.Contains(h.InstitutionalHolderId)
-                && h.ReportDate >= from
-                && h.ReportDate < before
+            .Where(h => h.ReportDate > after && h.ReportDate < before);
+        return DbContext
+            .Set<InstitutionalHolder>()
+            .Where(holder =>
+                holderIds.Contains(holder.Id)
+                && between.Any(h => h.InstitutionalHolderId == holder.Id)
             )
-            .Select(h => new HolderQuarter
-            {
-                HolderId = h.InstitutionalHolderId,
-                ReportDate = h.ReportDate,
-            })
+            .Select(holder => holder.Id)
             .Union(
                 Zero13FRestatements()
                     .Where(f =>
-                        holderIds.Contains(f.InstitutionalHolderId)
-                        && f.ReportDate >= from
+                        f.ReportDate > after
                         && f.ReportDate < before
+                        && holderIds.Contains(f.InstitutionalHolderId)
                     )
-                    .Select(f => new HolderQuarter
-                    {
-                        HolderId = f.InstitutionalHolderId,
-                        ReportDate = f.ReportDate,
-                    })
+                    .Select(f => f.InstitutionalHolderId)
             );
+    }
 
     /// <summary>The given 13F accessions whose rows, or zero-holdings restatement, are stored.</summary>
     public IQueryable<string> GetRetained13FAccessionsAmong(

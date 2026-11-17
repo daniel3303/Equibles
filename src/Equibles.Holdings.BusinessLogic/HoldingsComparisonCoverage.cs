@@ -81,39 +81,18 @@ public static class HoldingsComparisonCoverage
         if (books.Count == 0)
             return [];
         var holderIds = books.Select(book => book.HolderId).Distinct().ToArray();
-        var disclosedQuarters = (
-            await repository
-                .GetDisclosed13FQuarters(
-                    holderIds,
-                    books.Min(book => book.ReportDate).AddYears(-1),
-                    books.Max(book => book.ReportDate)
-                )
-                .ToListAsync(cancellationToken)
-        ).ToLookup(quarter => quarter.HolderId, quarter => quarter.ReportDate);
-        var sources = books
-            .Select(book =>
-                (
-                    book,
-                    DisclosedFor: disclosedQuarters[book.HolderId]
-                        .Where(date =>
-                            date < book.ReportDate && date >= book.ReportDate.AddYears(-1)
-                        )
-                        .DefaultIfEmpty()
-                        .Max()
-                )
-            )
-            .Where(source => source.DisclosedFor != default)
-            .ToList();
-        if (sources.Count == 0)
-            return [];
-        var sourceDates = sources.Select(source => source.DisclosedFor).Distinct().ToArray();
+        var from = books.Min(book => book.ReportDate).AddYears(-1);
+        var before = books.Max(book => book.ReportDate);
         var holdings =
             listedTicker == null
                 ? repository.Get13FHistoryByStock(stock)
                 : repository.Get13FHistoryByListing(stock, listedTicker);
+        // This stock's rows only: the withheld books are market-wide, and most never held it.
         var positions = await holdings
             .Where(h =>
-                sourceDates.Contains(h.ReportDate) && holderIds.Contains(h.InstitutionalHolderId)
+                h.ReportDate >= from
+                && h.ReportDate < before
+                && holderIds.Contains(h.InstitutionalHolderId)
             )
             .AsActivityLegs()
             .GroupBy(h => new
@@ -131,12 +110,14 @@ public static class HoldingsComparisonCoverage
             })
             .ToListAsync(cancellationToken);
         var primaryTicker = stock.Presentation.Listing.Ticker;
-        var lastDisclosed = positions
-            .GroupBy(p => (p.ReportDate, p.InstitutionalHolderId))
-            .ToDictionary(
-                g => g.Key,
-                g =>
-                    g.Sum(p =>
+        // Only a holder of the stock; one with only options held no shares.
+        var held = positions
+            .GroupBy(p => (p.InstitutionalHolderId, p.ReportDate))
+            .Select(g =>
+                (
+                    g.Key.InstitutionalHolderId,
+                    g.Key.ReportDate,
+                    Shares: g.Sum(p =>
                         SplitAdjustment.AdjustShareCount(
                             p.Shares,
                             p.ReportDate,
@@ -147,35 +128,65 @@ public static class HoldingsComparisonCoverage
                             )
                         )
                     )
-            );
-        return sources
-            .Select(source =>
-                (
-                    source.book,
-                    source.DisclosedFor,
-                    Shares: lastDisclosed.GetValueOrDefault(
-                        (source.DisclosedFor, source.book.HolderId)
-                    )
                 )
             )
-            // Only a holder of the stock when it last disclosed; one with only options held no shares.
-            .Where(entry => entry.Shares > 0)
-            .GroupBy(entry => entry.book.ReportDate)
+            .Where(position => position.Shares > 0)
+            .ToLookup(position => position.InstitutionalHolderId);
+        var candidates = books
+            .Select(book =>
+                (
+                    book,
+                    Last: held[book.HolderId]
+                        .Where(position =>
+                            position.ReportDate < book.ReportDate
+                            && position.ReportDate >= book.ReportDate.AddYears(-1)
+                        )
+                        .OrderByDescending(position => position.ReportDate)
+                        .FirstOrDefault()
+                )
+            )
+            .Where(candidate => candidate.Last.Shares > 0)
+            .ToList();
+        // A 13F the holder disclosed since then shows no position: it sold, so nothing stands in.
+        var soldSince = new HashSet<(Guid HolderId, DateOnly ReportDate)>();
+        foreach (
+            var gap in candidates
+                .Where(candidate =>
+                    candidate.Last.ReportDate
+                    != HoldingsCorpusCoverage.PreviousQuarterEnd(candidate.book.ReportDate)
+                )
+                .GroupBy(candidate => (After: candidate.Last.ReportDate, candidate.book.ReportDate))
+        )
+        {
+            var disclosed = await repository
+                .GetHolderIdsDisclosing13FBetween(
+                    gap.Select(candidate => candidate.book.HolderId).Distinct().ToArray(),
+                    gap.Key.After,
+                    gap.Key.ReportDate
+                )
+                .ToListAsync(cancellationToken);
+            soldSince.UnionWith(disclosed.Select(holderId => (holderId, gap.Key.ReportDate)));
+        }
+        return candidates
+            .Where(candidate =>
+                !soldSince.Contains((candidate.book.HolderId, candidate.book.ReportDate))
+            )
+            .GroupBy(candidate => candidate.book.ReportDate)
             .ToDictionary(
                 group => group.Key,
                 group =>
                     (IReadOnlyList<HoldingsExcludedFiler>)
                         group
-                            .OrderByDescending(entry => entry.Shares)
-                            .ThenBy(entry => entry.book.HolderId)
-                            .Select(entry => new HoldingsExcludedFiler(
-                                entry.book.HolderId,
-                                entry.book.Name,
-                                entry.Shares
+                            .OrderByDescending(candidate => candidate.Last.Shares)
+                            .ThenBy(candidate => candidate.book.HolderId)
+                            .Select(candidate => new HoldingsExcludedFiler(
+                                candidate.book.HolderId,
+                                candidate.book.Name,
+                                candidate.Last.Shares
                             )
                             {
-                                Cik = entry.book.Cik,
-                                DisclosedFor = entry.DisclosedFor,
+                                Cik = candidate.book.Cik,
+                                DisclosedFor = candidate.Last.ReportDate,
                             })
                             .ToList()
             );
