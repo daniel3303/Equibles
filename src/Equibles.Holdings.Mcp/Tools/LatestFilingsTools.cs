@@ -136,7 +136,11 @@ public class LatestFilingsTools
             .OrderByDescending(row => row.Day)
             .Take(FilingDaysSummarized)
             .ToListAsync();
-        var newestLoad = await window.MaxAsync(f => (DateTime?)f.ImportedAt);
+        // Over the listed days only, so the time always belongs to a day the header names.
+        var oldestListed = days[^1].Day;
+        var newestLoad = await window
+            .Where(f => f.FilingDate >= oldestListed)
+            .MaxAsync(f => (DateTime?)f.ImportedAt);
         return new LatestFilingsSummary(
             days.Select(row => (row.Day, row.Count)).ToList(),
             newestLoad
