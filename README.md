@@ -358,6 +358,7 @@ This self-hosted build exposes 71 tools over MCP. The hosted server at `https://
 - GetOwnershipSignals — who holds a stock and how across every 13F book: conviction, crowding, ownership of the estimated free float, holder concentration, holding periods, the holders' estimated cost and share held at a loss, and holder-overlap peers
 - GetHolderTargets — shareholder targeting: 13F filers that hold a stock's holder-overlap peers but not the stock, ranked by money in the peers, with style and holder type
 - GetHolderTypeFlows — market-wide money in and out of US equities by kind of 13F filer for a closed quarter, optionally split by sector, with net flow as a share of each bucket's prior book
+- GetLatest13FFilings — the newest 13F filings loaded, with each one's SEC filing date and load time, and how many filings are loaded per recent filing day
 - GetInstitutionPortfolio — an institution's 13F portfolio, with how long each position has been held and its estimated cost per share
 - SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, position count, and holder type
 - GetTopInstitutionalBuyersSellers — biggest adds/reductions on a stock this quarter

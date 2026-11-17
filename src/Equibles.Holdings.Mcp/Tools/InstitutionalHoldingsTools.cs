@@ -26,6 +26,7 @@ using Equibles.Holdings.BusinessLogic.Ownership.Models;
 using Equibles.Holdings.BusinessLogic.Signals;
 using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Mcp.Helpers;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Extensions;
 using Equibles.Holdings.Repositories.Models;
@@ -1180,7 +1181,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "View the tracked stock positions of a specific institutional investor from an SEC 13F-HR filing. Shows the largest positions by published value (default 20, max 500), with share counts, value, percent of tracked 13F value, and position count. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Coverage is limited to tracked U.S.-listed common stocks and related put/call positions; use position type before treating options as ownership. Use SearchInstitutions first when the name is ambiguous."
+        "View the tracked stock positions of a specific institutional investor from an SEC 13F-HR filing. Shows the largest positions by published value (default 20, max 500), with share counts, value, percent of tracked 13F value, and position count. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Coverage is limited to tracked U.S.-listed common stocks and related put/call positions; use position type before treating options as ownership. Use SearchInstitutions first when the name is ambiguous. The answer names the 13F filing behind the quarter shown: its SEC filing date and when it was loaded."
     )]
     public Task<string> GetInstitutionPortfolio(
         [Description(
@@ -1212,7 +1213,8 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return $"No holdings data for {holder.Name}.";
 
-                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
+                var (targetDate, dateNote, dateError) = await ResolveHolderReportDate(
+                    holder,
                     reportDate,
                     reportDates
                 );
@@ -2997,7 +2999,8 @@ public class InstitutionalHoldingsTools
             {
                 var (holder, reportDates, _, notes, error) = await ResolveHolderAndTargetDate(
                     institutionName,
-                    null
+                    null,
+                    nameFiling: false
                 );
                 if (error != null)
                     return error;
@@ -3453,7 +3456,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Common shares, put/call positions and principal amounts are separate rows labelled by Type. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
+        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Common shares, put/call positions and principal amounts are separate rows labelled by Type. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?' The answer names the 13F filing behind the quarter shown: its SEC filing date and when it was loaded."
     )]
     public Task<string> GetInstitutionQuarterlyActivity(
         [Description(
@@ -3496,7 +3499,8 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count < 2)
                     return $"{holder.Name} has fewer than two reported quarters — no diff available.";
 
-                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
+                var (targetDate, dateNote, dateError) = await ResolveHolderReportDate(
+                    holder,
                     reportDate,
                     reportDates
                 );
@@ -4160,7 +4164,7 @@ public class InstitutionalHoldingsTools
         DateOnly TargetDate,
         string Notes,
         string Error
-    )> ResolveHolderAndTargetDate(string institutionName, string reportDate)
+    )> ResolveHolderAndTargetDate(string institutionName, string reportDate, bool nameFiling = true)
     {
         var (holder, matchNote, holderError) = await ResolveHolderByName(institutionName);
         if (holderError != null)
@@ -4170,11 +4174,40 @@ public class InstitutionalHoldingsTools
         if (reportDates.Count == 0)
             return (holder, null, default, null, $"No 13F holdings reported by {holder.Name}.");
 
-        var (targetDate, dateNote, dateError) = ResolveReportDateStrict(reportDate, reportDates);
+        var (targetDate, dateNote, dateError) = nameFiling
+            ? await ResolveHolderReportDate(holder, reportDate, reportDates)
+            : ResolveReportDateStrict(reportDate, reportDates);
         if (dateError != null)
             return (holder, reportDates, default, null, dateError);
 
         return (holder, reportDates, targetDate, JoinNotes(matchNote, dateNote), null);
+    }
+
+    // The strict rule for one filer's quarter: a quarter end the filer has no 13F for says so
+    // instead of "not a 13F report date", and the note names the filing behind the quarter shown.
+    private async Task<(DateOnly Date, string Note, string Error)> ResolveHolderReportDate(
+        InstitutionalHolder holder,
+        string reportDate,
+        IReadOnlyList<DateOnly> reportDates
+    )
+    {
+        var (targetDate, dateNote, dateError) = ResolveReportDateStrict(reportDate, reportDates);
+        if (dateError != null)
+            return (default, null, dateError);
+
+        if (dateNote != null && TryParseReportDate(reportDate, out var requested))
+            dateNote =
+                HolderFilingNotes.MissingQuarter(holder.Name, requested, targetDate, reportDates)
+                ?? dateNote;
+        var filings = await _holdingRepository
+            .GetFilingsByHolder(holder, targetDate)
+            .AsNoTracking()
+            .ToListAsync();
+        return (
+            targetDate,
+            JoinNotes(dateNote, HolderFilingNotes.Filings(targetDate, filings)),
+            null
+        );
     }
 
     private static bool TryParseReportDate(string input, out DateOnly result)
