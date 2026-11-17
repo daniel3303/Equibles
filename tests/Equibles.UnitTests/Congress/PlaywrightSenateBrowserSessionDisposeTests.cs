@@ -20,7 +20,8 @@ public class PlaywrightSenateBrowserSessionDisposeTests
     {
         var session = new PlaywrightSenateBrowserSession(
             Substitute.For<ILogger<PlaywrightSenateBrowserSession>>(),
-            Substitute.For<SenateAccessGate>(null, null)
+            Substitute.For<SenateAccessGate>(null, null),
+            new DirectSenateBrowserContextOpener()
         );
 
         var dispose = async () => await session.DisposeAsync();

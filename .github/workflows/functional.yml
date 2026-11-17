@@ -45,9 +45,9 @@ jobs:
         run: dotnet build tests/Equibles.FunctionalTests/Equibles.FunctionalTests.csproj --no-restore -c Release
 
       - name: Install Playwright browsers
-        # Pre-install Chromium so the first test doesn't pay the download cost.
+        # Pre-install Chromium, and Firefox for the Senate eFD session, so the first test doesn't pay the download cost.
         # PlaywrightFixture has a fallback for local runs without this step.
-        run: pwsh tests/Equibles.FunctionalTests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+        run: pwsh tests/Equibles.FunctionalTests/bin/Release/net10.0/playwright.ps1 install chromium firefox --with-deps
 
       - name: Run functional tests
         run: dotnet test tests/Equibles.FunctionalTests/Equibles.FunctionalTests.csproj --no-build -c Release --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --settings coverage.runsettings --results-directory ./functional-results
