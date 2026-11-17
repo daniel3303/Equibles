@@ -76,6 +76,43 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetInstitutionalOwnershipHistory_HolderWithAWithheldQuarter_NamesItUnderConfidentialTreatment()
     {
+        await using var verify = Fixture.CreateDbContext();
+        var sut = await ToolsOverAWithheldQuarter(verify);
+
+        var output = await sut.GetInstitutionalOwnershipHistory("ARE");
+
+        output
+            .Should()
+            .Contain(
+                "- 2026-03-31: Norges Bank (CIK 1374170) last reported 16,460 shares for 2025-12-31."
+            );
+        output.Should().Contain("2026-03-31 13F withheld under confidential treatment");
+        // The total stays as filed: the withheld position is not carried into it.
+        output.Should().Contain("| 2026-03-31 | 1 | 1,000 |");
+    }
+
+    [Fact]
+    public async Task GetTopHolders_QuarterAHolderWithheld_NamesItBesideTheList()
+    {
+        await using var verify = Fixture.CreateDbContext();
+        var sut = await ToolsOverAWithheldQuarter(verify);
+
+        var withheldQuarter = await sut.GetTopHolders("ARE", "2026-03-31");
+        var disclosedQuarter = await sut.GetTopHolders("ARE", "2025-12-31");
+
+        withheldQuarter
+            .Should()
+            .Contain("- Norges Bank (CIK 1374170) last reported 16,460 shares for 2025-12-31.");
+        withheldQuarter.Should().NotContain("| Norges Bank |");
+        disclosedQuarter.Should().Contain("| Norges Bank |");
+        disclosedQuarter.Should().NotContain("confidential treatment");
+    }
+
+    // Norges Bank holds the stock at 2025-12-31 and withholds its whole 2026-03-31 book.
+    private async Task<InstitutionalHoldingsTools> ToolsOverAWithheldQuarter(
+        Equibles.Data.EquiblesFinancialDbContext verify
+    )
+    {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
             Ticker: "ARE",
             Name: "Alexandria Real Estate Equities",
@@ -101,8 +138,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
-        await using var verify = Fixture.CreateDbContext();
-        var sut = new InstitutionalHoldingsTools(
+        return new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
             new EquityIssuerRepository(verify),
@@ -114,17 +150,6 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
             ErrorManager,
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
-
-        var output = await sut.GetInstitutionalOwnershipHistory("ARE");
-
-        output
-            .Should()
-            .Contain(
-                "- 2026-03-31: Norges Bank (CIK 1374170) last reported 16,460 shares for 2025-12-31."
-            );
-        output.Should().Contain("2026-03-31 13F withheld under confidential treatment");
-        // The total stays as filed: the withheld position is not carried into it.
-        output.Should().Contain("| 2026-03-31 | 1 | 1,000 |");
     }
 
     private static InstitutionalHolding MakeHolding(

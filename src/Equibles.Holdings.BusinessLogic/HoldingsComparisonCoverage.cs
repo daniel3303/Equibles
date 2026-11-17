@@ -12,6 +12,33 @@ namespace Equibles.Holdings.BusinessLogic;
 
 public static class HoldingsComparisonCoverage
 {
+    /// <summary>
+    /// The previous quarter's holders of the stock whose 13F for <paramref name="reportDate"/>
+    /// withholds its whole book under confidential treatment, largest first, each with the shares
+    /// it last disclosed. Read through <see cref="History"/>, so a holder list and the ownership
+    /// history name the same filers with the same shares.
+    /// </summary>
+    public static async Task<IReadOnlyList<HoldingsExcludedFiler>> WithheldFilers(
+        InstitutionalHoldingRepository repository,
+        EquityIssuer stock,
+        DateOnly reportDate,
+        IReadOnlyList<StockSplit> splits,
+        string listedTicker = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var history = await History(
+            repository,
+            stock,
+            [HoldingsCorpusCoverage.PreviousQuarterEnd(reportDate), reportDate],
+            splits,
+            listedTicker,
+            null,
+            cancellationToken
+        );
+        return history.GetValueOrDefault(reportDate)?.WithheldFilers.ToList() ?? [];
+    }
+
     public static async Task<Dictionary<DateOnly, HoldingsComparisonStatus>> History(
         InstitutionalHoldingRepository repository,
         EquityIssuer stock,

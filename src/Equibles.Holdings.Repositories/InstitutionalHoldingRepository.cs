@@ -2669,6 +2669,26 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     /// <summary>
+    /// The quarters after <paramref name="after"/> for which the holder's 13F withholds its whole
+    /// book under a confidential treatment request, newest first. After the holder's newest stored
+    /// quarter, these are quarters it reported whose positions are not public yet.
+    /// </summary>
+    public IQueryable<DateOnly> GetWithheldQuartersAfter(
+        InstitutionalHolder holder,
+        DateOnly after
+    ) =>
+        DbContext
+            .Set<Form13FConfidentialFiling>()
+            .Where(filing =>
+                filing.FilerCik == holder.Cik
+                && filing.ReportDate > after
+                && filing.DisclosedPositionCount == 0
+            )
+            .Select(filing => filing.ReportDate)
+            .Distinct()
+            .OrderByDescending(date => date);
+
+    /// <summary>
     /// The quarters, among the given ones, in which each given holder's 13F withholds its whole
     /// book under a confidential treatment request: it declares omitted positions and discloses
     /// none. For a holder with no observed 13F that quarter, this is the proof it filed rather

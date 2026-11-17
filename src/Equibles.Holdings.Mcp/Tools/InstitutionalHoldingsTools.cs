@@ -168,7 +168,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetTopHolders", Title = "Top Institutional Holders", ReadOnly = true)]
     [Description(
-        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions, each marked as carried and valued at its own quarter's close; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership. Each holder shows its entity type from regulatory records (Form ADV, SEC filer profile, 13D/13G, N-CEN), filtered by holderTypes, and its style band measured from its filed book, filtered by styles."
+        "Get the top institutional holders (fund managers) of an exact stock or ETF listing from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. During the newest quarter's filing window, non-ETF primary stocks carry non-filers' prior-quarter positions, each marked as carried and valued at its own quarter's close; ETF listings remain exact and as-filed because carry-forward is filer-wide. Use position type before treating put/call rows as ownership. A previous holder whose 13F for the quarter withholds its whole book under SEC confidential treatment is named below the list with the shares it last disclosed; it is not ranked and its absence is not a sale. Each holder shows its entity type from regulatory records (Form ADV, SEC filer profile, 13D/13G, N-CEN), filtered by holderTypes, and its style band measured from its filed book, filtered by styles."
     )]
     public Task<string> GetTopHolders(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
@@ -288,6 +288,15 @@ public class InstitutionalHoldingsTools
                     );
                 }
 
+                // Named beside the list: their positions are undisclosed, neither sold nor ranked.
+                var withheld = await HoldingsComparisonCoverage.WithheldFilers(
+                    _holdingRepository,
+                    stock,
+                    targetDate,
+                    splits,
+                    exactListingScope ? listedTicker : null
+                );
+
                 // Totals and percentages stay over every institution; a filter only selects rows.
                 var totalShares = holdings.Sum(h => h.Shares);
                 var totalValue = holdings.Sum(h => h.Value);
@@ -350,7 +359,8 @@ public class InstitutionalHoldingsTools
                     filterDescription,
                     styleAsOf,
                     totalComposition,
-                    presentCombined ? RequirePreviousReportDate(anchor) : null
+                    presentCombined ? RequirePreviousReportDate(anchor) : null,
+                    withheld
                 );
                 var advisedNote = await AdvisedFundsNote(
                     stock,
@@ -556,9 +566,11 @@ public class InstitutionalHoldingsTools
         string filterDescription = null,
         DateOnly? styleAsOf = null,
         string totalComposition = null,
-        DateOnly? carriedFrom = null
+        DateOnly? carriedFrom = null,
+        IReadOnlyList<Equibles.Holdings.BusinessLogic.Models.HoldingsExcludedFiler> withheld = null
     )
     {
+        var withheldIds = (withheld ?? []).Select(filer => filer.InstitutionalHolderId).ToHashSet();
         var first = holdings.Count == 0 ? 0 : offset + 1;
         var last = offset + holdings.Count;
         var subtitle =
@@ -590,9 +602,11 @@ public class InstitutionalHoldingsTools
                         : $"{PositionType(h.OptionType, h.ShareType)} ({h.ListedTicker})";
                 // The combined view prices a carried row at its own quarter's close, so the row
                 // says which quarter it is; unmarked, it reads as a position filed for targetDate.
-                var institution = IsCarried(h, carriedFrom)
-                    ? $"{h.InstitutionName} \\*"
-                    : h.InstitutionName;
+                // A carried row of a filer that reported and withheld its book is not "not yet filed".
+                var institution =
+                    !IsCarried(h, carriedFrom) ? h.InstitutionName
+                    : withheldIds.Contains(h.InstitutionalHolderId) ? $"{h.InstitutionName} \u2020"
+                    : $"{h.InstitutionName} \\*";
                 return $"| {offset + rank} | {institution} | "
                     + $"{positionType} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
@@ -604,7 +618,31 @@ public class InstitutionalHoldingsTools
         );
 
         result.AppendLine();
-        if (carriedFrom is { } carried && holdings.Any(h => IsCarried(h, carriedFrom)))
+        if (
+            carriedFrom is { } withheldFrom
+            && holdings.Any(h =>
+                IsCarried(h, carriedFrom) && withheldIds.Contains(h.InstitutionalHolderId)
+            )
+        )
+            result.AppendLine(
+                $"\u2020 Withheld under confidential treatment: the filer reported {FormatDate(targetDate)} and its positions are not public yet. The row is its {FormatDate(withheldFrom)} position, the last it disclosed."
+            );
+        else if (withheld is { Count: > 0 } && carriedFrom == null)
+        {
+            result.AppendLine(
+                $"Withheld under confidential treatment (the filer reported {FormatDate(targetDate)} and its positions are not public yet, usually for about a year; they are not sold, not ranked above and not in the totals):"
+            );
+            foreach (var filer in withheld)
+                result.AppendLine(
+                    $"- {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(HoldingsCorpusCoverage.PreviousQuarterEnd(targetDate))}."
+                );
+        }
+        if (
+            carriedFrom is { } carried
+            && holdings.Any(h =>
+                IsCarried(h, carriedFrom) && !withheldIds.Contains(h.InstitutionalHolderId)
+            )
+        )
             result.AppendLine(
                 $"\\* Carried, not yet filed for the newest quarter: the row is the filer's {FormatDate(carried)} position, valued at that quarter's close. The total value above adds carried rows at the {FormatDate(carried)} close to filed rows at the {FormatDate(targetDate)} close."
             );
@@ -658,7 +696,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the historical trend of institutional (13F) ownership for an exact stock or ETF listing across multiple quarters. Shows total shares, published position value, and filer count. Total Shares and Total Value count common-share positions only; put, call and principal rows are left out, since they are not shares held. The filer count includes every 13F filer reporting any position, options included. Share Chg (QoQ) is like-for-like: it compares only filers with an observed 13F in both quarters, and each quarter notes how many filers and shares it excluded (the largest named), so missing filings and filer identity changes are not trades. Values normally use report-date closing prices, may fall back to filer values, and can include zero when unavailable. While the newest quarter's filing window is open, non-ETF primary stocks use a provisional combined view; ETF listings remain exact and as-filed because carry-forward is filer-wide."
+        "Get the historical trend of institutional (13F) ownership for an exact stock or ETF listing across multiple quarters. Shows total shares, published position value, and filer count. Total Shares and Total Value count common-share positions only; put, call and principal rows are left out, since they are not shares held. The filer count includes every 13F filer reporting any position, options included. Share Chg (QoQ) is like-for-like: it compares only filers with an observed 13F in both quarters, and each quarter notes how many filers and shares it excluded (the largest named), so missing filings and filer identity changes are not trades. A quarter also lists each previous holder whose 13F withholds its whole book under SEC confidential treatment, with the shares it last disclosed: that position is undisclosed, not sold, and not in the quarter's totals. Values normally use report-date closing prices, may fall back to filer values, and can include zero when unavailable. While the newest quarter's filing window is open, non-ETF primary stocks use a provisional combined view; ETF listings remain exact and as-filed because carry-forward is filer-wide."
     )]
     public Task<string> GetInstitutionalOwnershipHistory(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
