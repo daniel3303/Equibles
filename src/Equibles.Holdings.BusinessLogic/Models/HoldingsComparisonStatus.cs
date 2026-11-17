@@ -32,7 +32,8 @@ public sealed record HoldingsComparisonStatus(
     public IEnumerable<HoldingsExcludedFiler> WithheldFilers =>
         ExcludedFilers
             .Where(filer =>
-                MissingCurrentFilers.Contains(filer.InstitutionalHolderId)
+                filer.Shares > 0
+                && MissingCurrentFilers.Contains(filer.InstitutionalHolderId)
                 && ConfidentialFilers.Contains(filer.InstitutionalHolderId)
             )
             .OrderByDescending(filer => filer.Shares)

@@ -2669,6 +2669,45 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     /// <summary>
+    /// Every holder's quarter, among the given ones, whose book is withheld and still undisclosed:
+    /// its 13F declares omitted positions and discloses none, and no 13F of the holder for that
+    /// quarter is stored. The later filing that discloses the book ends it.
+    /// </summary>
+    public IQueryable<WithheldBook> GetUndisclosedWithheldBooks(
+        IReadOnlyCollection<DateOnly> reportDates
+    ) =>
+        DbContext
+            .Set<Form13FConfidentialFiling>()
+            .Where(filing =>
+                reportDates.Contains(filing.ReportDate) && filing.DisclosedPositionCount == 0
+            )
+            .Join(
+                DbContext.Set<InstitutionalHolder>(),
+                filing => filing.FilerCik,
+                holder => holder.Cik,
+                (filing, holder) =>
+                    new WithheldBook
+                    {
+                        ReportDate = filing.ReportDate,
+                        HolderId = holder.Id,
+                        Name = holder.Name,
+                        Cik = holder.Cik,
+                    }
+            )
+            .Where(book =>
+                !GetAll()
+                    .Where(Is13F)
+                    .Any(h =>
+                        h.InstitutionalHolderId == book.HolderId && h.ReportDate == book.ReportDate
+                    )
+                && !Zero13FRestatements()
+                    .Any(f =>
+                        f.InstitutionalHolderId == book.HolderId && f.ReportDate == book.ReportDate
+                    )
+            )
+            .Distinct();
+
+    /// <summary>
     /// The quarters after <paramref name="after"/> for which the holder's 13F withholds its whole
     /// book under a confidential treatment request, newest first. After the holder's newest stored
     /// quarter, these are quarters it reported whose positions are not public yet.

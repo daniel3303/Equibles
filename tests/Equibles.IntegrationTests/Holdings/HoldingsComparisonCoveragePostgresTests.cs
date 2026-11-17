@@ -160,6 +160,16 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
         result[dates[2]]
             .ConfidentialFilers.Should()
             .Equal([withholding.Id], "the comparison still misses its previous quarter");
+
+        // The reader a long chart uses names the same filers with the same shares.
+        var byQuarter = await HoldingsComparisonCoverage.WithheldFilersByQuarter(
+            new InstitutionalHoldingRepository(db),
+            stock,
+            dates,
+            []
+        );
+        byQuarter.Keys.Should().Equal(dates[1]);
+        byQuarter[dates[1]].Should().BeEquivalentTo(result[dates[1]].WithheldFilers);
     }
 
     private static Form13FConfidentialFiling ConfidentialFiling(

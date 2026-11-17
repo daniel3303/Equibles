@@ -5,4 +5,8 @@ public sealed class WithheldBook
 {
     public DateOnly ReportDate { get; init; }
     public Guid HolderId { get; init; }
+
+    // Filled only by reads that name the holder.
+    public string Name { get; init; }
+    public string Cik { get; init; }
 }

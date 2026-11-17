@@ -15,8 +15,7 @@ public static class HoldingsComparisonCoverage
     /// <summary>
     /// The previous quarter's holders of the stock whose 13F for <paramref name="reportDate"/>
     /// withholds its whole book under confidential treatment, largest first, each with the shares
-    /// it last disclosed. Read through <see cref="History"/>, so a holder list and the ownership
-    /// history name the same filers with the same shares.
+    /// it last disclosed.
     /// </summary>
     public static async Task<IReadOnlyList<HoldingsExcludedFiler>> WithheldFilers(
         InstitutionalHoldingRepository repository,
@@ -25,18 +24,118 @@ public static class HoldingsComparisonCoverage
         IReadOnlyList<StockSplit> splits,
         string listedTicker = null,
         CancellationToken cancellationToken = default
+    ) =>
+        (
+            await WithheldFilersByQuarter(
+                repository,
+                stock,
+                [reportDate],
+                splits,
+                listedTicker,
+                cancellationToken
+            )
+        ).GetValueOrDefault(reportDate) ?? [];
+
+    /// <summary>
+    /// <see cref="WithheldFilers"/> for many quarters at once, keyed by the withheld quarter;
+    /// a quarter with none has no entry. It starts from the few withheld books rather than from
+    /// every holder of the stock, so a surface that shows a long history can afford it, and it
+    /// names the same filers and shares as <see cref="HoldingsComparisonStatus.WithheldFilers"/>
+    /// (pinned by HoldingsComparisonCoveragePostgresTests).
+    /// </summary>
+    public static async Task<
+        Dictionary<DateOnly, IReadOnlyList<HoldingsExcludedFiler>>
+    > WithheldFilersByQuarter(
+        InstitutionalHoldingRepository repository,
+        EquityIssuer stock,
+        IReadOnlyCollection<DateOnly> reportDates,
+        IReadOnlyList<StockSplit> splits,
+        string listedTicker = null,
+        CancellationToken cancellationToken = default
     )
     {
-        var history = await History(
-            repository,
-            stock,
-            [HoldingsCorpusCoverage.PreviousQuarterEnd(reportDate), reportDate],
-            splits,
-            listedTicker,
-            null,
-            cancellationToken
-        );
-        return history.GetValueOrDefault(reportDate)?.WithheldFilers.ToList() ?? [];
+        var books = await repository
+            .GetUndisclosedWithheldBooks(reportDates)
+            .ToListAsync(cancellationToken);
+        if (books.Count == 0)
+            return [];
+        var holderIds = books.Select(book => book.HolderId).Distinct().ToArray();
+        var previousDates = books
+            .Select(book => HoldingsCorpusCoverage.PreviousQuarterEnd(book.ReportDate))
+            .Distinct()
+            .ToArray();
+        var holdings =
+            listedTicker == null
+                ? repository.Get13FHistoryByStock(stock)
+                : repository.Get13FHistoryByListing(stock, listedTicker);
+        var positions = await holdings
+            .Where(h =>
+                previousDates.Contains(h.ReportDate) && holderIds.Contains(h.InstitutionalHolderId)
+            )
+            .AsActivityLegs()
+            .GroupBy(h => new
+            {
+                h.ReportDate,
+                h.InstitutionalHolderId,
+                h.ListedTicker,
+            })
+            .Select(g => new HoldingsPositionShares
+            {
+                ReportDate = g.Key.ReportDate,
+                InstitutionalHolderId = g.Key.InstitutionalHolderId,
+                ListedTicker = g.Key.ListedTicker,
+                Shares = g.Sum(h => h.Shares),
+            })
+            .ToListAsync(cancellationToken);
+        var primaryTicker = stock.Presentation.Listing.Ticker;
+        var lastDisclosed = positions
+            .GroupBy(p => (p.ReportDate, p.InstitutionalHolderId))
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                    g.Sum(p =>
+                        SplitAdjustment.AdjustShareCount(
+                            p.Shares,
+                            p.ReportDate,
+                            ShareCountSplitScope.ForListedSeries(
+                                splits,
+                                primaryTicker,
+                                p.ListedTicker ?? primaryTicker
+                            )
+                        )
+                    )
+            );
+        return books
+            .Select(book =>
+                (
+                    book,
+                    Held: lastDisclosed.TryGetValue(
+                        (HoldingsCorpusCoverage.PreviousQuarterEnd(book.ReportDate), book.HolderId),
+                        out var shares
+                    ),
+                    Shares: shares
+                )
+            )
+            // Only a holder of the stock in the quarter before; one with only options held no shares.
+            .Where(entry => entry.Held && entry.Shares > 0)
+            .GroupBy(entry => entry.book.ReportDate)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                    (IReadOnlyList<HoldingsExcludedFiler>)
+                        group
+                            .OrderByDescending(entry => entry.Shares)
+                            .ThenBy(entry => entry.book.HolderId)
+                            .Select(entry => new HoldingsExcludedFiler(
+                                entry.book.HolderId,
+                                entry.book.Name,
+                                entry.Shares
+                            )
+                            {
+                                Cik = entry.book.Cik,
+                            })
+                            .ToList()
+            );
     }
 
     public static async Task<Dictionary<DateOnly, HoldingsComparisonStatus>> History(
