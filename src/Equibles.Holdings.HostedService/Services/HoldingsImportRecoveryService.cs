@@ -20,6 +20,11 @@ public class HoldingsImportRecoveryService(
 {
     private const int FilersPerCycle = 10;
 
+    // SEC's per-filer filing list lags acceptance by minutes. A filing discovered within the
+    // window retries on the short interval; an older one keeps the filer's ordinary cooldown.
+    internal static readonly TimeSpan ListingLagRetry = TimeSpan.FromMinutes(3);
+    internal static readonly TimeSpan ListingLagWindow = TimeSpan.FromHours(1);
+
     public async Task Recover(DateOnly minReportDate, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
@@ -56,6 +61,22 @@ public class HoldingsImportRecoveryService(
             try
             {
                 await RecoverFiler(cik, minReportDate, sweptThrough, cancellationToken);
+            }
+            catch (PendingFilingNotListedException)
+            {
+                // Expected minutes after acceptance; only a filing discovered recently retries soon.
+                var retried = await failures.RetrySoon(
+                    cik,
+                    now - ListingLagWindow,
+                    now + ListingLagRetry,
+                    cancellationToken
+                );
+                logger.LogInformation(
+                    "Holdings recovery for CIK {Cik} waits for SEC's filing list; {Retried} filings retry in {Minutes} minutes",
+                    cik,
+                    retried,
+                    ListingLagRetry.TotalMinutes
+                );
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -101,8 +122,9 @@ public class HoldingsImportRecoveryService(
         var filings = await edgar.GetCompanyFilings(
             cik,
             edgarForm: null,
+            // No upper bound: a filing accepted after 17:30 ET is dated the next business day.
             fromDate: from,
-            toDate: DateOnly.FromDateTime(DateTime.UtcNow)
+            toDate: null
         );
         var outOfScope = filings
             .Where(f => f.ReportDate != default && f.ReportDate < minReportDate)
@@ -146,7 +168,7 @@ public class HoldingsImportRecoveryService(
             // EDGAR removes a filing the filer withdraws or SEC rejects after acceptance, and its
             // directory goes with it; a directory still published means the index only lags.
             if (await edgar.FilingExists(cik, row.AccessionNumber, cancellationToken))
-                throw new InvalidDataException(
+                throw new PendingFilingNotListedException(
                     "The SEC submissions response omitted a pending filing EDGAR still publishes; recovery was not attempted."
                 );
             await failures.Resolve(

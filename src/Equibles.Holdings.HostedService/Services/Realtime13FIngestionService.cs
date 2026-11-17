@@ -220,6 +220,60 @@ public class Realtime13FIngestionService
             lookbackDays,
             cancellationToken
         );
+        var queued = await QueueUnstored(entries, cancellationToken);
+        if (queued > 0)
+            _logger.LogInformation(
+                "13F discovery queued {Count} unstored filings ahead of the sweep",
+                queued
+            );
+        return earliestFailedDate;
+    }
+
+    /// <summary>
+    /// Queues for recovery the 13F filings EDGAR's latest-filings feed just listed, hours before
+    /// the day's index exists. Returns how many were queued; a filing already processed, stored
+    /// or queued is left alone.
+    /// </summary>
+    public virtual async Task<int> QueueFeedFilings(
+        IReadOnlyCollection<EdgarRecentFilingEntry> feedEntries,
+        CancellationToken cancellationToken
+    )
+    {
+        var entries = feedEntries
+            .Where(entry =>
+                entry.FormType is "13F-HR" or "13F-HR/A"
+                && !string.IsNullOrEmpty(entry.AccessionNumber)
+                && !string.IsNullOrEmpty(entry.Cik)
+            )
+            .DistinctBy(entry => entry.AccessionNumber, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => new EdgarDailyIndexEntry
+            {
+                FormType = entry.FormType,
+                CompanyName = entry.CompanyName,
+                Cik = entry.Cik,
+                AccessionNumber = entry.AccessionNumber,
+                // The acceptance day in SEC's own offset. A filing accepted after 17:30 ET is
+                // dated the next business day, so this is never later than its filing date.
+                DateFiled = DateOnly.FromDateTime((entry.Updated ?? DateTimeOffset.UtcNow).Date),
+            })
+            .ToList();
+        if (entries.Count == 0)
+            return 0;
+        var queued = await QueueUnstored(entries, cancellationToken);
+        if (queued > 0)
+            _logger.LogInformation(
+                "13F live feed queued {Count} newly filed 13F filings for import",
+                queued
+            );
+        return queued;
+    }
+
+    // Queues the entries that are neither processed, stored nor already queued; returns how many.
+    private async Task<int> QueueUnstored(
+        IReadOnlyCollection<EdgarDailyIndexEntry> entries,
+        CancellationToken cancellationToken
+    )
+    {
         var processed = await LoadProcessedAccessions(
             entries.Select(e => e.AccessionNumber),
             cancellationToken
@@ -232,12 +286,13 @@ public class Realtime13FIngestionService
         // A stored filing is the rewound sweep's to re-apply; only one never stored is owed now.
         unseen.RemoveAll(e => retained.Contains(e.AccessionNumber));
         if (unseen.Count == 0)
-            return earliestFailedDate;
+            return 0;
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var failures = scope.ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>();
+        var queued = 0;
         foreach (var entry in unseen)
-            await failures.EnqueueRecovery(
+            queued += await failures.EnqueueRecovery(
                 entry.AccessionNumber,
                 entry.Cik.TrimStart('0'),
                 // A filing EDGAR lists again on a later day is recovered from the day it was
@@ -246,11 +301,7 @@ public class Realtime13FIngestionService
                     ?? entry.DateFiled,
                 cancellationToken
             );
-        _logger.LogInformation(
-            "13F discovery queued {Count} unstored filings ahead of the sweep",
-            unseen.Count
-        );
-        return earliestFailedDate;
+        return queued;
     }
 
     /// <summary>

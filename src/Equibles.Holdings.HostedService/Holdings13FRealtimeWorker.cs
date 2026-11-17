@@ -45,6 +45,14 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     private bool _hasMoreFilings;
     private bool _storedReplaysRestated;
 
+    // Set when the wait ended on a recovery request alone: that cycle imports the queued filings
+    // and leaves the daily-index sweep to its own interval.
+    private bool _recoveryWake;
+
+    // When the sweep is next owed after a cycle that skipped it, so a run of recovery wakes
+    // cannot keep pushing the sweep a full interval away.
+    private DateTime? _sweepDueAt;
+
     protected override string WorkerName => "13F real-time ingestion";
     protected override TimeSpan SleepInterval => TimeSpan.FromHours(6);
     protected override ErrorSource ErrorSource => ErrorSource.HoldingsScraper;
@@ -79,10 +87,24 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             if (untilRecovery < interval)
                 interval = untilRecovery;
         }
+        if (_sweepDueAt is { } sweepDueAt)
+        {
+            var untilSweep = sweepDueAt - DateTime.UtcNow;
+            if (untilSweep < BacklogRetryInterval)
+                untilSweep = BacklogRetryInterval;
+            if (untilSweep < interval)
+                interval = untilSweep;
+        }
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var requested = signal.WaitAsync(wait.Token);
+        var recovery = signal.WaitForRecoveryAsync(wait.Token);
         var elapsed = Task.Delay(interval, wait.Token);
-        await Task.WhenAny(requested, elapsed);
+        await Task.WhenAny(requested, recovery, elapsed);
+        // A replay request or an elapsed interval owes the full cycle even beside a recovery one.
+        _recoveryWake =
+            recovery.IsCompletedSuccessfully
+            && !requested.IsCompletedSuccessfully
+            && !elapsed.IsCompleted;
         await wait.CancelAsync();
     }
 
@@ -97,6 +119,9 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     {
         var sweepContinues = _hasMoreFilings;
         _hasMoreFilings = false;
+        var recoveryWake = _recoveryWake;
+        _recoveryWake = false;
+        _sweepDueAt = null;
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
         var minReportDate = DateOnly.FromDateTime(startDate);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -146,15 +171,19 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             _hasMoreFilings = sweepContinues;
             return;
         }
-        // A replay backlog wakes this worker every few seconds. A sweep that already reaches
-        // today then repeats on its own interval instead of re-reading the same daily indexes.
+        // A replay backlog wakes this worker every few seconds, and a newly queued filing wakes
+        // it at once. A sweep that already reaches today then repeats on its own interval
+        // instead of re-reading the same daily indexes.
         if (
             sweepReachesToday
             && !sweepContinues
-            && _nextRecoveryAt <= now
+            && (recoveryWake || _nextRecoveryAt <= now)
             && now - state.UpdatedAt < SleepInterval
         )
+        {
+            _sweepDueAt = state.UpdatedAt + SleepInterval;
             return;
+        }
 
         // Cold start (no watermark) backfills the season via the quarter-floor
         // lookback; once a watermark exists we only resume from it plus the

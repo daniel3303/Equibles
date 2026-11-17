@@ -480,6 +480,124 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
         }
     }
 
+    // SEC's filing list lags a newly accepted filing by minutes. Only a filing queued within the
+    // last hour retries soon; the filer's older pending filing keeps the ordinary cooldown.
+    [Fact]
+    public async Task Recovery_RetriesSoonOnlyTheFreshFilingSecsListDoesNotCarryYet()
+    {
+        await using var db = fixture.CreateDbContext();
+        var failures = new HoldingsImportFailureRepository(db);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await failures.EnqueueRecovery("stale", "123", today.AddDays(-3), CancellationToken.None);
+        await failures
+            .GetAll()
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(r => r.FirstFailedAt, DateTime.UtcNow.AddDays(-3))
+            );
+        await failures.EnqueueRecovery("fresh", "123", today, CancellationToken.None);
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyFilings("123", null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+            .Returns([]);
+        edgar.FilingExists("123", Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
+        var recovery = new HoldingsImportRecoveryService(
+            failures,
+            new InstitutionalHoldingRepository(db),
+            new RealtimeSweepStateRepository(db),
+            edgar,
+            Substitute.For<Realtime13FIngestionService>(
+                edgar,
+                new Filing13FXmlParser(),
+                new Realtime13FArchiveBuilder(),
+                null,
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<Realtime13FIngestionService>>()
+            ),
+            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+        );
+
+        await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        var rows = await failures.GetAll().AsNoTracking().ToDictionaryAsync(r => r.AccessionNumber);
+        rows.Values.Should().OnlyContain(row => row.ResolvedAt == null);
+        rows["fresh"]
+            .NextAttemptAt.Should()
+            .BeCloseTo(
+                DateTime.UtcNow + HoldingsImportRecoveryService.ListingLagRetry,
+                TimeSpan.FromMinutes(1)
+            );
+        rows["stale"].NextAttemptAt.Should().BeAfter(DateTime.UtcNow.AddHours(5));
+    }
+
+    // A 13F accepted after 17:30 ET is dated the next business day: queued from the feed that
+    // evening, it must import then, not wait for its filing date to arrive.
+    [Fact]
+    public async Task Recovery_ImportsAFilingDatedAfterToday()
+    {
+        await using var db = fixture.CreateDbContext();
+        var failures = new HoldingsImportFailureRepository(db);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await failures.EnqueueRecovery("evening", "123", today, CancellationToken.None);
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyFilings("123", null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+            .Returns(call =>
+                new List<FilingData>
+                {
+                    new()
+                    {
+                        AccessionNumber = "evening",
+                        Form = "13F-HR",
+                        FilingDate = today.AddDays(3),
+                        ReportDate = Quarter,
+                    },
+                }
+                    .Where(filing =>
+                        call.ArgAt<DateOnly?>(3) is not { } toDate || filing.FilingDate <= toDate
+                    )
+                    .ToList()
+            );
+        edgar.FilingExists("123", "evening", Arg.Any<CancellationToken>()).Returns(true);
+        var ingestion = Substitute.For<Realtime13FIngestionService>(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            null,
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        ingestion
+            .ReplayRecoveryTail(
+                Arg.Any<IReadOnlyCollection<EdgarDailyIndexEntry>>(),
+                Arg.Any<IReadOnlySet<string>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new RecoveryReplayResult(1, 1, 0, ["evening"], Complete: true));
+        var recovery = new HoldingsImportRecoveryService(
+            failures,
+            new InstitutionalHoldingRepository(db),
+            new RealtimeSweepStateRepository(db),
+            edgar,
+            ingestion,
+            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+        );
+
+        await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        await ingestion
+            .Received(1)
+            .ReplayRecoveryTail(
+                Arg.Is<IReadOnlyCollection<EdgarDailyIndexEntry>>(entries =>
+                    entries.Single().AccessionNumber == "evening"
+                ),
+                Arg.Any<IReadOnlySet<string>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>()
+            );
+        (await failures.GetAll().AsNoTracking().SingleAsync()).ResolvedAt.Should().NotBeNull();
+    }
+
     // A resolved row that keeps its failure reason means the filing's holdings were written; every
     // row closed without a write names the source proof instead.
     [Fact]

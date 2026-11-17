@@ -45,18 +45,21 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     private readonly BackfillStateRepository _backfillStateRepository;
     private readonly DocumentScraperOptions _options;
     private readonly ILogger<FilingDiscoveryService> _logger;
+    private readonly IReadOnlyList<IRecentFilingSink> _recentFilingSinks;
 
     public FilingDiscoveryService(
         ISecEdgarClient secEdgarClient,
         BackfillStateRepository backfillStateRepository,
         IOptions<DocumentScraperOptions> options,
-        ILogger<FilingDiscoveryService> logger
+        ILogger<FilingDiscoveryService> logger,
+        IEnumerable<IRecentFilingSink> recentFilingSinks = null
     )
     {
         _secEdgarClient = secEdgarClient;
         _backfillStateRepository = backfillStateRepository;
         _options = options.Value;
         _logger = logger;
+        _recentFilingSinks = [.. recentFilingSinks ?? []];
     }
 
     public Task<List<EquityIssuer>> DiscoverCompaniesWithNewFilings(
@@ -237,6 +240,46 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         CancellationToken cancellationToken
     )
     {
+        var fresh = new List<EdgarRecentFilingEntry>();
+        await PollRecentFeed(cikToCompany, syncedForms, dirty, fresh, cancellationToken);
+        await OfferToSinks(fresh, cancellationToken);
+    }
+
+    // A sink sees each entry once, on the poll that first reads it, whatever its form or filer.
+    // A failing sink only loses those entries' early notice: its own lane's index sweep backstops.
+    private async Task OfferToSinks(
+        List<EdgarRecentFilingEntry> fresh,
+        CancellationToken cancellationToken
+    )
+    {
+        if (fresh.Count == 0)
+            return;
+        foreach (var sink in _recentFilingSinks)
+        {
+            try
+            {
+                await sink.Offer(fresh, cancellationToken);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Latest-filings sink {Sink} failed on {Count} entries",
+                    sink.GetType().Name,
+                    fresh.Count
+                );
+            }
+        }
+    }
+
+    private async Task PollRecentFeed(
+        Dictionary<long, EquityIssuer> cikToCompany,
+        HashSet<string> syncedForms,
+        Dictionary<Guid, EquityIssuer> dirty,
+        List<EdgarRecentFilingEntry> fresh,
+        CancellationToken cancellationToken
+    )
+    {
         var utcNow = DateTime.UtcNow;
         if (utcNow - _lastFeedPollAtUtc < TimeSpan.FromSeconds(_options.RecentFeedPollSeconds))
             return;
@@ -284,6 +327,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                     sawKnownEntry = true;
                     continue;
                 }
+                fresh.Add(entry);
 
                 if (!syncedForms.Contains(entry.FormType))
                     continue;
