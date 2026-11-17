@@ -39,9 +39,8 @@ public static class HoldingsComparisonCoverage
     /// <summary>
     /// <see cref="WithheldFilers"/> for many quarters at once, keyed by the withheld quarter;
     /// a quarter with none has no entry. It starts from the few withheld books rather than from
-    /// every holder of the stock, so a surface that shows a long history can afford it, and it
-    /// names the same filers and shares as <see cref="HoldingsComparisonStatus.WithheldFilers"/>
-    /// (pinned by HoldingsComparisonCoveragePostgresTests).
+    /// every holder of the stock, so a surface that shows a long history can afford it. It needs
+    /// no compared predecessor, so the oldest quarter of a history is answered like any other.
     /// </summary>
     public static async Task<
         Dictionary<DateOnly, IReadOnlyList<HoldingsExcludedFiler>>
@@ -299,9 +298,7 @@ public static class HoldingsComparisonCoverage
     {
         var named = statuses
             .Values.SelectMany(status =>
-                status
-                    .LargestExcludedFilers.Concat(status.WithheldFilers)
-                    .Select(filer => filer.InstitutionalHolderId)
+                status.LargestExcludedFilers.Select(filer => filer.InstitutionalHolderId)
             )
             .Distinct()
             .ToArray();

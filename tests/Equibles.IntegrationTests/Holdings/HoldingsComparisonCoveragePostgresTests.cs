@@ -149,27 +149,25 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
             []
         );
 
-        var withheld = result[dates[1]].WithheldFilers.Should().ContainSingle().Subject;
-        withheld.Name.Should().Be("Withholding filer");
-        withheld.Cik.Should().Be("2");
-        withheld.Shares.Should().Be(700, "the shares it last disclosed, for the quarter before");
         result[dates[1]].Note.Should().Contain("withheld under confidential treatment");
-        result[dates[2]]
-            .WithheldFilers.Should()
-            .BeEmpty("it reported the newer quarter; only its previous one is withheld");
+        result[dates[1]].ConfidentialFilers.Should().Equal(withholding.Id);
         result[dates[2]]
             .ConfidentialFilers.Should()
             .Equal([withholding.Id], "the comparison still misses its previous quarter");
 
-        // The reader a long chart uses names the same filers with the same shares.
         var byQuarter = await HoldingsComparisonCoverage.WithheldFilersByQuarter(
             new InstitutionalHoldingRepository(db),
             stock,
             dates,
             []
         );
-        byQuarter.Keys.Should().Equal(dates[1]);
-        byQuarter[dates[1]].Should().BeEquivalentTo(result[dates[1]].WithheldFilers);
+        byQuarter
+            .Keys.Should()
+            .Equal([dates[1]], "it reported the newer quarter; only its previous one is withheld");
+        var withheld = byQuarter[dates[1]].Should().ContainSingle().Subject;
+        withheld.Name.Should().Be("Withholding filer");
+        withheld.Cik.Should().Be("2");
+        withheld.Shares.Should().Be(700, "the shares it last disclosed, for the quarter before");
     }
 
     private static Form13FConfidentialFiling ConfidentialFiling(

@@ -764,15 +764,29 @@ public class InstitutionalHoldingsTools
                     .OrderBy(row => row.ReportDate)
                     .ToList();
                 await _marketActivityShareRestater.RestateStockActivity(stock, selected);
+                var splits = await _marketActivityShareRestater.EffectiveSplits(stock);
                 var coverage = await HoldingsComparisonCoverage.History(
                     _holdingRepository,
                     stock,
                     selected.Select(row => row.ReportDate).ToList(),
-                    await _marketActivityShareRestater.EffectiveSplits(stock),
+                    splits,
                     exactListingScope ? listedTicker : null,
                     anchor is { IsCombined: true } ? anchor.ReportDate : null
                 );
-                return RenderOwnershipHistory(stock, ticker, selected, anchor, coverage);
+                var withheld = await HoldingsComparisonCoverage.WithheldFilersByQuarter(
+                    _holdingRepository,
+                    stock,
+                    selected
+                        .Select(row => row.ReportDate)
+                        // The combined row carries a withheld filer like any filer yet to file.
+                        .Where(date =>
+                            anchor is not { IsCombined: true } || date != anchor.ReportDate
+                        )
+                        .ToList(),
+                    splits,
+                    exactListingScope ? listedTicker : null
+                );
+                return RenderOwnershipHistory(stock, ticker, selected, anchor, coverage, withheld);
             },
             "GetInstitutionalOwnershipHistory",
             $"ticker: {ticker}"
@@ -783,23 +797,22 @@ public class InstitutionalHoldingsTools
     // confidential treatment: the position is undisclosed, so it is neither a sale nor in the total.
     private static void AppendConfidentialFilers(
         StringBuilder result,
-        IEnumerable<Equibles.Holdings.BusinessLogic.Models.HoldingsComparisonStatus> comparisons
+        IReadOnlyDictionary<
+            DateOnly,
+            IReadOnlyList<Equibles.Holdings.BusinessLogic.Models.HoldingsExcludedFiler>
+        > withheld
     )
     {
-        var quarters = comparisons
-            .Where(comparison => comparison.WithheldFilers.Any())
-            .OrderBy(comparison => comparison.ReportDate)
-            .ToList();
-        if (quarters.Count == 0)
+        if (withheld.Count == 0)
             return;
         result.AppendLine();
         result.AppendLine(
             "Confidential treatment (the filer reported the quarter and withheld its positions; they are not sold and not in that quarter's totals until disclosed, usually about a year later):"
         );
-        foreach (var comparison in quarters)
-        foreach (var filer in comparison.WithheldFilers)
+        foreach (var quarter in withheld.OrderBy(entry => entry.Key))
+        foreach (var filer in quarter.Value)
             result.AppendLine(
-                $"- {FormatDate(comparison.ReportDate)}: {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(comparison.PreviousReportDate)}."
+                $"- {FormatDate(quarter.Key)}: {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(HoldingsCorpusCoverage.PreviousQuarterEnd(quarter.Key))}."
             );
     }
 
@@ -811,7 +824,11 @@ public class InstitutionalHoldingsTools
         IReadOnlyDictionary<
             DateOnly,
             Equibles.Holdings.BusinessLogic.Models.HoldingsComparisonStatus
-        > coverage
+        > coverage,
+        IReadOnlyDictionary<
+            DateOnly,
+            IReadOnlyList<Equibles.Holdings.BusinessLogic.Models.HoldingsExcludedFiler>
+        > withheld
     )
     {
         var result = MarkdownTable.Start(
@@ -846,7 +863,7 @@ public class InstitutionalHoldingsTools
         )
             result.AppendLine($"{FormatDate(comparison.ReportDate)}: {comparison.Note}");
 
-        AppendConfidentialFilers(result, coverage.Values);
+        AppendConfidentialFilers(result, withheld);
 
         if (combinedRowShown)
         {

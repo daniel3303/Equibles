@@ -23,21 +23,10 @@ public sealed record HoldingsComparisonStatus(
     // already present on both sides; the others stay among the missing filers.
     public IReadOnlyList<HoldingsSuccessionGroup> Successions { get; init; } = [];
 
-    // Missing filers whose 13F for the quarter they are missing from declares positions omitted
+    // Missing filers whose 13F for the quarter they are missing from withholds its whole book
     // under a confidential treatment request: they reported, and the position is undisclosed.
+    // The note's reason reads it; HoldingsComparisonCoverage.WithheldFilersByQuarter lists them.
     public IReadOnlySet<Guid> ConfidentialFilers { get; init; } = new HashSet<Guid>();
-
-    // Holders of the previous quarter whose book for this quarter is withheld, with the shares
-    // they last disclosed. Their position is neither sold nor counted in this quarter's totals.
-    public IEnumerable<HoldingsExcludedFiler> WithheldFilers =>
-        ExcludedFilers
-            .Where(filer =>
-                filer.Shares > 0
-                && MissingCurrentFilers.Contains(filer.InstitutionalHolderId)
-                && ConfidentialFilers.Contains(filer.InstitutionalHolderId)
-            )
-            .OrderByDescending(filer => filer.Shares)
-            .ThenBy(filer => filer.InstitutionalHolderId);
 
     public bool ConsecutiveQuarters =>
         PreviousReportDate == HoldingsCorpusCoverage.PreviousQuarterEnd(ReportDate);
