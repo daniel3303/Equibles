@@ -53,7 +53,7 @@ public class LatestFilingsToolsTests : ParadeDbMcpTestBase
         var output = await tools.GetLatest13FFilings("2026-09-30", "2026-11-01");
 
         output.Should().Contain("Loaded by SEC filing day: 2026-11-16: 1; 2026-11-12: 1.");
-        output.Should().Contain("Most recent load: 2026-11-17 12:42 UTC.");
+        output.Should().Contain("Newest load among these filing days: 2026-11-17 12:42 UTC.");
         output
             .Should()
             .Contain("| 1 | TIGER GLOBAL MANAGEMENT LLC | 1167483 | 2026-09-30 | 2026-11-16 |");

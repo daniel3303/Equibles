@@ -6,7 +6,7 @@ namespace Equibles.Holdings.Mcp.Helpers;
 
 /// <summary>
 /// The lines a single-filer 13F answer owes its reader about the filing behind the quarter shown:
-/// when it was filed and last loaded, and why a requested quarter is not the one shown.
+/// when it was filed and loaded, and why a requested quarter is not the one shown.
 /// </summary>
 public static class HolderFilingNotes
 {
@@ -59,9 +59,9 @@ public static class HolderFilingNotes
         return $"13F filing for {Date(reportDate)}: {string.Join("; ", listed)}{more}.";
     }
 
-    // "Last loaded" is the rollup row's creation time: a reprocessed filing carries the reprocess.
+    // The rollup row's creation time: a replay keeps it, a filing removed and imported again moves it.
     private static string Describe(InstitutionalFiling filing) =>
-        $"{(filing.IsAmendment ? "13F-HR/A" : "13F-HR")} filed {Date(filing.FilingDate)}, last loaded {LoadedAt(filing.CreationTime)} (accession {filing.AccessionNumber})";
+        $"{(filing.IsAmendment ? "13F-HR/A" : "13F-HR")} filed {Date(filing.FilingDate)}, loaded {LoadedAt(filing.CreationTime)} (accession {filing.AccessionNumber})";
 
     public static string LoadedAt(DateTime utc) =>
         McpFormat.Invariant(utc, "yyyy-MM-dd HH:mm") + " UTC";

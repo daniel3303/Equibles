@@ -31,7 +31,7 @@ public class LatestFilingsToolsTests
         output
             .Should()
             .Contain("Loaded by SEC filing day: 2026-11-16: 2; 2026-11-12: 1; 2026-11-05: 1.");
-        output.Should().Contain("Most recent load: 2026-11-17 12:42 UTC.");
+        output.Should().Contain("Newest load among these filing days: 2026-11-17 12:42 UTC.");
         output
             .Should()
             .Contain(

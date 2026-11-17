@@ -41,7 +41,7 @@ public class LatestFilingsTools
 
     [McpServerTool(Name = "GetLatest13FFilings", Title = "Latest 13F Filings", ReadOnly = true)]
     [Description(
-        "List the newest SEC 13F-HR filings loaded here, newest filing day first: filer, CIK, report quarter, SEC filing date, when the filing was last loaded (UTC), original or amendment, tracked positions and tracked value. Opens with how many filings are loaded per recent filing day and when the newest was loaded, so you can tell whether a quarter's filings are in before reading a filer's holdings. Filter by reportDate (a quarter end) or filedSince. A filing appears only after it is filed with the SEC and loaded; a filer absent from the list has no newer 13F on file here."
+        "List the newest SEC 13F-HR filings loaded here, newest filing day first: filer, CIK, report quarter, SEC filing date, when the filing was loaded (UTC), original or amendment, tracked positions and tracked value. Opens with how many filings are loaded per recent filing day and when the newest of them was loaded, so you can tell whether a quarter's filings are in before reading a filer's holdings. Filter by reportDate (a quarter end) or filedSince. A filing appears only after it is filed with the SEC and loaded; a filer absent from the list has no newer 13F on file here."
     )]
     public Task<string> GetLatest13FFilings(
         [Description(
@@ -119,7 +119,13 @@ public class LatestFilingsTools
 
     private static async Task<LatestFilingsSummary> ReadSummary(IQueryable<RecentFiling> filings)
     {
-        var newestDay = await filings.MaxAsync(f => (DateOnly?)f.FilingDate);
+        // Ordered like the page so the newest day comes off the filing-date index; an aggregate
+        // over the joined rollup would read every row.
+        var newestDay = await filings
+            .OrderByDescending(f => f.FilingDate)
+            .ThenByDescending(f => f.AccessionNumber)
+            .Select(f => (DateOnly?)f.FilingDate)
+            .FirstOrDefaultAsync();
         if (newestDay is not { } newest)
             return new LatestFilingsSummary([], null);
         var windowStart = newest.AddDays(-SummaryWindowDays);
@@ -163,13 +169,15 @@ public class LatestFilingsTools
                     + "."
             );
         if (summary.NewestLoad is { } newestLoad)
-            result.AppendLine($"Most recent load: {HolderFilingNotes.LoadedAt(newestLoad)}.");
+            result.AppendLine(
+                $"Newest load among these filing days: {HolderFilingNotes.LoadedAt(newestLoad)}."
+            );
         result.AppendLine();
         result.AppendLine(
-            "| # | Filer | CIK | Report date | Filed | Last loaded (UTC) | Form | Positions | Value ($M) |"
+            "| # | Filer | CIK | Report date | Filed | Loaded (UTC) | Form | Positions | Value ($M) |"
         );
         result.AppendLine(
-            "|---|-------|-----|-------------|-------|-------------------|------|-----------|-----------|"
+            "|---|-------|-----|-------------|-------|--------------|------|-----------|-----------|"
         );
         for (var index = 0; index < page.Count; index++)
         {
@@ -185,7 +193,7 @@ public class LatestFilingsTools
         }
         result.AppendLine();
         result.AppendLine(
-            "_Filed is the SEC filing date. Last loaded is when the filing's holdings were last written here; reprocessing a filing updates it. Positions and value count the tracked U.S.-listed stocks and their options. A 13F is due 45 days after the quarter end, so a filer missing from this list has no newer 13F on file here._"
+            "_Filed is the SEC filing date. Loaded is when the filing was first stored here; a filing removed and imported again carries the later time. Positions and value count the tracked U.S.-listed stocks and their options. A 13F is due 45 days after the quarter end, so a filer missing from this list has no newer 13F on file here._"
         );
         var last = offset + page.Count;
         result.AppendLine(

@@ -82,8 +82,8 @@ public class HolderFilingNotesTests
         line.Should()
             .Be(
                 "13F filing for 2026-09-30: "
-                    + "13F-HR/A filed 2026-11-20, last loaded 2026-11-17 12:42 UTC (accession 0000919574-26-008400); "
-                    + "13F-HR filed 2026-11-16, last loaded 2026-11-17 12:42 UTC (accession 0000919574-26-008062)."
+                    + "13F-HR/A filed 2026-11-20, loaded 2026-11-17 12:42 UTC (accession 0000919574-26-008400); "
+                    + "13F-HR filed 2026-11-16, loaded 2026-11-17 12:42 UTC (accession 0000919574-26-008062)."
             );
     }
 

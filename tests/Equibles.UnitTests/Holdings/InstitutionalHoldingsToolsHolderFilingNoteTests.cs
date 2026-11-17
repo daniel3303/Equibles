@@ -43,7 +43,7 @@ public class InstitutionalHoldingsToolsHolderFilingNoteTests
         output
             .Should()
             .Contain(
-                "13F filing for 2026-06-30: 13F-HR filed 2026-08-14, last loaded 2026-08-15 03:01 UTC (accession 0000919574-26-005427)."
+                "13F filing for 2026-06-30: 13F-HR filed 2026-08-14, loaded 2026-08-15 03:01 UTC (accession 0000919574-26-005427)."
             );
     }
 

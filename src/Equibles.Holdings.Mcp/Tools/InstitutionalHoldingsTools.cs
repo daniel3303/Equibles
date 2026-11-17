@@ -1181,7 +1181,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "View the tracked stock positions of a specific institutional investor from an SEC 13F-HR filing. Shows the largest positions by published value (default 20, max 500), with share counts, value, percent of tracked 13F value, and position count. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Coverage is limited to tracked U.S.-listed common stocks and related put/call positions; use position type before treating options as ownership. Use SearchInstitutions first when the name is ambiguous. The answer names the 13F filing behind the quarter shown: its SEC filing date and when it was last loaded."
+        "View the tracked stock positions of a specific institutional investor from an SEC 13F-HR filing. Shows the largest positions by published value (default 20, max 500), with share counts, value, percent of tracked 13F value, and position count. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Coverage is limited to tracked U.S.-listed common stocks and related put/call positions; use position type before treating options as ownership. Use SearchInstitutions first when the name is ambiguous. The answer names the 13F filing behind the quarter shown: its SEC filing date and when it was loaded."
     )]
     public Task<string> GetInstitutionPortfolio(
         [Description(
@@ -3456,7 +3456,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Common shares, put/call positions and principal amounts are separate rows labelled by Type. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?' The answer names the 13F filing behind the quarter shown: its SEC filing date and when it was last loaded."
+        "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Common shares, put/call positions and principal amounts are separate rows labelled by Type. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?' The answer names the 13F filing behind the quarter shown: its SEC filing date and when it was loaded."
     )]
     public Task<string> GetInstitutionQuarterlyActivity(
         [Description(
