@@ -338,6 +338,83 @@ public class GleifEntityClientTests
         (await Client(http).GetRegistered("RA000412", "1803-01-018771")).Should().BeNull();
     }
 
+    // GLEIF files Vale under Rio de Janeiro's board of trade (RA000053) with its CNPJ as the number; other Brazilian
+    // companies sit under the federal revenue or another state's board, all with the CNPJ.
+    [Fact]
+    public async Task GetRegisteredInJurisdiction_ReturnsTheEntityWhicheverRegisterOfTheCountryFilesIt()
+    {
+        var handler = new ReplyHandler([
+            (HttpStatusCode.OK, await Fixture("vale-registered-as.json")),
+        ]);
+        using var http = new HttpClient(handler);
+
+        var entity = await Client(http).GetRegisteredInJurisdiction("BR", "33.592.510/0001-54");
+
+        handler
+            .Requests.Should()
+            .Equal(
+                new Uri(
+                    "https://api.gleif.org/api/v1/lei-records?filter%5Bentity.registeredAs%5D=33.592.510%2F0001-54&page%5Bsize%5D=10"
+                )
+            );
+        entity.LegalEntityIdentifier.Should().Be("254900SMTWBX7RU2SR20");
+        entity.RegistrationAuthorityId.Should().Be("RA000053");
+        entity.Jurisdiction.Should().Be("BR");
+    }
+
+    [Theory]
+    [InlineData("PT", "BR")]
+    [InlineData("BR", "BR-RJ")]
+    [InlineData("BR", "BRX")]
+    public async Task GetRegisteredInJurisdiction_MatchesTheCountryOrItsSubdivisionOnly(
+        string country,
+        string jurisdiction
+    )
+    {
+        var record = JsonNode.Parse(await Fixture("vale-registered-as.json"))!;
+        record["data"]![0]!["attributes"]!["entity"]!["jurisdiction"] = jurisdiction;
+        var handler = new ReplyHandler([(HttpStatusCode.OK, record.ToJsonString())]);
+        using var http = new HttpClient(handler);
+
+        var entity = await Client(http).GetRegisteredInJurisdiction(country, "33.592.510/0001-54");
+
+        (entity != null).Should().Be(jurisdiction == "BR-RJ");
+    }
+
+    [Fact]
+    public async Task GetRegisteredInJurisdiction_FindsNothingWhenTwoActiveEntitiesShareTheNumber()
+    {
+        var record = JsonNode.Parse(await Fixture("vale-registered-as.json"))!;
+        var second = record["data"]![0]!.DeepClone();
+        second["id"] = "529900T8BM49AURSDO55";
+        second["attributes"]!["lei"] = "529900T8BM49AURSDO55";
+        record["data"]!.AsArray().Add(second);
+        record["meta"]!["pagination"]!["total"] = 2;
+        var handler = new ReplyHandler([(HttpStatusCode.OK, record.ToJsonString())]);
+        using var http = new HttpClient(handler);
+
+        (await Client(http).GetRegisteredInJurisdiction("BR", "33.592.510/0001-54"))
+            .Should()
+            .BeNull();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("br")]
+    [InlineData("BRA")]
+    public async Task GetRegisteredInJurisdiction_RefusesAMalformedCountry_WithoutARequest(
+        string country
+    )
+    {
+        var handler = new ReplyHandler([]);
+        using var http = new HttpClient(handler);
+
+        var lookup = () => Client(http).GetRegisteredInJurisdiction(country, "33.592.510/0001-54");
+
+        await lookup.Should().ThrowAsync<ArgumentException>();
+        handler.Requests.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(null, "1803-01-018771")]
     [InlineData("412", "1803-01-018771")]

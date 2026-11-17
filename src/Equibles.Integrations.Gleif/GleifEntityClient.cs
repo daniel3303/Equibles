@@ -169,7 +169,7 @@ public partial class GleifEntityClient
 
     // The one active legal entity a national register files under this registration authority and number, or null
     // when GLEIF holds none, several, or more than one page of candidates; a name is never consulted.
-    public virtual async Task<GleifEntity> GetRegistered(
+    public virtual Task<GleifEntity> GetRegistered(
         string registrationAuthorityId,
         string registeredAs,
         CancellationToken cancellationToken = default
@@ -180,6 +180,44 @@ public partial class GleifEntityClient
                 "A GLEIF registration authority id is required.",
                 nameof(registrationAuthorityId)
             );
+        return Registered(
+            registeredAs,
+            entity => entity.RegistrationAuthorityId == registrationAuthorityId,
+            cancellationToken
+        );
+    }
+
+    // The one active legal entity of a jurisdiction that any register files under this number, or null when GLEIF
+    // holds none, several, or more than one page of candidates. For a national number that several registers of
+    // one country file, as Brazil's CNPJ is under the federal revenue and each state's board of trade.
+    public virtual Task<GleifEntity> GetRegisteredInJurisdiction(
+        string countryCode,
+        string registeredAs,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!CountryCode().IsMatch(countryCode ?? ""))
+            throw new ArgumentException(
+                "An ISO 3166 country code is required.",
+                nameof(countryCode)
+            );
+        // A legal jurisdiction is a country, or one of its subdivisions written after a hyphen.
+        return Registered(
+            registeredAs,
+            entity =>
+                entity.Jurisdiction == countryCode
+                || entity.Jurisdiction?.StartsWith(countryCode + "-", StringComparison.Ordinal)
+                    == true,
+            cancellationToken
+        );
+    }
+
+    private async Task<GleifEntity> Registered(
+        string registeredAs,
+        Func<GleifEntity, bool> files,
+        CancellationToken cancellationToken
+    )
+    {
         if (string.IsNullOrWhiteSpace(registeredAs) || registeredAs.Length > MaxQueryLength)
             throw new ArgumentException("A registered number is required.", nameof(registeredAs));
         var source = new Uri(
@@ -206,7 +244,7 @@ public partial class GleifEntityClient
                 var matches = data.EnumerateArray()
                     .Select(record => Entity(record, null))
                     .Where(entity =>
-                        entity.RegistrationAuthorityId == registrationAuthorityId
+                        files(entity)
                         && entity.RegisteredAs == registeredAs
                         && entity.EntityStatus == "ACTIVE"
                         && entity.RegistrationStatus is "ISSUED" or "LAPSED"
@@ -388,4 +426,7 @@ public partial class GleifEntityClient
 
     [GeneratedRegex("^RA[0-9]{6}$")]
     private static partial Regex RegistrationAuthority();
+
+    [GeneratedRegex("^[A-Z]{2}$")]
+    private static partial Regex CountryCode();
 }
