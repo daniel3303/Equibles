@@ -14,6 +14,14 @@ public class HoldingsImportCoverage(
     HoldingsCusipRescanRepository cusipRescans
 )
 {
+    /// <summary>The cursor of the realtime 13F sweep.</summary>
+    public const string SweepWorkerName = "Holdings13FRealtime";
+
+    /// <summary>The cursor of the discovery pass that reads the newest days ahead of a rewound sweep.</summary>
+    public const string DiscoveryWorkerName = "Holdings13FDiscovery";
+
+    private static readonly string[] RecentFilingWorkers = [SweepWorkerName, DiscoveryWorkerName];
+
     public async Task<string> GetIncompleteReason(
         DateOnly reportDate,
         CancellationToken cancellationToken = default
@@ -35,10 +43,12 @@ public class HoldingsImportCoverage(
                 .AnyAsync(row => row.CompletedAt == null, cancellationToken)
         )
             return "Institutional holdings are being reconciled with SEC filings. Holder totals and changes may be incomplete until reconciliation finishes.";
+        // A replay rewinds the sweep while discovery keeps reading the newest days, so recent
+        // filings are behind only when neither cursor is near today.
         var sweptThrough = await states
-            .GetByWorker("Holdings13FRealtime")
-            .Select(row => (DateOnly?)row.SweptThrough)
-            .SingleOrDefaultAsync(cancellationToken);
+            .GetAll()
+            .Where(row => RecentFilingWorkers.Contains(row.WorkerName))
+            .MaxAsync(row => (DateOnly?)row.SweptThrough, cancellationToken);
         if (
             sweptThrough == null
             || sweptThrough < DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-2)
@@ -47,11 +57,10 @@ public class HoldingsImportCoverage(
         // A filing whose period never parsed can only report a quarter that ended before it was
         // filed, so it leaves later quarters complete; one with no parsed filing date counts for all.
         var unresolved = await failures
-            .GetAll()
+            .GetWithheld()
             .CountAsync(
                 row =>
-                    row.ResolvedAt == null
-                    && (
+                    (
                         reportDate == default
                         || (
                             row.ReportDate == null

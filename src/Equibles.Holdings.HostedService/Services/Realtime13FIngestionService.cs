@@ -88,6 +88,16 @@ public class Realtime13FIngestionService
             .AsNoTracking()
             .ToListAsync(cancellationToken);
         var recoveringManagers = pendingRows.Select(row => row.Cik.TrimStart('0')).ToHashSet();
+        var retained = await LoadRetainedAccessions(
+            entries
+                .Where(e =>
+                    recoveringManagers.Contains(e.Cik.TrimStart('0'))
+                    && !alreadyProcessed.Contains(e.AccessionNumber)
+                )
+                .Select(e => e.AccessionNumber)
+                .ToList(),
+            cancellationToken
+        );
         var retryFrom = new Dictionary<string, DateOnly>();
 
         // Sort chronologically so originals are always imported before their
@@ -117,7 +127,10 @@ public class Realtime13FIngestionService
                         entry.AccessionNumber,
                         entry.Cik.TrimStart('0'),
                         entry.DateFiled,
-                        cancellationToken
+                        cancellationToken,
+                        reason: retained.Contains(entry.AccessionNumber)
+                            ? HoldingsImportFailureReason.StoredReplay
+                            : HoldingsImportFailureReason.PendingRecovery
                     );
                 continue;
             }
@@ -188,6 +201,56 @@ public class Realtime13FIngestionService
         );
 
         return new RealtimeIngestionResult(totalImported, earliestRetryDate);
+    }
+
+    /// <summary>
+    /// Queues for recovery, without importing, every filing in the window that is neither processed
+    /// nor stored. A rewound sweep reaches these days last, and importing a filing here would let
+    /// the sweep re-apply an older one over it; recovery walks each manager's tail in order.
+    /// Returns the earliest day whose index could not be read.
+    /// </summary>
+    public virtual async Task<DateOnly?> QueueUnseenFilings(
+        DateOnly today,
+        int lookbackDays,
+        CancellationToken cancellationToken
+    )
+    {
+        var (entries, earliestFailedDate) = await DiscoverEntries(
+            today,
+            lookbackDays,
+            cancellationToken
+        );
+        var processed = await LoadProcessedAccessions(
+            entries.Select(e => e.AccessionNumber),
+            cancellationToken
+        );
+        var unseen = entries.Where(e => !processed.Contains(e.AccessionNumber)).ToList();
+        var retained = await LoadRetainedAccessions(
+            unseen.Select(e => e.AccessionNumber).ToList(),
+            cancellationToken
+        );
+        // A stored filing is the rewound sweep's to re-apply; only one never stored is owed now.
+        unseen.RemoveAll(e => retained.Contains(e.AccessionNumber));
+        if (unseen.Count == 0)
+            return earliestFailedDate;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var failures = scope.ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>();
+        foreach (var entry in unseen)
+            await failures.EnqueueRecovery(
+                entry.AccessionNumber,
+                entry.Cik.TrimStart('0'),
+                // A filing EDGAR lists again on a later day is recovered from the day it was
+                // filed: the manager's tail is read from this date on.
+                entry.StatedFilingDate
+                    ?? entry.DateFiled,
+                cancellationToken
+            );
+        _logger.LogInformation(
+            "13F discovery queued {Count} unstored filings ahead of the sweep",
+            unseen.Count
+        );
+        return earliestFailedDate;
     }
 
     /// <summary>
@@ -752,6 +815,23 @@ public class Realtime13FIngestionService
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
 
         return await LoadProcessedSet(repo, accessionNumbers, cancellationToken);
+    }
+
+    private async Task<HashSet<string>> LoadRetainedAccessions(
+        IReadOnlyCollection<string> accessionNumbers,
+        CancellationToken cancellationToken
+    )
+    {
+        if (accessionNumbers.Count == 0)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var holdings = scope.ServiceProvider.GetRequiredService<InstitutionalHoldingRepository>();
+        return new HashSet<string>(
+            await holdings
+                .GetRetained13FAccessionsAmong(accessionNumbers)
+                .ToListAsync(cancellationToken),
+            StringComparer.OrdinalIgnoreCase
+        );
     }
 
     internal async Task<bool> RecordProcessed(

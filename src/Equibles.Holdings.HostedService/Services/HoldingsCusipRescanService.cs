@@ -1,5 +1,6 @@
 using System.Data;
 using Equibles.Core.AutoWiring;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -69,7 +70,9 @@ public class HoldingsCusipRescanService(
                     filing.Cik,
                     filing.FilingDate,
                     cancellationToken,
-                    supersedesActiveAttempt: true
+                    supersedesActiveAttempt: true,
+                    // The archive import stored this filing; the new identity only re-reads it.
+                    reason: HoldingsImportFailureReason.StoredReplay
                 );
             foreach (var request in batch)
                 request.ScannedThrough = archive.End;

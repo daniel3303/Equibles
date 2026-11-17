@@ -12,6 +12,7 @@ namespace Equibles.Holdings.HostedService.Services;
 public class HoldingsImportRecoveryService(
     HoldingsImportFailureRepository failures,
     InstitutionalHoldingRepository holdings,
+    RealtimeSweepStateRepository sweepStates,
     ISecEdgarClient edgar,
     Realtime13FIngestionService ingestion,
     ILogger<HoldingsImportRecoveryService> logger
@@ -29,13 +30,23 @@ public class HoldingsImportRecoveryService(
             .Select(group => new
             {
                 Cik = group.Key,
+                // 0 while a due filing is not stored yet, so its manager goes before the managers
+                // that only owe a replay of stored filings.
+                ReplayOnly = group.Min(row =>
+                    row.Reason == HoldingsImportFailureReason.StoredReplay ? 1 : 0
+                ),
                 NextAttemptAt = group.Min(row => row.NextAttemptAt),
             })
-            .OrderBy(row => row.NextAttemptAt)
+            .OrderBy(row => row.ReplayOnly)
+            .ThenBy(row => row.NextAttemptAt)
             .ThenBy(row => row.Cik)
             .Select(row => row.Cik)
             .Take(FilersPerCycle)
             .ToListAsync(cancellationToken);
+        var sweptThrough = await sweepStates
+            .GetByWorker(Holdings13FRealtimeWorker.WorkerStateName)
+            .Select(state => (DateOnly?)state.SweptThrough)
+            .SingleOrDefaultAsync(cancellationToken);
         foreach (var cik in due)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -44,7 +55,7 @@ public class HoldingsImportRecoveryService(
             await failures.Defer(cik, now, cancellationToken);
             try
             {
-                await RecoverFiler(cik, minReportDate, cancellationToken);
+                await RecoverFiler(cik, minReportDate, sweptThrough, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -60,6 +71,7 @@ public class HoldingsImportRecoveryService(
     private async Task RecoverFiler(
         string cik,
         DateOnly minReportDate,
+        DateOnly? sweptThrough,
         CancellationToken cancellationToken
     )
     {
@@ -72,6 +84,11 @@ public class HoldingsImportRecoveryService(
             return;
         var startedAt = DateTime.UtcNow;
         var from = pending.Min(row => row.FilingDate);
+        // A rewound sweep has yet to re-apply this manager's filings after its cursor. A tail that
+        // starts later marks the pending filing processed, and the sweep then re-applies an older
+        // filing over it.
+        if (sweptThrough < from)
+            from = sweptThrough.Value;
         var filings = await edgar.GetCompanyFilings(
             cik,
             edgarForm: null,

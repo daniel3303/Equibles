@@ -293,6 +293,7 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
         var recovery = new HoldingsImportRecoveryService(
             failures,
             new InstitutionalHoldingRepository(db),
+            new RealtimeSweepStateRepository(db),
             edgar,
             ingestion,
             Substitute.For<ILogger<HoldingsImportRecoveryService>>()
@@ -419,6 +420,7 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
             new HoldingsImportRecoveryService(
                 failures,
                 new InstitutionalHoldingRepository(db),
+                new RealtimeSweepStateRepository(db),
                 edgar,
                 Ingestion(),
                 Substitute.For<ILogger<HoldingsImportRecoveryService>>()
@@ -563,6 +565,7 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
         var recovery = new HoldingsImportRecoveryService(
             failures,
             new InstitutionalHoldingRepository(db),
+            new RealtimeSweepStateRepository(db),
             edgar,
             ingestion,
             Substitute.For<ILogger<HoldingsImportRecoveryService>>()
