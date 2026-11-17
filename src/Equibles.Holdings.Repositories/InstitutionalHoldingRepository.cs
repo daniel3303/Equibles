@@ -2132,6 +2132,35 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             );
 
     /// <summary>
+    /// The date the stock's listing was delisted, or null while it is listed: the presentation
+    /// listing for an issuer-wide read, otherwise the exact listed ticker, which counts as listed
+    /// while any of its listings is.
+    /// </summary>
+    public async Task<DateOnly?> GetDelistedOn(
+        EquityIssuer stock,
+        string listedTicker,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var presentation = stock.Presentation.Listing;
+        if (
+            listedTicker == null
+            || string.Equals(listedTicker, presentation.Ticker, StringComparison.OrdinalIgnoreCase)
+        )
+            return presentation.DelistedOn;
+        var delistings = await DbContext
+            .Set<EquityListing>()
+            .Where(listing =>
+                listing.Security.EquityIssuerId == stock.Id && listing.Ticker == listedTicker
+            )
+            .Select(listing => listing.DelistedOn)
+            .ToListAsync(cancellationToken);
+        return delistings.Count == 0 || delistings.Any(delistedOn => delistedOn == null)
+            ? null
+            : delistings.Max();
+    }
+
+    /// <summary>
     /// The given holders that disclosed a 13F for a quarter strictly between the two: stored
     /// positions or a zero-holdings restatement. Each holder is probed for one row, as
     /// <see cref="GetFiledHolderIdsAmong"/> does; reading quarters off positions scans whole books.
