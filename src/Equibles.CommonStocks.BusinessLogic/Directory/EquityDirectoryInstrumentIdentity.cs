@@ -153,10 +153,17 @@ internal sealed class EquityDirectoryInstrumentIdentity(
         )
         && input.Isin.Substring(2, 9) == security.Cusip;
 
-    // Only a security bound to this venue code may take the code's reissued ISIN.
+    // Only a security bound to this venue code may take the code's reissued ISIN: one under the same issuer number, or
+    // one the source itself proved replaced the recorded number.
     private bool Reissued(EquitySecurity security) =>
         securityIdentifier?.Security == security
-        && EquityDirectoryIsinReissue.Proves(security.Isin, input.Isin);
+        && (
+            EquityDirectoryIsinReissue.Proves(security.Isin, input.Isin)
+            || input.IsinSupersedesRecorded
+                && security.Isin != null
+                && input.Isin != null
+                && security.Isin != input.Isin
+        );
 
     public void Bind(EquityIssuerRepository repository, EquityListing listing, Guid recordId)
     {

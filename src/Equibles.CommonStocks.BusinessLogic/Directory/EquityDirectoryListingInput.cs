@@ -24,6 +24,10 @@ public class EquityDirectoryListingInput
     public string LegalEntityIdentifier { get; set; }
     public List<string> RelatedIsins { get; set; } = [];
     public string Isin { get; set; }
+
+    // The source proved Isin now numbers the security SourceSecurityIdentifier is bound to, as when a numbering agency
+    // renumbers a share on its company's rename; the bound security takes it in place of the one it recorded.
+    public bool IsinSupersedesRecorded { get; set; }
     public EquitySecurityKind? SecurityType { get; set; }
     public DateOnly? ListedOn { get; set; }
     public string Ticker { get; set; }
