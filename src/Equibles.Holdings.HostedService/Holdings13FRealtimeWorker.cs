@@ -242,7 +242,8 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             return;
         }
 
-        _sweepRequested = false;
+        // A sweep that yielded stays owed, so a faulted next cycle cannot drop its remainder.
+        _sweepRequested = _hasMoreFilings;
         Logger.LogInformation(
             "13F real-time ingestion cycle complete: {Count} filings processed, swept through {Watermark:yyyy-MM-dd}",
             result.FilingsImported,
