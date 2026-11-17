@@ -155,6 +155,29 @@ public class UnattributedDividendRecaptureManagerTests
     }
 
     [Fact]
+    public async Task RecaptureNext_WaitsForADeclaredPaymentsExDateBeforeReadingItsWindow()
+    {
+        await using var db = NewDb();
+        var declared = await AddIssuer(db, "DECL");
+        var mixed = await AddIssuer(db, "MIXD");
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        db.AddRange(
+            // Yahoo refuses a window that starts after today, so a future-only issuer was a 400 every pass.
+            Dividend(declared, today.AddDays(120), attributed: false),
+            Dividend(mixed, today.AddDays(-30), attributed: false),
+            Dividend(mixed, today.AddDays(120), attributed: false)
+        );
+        await db.SaveChangesAsync();
+        var yahoo = YahooServing("MIXD");
+
+        var attempted = await NewManager(db, yahoo).RecaptureNext([], 10, CancellationToken.None);
+
+        attempted.Should().Equal(mixed.Id);
+        await yahoo.Received(1).GetChart("MIXD", today.AddDays(-33), Arg.Any<DateOnly>());
+        await yahoo.DidNotReceive().GetChart("DECL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+    }
+
+    [Fact]
     public async Task RecaptureNext_OnlyTheSameIssuersNearbyPaymentCoversARow()
     {
         await using var db = NewDb();
