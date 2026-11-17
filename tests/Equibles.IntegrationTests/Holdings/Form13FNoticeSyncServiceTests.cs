@@ -89,6 +89,43 @@ public class Form13FNoticeSyncServiceTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Import_StoresConfidentialTreatmentReportsOnceAcrossDataSets()
+    {
+        // Norges Bank's 2026-03-31 original as filed: 1,507 declared positions, one placeholder row.
+        (string, string)[] tables =
+        [
+            (
+                "SUMMARYPAGE.tsv",
+                "ACCESSION_NUMBER\tTABLEENTRYTOTAL\tTABLEVALUETOTAL\tISCONFIDENTIALOMITTED\n"
+                    + "0001374170-26-000023\t1507\t864690921985\tY\n"
+            ),
+            (
+                "INFOTABLE.tsv",
+                "ACCESSION_NUMBER\tNAMEOFISSUER\tCUSIP\tVALUE\tSSHPRNAMT\n"
+                    + "0001374170-26-000023\tNA\t000000000\t0\t0\n"
+            ),
+        ];
+        string AddReport(string table, string text) =>
+            table == "SUBMISSION.tsv"
+                ? text.TrimEnd('\n')
+                    + "\n0001374170-26-000023\t11-MAY-2026\t13F-HR\t0001374170\t31-MAR-2026\n"
+                : text;
+
+        using (var first = Archive(AddReport, tables))
+            await Sut().Import(first, Older, CancellationToken.None);
+        using (var second = Archive(AddReport, tables))
+            await Sut().Import(second, Newer, CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var report = await verify.Set<Form13FConfidentialFiling>().SingleAsync();
+        report.FilerCik.Should().Be("1374170");
+        report.ReportDate.Should().Be(new DateOnly(2026, 3, 31));
+        report.DeclaredEntryTotal.Should().Be(1507);
+        report.DisclosedPositionCount.Should().Be(0);
+        (await verify.Set<Form13FNotice>().CountAsync()).Should().Be(4);
+    }
+
+    [Fact]
     public async Task SyncMissing_ArchiveTheCatalogDoesNotList_IsSkippedAndTheNextIsRead()
     {
         await MarkProcessed(Older, Newer);
@@ -172,7 +209,10 @@ public class Form13FNoticeSyncServiceTests : ParadeDbMcpTestBase
     }
 
     // Real rows from SEC's 01jun2026-31aug2026 data set: four notices among two 13F-HR reports.
-    private static ZipArchive Archive(Func<string, string, string> edit = null)
+    private static ZipArchive Archive(
+        Func<string, string, string> edit = null,
+        (string Table, string Text)[] extraTables = null
+    )
     {
         var buffer = new MemoryStream();
         using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
@@ -193,6 +233,11 @@ public class Form13FNoticeSyncServiceTests : ParadeDbMcpTestBase
                     continue;
                 using var writer = new StreamWriter(archive.CreateEntry(table).Open());
                 writer.Write(content);
+            }
+            foreach (var (table, text) in extraTables ?? [])
+            {
+                using var writer = new StreamWriter(archive.CreateEntry(table).Open());
+                writer.Write(text);
             }
         }
 

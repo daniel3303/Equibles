@@ -104,6 +104,16 @@ public class Form13FNoticeSyncService
     {
         var notices = await Form13FNoticeReader.Read(archive, fileName, _tsvParser);
         var accessions = notices.Select(notice => notice.AccessionNumber).ToList();
+        // Read in the same pass: both are cover-page facts of filings the holdings import skips
+        // or stores no row for.
+        var confidentialRead = await Form13FConfidentialFilingReader.Read(archive, _tsvParser);
+        if (!confidentialRead.ColumnSeen)
+            _logger.LogWarning(
+                "The summary page of {FileName} carries no confidential-omission column; none of its reports is recorded as confidential",
+                fileName
+            );
+        var confidential = confidentialRead.Filings;
+        var confidentialAccessions = confidential.Select(filing => filing.AccessionNumber).ToList();
 
         var strategy = _dbContext.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
@@ -121,7 +131,12 @@ public class Form13FNoticeSyncService
                 .Set<Form13FNoticeDataSet>()
                 .Where(dataSet => dataSet.FileName == fileName)
                 .ExecuteDeleteAsync(cancellationToken);
+            await _dbContext
+                .Set<Form13FConfidentialFiling>()
+                .Where(filing => confidentialAccessions.Contains(filing.AccessionNumber))
+                .ExecuteDeleteAsync(cancellationToken);
             _dbContext.AddRange(notices);
+            _dbContext.AddRange(confidential);
             _dbContext.Add(
                 new Form13FNoticeDataSet
                 {
@@ -134,7 +149,12 @@ public class Form13FNoticeSyncService
             await transaction.CommitAsync(cancellationToken);
         });
 
-        _logger.LogInformation("Read {Count} 13F notices from {FileName}", notices.Count, fileName);
+        _logger.LogInformation(
+            "Read {Count} 13F notices and {Confidential} confidential-treatment reports from {FileName}",
+            notices.Count,
+            confidential.Count,
+            fileName
+        );
         return notices.Count;
     }
 }

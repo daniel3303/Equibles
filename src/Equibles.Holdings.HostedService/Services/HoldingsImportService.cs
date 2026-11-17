@@ -3506,7 +3506,7 @@ public class HoldingsImportService
             h.ListedTicker
         );
 
-    private static bool IsYes(string raw) =>
+    internal static bool IsYes(string raw) =>
         !string.IsNullOrEmpty(raw)
         && (
             raw.Equals("Y", StringComparison.OrdinalIgnoreCase)

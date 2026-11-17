@@ -23,6 +23,11 @@ public sealed record HoldingsComparisonStatus(
     // already present on both sides; the others stay among the missing filers.
     public IReadOnlyList<HoldingsSuccessionGroup> Successions { get; init; } = [];
 
+    // Missing filers whose 13F for the quarter they are missing from withholds its whole book
+    // under a confidential treatment request: they reported, and the position is undisclosed.
+    // The note's reason reads it; HoldingsComparisonCoverage.WithheldFilersByQuarter lists them.
+    public IReadOnlySet<Guid> ConfidentialFilers { get; init; } = new HashSet<Guid>();
+
     public bool ConsecutiveQuarters =>
         PreviousReportDate == HoldingsCorpusCoverage.PreviousQuarterEnd(ReportDate);
 
@@ -141,10 +146,17 @@ public sealed record HoldingsComparisonStatus(
         }
     }
 
-    private string Reason(Guid holderId) =>
-        Successions.Any(group => !group.Comparable && group.Contains(holderId))
-            ? "CIK change, books not comparable"
-            : $"no {Date(MissingPreviousFilers.Contains(holderId) ? PreviousReportDate : ReportDate)} 13F";
+    private string Reason(Guid holderId)
+    {
+        if (Successions.Any(group => !group.Comparable && group.Contains(holderId)))
+            return "CIK change, books not comparable";
+        var missing = Date(
+            MissingPreviousFilers.Contains(holderId) ? PreviousReportDate : ReportDate
+        );
+        return ConfidentialFilers.Contains(holderId)
+            ? $"{missing} 13F withheld under confidential treatment"
+            : $"no {missing} 13F";
+    }
 
     private static string Continued(HoldingsSuccessionGroup group)
     {

@@ -47,6 +47,19 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
     /// replay is left out: it delays nothing a reader can see.
     /// </summary>
     /// <summary>
+    /// The filings closed as withholding their positions that have no confidential-treatment
+    /// report recorded.
+    /// </summary>
+    public IQueryable<HoldingsImportFailure> GetConfidentialClosuresWithoutReport() =>
+        GetAll()
+            .Where(row =>
+                row.Reason == HoldingsImportFailureReason.ConfidentialTreatment
+                && !DbContext
+                    .Set<Form13FConfidentialFiling>()
+                    .Any(report => report.AccessionNumber == row.AccessionNumber)
+            );
+
+    /// <summary>
     /// Restates as <see cref="HoldingsImportFailureReason.StoredReplay"/> every pending recovery
     /// whose filing is stored. A release that did not tell the two apart queued them alike, and
     /// such a backlog would keep deferring the sweep and counting against coverage.

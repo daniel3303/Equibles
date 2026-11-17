@@ -310,6 +310,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<Form13FNotice>();
         builder.Entity<Form13FNoticeReporter>();
         builder.Entity<Form13FNoticeDataSet>();
+        builder.Entity<Form13FConfidentialFiling>();
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedDataSetAccession>();
         builder.Entity<HoldingsCusipRescan>();

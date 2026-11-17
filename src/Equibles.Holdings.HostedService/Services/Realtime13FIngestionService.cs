@@ -478,6 +478,8 @@ public class Realtime13FIngestionService
             entry.Cik,
             filing.PeriodOfReport
         );
+        if (filing.ConfidentialOmitted)
+            await RecordConfidentialFiling(entry, filing, cancellationToken);
 
         ImportResult importResult;
         try
@@ -689,6 +691,206 @@ public class Realtime13FIngestionService
                     ),
                 cancellationToken
             );
+    }
+
+    // Recorded before the import: a report that withholds its whole book stores no holdings, and
+    // this row then is the only trace that the filer reported the quarter.
+    private async Task RecordConfidentialFiling(
+        EdgarDailyIndexEntry entry,
+        Parsed13FFiling filing,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<Form13FConfidentialFilingRepository>()
+            .Record(
+                entry.AccessionNumber,
+                filing.Cik,
+                filing.PeriodOfReport,
+                entry.StatedFilingDate ?? entry.DateFiled,
+                filing.IsAmendment,
+                filing.TableEntryTotal,
+                filing.Holdings.Count(holding => holding.Shares > 0 || holding.Value > 0),
+                cancellationToken
+            );
+    }
+
+    /// <summary>
+    /// Records the confidential-treatment report of filings the recovery queue closed as
+    /// withholding their positions before such reports were recorded. Each one leaves the set
+    /// once recorded, here or by the data set that carries its summary page, so the pass ends by
+    /// itself.
+    /// </summary>
+    public virtual async Task<int> RecordClosedConfidentialFilings(
+        int limit,
+        CancellationToken cancellationToken
+    )
+    {
+        List<HoldingsImportFailure> closed;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+            closed = await scope
+                .ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>()
+                .GetConfidentialClosuresWithoutReport()
+                .AsNoTracking()
+                .OrderByDescending(row => row.FilingDate)
+                .ThenBy(row => row.AccessionNumber)
+                .Take(limit)
+                .ToListAsync(cancellationToken);
+
+        var recorded = 0;
+        foreach (var row in closed)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var entry = new EdgarDailyIndexEntry
+            {
+                AccessionNumber = row.AccessionNumber,
+                Cik = row.Cik,
+                DateFiled = row.FilingDate,
+                FormType = "13F-HR",
+            };
+            try
+            {
+                if (await RecordConfidentialFilingOf(entry, cancellationToken))
+                    recorded++;
+            }
+            catch (HttpRequestException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Failed to fetch 13F {Accession} for its confidential-treatment report; the rest waits for the next cycle",
+                    row.AccessionNumber
+                );
+                break;
+            }
+        }
+
+        if (recorded > 0)
+            _logger.LogInformation(
+                "Recorded the confidential-treatment report of {Count} earlier 13F filings",
+                recorded
+            );
+        return recorded;
+    }
+
+    // EDGAR publishes a day's index that night, so an empty one this recent may be unpublished.
+    internal const int DailyIndexPublicationDays = 3;
+
+    /// <summary>
+    /// Records the confidential-treatment reports among one day's filings that the sweep imported,
+    /// before such reports were recorded, without storing a row: a withheld book stores none, and
+    /// a filing with stored rows is left to the data set that carries its summary page. Returns
+    /// false when the day could not be read whole, so the caller retries it.
+    /// </summary>
+    public virtual async Task<bool> RecordConfidentialFilingsOf(
+        DateOnly day,
+        CancellationToken cancellationToken
+    )
+    {
+        List<EdgarDailyIndexEntry> entries;
+        try
+        {
+            entries = await _edgarClient.GetDailyIndex(day, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to fetch the {Date:yyyy-MM-dd} daily index for confidential-treatment reports",
+                day
+            );
+            return false;
+        }
+        if (
+            entries.Count == 0
+            && day.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)
+            && day.DayNumber
+                >= DateOnly.FromDateTime(DateTime.UtcNow).DayNumber - DailyIndexPublicationDays
+        )
+            return false;
+
+        var imported = await LoadProcessedAccessions(
+            entries
+                .Where(entry => !string.IsNullOrEmpty(entry.AccessionNumber))
+                .Select(entry => entry.AccessionNumber),
+            cancellationToken
+        );
+        var stored = await LoadRetainedAccessions(imported.ToList(), cancellationToken);
+        HashSet<string> reported;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+            reported = (
+                await scope
+                    .ServiceProvider.GetRequiredService<Form13FConfidentialFilingRepository>()
+                    .GetAll()
+                    .Where(report => imported.Contains(report.AccessionNumber))
+                    .Select(report => report.AccessionNumber)
+                    .ToListAsync(cancellationToken)
+            ).ToHashSet();
+
+        var recorded = 0;
+        foreach (
+            var entry in entries.Where(entry =>
+                imported.Contains(entry.AccessionNumber)
+                && !stored.Contains(entry.AccessionNumber)
+                && !reported.Contains(entry.AccessionNumber)
+            )
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                if (await RecordConfidentialFilingOf(entry, cancellationToken))
+                    recorded++;
+            }
+            catch (HttpRequestException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Failed to fetch 13F {Accession} for its confidential-treatment report; retrying the day",
+                    entry.AccessionNumber
+                );
+                return false;
+            }
+        }
+
+        if (recorded > 0)
+            _logger.LogInformation(
+                "Recorded {Count} confidential-treatment 13F reports filed {Date:yyyy-MM-dd}",
+                recorded,
+                day
+            );
+        return true;
+    }
+
+    // An unreadable filing stays to the data set that carries its summary page; an unreachable
+    // source throws, so the caller retries.
+    private async Task<bool> RecordConfidentialFilingOf(
+        EdgarDailyIndexEntry entry,
+        CancellationToken cancellationToken
+    )
+    {
+        Parsed13FFiling filing;
+        try
+        {
+            filing = await ParseFiling(entry, cancellationToken);
+        }
+        catch (Exception exception)
+            when (exception is not (OperationCanceledException or HttpRequestException))
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not read 13F {Accession} for its confidential-treatment report",
+                entry.AccessionNumber
+            );
+            return false;
+        }
+        if (
+            filing is not { ConfidentialOmitted: true }
+            || filing.PeriodOfReport == DateOnly.MinValue
+        )
+            return false;
+        await RecordConfidentialFiling(entry, filing, cancellationToken);
+        return true;
     }
 
     private async Task RecordFailure(

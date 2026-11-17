@@ -3,12 +3,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
 
-/// <summary>A 13F data set whose notices have been read, so the notice sync does not fetch it again.</summary>
+/// <summary>
+/// A 13F data set whose notices and confidential-treatment reports have been read, so the notice
+/// sync does not fetch it again.
+/// </summary>
 [Index(nameof(FileName), IsUnique = true)]
 public class Form13FNoticeDataSet
 {
-    /// <summary>Bump to read every data set's notices again after a reader change.</summary>
-    public const int CurrentParserVersion = 1;
+    /// <summary>Bump to read every data set again after a reader change.</summary>
+    public const int CurrentParserVersion = 2;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
