@@ -176,6 +176,15 @@ internal static class HoldingsParsingHelper
     /// spelling filer CIKs are stored under. Blank stays null: an absent identifier must not
     /// become an empty string that looks like a value.
     /// </summary>
+    internal static bool IsYes(string raw) =>
+        !string.IsNullOrEmpty(raw)
+        && (
+            raw.Equals("Y", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("yes", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || raw == "1"
+        );
+
     internal static string NormalizeCik(string cik)
     {
         var trimmed = NormalizeIdentifier(cik);

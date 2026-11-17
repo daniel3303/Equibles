@@ -173,7 +173,9 @@ public static class HoldingsComparisonCoverage
     {
         var named = statuses
             .Values.SelectMany(status =>
-                status.LargestExcludedFilers.Select(filer => filer.InstitutionalHolderId)
+                status
+                    .LargestExcludedFilers.Concat(status.WithheldFilers)
+                    .Select(filer => filer.InstitutionalHolderId)
             )
             .Distinct()
             .ToArray();
@@ -181,9 +183,14 @@ public static class HoldingsComparisonCoverage
             return statuses;
         var names = await holdings
             .Where(h => dates.Contains(h.ReportDate) && named.Contains(h.InstitutionalHolderId))
-            .Select(h => new { h.InstitutionalHolderId, h.InstitutionalHolder.Name })
+            .Select(h => new
+            {
+                h.InstitutionalHolderId,
+                h.InstitutionalHolder.Name,
+                h.InstitutionalHolder.Cik,
+            })
             .Distinct()
-            .ToDictionaryAsync(h => h.InstitutionalHolderId, h => h.Name, cancellationToken);
+            .ToDictionaryAsync(h => h.InstitutionalHolderId, cancellationToken);
         return statuses.ToDictionary(
             entry => entry.Key,
             entry =>
@@ -193,7 +200,8 @@ public static class HoldingsComparisonCoverage
                         .Value.ExcludedFilers.Select(filer =>
                             filer with
                             {
-                                Name = names.GetValueOrDefault(filer.InstitutionalHolderId),
+                                Name = names.GetValueOrDefault(filer.InstitutionalHolderId)?.Name,
+                                Cik = names.GetValueOrDefault(filer.InstitutionalHolderId)?.Cik,
                             }
                         )
                         .ToList(),
@@ -288,10 +296,44 @@ public static class HoldingsComparisonCoverage
             )
             .ToList();
         var successions = await Successions(repository, resolved, cancellationToken);
+        var confidential = await ConfidentialFilers(repository, resolved, cancellationToken);
         return resolved.ToDictionary(
             p => p.ReportDate,
-            p => WithSuccessions(p, successions[p.ReportDate])
+            p =>
+                WithSuccessions(p, successions[p.ReportDate]) with
+                {
+                    ConfidentialFilers = p
+                        .MissingPreviousFilers.Intersect(confidential[p.PreviousReportDate])
+                        .Concat(p.MissingCurrentFilers.Intersect(confidential[p.ReportDate]))
+                        .ToHashSet(),
+                }
         );
+    }
+
+    // Which of the filers still missing a side reported that quarter with its positions withheld.
+    private static async Task<ILookup<DateOnly, Guid>> ConfidentialFilers(
+        InstitutionalHoldingRepository repository,
+        IReadOnlyList<HoldingsComparisonStatus> resolved,
+        CancellationToken cancellationToken
+    )
+    {
+        var missing = resolved
+            .Where(p => p.ConsecutiveQuarters)
+            .SelectMany(p =>
+                p.MissingPreviousFilers.Select(id => (Date: p.PreviousReportDate, Holder: id))
+                    .Concat(p.MissingCurrentFilers.Select(id => (Date: p.ReportDate, Holder: id)))
+            )
+            .Distinct()
+            .ToLookup(entry => entry.Date, entry => entry.Holder);
+        var found = new List<(DateOnly Date, Guid Holder)>();
+        foreach (var quarter in missing)
+        {
+            var holders = await repository
+                .GetConfidentialHolderIdsAmong(quarter.Key, quarter.ToArray())
+                .ToListAsync(cancellationToken);
+            found.AddRange(holders.Select(holder => (quarter.Key, holder)));
+        }
+        return found.ToLookup(entry => entry.Date, entry => entry.Holder);
     }
 
     // The succession groups whose successors first filed in a compared quarter that still

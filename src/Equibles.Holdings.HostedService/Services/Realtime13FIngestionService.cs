@@ -478,6 +478,8 @@ public class Realtime13FIngestionService
             entry.Cik,
             filing.PeriodOfReport
         );
+        if (filing.ConfidentialOmitted)
+            await RecordConfidentialFiling(entry, filing, cancellationToken);
 
         ImportResult importResult;
         try
@@ -687,6 +689,27 @@ public class Realtime13FIngestionService
                             )
                         )
                     ),
+                cancellationToken
+            );
+    }
+
+    // Recorded before the import: a report that withholds its whole book stores no holdings, and
+    // this row then is the only trace that the filer reported the quarter.
+    private async Task RecordConfidentialFiling(
+        EdgarDailyIndexEntry entry,
+        Parsed13FFiling filing,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<Form13FConfidentialFilingRepository>()
+            .Record(
+                entry.AccessionNumber,
+                filing.Cik,
+                filing.PeriodOfReport,
+                entry.StatedFilingDate ?? entry.DateFiled,
+                filing.IsAmendment,
                 cancellationToken
             );
     }

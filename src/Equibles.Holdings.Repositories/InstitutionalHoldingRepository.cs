@@ -2668,6 +2668,27 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             );
     }
 
+    /// <summary>
+    /// The holders among the given set whose 13F for the quarter declares positions omitted under
+    /// a confidential treatment request. For a holder with no observed 13F that quarter, this is
+    /// the proof it filed and withheld its book rather than stopped reporting.
+    /// </summary>
+    public IQueryable<Guid> GetConfidentialHolderIdsAmong(
+        DateOnly reportDate,
+        IReadOnlyCollection<Guid> holderIds
+    )
+    {
+        var quarter = DbContext
+            .Set<Form13FConfidentialFiling>()
+            .Where(filing => filing.ReportDate == reportDate);
+        return DbContext
+            .Set<InstitutionalHolder>()
+            .Where(holder =>
+                holderIds.Contains(holder.Id) && quarter.Any(f => f.FilerCik == holder.Cik)
+            )
+            .Select(holder => holder.Id);
+    }
+
     // Combined-quarter variant of GetQuarterlyActivity. The "current" side aggregates
     // the combined view (current filers + previous-quarter fallback for non-filers).
     // The "previous" side uses the actual previous quarter for delta comparison. For

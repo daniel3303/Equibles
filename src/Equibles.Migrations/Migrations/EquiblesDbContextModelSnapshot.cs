@@ -2885,6 +2885,41 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("FilingOtherManager");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.Form13FConfidentialFiling", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccessionNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("FilerCik")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateOnly>("FilingDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsAmendment")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("FilerCik", "ReportDate");
+
+                    b.ToTable("Form13FConfidentialFiling");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.Form13FNotice", b =>
                 {
                     b.Property<Guid>("Id")

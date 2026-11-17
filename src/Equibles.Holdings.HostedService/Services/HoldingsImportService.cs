@@ -3505,13 +3505,4 @@ public class HoldingsImportService
             h.FilingType,
             h.ListedTicker
         );
-
-    private static bool IsYes(string raw) =>
-        !string.IsNullOrEmpty(raw)
-        && (
-            raw.Equals("Y", StringComparison.OrdinalIgnoreCase)
-            || raw.Equals("yes", StringComparison.OrdinalIgnoreCase)
-            || raw.Equals("true", StringComparison.OrdinalIgnoreCase)
-            || raw == "1"
-        );
 }

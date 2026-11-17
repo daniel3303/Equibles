@@ -741,6 +741,30 @@ public class InstitutionalHoldingsTools
         );
     }
 
+    // Names, per quarter, the previous quarter's holders whose 13F withholds its positions under
+    // confidential treatment: the position is undisclosed, so it is neither a sale nor in the total.
+    private static void AppendConfidentialFilers(
+        StringBuilder result,
+        IEnumerable<Equibles.Holdings.BusinessLogic.Models.HoldingsComparisonStatus> comparisons
+    )
+    {
+        var quarters = comparisons
+            .Where(comparison => comparison.WithheldFilers.Any())
+            .OrderBy(comparison => comparison.ReportDate)
+            .ToList();
+        if (quarters.Count == 0)
+            return;
+        result.AppendLine();
+        result.AppendLine(
+            "Confidential treatment (the filer reported the quarter and withheld its positions; they are not sold and not in that quarter's totals until disclosed, usually about a year later):"
+        );
+        foreach (var comparison in quarters)
+        foreach (var filer in comparison.WithheldFilers)
+            result.AppendLine(
+                $"- {FormatDate(comparison.ReportDate)}: {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(comparison.PreviousReportDate)}."
+            );
+    }
+
     private static string RenderOwnershipHistory(
         EquityIssuer stock,
         string ticker,
@@ -783,6 +807,8 @@ public class InstitutionalHoldingsTools
             var comparison in coverage.Values.Where(c => c.Note != null).OrderBy(c => c.ReportDate)
         )
             result.AppendLine($"{FormatDate(comparison.ReportDate)}: {comparison.Note}");
+
+        AppendConfidentialFilers(result, coverage.Values);
 
         if (combinedRowShown)
         {
