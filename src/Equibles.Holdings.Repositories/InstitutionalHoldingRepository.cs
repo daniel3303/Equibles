@@ -2131,6 +2131,42 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Select(f => f.AccessionNumber)
             );
 
+    /// <summary>
+    /// The quarters, from <paramref name="from"/> up to but not including
+    /// <paramref name="before"/>, that each given holder disclosed a 13F for: stored positions or
+    /// a zero-holdings restatement.
+    /// </summary>
+    public IQueryable<HolderQuarter> GetDisclosed13FQuarters(
+        IReadOnlyCollection<Guid> holderIds,
+        DateOnly from,
+        DateOnly before
+    ) =>
+        GetAll()
+            .Where(Is13F)
+            .Where(h =>
+                holderIds.Contains(h.InstitutionalHolderId)
+                && h.ReportDate >= from
+                && h.ReportDate < before
+            )
+            .Select(h => new HolderQuarter
+            {
+                HolderId = h.InstitutionalHolderId,
+                ReportDate = h.ReportDate,
+            })
+            .Union(
+                Zero13FRestatements()
+                    .Where(f =>
+                        holderIds.Contains(f.InstitutionalHolderId)
+                        && f.ReportDate >= from
+                        && f.ReportDate < before
+                    )
+                    .Select(f => new HolderQuarter
+                    {
+                        HolderId = f.InstitutionalHolderId,
+                        ReportDate = f.ReportDate,
+                    })
+            );
+
     /// <summary>The given 13F accessions whose rows, or zero-holdings restatement, are stored.</summary>
     public IQueryable<string> GetRetained13FAccessionsAmong(
         IReadOnlyCollection<string> accessions

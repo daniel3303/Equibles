@@ -646,7 +646,7 @@ public class InstitutionalHoldingsTools
             );
             foreach (var filer in withheld)
                 result.AppendLine(
-                    $"- {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(HoldingsCorpusCoverage.PreviousQuarterEnd(targetDate))}."
+                    $"- {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(filer.DisclosedFor ?? HoldingsCorpusCoverage.PreviousQuarterEnd(targetDate))}."
                 );
         }
         if (
@@ -824,7 +824,7 @@ public class InstitutionalHoldingsTools
         foreach (var quarter in withheld.OrderBy(entry => entry.Key))
         foreach (var filer in quarter.Value)
             result.AppendLine(
-                $"- {FormatDate(quarter.Key)}: {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(HoldingsCorpusCoverage.PreviousQuarterEnd(quarter.Key))}."
+                $"- {FormatDate(quarter.Key)}: {filer.Name ?? "Unknown filer"} (CIK {filer.Cik ?? "unknown"}) last reported {McpFormat.WholeNumber(filer.Shares)} shares for {FormatDate(filer.DisclosedFor ?? HoldingsCorpusCoverage.PreviousQuarterEnd(quarter.Key))}."
             );
     }
 

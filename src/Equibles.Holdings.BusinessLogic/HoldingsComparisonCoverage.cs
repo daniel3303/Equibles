@@ -33,9 +33,9 @@ public static class HoldingsComparisonCoverage
             ).ToHashSet();
 
     /// <summary>
-    /// The previous quarter's holders of the stock whose 13F for <paramref name="reportDate"/>
-    /// withholds its whole book under confidential treatment, largest first, each with the shares
-    /// it last disclosed.
+    /// The holders of the stock whose 13F for <paramref name="reportDate"/> withholds its whole
+    /// book under confidential treatment, largest first, each with the shares it last disclosed
+    /// and the quarter they were disclosed for.
     /// </summary>
     public static async Task<IReadOnlyList<HoldingsExcludedFiler>> WithheldFilers(
         InstitutionalHoldingRepository repository,
@@ -61,6 +61,8 @@ public static class HoldingsComparisonCoverage
     /// a quarter with none has no entry. It starts from the few withheld books rather than from
     /// every holder of the stock, so a surface that shows a long history can afford it. It needs
     /// no compared predecessor, so the oldest quarter of a history is answered like any other.
+    /// A filer's last disclosed quarter is read up to a year back, which covers one that
+    /// withholds several quarters running; an older position is no fair stand-in for today's.
     /// </summary>
     public static async Task<
         Dictionary<DateOnly, IReadOnlyList<HoldingsExcludedFiler>>
@@ -79,17 +81,39 @@ public static class HoldingsComparisonCoverage
         if (books.Count == 0)
             return [];
         var holderIds = books.Select(book => book.HolderId).Distinct().ToArray();
-        var previousDates = books
-            .Select(book => HoldingsCorpusCoverage.PreviousQuarterEnd(book.ReportDate))
-            .Distinct()
-            .ToArray();
+        var disclosedQuarters = (
+            await repository
+                .GetDisclosed13FQuarters(
+                    holderIds,
+                    books.Min(book => book.ReportDate).AddYears(-1),
+                    books.Max(book => book.ReportDate)
+                )
+                .ToListAsync(cancellationToken)
+        ).ToLookup(quarter => quarter.HolderId, quarter => quarter.ReportDate);
+        var sources = books
+            .Select(book =>
+                (
+                    book,
+                    DisclosedFor: disclosedQuarters[book.HolderId]
+                        .Where(date =>
+                            date < book.ReportDate && date >= book.ReportDate.AddYears(-1)
+                        )
+                        .DefaultIfEmpty()
+                        .Max()
+                )
+            )
+            .Where(source => source.DisclosedFor != default)
+            .ToList();
+        if (sources.Count == 0)
+            return [];
+        var sourceDates = sources.Select(source => source.DisclosedFor).Distinct().ToArray();
         var holdings =
             listedTicker == null
                 ? repository.Get13FHistoryByStock(stock)
                 : repository.Get13FHistoryByListing(stock, listedTicker);
         var positions = await holdings
             .Where(h =>
-                previousDates.Contains(h.ReportDate) && holderIds.Contains(h.InstitutionalHolderId)
+                sourceDates.Contains(h.ReportDate) && holderIds.Contains(h.InstitutionalHolderId)
             )
             .AsActivityLegs()
             .GroupBy(h => new
@@ -124,19 +148,18 @@ public static class HoldingsComparisonCoverage
                         )
                     )
             );
-        return books
-            .Select(book =>
+        return sources
+            .Select(source =>
                 (
-                    book,
-                    Held: lastDisclosed.TryGetValue(
-                        (HoldingsCorpusCoverage.PreviousQuarterEnd(book.ReportDate), book.HolderId),
-                        out var shares
-                    ),
-                    Shares: shares
+                    source.book,
+                    source.DisclosedFor,
+                    Shares: lastDisclosed.GetValueOrDefault(
+                        (source.DisclosedFor, source.book.HolderId)
+                    )
                 )
             )
-            // Only a holder of the stock in the quarter before; one with only options held no shares.
-            .Where(entry => entry.Held && entry.Shares > 0)
+            // Only a holder of the stock when it last disclosed; one with only options held no shares.
+            .Where(entry => entry.Shares > 0)
             .GroupBy(entry => entry.book.ReportDate)
             .ToDictionary(
                 group => group.Key,
@@ -152,6 +175,7 @@ public static class HoldingsComparisonCoverage
                             )
                             {
                                 Cik = entry.book.Cik,
+                                DisclosedFor = entry.DisclosedFor,
                             })
                             .ToList()
             );

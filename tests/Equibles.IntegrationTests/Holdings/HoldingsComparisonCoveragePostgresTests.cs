@@ -168,6 +168,56 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
         withheld.Name.Should().Be("Withholding filer");
         withheld.Cik.Should().Be("2");
         withheld.Shares.Should().Be(700, "the shares it last disclosed, for the quarter before");
+        withheld.DisclosedFor.Should().Be(dates[0]);
+    }
+
+    [Fact]
+    public async Task WithheldFilers_ReadTheLastDisclosedQuarterUpToAYearBack()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COVER",
+            Name: "Coverage subject"
+        );
+        var running = new InstitutionalHolder { Cik = "4", Name = "Withholds two running" };
+        var stale = new InstitutionalHolder { Cik = "5", Name = "Disclosed long ago" };
+        var disclosed = new InstitutionalHolder { Cik = "6", Name = "Disclosed since" };
+        // Six quarter ends, oldest first; the newest two are the ones read.
+        var dates = Enumerable
+            .Range(0, 6)
+            .Select(i => new DateOnly(2025, 4, 1).AddMonths(i * 3).AddDays(-1))
+            .ToArray();
+        await using (var seed = fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, running, stale, disclosed);
+            seed.Add(Holding(stock, running, dates[3], shares: 900));
+            seed.Add(ConfidentialFiling(running, dates[4], disclosedPositions: 0));
+            seed.Add(ConfidentialFiling(running, dates[5], disclosedPositions: 0));
+            // More than a year before the withheld quarter: no fair stand-in.
+            seed.Add(Holding(stock, stale, dates[0], shares: 500));
+            seed.Add(ConfidentialFiling(stale, dates[5], disclosedPositions: 0));
+            // The amendment that discloses the quarter ends the withheld state.
+            seed.Add(Holding(stock, disclosed, dates[4], shares: 300));
+            seed.Add(Holding(stock, disclosed, dates[5], shares: 300));
+            seed.Add(ConfidentialFiling(disclosed, dates[5], disclosedPositions: 0));
+            await seed.SaveChangesAsync();
+        }
+        await using var db = fixture.CreateDbContext();
+
+        var byQuarter = await HoldingsComparisonCoverage.WithheldFilersByQuarter(
+            new InstitutionalHoldingRepository(db),
+            stock,
+            [dates[4], dates[5]],
+            []
+        );
+
+        byQuarter.Keys.Should().BeEquivalentTo([dates[4], dates[5]]);
+        foreach (var quarter in byQuarter.Values)
+        {
+            var filer = quarter.Should().ContainSingle().Subject;
+            filer.Name.Should().Be("Withholds two running");
+            filer.Shares.Should().Be(900);
+            filer.DisclosedFor.Should().Be(dates[3], "the last quarter it disclosed");
+        }
     }
 
     private static Form13FConfidentialFiling ConfidentialFiling(
