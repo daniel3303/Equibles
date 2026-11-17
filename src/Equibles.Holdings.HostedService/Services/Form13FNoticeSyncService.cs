@@ -106,7 +106,13 @@ public class Form13FNoticeSyncService
         var accessions = notices.Select(notice => notice.AccessionNumber).ToList();
         // Read in the same pass: both are cover-page facts of filings the holdings import skips
         // or stores no row for.
-        var confidential = await Form13FConfidentialFilingReader.Read(archive, _tsvParser);
+        var confidentialRead = await Form13FConfidentialFilingReader.Read(archive, _tsvParser);
+        if (!confidentialRead.ColumnSeen)
+            _logger.LogWarning(
+                "The summary page of {FileName} carries no confidential-omission column; none of its reports is recorded as confidential",
+                fileName
+            );
+        var confidential = confidentialRead.Filings;
         var confidentialAccessions = confidential.Select(filing => filing.AccessionNumber).ToList();
 
         var strategy = _dbContext.Database.CreateExecutionStrategy();

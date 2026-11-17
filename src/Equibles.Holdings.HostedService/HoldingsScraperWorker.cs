@@ -193,6 +193,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
         await RefreshHolderProfiles(stoppingToken);
 
         await SyncForm13FNotices(fileNames, stoppingToken);
+        // After the notice sync, whose newest read data set bounds the days left to fill.
+        await FillConfidentialFilingGap(stoppingToken);
         // After the notices, which name the managers that report for a filer that stopped.
         await RefreshHolderSuccessions(stoppingToken);
         // After the successions, which a parent link must never repeat.
@@ -818,6 +820,59 @@ public class HoldingsScraperWorker : BaseScraperWorker
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             Logger.LogError(exception, "13F notice sync failed; retrying next cycle");
+        }
+    }
+
+    internal const string ConfidentialGapStateName = "Holdings13FConfidentialGap";
+
+    /// <summary>
+    /// Records the confidential-treatment reports of filings the realtime sweep imported before it
+    /// recorded them, newest day first, down to the day after the newest data set read: a data set
+    /// records its own. The cursor is the earliest day done, so the pass ends by itself.
+    /// </summary>
+    internal async Task FillConfidentialFilingGap(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            var readThrough = (
+                await dbContext
+                    .Set<Form13FNoticeDataSet>()
+                    .AsNoTracking()
+                    .Where(dataSet =>
+                        dataSet.ParserVersion >= Form13FNoticeDataSet.CurrentParserVersion
+                    )
+                    .Select(dataSet => dataSet.FileName)
+                    .ToListAsync(cancellationToken)
+            )
+                .Select(Holdings13FRealtimeWorker.ParseDataSetEndDate)
+                .Max();
+            // Until a data set is read there is no lower bound, and the pass would walk all history.
+            if (readThrough == null)
+                return;
+
+            var states = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
+            var state = await states
+                .GetByWorker(ConfidentialGapStateName)
+                .AsNoTracking()
+                .SingleOrDefaultAsync(cancellationToken);
+            var ingestion = scope.ServiceProvider.GetRequiredService<Realtime13FIngestionService>();
+            var day = state?.SweptThrough.AddDays(-1) ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            for (; day > readThrough; day = day.AddDays(-1))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!await ingestion.RecordConfidentialFilingsOf(day, cancellationToken))
+                    return;
+                await states.Rewind(ConfidentialGapStateName, day, cancellationToken);
+            }
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogError(
+                exception,
+                "Recording earlier confidential-treatment 13F reports failed; retrying next cycle"
+            );
         }
     }
 

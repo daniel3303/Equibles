@@ -710,8 +710,86 @@ public class Realtime13FIngestionService
                 filing.PeriodOfReport,
                 entry.StatedFilingDate ?? entry.DateFiled,
                 filing.IsAmendment,
+                filing.TableEntryTotal,
+                filing.Holdings.Count(holding => holding.Shares > 0 || holding.Value > 0),
                 cancellationToken
             );
+    }
+
+    /// <summary>
+    /// Records the confidential-treatment reports among one day's filings that were imported
+    /// before such reports were recorded. A filing not imported yet is left to its import, which
+    /// records it. Returns false when the day could not be read whole, so the caller retries it.
+    /// </summary>
+    public virtual async Task<bool> RecordConfidentialFilingsOf(
+        DateOnly day,
+        CancellationToken cancellationToken
+    )
+    {
+        List<EdgarDailyIndexEntry> entries;
+        try
+        {
+            entries = await _edgarClient.GetDailyIndex(day, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to fetch the {Date:yyyy-MM-dd} daily index for confidential-treatment reports",
+                day
+            );
+            return false;
+        }
+
+        entries = entries.Where(entry => !string.IsNullOrEmpty(entry.AccessionNumber)).ToList();
+        var imported = await LoadProcessedAccessions(
+            entries.Select(entry => entry.AccessionNumber),
+            cancellationToken
+        );
+        var recorded = 0;
+        foreach (var entry in entries.Where(entry => imported.Contains(entry.AccessionNumber)))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Parsed13FFiling filing;
+            try
+            {
+                filing = await ParseFiling(entry, cancellationToken);
+            }
+            catch (HttpRequestException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Failed to fetch 13F {Accession} for confidential-treatment reports; retrying the day",
+                    entry.AccessionNumber
+                );
+                return false;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // An unreadable filing stays to the data set that carries its summary page.
+                _logger.LogWarning(
+                    exception,
+                    "Could not read 13F {Accession} for confidential-treatment reports",
+                    entry.AccessionNumber
+                );
+                continue;
+            }
+            if (
+                filing is not { ConfidentialOmitted: true }
+                || filing.PeriodOfReport == DateOnly.MinValue
+            )
+                continue;
+            await RecordConfidentialFiling(entry, filing, cancellationToken);
+            recorded++;
+        }
+
+        if (recorded > 0)
+            _logger.LogInformation(
+                "Recorded {Count} confidential-treatment 13F reports filed {Date:yyyy-MM-dd}",
+                recorded,
+                day
+            );
+        return true;
     }
 
     private async Task RecordFailure(

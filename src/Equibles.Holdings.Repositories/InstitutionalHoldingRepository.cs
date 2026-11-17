@@ -2669,25 +2669,29 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     /// <summary>
-    /// The holders among the given set whose 13F for the quarter declares positions omitted under
-    /// a confidential treatment request. For a holder with no observed 13F that quarter, this is
-    /// the proof it filed and withheld its book rather than stopped reporting.
+    /// The quarters, among the given ones, in which each given holder's 13F withholds its whole
+    /// book under a confidential treatment request: it declares omitted positions and discloses
+    /// none. For a holder with no observed 13F that quarter, this is the proof it filed rather
+    /// than stopped reporting. A report that omits some positions and discloses others never
+    /// counts: its missing rows are an import still pending.
     /// </summary>
-    public IQueryable<Guid> GetConfidentialHolderIdsAmong(
-        DateOnly reportDate,
+    public IQueryable<WithheldBook> GetWithheldBooks(
+        IReadOnlyCollection<DateOnly> reportDates,
         IReadOnlyCollection<Guid> holderIds
-    )
-    {
-        var quarter = DbContext
+    ) =>
+        DbContext
             .Set<Form13FConfidentialFiling>()
-            .Where(filing => filing.ReportDate == reportDate);
-        return DbContext
-            .Set<InstitutionalHolder>()
-            .Where(holder =>
-                holderIds.Contains(holder.Id) && quarter.Any(f => f.FilerCik == holder.Cik)
+            .Where(filing =>
+                reportDates.Contains(filing.ReportDate) && filing.DisclosedPositionCount == 0
             )
-            .Select(holder => holder.Id);
-    }
+            .Join(
+                DbContext.Set<InstitutionalHolder>().Where(holder => holderIds.Contains(holder.Id)),
+                filing => filing.FilerCik,
+                holder => holder.Cik,
+                (filing, holder) =>
+                    new WithheldBook { ReportDate = filing.ReportDate, HolderId = holder.Id }
+            )
+            .Distinct();
 
     // Combined-quarter variant of GetQuarterlyActivity. The "current" side aggregates
     // the combined view (current filers + previous-quarter fallback for non-filers).

@@ -7,30 +7,47 @@ namespace Equibles.Holdings.HostedService.Services;
 
 /// <summary>
 /// Reads, out of a 13F data set, the holdings reports (13F-HR and 13F-HR/A) whose summary page
-/// declares positions omitted under a confidential treatment request.
+/// declares positions omitted under a confidential treatment request, with how many positions
+/// each one still discloses.
 /// </summary>
 internal static class Form13FConfidentialFilingReader
 {
-    internal static async Task<List<Form13FConfidentialFiling>> Read(
-        ZipArchive archive,
-        TsvParser tsvParser
-    )
+    private const string OmittedColumn = "ISCONFIDENTIALOMITTED";
+
+    /// <param name="ColumnSeen">
+    /// False when the summary page has rows and none carries the omission column: the layout
+    /// changed, and an empty answer is then not evidence that nothing was withheld.
+    /// </param>
+    internal sealed record Result(List<Form13FConfidentialFiling> Filings, bool ColumnSeen);
+
+    internal static async Task<Result> Read(ZipArchive archive, TsvParser tsvParser)
     {
         var submissions = FindEntry(archive, "SUBMISSION.tsv");
         var summaryPages = FindEntry(archive, "SUMMARYPAGE.tsv");
-        // The oldest data sets carry no summary page; they declare nothing to read.
+        // A data set without a summary page declares nothing to read.
         if (submissions == null || summaryPages == null)
-            return [];
+            return new Result([], true);
 
-        var omitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var declaredTotals = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
+        var summaryRows = 0;
+        var columnSeen = false;
         await foreach (var row in tsvParser.ParseEntry(summaryPages))
         {
+            summaryRows++;
+            columnSeen |= row.ContainsKey(OmittedColumn);
             var accession = NormalizeIdentifier(GetValue(row, "ACCESSION_NUMBER"));
-            if (accession != null && IsYes(GetValue(row, "ISCONFIDENTIALOMITTED")?.Trim()))
-                omitted.Add(accession);
+            if (
+                accession == null
+                || !HoldingsImportService.IsYes(GetValue(row, OmittedColumn)?.Trim())
+            )
+                continue;
+            declaredTotals[accession] =
+                int.TryParse(GetValue(row, "TABLEENTRYTOTAL"), out var entries) && entries >= 0
+                    ? entries
+                    : null;
         }
-        if (omitted.Count == 0)
-            return [];
+        if (declaredTotals.Count == 0)
+            return new Result([], columnSeen || summaryRows == 0);
 
         var filings = new Dictionary<string, Form13FConfidentialFiling>(
             StringComparer.OrdinalIgnoreCase
@@ -45,7 +62,7 @@ internal static class Form13FConfidentialFilingReader
             if (
                 accession == null
                 || cik == null
-                || !omitted.Contains(accession)
+                || !declaredTotals.TryGetValue(accession, out var declaredTotal)
                 || !TryParseDateOnly(GetValue(row, "PERIODOFREPORT"), out var reportDate)
                 || !TryParseDateOnly(GetValue(row, "FILING_DATE"), out var filingDate)
             )
@@ -58,9 +75,28 @@ internal static class Form13FConfidentialFilingReader
                 ReportDate = reportDate,
                 FilingDate = filingDate,
                 IsAmendment = formType == "13F-HR/A",
+                DeclaredEntryTotal = declaredTotal,
             };
         }
+        if (filings.Count == 0)
+            return new Result([], true);
 
-        return filings.Values.ToList();
+        // Without the information table a disclosed count of zero would read as a withheld book.
+        var infoTable =
+            FindEntry(archive, "INFOTABLE.tsv")
+            ?? throw new InvalidDataException("The 13F data set has no INFOTABLE.tsv table.");
+        await foreach (var row in tsvParser.ParseEntry(infoTable))
+        {
+            if (
+                filings.TryGetValue(GetValue(row, "ACCESSION_NUMBER") ?? "", out var filing)
+                && (
+                    ParseLong(GetValue(row, "SSHPRNAMT")) > 0
+                    || ParseLong(GetValue(row, "VALUE")) > 0
+                )
+            )
+                filing.DisclosedPositionCount++;
+        }
+
+        return new Result(filings.Values.ToList(), true);
     }
 }

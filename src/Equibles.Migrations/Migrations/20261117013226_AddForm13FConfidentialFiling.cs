@@ -20,7 +20,9 @@ namespace Equibles.Migrations.Migrations
                     FilerCik = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     ReportDate = table.Column<DateOnly>(type: "date", nullable: false),
                     FilingDate = table.Column<DateOnly>(type: "date", nullable: false),
-                    IsAmendment = table.Column<bool>(type: "boolean", nullable: false)
+                    IsAmendment = table.Column<bool>(type: "boolean", nullable: false),
+                    DeclaredEntryTotal = table.Column<int>(type: "integer", nullable: true),
+                    DisclosedPositionCount = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {

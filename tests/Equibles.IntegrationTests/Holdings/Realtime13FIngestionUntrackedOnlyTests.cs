@@ -84,6 +84,8 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
                     .Returns(new ProcessedFilingRepository(ctx));
                 sp.GetService(typeof(HoldingsImportFailureRepository))
                     .Returns(new HoldingsImportFailureRepository(ctx));
+                sp.GetService(typeof(Form13FConfidentialFilingRepository))
+                    .Returns(new Form13FConfidentialFilingRepository(ctx));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;
@@ -586,5 +588,14 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
         (await verify.Set<InstitutionalFiling>().AnyAsync())
             .Should()
             .BeFalse("an empty rollup would read as the filer selling its whole declared book");
+        var confidential = await verify.Set<Form13FConfidentialFiling>().SingleAsync();
+        confidential.AccessionNumber.Should().Be(accession);
+        confidential.FilerCik.Should().Be(cik);
+        confidential.ReportDate.Should().Be(report);
+        confidential.FilingDate.Should().Be(filed);
+        confidential.DeclaredEntryTotal.Should().Be(1507);
+        confidential
+            .DisclosedPositionCount.Should()
+            .Be(0, "the record is the only trace that the filer reported the quarter");
     }
 }

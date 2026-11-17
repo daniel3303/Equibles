@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20261117012606_AddForm13FConfidentialFiling")]
+    [Migration("20261117013226_AddForm13FConfidentialFiling")]
     partial class AddForm13FConfidentialFiling
     {
         /// <inheritdoc />
@@ -2898,6 +2898,12 @@ namespace Equibles.Migrations.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("DeclaredEntryTotal")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DisclosedPositionCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("FilerCik")
                         .IsRequired()

@@ -111,6 +111,73 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
     }
 
     [Fact]
+    public async Task History_MarksAMissingFilerWhoseQuarterIsWithheldUnderConfidentialTreatment()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COVER",
+            Name: "Coverage subject"
+        );
+        var stable = new InstitutionalHolder { Cik = "1", Name = "Stable filer" };
+        var withholding = new InstitutionalHolder { Cik = "2", Name = "Withholding filer" };
+        var pending = new InstitutionalHolder { Cik = "3", Name = "Pending filer" };
+        var dates = Enumerable
+            .Range(0, 3)
+            .Select(i => new DateOnly(2026, 1, 1).AddMonths(i * 3).AddDays(-1))
+            .ToArray();
+        await using (var seed = fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, stable, withholding, pending);
+            foreach (var date in dates)
+                seed.Add(Holding(stock, stable, date));
+            // Both hold the stock around a quarter with no stored 13F of theirs.
+            foreach (var holder in new[] { withholding, pending })
+            {
+                seed.Add(Holding(stock, holder, dates[0], shares: 700));
+                seed.Add(Holding(stock, holder, dates[2], shares: 700));
+            }
+            seed.Add(ConfidentialFiling(withholding, dates[1], disclosedPositions: 0));
+            // A report that still discloses positions has rows to import; none stored is a gap.
+            seed.Add(ConfidentialFiling(pending, dates[1], disclosedPositions: 40));
+            await seed.SaveChangesAsync();
+        }
+        await using var db = fixture.CreateDbContext();
+
+        var result = await HoldingsComparisonCoverage.History(
+            new InstitutionalHoldingRepository(db),
+            stock,
+            dates,
+            []
+        );
+
+        var withheld = result[dates[1]].WithheldFilers.Should().ContainSingle().Subject;
+        withheld.Name.Should().Be("Withholding filer");
+        withheld.Cik.Should().Be("2");
+        withheld.Shares.Should().Be(700, "the shares it last disclosed, for the quarter before");
+        result[dates[1]].Note.Should().Contain("withheld under confidential treatment");
+        result[dates[2]]
+            .WithheldFilers.Should()
+            .BeEmpty("it reported the newer quarter; only its previous one is withheld");
+        result[dates[2]]
+            .ConfidentialFilers.Should()
+            .Equal([withholding.Id], "the comparison still misses its previous quarter");
+    }
+
+    private static Form13FConfidentialFiling ConfidentialFiling(
+        InstitutionalHolder holder,
+        DateOnly reportDate,
+        int disclosedPositions
+    ) =>
+        new()
+        {
+            AccessionNumber = Guid.NewGuid().ToString("N"),
+            FilerCik = holder.Cik,
+            ReportDate = reportDate,
+            FilingDate = reportDate.AddDays(40),
+            DeclaredEntryTotal = 1500,
+            DisclosedPositionCount = disclosedPositions,
+        };
+
+    [Fact]
     public async Task History_ComparesAFilerSplitAcrossNewCiksAsOneHolder()
     {
         // Shaped on Vanguard Group, which several new filers continue.

@@ -310,7 +310,7 @@ public static class HoldingsComparisonCoverage
         );
     }
 
-    // Which of the filers still missing a side reported that quarter with its positions withheld.
+    // Which of the filers still missing a side reported that quarter with its whole book withheld.
     private static async Task<ILookup<DateOnly, Guid>> ConfidentialFilers(
         InstitutionalHoldingRepository repository,
         IReadOnlyList<HoldingsComparisonStatus> resolved,
@@ -323,17 +323,18 @@ public static class HoldingsComparisonCoverage
                 p.MissingPreviousFilers.Select(id => (Date: p.PreviousReportDate, Holder: id))
                     .Concat(p.MissingCurrentFilers.Select(id => (Date: p.ReportDate, Holder: id)))
             )
-            .Distinct()
-            .ToLookup(entry => entry.Date, entry => entry.Holder);
-        var found = new List<(DateOnly Date, Guid Holder)>();
-        foreach (var quarter in missing)
-        {
-            var holders = await repository
-                .GetConfidentialHolderIdsAmong(quarter.Key, quarter.ToArray())
-                .ToListAsync(cancellationToken);
-            found.AddRange(holders.Select(holder => (quarter.Key, holder)));
-        }
-        return found.ToLookup(entry => entry.Date, entry => entry.Holder);
+            .ToHashSet();
+        if (missing.Count == 0)
+            return missing.ToLookup(entry => entry.Date, entry => entry.Holder);
+        var withheld = await repository
+            .GetWithheldBooks(
+                missing.Select(entry => entry.Date).Distinct().ToArray(),
+                missing.Select(entry => entry.Holder).Distinct().ToArray()
+            )
+            .ToListAsync(cancellationToken);
+        return withheld
+            .Where(book => missing.Contains((book.ReportDate, book.HolderId)))
+            .ToLookup(book => book.ReportDate, book => book.HolderId);
     }
 
     // The succession groups whose successors first filed in a compared quarter that still

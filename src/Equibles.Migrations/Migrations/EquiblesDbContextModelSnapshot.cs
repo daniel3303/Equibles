@@ -2896,6 +2896,12 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int?>("DeclaredEntryTotal")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DisclosedPositionCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("FilerCik")
                         .IsRequired()
                         .HasMaxLength(16)

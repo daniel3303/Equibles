@@ -14,13 +14,17 @@ public class Form13FConfidentialFilingRepository(EquiblesFinancialDbContext dbCo
         DateOnly reportDate,
         DateOnly filingDate,
         bool isAmendment,
+        int? declaredEntryTotal,
+        int disclosedPositionCount,
         CancellationToken cancellationToken
     ) =>
         DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
             INSERT INTO "Form13FConfidentialFiling"
-              ("Id", "AccessionNumber", "FilerCik", "ReportDate", "FilingDate", "IsAmendment")
-            VALUES ({Guid.NewGuid()}, {accession}, {filerCik}, {reportDate}, {filingDate}, {isAmendment})
+              ("Id", "AccessionNumber", "FilerCik", "ReportDate", "FilingDate", "IsAmendment",
+               "DeclaredEntryTotal", "DisclosedPositionCount")
+            VALUES ({Guid.NewGuid()}, {accession}, {filerCik}, {reportDate}, {filingDate}, {isAmendment},
+                    {declaredEntryTotal}, {disclosedPositionCount})
             ON CONFLICT ("AccessionNumber") DO NOTHING
             """,
             cancellationToken
