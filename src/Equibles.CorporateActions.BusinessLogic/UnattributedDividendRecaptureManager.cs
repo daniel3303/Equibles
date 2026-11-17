@@ -48,10 +48,14 @@ public class UnattributedDividendRecaptureManager
     )
     {
         var attemptedIds = attempted.ToList();
+        // A declared payment whose ex-date has not passed is not in the source's history yet, and a
+        // window starting after today is refused (HTTP 400) on every pass; it becomes eligible once it passes.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var batch = await _dividendRepository
             .GetUnattributedWithoutListingRow(MatchToleranceDays)
             .Where(row =>
-                row.Issuer.Presentation.Listing.Active
+                row.ExDate <= today
+                && row.Issuer.Presentation.Listing.Active
                 && row.Issuer.Presentation.Listing.MarketCountryCode == "US"
                 && !attemptedIds.Contains(row.EquityIssuerId)
             )
