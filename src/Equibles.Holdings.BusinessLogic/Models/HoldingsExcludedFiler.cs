@@ -6,4 +6,7 @@ public sealed record HoldingsExcludedFiler(Guid InstitutionalHolderId, string Na
 {
     // Loaded with the name; null when only the share total is needed.
     public string Cik { get; init; }
+
+    // The quarter Shares was disclosed for, when the filer is listed for a quarter it withheld.
+    public DateOnly? DisclosedFor { get; init; }
 }

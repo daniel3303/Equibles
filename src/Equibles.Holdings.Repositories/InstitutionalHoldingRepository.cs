@@ -2131,6 +2131,38 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Select(f => f.AccessionNumber)
             );
 
+    /// <summary>
+    /// The given holders that disclosed a 13F for a quarter strictly between the two: stored
+    /// positions or a zero-holdings restatement. Each holder is probed for one row, as
+    /// <see cref="GetFiledHolderIdsAmong"/> does; reading quarters off positions scans whole books.
+    /// </summary>
+    public IQueryable<Guid> GetHolderIdsDisclosing13FBetween(
+        IReadOnlyCollection<Guid> holderIds,
+        DateOnly after,
+        DateOnly before
+    )
+    {
+        var between = GetAll()
+            .Where(Is13F)
+            .Where(h => h.ReportDate > after && h.ReportDate < before);
+        return DbContext
+            .Set<InstitutionalHolder>()
+            .Where(holder =>
+                holderIds.Contains(holder.Id)
+                && between.Any(h => h.InstitutionalHolderId == holder.Id)
+            )
+            .Select(holder => holder.Id)
+            .Union(
+                Zero13FRestatements()
+                    .Where(f =>
+                        f.ReportDate > after
+                        && f.ReportDate < before
+                        && holderIds.Contains(f.InstitutionalHolderId)
+                    )
+                    .Select(f => f.InstitutionalHolderId)
+            );
+    }
+
     /// <summary>The given 13F accessions whose rows, or zero-holdings restatement, are stored.</summary>
     public IQueryable<string> GetRetained13FAccessionsAmong(
         IReadOnlyCollection<string> accessions
