@@ -203,6 +203,7 @@ public class Realtime13FIngestionIncompleteImportTests : IAsyncLifetime
         var recovery = new HoldingsImportRecoveryService(
             failures,
             new InstitutionalHoldingRepository(db),
+            new RealtimeSweepStateRepository(db),
             edgar,
             ingestion,
             Substitute.For<ILogger<HoldingsImportRecoveryService>>()

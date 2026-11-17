@@ -422,7 +422,12 @@ public class SplitBasisHoldingRepairServiceTests : IAsyncLifetime
             .SingleAsync(f => f.AccessionNumber == "0002009426-24-000003");
         request.Cik.Should().Be("2009426");
         request.FilingDate.Should().Be(new DateOnly(2024, 8, 14));
-        request.Reason.Should().Be(HoldingsImportFailureReason.PendingRecovery);
+        request
+            .Reason.Should()
+            .Be(
+                HoldingsImportFailureReason.StoredReplay,
+                "the filing's row is stored, so the replay withholds nothing from its quarter"
+            );
         request.ResolvedAt.Should().BeNull();
         (
             await db.Set<HoldingsCorrectionEvidence>()

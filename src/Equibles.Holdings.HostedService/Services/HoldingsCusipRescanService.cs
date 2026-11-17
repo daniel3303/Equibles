@@ -1,5 +1,6 @@
 using System.Data;
 using Equibles.Core.AutoWiring;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ public class HoldingsCusipRescanService(
     ProcessedDataSetRepository processed,
     HoldingsDataSetClient dataSets,
     HoldingsImportFailureRepository failures,
+    InstitutionalHoldingRepository holdings,
     HoldingsRescanSignal signal,
     HoldingsRealtimeReplaySignal realtimeSignal,
     ILogger<HoldingsCusipRescanService> logger
@@ -59,6 +61,18 @@ public class HoldingsCusipRescanService(
                 minReportDate,
                 cancellationToken
             );
+            // A filing whose every tracked position waited on the new identity stored nothing:
+            // only one with stored rows is a replay that withholds no filing from its quarter.
+            var stored =
+                affected.Count == 0
+                    ? []
+                    : (
+                        await holdings
+                            .GetRetained13FAccessionsAmong(
+                                affected.Select(filing => filing.AccessionNumber).ToList()
+                            )
+                            .ToListAsync(cancellationToken)
+                    ).ToHashSet(StringComparer.OrdinalIgnoreCase);
             await using var transaction = await requests.CreateTransaction(
                 IsolationLevel.ReadCommitted,
                 cancellationToken
@@ -69,7 +83,10 @@ public class HoldingsCusipRescanService(
                     filing.Cik,
                     filing.FilingDate,
                     cancellationToken,
-                    supersedesActiveAttempt: true
+                    supersedesActiveAttempt: true,
+                    reason: stored.Contains(filing.AccessionNumber)
+                        ? HoldingsImportFailureReason.StoredReplay
+                        : HoldingsImportFailureReason.PendingRecovery
                 );
             foreach (var request in batch)
                 request.ScannedThrough = archive.End;

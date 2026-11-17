@@ -37,6 +37,7 @@ public class HoldingsCusipRescanTests(ParadeDbFixture fixture) : IAsyncLifetime
             new ProcessedDataSetRepository(db),
             new HoldingsDataSetClient(edgar, Substitute.For<ILogger<HoldingsDataSetClient>>()),
             new HoldingsImportFailureRepository(db),
+            new InstitutionalHoldingRepository(db),
             new HoldingsRescanSignal(),
             new HoldingsRealtimeReplaySignal(),
             Substitute.For<ILogger<HoldingsCusipRescanService>>()
@@ -126,6 +127,49 @@ public class HoldingsCusipRescanTests(ParadeDbFixture fixture) : IAsyncLifetime
                 .Should()
                 .BeEquivalentTo("original", "later", "unrelated");
         }
+    }
+
+    [Fact]
+    public async Task Scan_QueuesAStoredFilingAsAReplay_AndOneWithNothingStoredAsPending()
+    {
+        await Seed();
+        await using (var db = fixture.CreateDbContext())
+        {
+            Equibles.CommonStocks.Data.Models.EquityIssuer stock =
+                Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "HELD", Name: "Held stock");
+            var holder = new InstitutionalHolder { Cik = "123", Name = "Filer" };
+            db.AddRange(stock, holder);
+            // The amendment stored another position; the original's only one waited on the CUSIP.
+            db.Add(
+                new InstitutionalHolding
+                {
+                    EquityIssuerId = stock.Id,
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = new DateOnly(2022, 12, 31),
+                    FilingDate = new DateOnly(2023, 2, 15),
+                    FilingType = FilingType.Form13F,
+                    Shares = 100,
+                    Value = 1000,
+                    AccessionNumber = "later",
+                    ShareType = ShareType.Shares,
+                }
+            );
+            await db.SaveChangesAsync();
+        }
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar.DownloadStream(Arg.Any<string>()).Returns(_ => Source("NEW"));
+
+        await using (var db = fixture.CreateDbContext())
+            await Service(db, edgar).Scan(Floor, CancellationToken.None);
+
+        await using var verify = fixture.CreateDbContext();
+        (await verify.Set<HoldingsImportFailure>().ToListAsync())
+            .Select(row => (row.AccessionNumber, row.Reason))
+            .Should()
+            .BeEquivalentTo([
+                ("original", HoldingsImportFailureReason.PendingRecovery),
+                ("later", HoldingsImportFailureReason.StoredReplay),
+            ]);
     }
 
     [Fact]

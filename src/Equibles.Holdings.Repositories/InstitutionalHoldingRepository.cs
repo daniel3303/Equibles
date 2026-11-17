@@ -2131,6 +2131,21 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     .Select(f => f.AccessionNumber)
             );
 
+    /// <summary>The given 13F accessions whose rows, or zero-holdings restatement, are stored.</summary>
+    public IQueryable<string> GetRetained13FAccessionsAmong(
+        IReadOnlyCollection<string> accessions
+    ) =>
+        GetAll()
+            .Where(h =>
+                h.FilingType == FilingType.Form13F && accessions.Contains(h.AccessionNumber)
+            )
+            .Select(h => h.AccessionNumber)
+            .Union(
+                Zero13FRestatements()
+                    .Where(f => accessions.Contains(f.AccessionNumber))
+                    .Select(f => f.AccessionNumber)
+            );
+
     public IQueryable<InstitutionalFiling> GetFilingsByHolder(
         InstitutionalHolder holder,
         DateOnly reportDate

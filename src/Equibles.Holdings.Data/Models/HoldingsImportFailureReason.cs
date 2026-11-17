@@ -40,4 +40,9 @@ public enum HoldingsImportFailureReason
 
     [Display(Name = "Report period precedes the imported history")]
     OutsideHistoryWindow,
+
+    // Appended because stored values are positional. The filing's rows are stored and only its
+    // place in an ordered replay is owed, so it withholds nothing from a quarter.
+    [Display(Name = "Stored filing awaiting ordered replay")]
+    StoredReplay,
 }

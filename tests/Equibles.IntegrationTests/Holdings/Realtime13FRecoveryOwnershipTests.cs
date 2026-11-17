@@ -44,6 +44,9 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                 provider
                     .GetService(typeof(HoldingsImportFailureRepository))
                     .Returns(new HoldingsImportFailureRepository(db));
+                provider
+                    .GetService(typeof(InstitutionalHoldingRepository))
+                    .Returns(new InstitutionalHoldingRepository(db));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(provider);
                 return scope;
@@ -90,6 +93,22 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
         await failures.Defer("123", DateTime.UtcNow, CancellationToken.None);
         var before = await failures.GetAll().AsNoTracking().SingleAsync();
         db.Add(new ProcessedFiling { AccessionNumber = "processed" });
+        // Stored before a rewind dropped its ledger row: it owes a replay, not an import.
+        var issuer = new Equibles.CommonStocks.Data.Models.EquityIssuer { Name = "Issuer" };
+        var holder = new InstitutionalHolder { Cik = "123", Name = "Manager" };
+        db.AddRange(issuer, holder);
+        db.Add(
+            new InstitutionalHolding
+            {
+                EquityIssuerId = issuer.Id,
+                InstitutionalHolderId = holder.Id,
+                ReportDate = new DateOnly(2026, 6, 30),
+                FilingDate = Filed,
+                FilingType = FilingType.Form13F,
+                AccessionNumber = "stored-tail",
+                Shares = 17,
+            }
+        );
         await db.SaveChangesAsync();
         var edgar = Substitute.For<ISecEdgarClient>();
         edgar
@@ -98,6 +117,7 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                 Entry("pending", Filed),
                 Entry("older", Filed.AddDays(-10)),
                 Entry("new-tail", Filed.AddDays(1)),
+                Entry("stored-tail", Filed),
                 Entry("processed", Filed, "456"),
             ]);
         var ingestion = Ingestion(edgar);
@@ -120,7 +140,7 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                 Arg.Any<CancellationToken>()
             );
         var rows = await failures.GetAll().AsNoTracking().ToListAsync();
-        rows.Should().HaveCount(3);
+        rows.Should().HaveCount(4);
         var pending = rows.Single(r => r.AccessionNumber == "pending");
         pending.Attempts.Should().Be(before.Attempts);
         pending.NextAttemptAt.Should().Be(before.NextAttemptAt);
@@ -131,7 +151,12 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
             .OnlyContain(r =>
                 r.Cik == "123"
                 && r.Attempts == 0
-                && r.Reason == HoldingsImportFailureReason.PendingRecovery
+                && r.Reason
+                    == (
+                        r.AccessionNumber == "stored-tail"
+                            ? HoldingsImportFailureReason.StoredReplay
+                            : HoldingsImportFailureReason.PendingRecovery
+                    )
             );
         (await db.Set<ProcessedFiling>().CountAsync()).Should().Be(1);
 
@@ -152,6 +177,12 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                     Form = "13F-HR",
                     FilingDate = Filed,
                 },
+                new FilingData
+                {
+                    AccessionNumber = "stored-tail",
+                    Form = "13F-HR",
+                    FilingDate = Filed,
+                },
             ]);
         edgar.FilingExists("123", "new-tail", Arg.Any<CancellationToken>()).Returns(true);
         var recoveryIngestion = Substitute.For<Realtime13FIngestionService>(
@@ -165,6 +196,7 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
         var recovery = new HoldingsImportRecoveryService(
             failures,
             new InstitutionalHoldingRepository(db),
+            new RealtimeSweepStateRepository(db),
             edgar,
             recoveryIngestion,
             Substitute.For<ILogger<HoldingsImportRecoveryService>>()
@@ -179,7 +211,7 @@ public class Realtime13FRecoveryOwnershipTests(ParadeDbFixture fixture) : IAsync
                 Arg.Any<CancellationToken>()
             );
         await edgar.Received(1).FilingExists("123", "new-tail", Arg.Any<CancellationToken>());
-        (await failures.GetAll().CountAsync(r => r.ResolvedAt == null)).Should().Be(3);
+        (await failures.GetAll().CountAsync(r => r.ResolvedAt == null)).Should().Be(4);
     }
 
     [Fact]
