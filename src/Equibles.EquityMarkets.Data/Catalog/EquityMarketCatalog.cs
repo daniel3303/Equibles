@@ -355,6 +355,30 @@ public static class EquityMarketCatalog
         // presentation when a share trades on both.
         Indian("nse", "National Stock Exchange of India", "XNSE", ".NS", "NSI"),
         Indian("bse", "BSE", "XBOM", ".BO", "BSE"),
+        // Brazil has no FIRDS register either; a host-owned directory states B3's listings. Continuous trading
+        // opens at 10:00 in São Paulo and ends at 15:55 in New York, with the closing call uncrossing five
+        // minutes later, so the São Paulo close moves an hour with US daylight saving. No provider symbol is
+        // stated, so the price lane holds no B3 series.
+        new(
+            "sao-paulo",
+            "B3",
+            "BR",
+            ["BVMF"],
+            "BRL",
+            YahooSuffix: null,
+            YahooExchangeCode: null,
+            "America/Sao_Paulo",
+            new(10, 0),
+            new(17, 55),
+            new(18, 0),
+            DirectorySource: null,
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: null
+        )
+        {
+            CloseTimeZoneId = "America/New_York",
+        },
         // Last on purpose: the FCA register homes the EEA issuers' London lines too, so their EEA directories
         // run first and hold the presentation before a London listing of the same share arrives. AIM is its own
         // venue code, so the growth market is a market identifier here rather than a segment of XLON.
