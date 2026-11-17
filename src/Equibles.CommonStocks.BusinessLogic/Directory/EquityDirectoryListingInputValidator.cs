@@ -36,6 +36,11 @@ internal static class EquityDirectoryListingInputValidator
             return false;
         if (input.Isin == null && input.SourceSecurityIdentifier == null)
             return false;
+        if (
+            input.IsinSupersedesRecorded
+            && (input.Isin == null || input.SourceSecurityIdentifier == null)
+        )
+            return false;
         if ((input.SourceSecurityIdentifier == null) != (input.SourceListingIdentifier == null))
             return false;
         return input.SourceSecurityIdentifier == null

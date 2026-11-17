@@ -661,6 +661,53 @@ public class SourceInstrumentSnapshotTests(ParadeDbFixture fixture) : ParadeDbMc
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
     }
 
+    // A national agency renumbers a share when its company is renamed, under no shared issuer number. A source that
+    // proved the new number names the bound security moves it; the same number held by another security still refuses.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ASourceProvenReplacementMovesTheBoundSecurityUnlessAnotherSecurityHoldsTheNumber(
+        bool ownedElsewhere
+    )
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var manager = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var first = Listing();
+        first.Isin = "HK0000050093";
+        var other = Listing("share-b", "00002");
+        other.SourceIssuerIdentifier = "issuer-b";
+        other.SourceSecurityIdentifier = "security-b";
+        other.Isin = ownedElsewhere ? "HK0000050176" : "KYG4052M1116";
+        first.DirectorySnapshotId = other.DirectorySnapshotId = await manager.Reconcile(
+            Snapshot(0, first, other)
+        );
+        var firstId = await importer.ImportListing(first);
+        await importer.ImportListing(other);
+
+        var renumbered = Listing(ticker: "00009");
+        renumbered.Isin = "HK0000050176";
+        renumbered.IsinSupersedesRecorded = true;
+        renumbered.DirectorySnapshotId = await manager.Reconcile(Snapshot(1, renumbered, other));
+        if (ownedElsewhere)
+            await Assert.ThrowsAsync<InvalidDataException>(() =>
+                importer.ImportListing(renumbered)
+            );
+        else
+            (await importer.ImportListing(renumbered)).Should().Be(firstId);
+
+        DbContext.ChangeTracker.Clear();
+        var after = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+            .SingleAsync(row => row.Id == firstId);
+        after.Active.Should().BeTrue();
+        after.Security.Isin.Should().Be(ownedElsewhere ? "HK0000050093" : "HK0000050176");
+        after.Ticker.Should().Be(ownedElsewhere ? "00001" : "00009");
+        (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(2);
+    }
+
     // A row whose ISIN conflicts and whose listing is bound to another security is still an identifier conflict.
     [Fact]
     public async Task AnIsinConflictNeverMasksAnIdentifierConflict()
