@@ -88,7 +88,10 @@ internal static class Form13FConfidentialFilingReader
         await foreach (var row in tsvParser.ParseEntry(infoTable))
         {
             if (
-                filings.TryGetValue(GetValue(row, "ACCESSION_NUMBER") ?? "", out var filing)
+                filings.TryGetValue(
+                    NormalizeIdentifier(GetValue(row, "ACCESSION_NUMBER")) ?? "",
+                    out var filing
+                )
                 && (
                     ParseLong(GetValue(row, "SSHPRNAMT")) > 0
                     || ParseLong(GetValue(row, "VALUE")) > 0

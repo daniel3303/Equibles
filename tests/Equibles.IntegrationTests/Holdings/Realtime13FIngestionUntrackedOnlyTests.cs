@@ -791,6 +791,17 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
         (await ingestion.RecordConfidentialFilingsOf(day.AddDays(1), CancellationToken.None))
             .Should()
             .BeFalse("a day that could not be read is retried, never skipped");
+        var recent = DateOnly.FromDateTime(DateTime.UtcNow);
+        while (recent.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            recent = recent.AddDays(-1);
+        edgar.GetDailyIndex(recent, Arg.Any<CancellationToken>()).Returns([]);
+        edgar.GetDailyIndex(day.AddDays(2), Arg.Any<CancellationToken>()).Returns([]);
+        (await ingestion.RecordConfidentialFilingsOf(recent, CancellationToken.None))
+            .Should()
+            .BeFalse("EDGAR publishes a day's index that night; an empty one may be unpublished");
+        (await ingestion.RecordConfidentialFilingsOf(day.AddDays(2), CancellationToken.None))
+            .Should()
+            .BeTrue("an older day with no 13F is read");
 
         using var verify = FreshContext();
         var report = await verify.Set<Form13FConfidentialFiling>().SingleAsync();

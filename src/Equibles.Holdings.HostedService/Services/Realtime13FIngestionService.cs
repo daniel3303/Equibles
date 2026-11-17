@@ -773,6 +773,9 @@ public class Realtime13FIngestionService
         return recorded;
     }
 
+    // EDGAR publishes a day's index that night, so an empty one this recent may be unpublished.
+    internal const int DailyIndexPublicationDays = 3;
+
     /// <summary>
     /// Records the confidential-treatment reports among one day's filings that the sweep imported,
     /// before such reports were recorded, without storing a row: a withheld book stores none, and
@@ -798,6 +801,13 @@ public class Realtime13FIngestionService
             );
             return false;
         }
+        if (
+            entries.Count == 0
+            && day.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)
+            && day.DayNumber
+                >= DateOnly.FromDateTime(DateTime.UtcNow).DayNumber - DailyIndexPublicationDays
+        )
+            return false;
 
         var imported = await LoadProcessedAccessions(
             entries

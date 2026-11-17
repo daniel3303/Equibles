@@ -81,6 +81,29 @@ public class Form13FConfidentialGapTests(ParadeDbFixture fixture) : IAsyncLifeti
         (await Cursor()).Should().BeNull();
     }
 
+    [Fact]
+    public async Task Fill_NewestDayHeldBack_IsStillReadByALaterCycle()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await MarkRead(today.AddDays(-2));
+        var worker = Worker();
+
+        // EDGAR has not published the newest day's index yet.
+        await worker.FillConfidentialFilingGap(CancellationToken.None);
+
+        (await Cursor()).Should().Be(today.AddDays(1), "the walk's newest day is fixed, not done");
+
+        _ingestion
+            .RecordConfidentialFilingsOf(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        await worker.FillConfidentialFilingGap(CancellationToken.None);
+
+        (await Cursor()).Should().Be(today.AddDays(-1));
+        await _ingestion
+            .Received(2)
+            .RecordConfidentialFilingsOf(today, Arg.Any<CancellationToken>());
+    }
+
     private async Task MarkRead(DateOnly through)
     {
         await using var db = fixture.CreateDbContext();

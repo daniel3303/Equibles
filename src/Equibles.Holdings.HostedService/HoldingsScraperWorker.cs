@@ -865,7 +865,12 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 .GetByWorker(ConfidentialGapStateName)
                 .AsNoTracking()
                 .SingleOrDefaultAsync(cancellationToken);
-            var day = state?.SweptThrough.AddDays(-1) ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            // The first cycle fixes the walk's newest day: a day held back until EDGAR publishes
+            // its index is then still the walk's to read, not a later cycle's own "today".
+            if (state == null)
+                await states.Rewind(ConfidentialGapStateName, today.AddDays(1), cancellationToken);
+            var day = (state?.SweptThrough ?? today.AddDays(1)).AddDays(-1);
             for (; day > readThrough; day = day.AddDays(-1))
             {
                 cancellationToken.ThrowIfCancellationRequested();
