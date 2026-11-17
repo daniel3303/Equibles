@@ -782,6 +782,96 @@ public class HoldingsImportFailureRecoveryTests(ParadeDbFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task Recovery_StartsTheTailAtTheSweepsTrailingDaysWhenItsCursorIsNewer()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await using var db = fixture.CreateDbContext();
+        // A rewind this shallow leaves the cursor inside the days the sweep reads again anyway.
+        db.Add(
+            new RealtimeSweepState
+            {
+                WorkerName = "Holdings13FRealtime",
+                SweptThrough = today.AddDays(-3),
+            }
+        );
+        await db.SaveChangesAsync();
+        var failures = new HoldingsImportFailureRepository(db);
+        await failures.EnqueueRecovery("restatement", "123", today, CancellationToken.None);
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetCompanyFilings("123", null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+            .Returns(new List<FilingData>());
+        var recovery = new HoldingsImportRecoveryService(
+            failures,
+            new InstitutionalHoldingRepository(db),
+            new RealtimeSweepStateRepository(db),
+            edgar,
+            Substitute.For<Realtime13FIngestionService>(
+                edgar,
+                new Filing13FXmlParser(),
+                new Realtime13FArchiveBuilder(),
+                null,
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<Realtime13FIngestionService>>()
+            ),
+            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+        );
+
+        await recovery.Recover(new DateOnly(2020, 1, 1), CancellationToken.None);
+
+        await edgar
+            .Received(1)
+            .GetCompanyFilings("123", null, today.AddDays(-14), Arg.Any<DateOnly?>());
+    }
+
+    [Fact]
+    public async Task RestateStoredReplays_MovesOnlyPendingRecoveriesWhoseFilingIsStored()
+    {
+        Equibles.CommonStocks.Data.Models.EquityIssuer stock =
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "HELD", Name: "Held stock");
+        var holder = new InstitutionalHolder { Cik = "123", Name = "Filer" };
+        await using var db = fixture.CreateDbContext();
+        db.AddRange(stock, holder);
+        db.Add(
+            new InstitutionalHolding
+            {
+                EquityIssuerId = stock.Id,
+                InstitutionalHolderId = holder.Id,
+                ReportDate = Quarter,
+                FilingDate = Quarter.AddDays(30),
+                FilingType = FilingType.Form13F,
+                Shares = 100,
+                Value = 1000,
+                AccessionNumber = "stored",
+                ShareType = ShareType.Shares,
+            }
+        );
+        await db.SaveChangesAsync();
+        var failures = new HoldingsImportFailureRepository(db);
+        // Queued by a release that gave every recovery the same reason.
+        foreach (var accession in new[] { "stored", "unstored" })
+            await failures.EnqueueRecovery(
+                accession,
+                "123",
+                Quarter.AddDays(30),
+                CancellationToken.None
+            );
+
+        (await failures.RestateStoredReplays(CancellationToken.None)).Should().Be(1);
+
+        (await failures.GetAll().AsNoTracking().ToListAsync())
+            .Select(row => (row.AccessionNumber, row.Reason))
+            .Should()
+            .BeEquivalentTo([
+                ("stored", HoldingsImportFailureReason.StoredReplay),
+                ("unstored", HoldingsImportFailureReason.PendingRecovery),
+            ]);
+        (await failures.GetWithheld().Select(row => row.AccessionNumber).ToListAsync())
+            .Should()
+            .Equal("unstored");
+    }
+
+    [Fact]
     public async Task Coverage_LeavesOutStoredFilingsAwaitingReplay()
     {
         await using var db = fixture.CreateDbContext();

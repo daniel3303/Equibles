@@ -28,7 +28,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     // Once a watermark exists, every cycle still re-sweeps this many recent days
     // so late/amended filings (which carry a fresh accession) are picked up even
     // after the watermark has advanced past their report period.
-    private const int TrailingReSweepDays = 14;
+    internal const int TrailingReSweepDays = 14;
     internal const int CatchUpWindowDays = 7;
     private const int FilingsPerCycle = 100;
     internal static readonly TimeSpan BacklogRetryInterval = TimeSpan.FromSeconds(5);
@@ -43,6 +43,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     private readonly IConfiguration _configuration;
     private DateTime? _nextRecoveryAt;
     private bool _hasMoreFilings;
+    private bool _storedReplaysRestated;
 
     protected override string WorkerName => "13F real-time ingestion";
     protected override TimeSpan SleepInterval => TimeSpan.FromHours(6);
@@ -101,10 +102,21 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         await using var scope = ScopeFactory.CreateAsyncScope();
+        var failures = scope.ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>();
+        if (!_storedReplaysRestated)
+        {
+            // Once per start: the rows an older release queued, before recovery ranks them.
+            var restated = await failures.RestateStoredReplays(stoppingToken);
+            _storedReplaysRestated = true;
+            if (restated > 0)
+                Logger.LogInformation(
+                    "Restated {Count} pending 13F recoveries of stored filings as ordered replays",
+                    restated
+                );
+        }
         await scope
             .ServiceProvider.GetRequiredService<HoldingsImportRecoveryService>()
             .Recover(minReportDate, stoppingToken);
-        var failures = scope.ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>();
         var stateRepo = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
         var ingestionService =
             scope.ServiceProvider.GetRequiredService<Realtime13FIngestionService>();

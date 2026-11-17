@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -45,6 +46,35 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
     /// The unresolved filings whose rows are not stored yet. A stored filing awaiting its ordered
     /// replay is left out: it delays nothing a reader can see.
     /// </summary>
+    /// <summary>
+    /// Restates as <see cref="HoldingsImportFailureReason.StoredReplay"/> every pending recovery
+    /// whose filing is stored. A release that did not tell the two apart queued them alike, and
+    /// such a backlog would keep deferring the sweep and counting against coverage.
+    /// </summary>
+    public Task<int> RestateStoredReplays(CancellationToken cancellationToken) =>
+        GetAll()
+            .Where(row =>
+                row.ResolvedAt == null
+                && row.Reason == HoldingsImportFailureReason.PendingRecovery
+                && (
+                    DbContext
+                        .Set<InstitutionalHolding>()
+                        .Any(holding =>
+                            holding.AccessionNumber == row.AccessionNumber
+                            && holding.FilingType == FilingType.Form13F
+                        )
+                    || DbContext
+                        .Set<InstitutionalFiling>()
+                        .Zero13FRestatements()
+                        .Any(filing => filing.AccessionNumber == row.AccessionNumber)
+                )
+            )
+            .ExecuteUpdateAsync(
+                update =>
+                    update.SetProperty(row => row.Reason, HoldingsImportFailureReason.StoredReplay),
+                cancellationToken
+            );
+
     public IQueryable<HoldingsImportFailure> GetWithheld() =>
         GetAll()
             .Where(row =>

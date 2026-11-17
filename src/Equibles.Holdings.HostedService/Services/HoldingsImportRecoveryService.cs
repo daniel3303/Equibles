@@ -84,11 +84,20 @@ public class HoldingsImportRecoveryService(
             return;
         var startedAt = DateTime.UtcNow;
         var from = pending.Min(row => row.FilingDate);
-        // A rewound sweep has yet to re-apply this manager's filings after its cursor. A tail that
-        // starts later marks the pending filing processed, and the sweep then re-applies an older
-        // filing over it.
-        if (sweptThrough < from)
-            from = sweptThrough.Value;
+        // The sweep has yet to re-apply this manager's filings from where it resumes: its cursor,
+        // or its trailing days when the cursor is newer. A tail that starts later marks the
+        // pending filing processed, and the sweep then re-applies an older filing over it.
+        if (sweptThrough != null)
+        {
+            var sweepResumes = Holdings13FRealtimeWorker.ComputeWindowStart(
+                DateOnly.FromDateTime(startedAt),
+                sweptThrough,
+                Holdings13FRealtimeWorker.TrailingReSweepDays,
+                0
+            );
+            if (sweepResumes < from)
+                from = sweepResumes;
+        }
         var filings = await edgar.GetCompanyFilings(
             cik,
             edgarForm: null,
