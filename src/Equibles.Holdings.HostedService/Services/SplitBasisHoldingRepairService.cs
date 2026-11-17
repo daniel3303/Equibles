@@ -459,7 +459,14 @@ public class SplitBasisHoldingRepairService
         await dbContext.SaveChangesAsync(cancellationToken);
         var failures = new HoldingsImportFailureRepository(dbContext);
         foreach (var (accession, (cik, filingDate)) in replays)
-            await failures.EnqueueRecovery(accession, cik, filingDate, cancellationToken);
+            await failures.EnqueueRecovery(
+                accession,
+                cik,
+                filingDate,
+                cancellationToken,
+                // Each of these filings has the stored row the replay restates.
+                reason: HoldingsImportFailureReason.StoredReplay
+            );
         if (transaction != null)
             await transaction.CommitAsync(cancellationToken);
         _logger.LogWarning(
