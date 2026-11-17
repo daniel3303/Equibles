@@ -342,13 +342,139 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
             );
     }
 
+    /// <summary>
+    /// A 13F the latest-filings feed lists is queued and wakes the worker at once. That cycle only
+    /// recovers: it reads no daily index, and when SEC's filing list does not carry the filing yet
+    /// it retries in minutes while the sweep stays owed at its own time.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DoWork_FeedFiling_WakesARecoveryOnlyCycleUnlessTheSweepIsDue(bool sweepDue)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<RealtimeSweepState>()
+                .Add(
+                    new RealtimeSweepState
+                    {
+                        WorkerName = Holdings13FRealtimeWorker.WorkerStateName,
+                        SweptThrough = today,
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+        var edgarClient = Substitute.For<ISecEdgarClient>();
+        // SEC's list of the filer's filings lags the feed; the filing itself is published.
+        edgarClient
+            .GetCompanyFilings(Arg.Any<string>(), null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+            .Returns([]);
+        edgarClient
+            .FilingExists(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        edgarClient
+            .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new List<EdgarDailyIndexEntry>());
+        var signal = new HoldingsRealtimeReplaySignal();
+        var worker = Worker(
+            edgarClient,
+            new CapturingLogger<Holdings13FRealtimeWorker>(),
+            signal,
+            out var scopes
+        );
+        // The worker's first cycle always sweeps; the feed reaches a worker that already has.
+        await worker.InvokeDoWork(CancellationToken.None);
+        // Swept recently: the next sweep is owed in 15 seconds. Overdue: it was owed an hour ago.
+        var sweptAt = sweepDue
+            ? DateTime.UtcNow.AddHours(-7)
+            : DateTime.UtcNow.AddHours(-6).AddSeconds(15);
+        await using (var aged = _fixture.CreateDbContext())
+            await aged.Set<RealtimeSweepState>()
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.UpdatedAt, sweptAt));
+        edgarClient.ClearReceivedCalls();
+        var ingestion = (Realtime13FIngestionService)
+            scopes.CreateScope().ServiceProvider.GetService(typeof(Realtime13FIngestionService));
+        var sink = new Recent13FFilingSink(ingestion, signal);
+
+        await sink.Offer(
+            [
+                new EdgarRecentFilingEntry
+                {
+                    Cik = "0000009999",
+                    FormType = "13F-HR",
+                    AccessionNumber = "0000009999-26-000001",
+                    Updated = DateTimeOffset.UtcNow,
+                },
+                new EdgarRecentFilingEntry
+                {
+                    Cik = "0000007777",
+                    FormType = "8-K",
+                    AccessionNumber = "0000007777-26-000002",
+                    Updated = DateTimeOffset.UtcNow,
+                },
+            ],
+            CancellationToken.None
+        );
+
+        // The queued filing ends a wait that would otherwise last the whole sweep interval.
+        await worker.InvokeWait(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        await worker.InvokeDoWork(CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        var queued = await verify.Set<HoldingsImportFailure>().SingleAsync();
+        queued.AccessionNumber.Should().Be("0000009999-26-000001");
+        queued.Cik.Should().Be("9999");
+        queued.Reason.Should().Be(HoldingsImportFailureReason.PendingRecovery);
+        queued.ResolvedAt.Should().BeNull();
+        queued
+            .NextAttemptAt.Should()
+            .BeCloseTo(
+                DateTime.UtcNow + HoldingsImportRecoveryService.ListingLagRetry,
+                TimeSpan.FromMinutes(1)
+            );
+        if (sweepDue)
+        {
+            FetchedDates(edgarClient).Should().NotBeEmpty();
+            (await SweepState(verify)).UpdatedAt.Should().BeAfter(sweptAt.AddHours(1));
+        }
+        else
+        {
+            FetchedDates(edgarClient).Should().BeEmpty();
+            (await SweepState(verify))
+                .UpdatedAt.Should()
+                .BeCloseTo(sweptAt, TimeSpan.FromSeconds(1));
+            // The retry minutes later is a timer wake: it recovers again and still reads no index.
+            await using (var due = _fixture.CreateDbContext())
+                await due.Set<HoldingsImportFailure>()
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(r => r.NextAttemptAt, DateTime.UtcNow.AddSeconds(-1))
+                    );
+            await worker.InvokeDoWork(CancellationToken.None);
+            FetchedDates(edgarClient).Should().BeEmpty();
+            await edgarClient
+                .Received(2)
+                .GetCompanyFilings("9999", null, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>());
+            // The sweep owed in seconds ends the next wait, not the filing's retry minutes away.
+            await worker.InvokeWait(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(45));
+        }
+    }
+
     private TestableHoldings13FRealtimeWorker Worker(
         ISecEdgarClient edgarClient,
         CapturingLogger<Holdings13FRealtimeWorker> logger
+    ) => Worker(edgarClient, logger, null, out _);
+
+    private TestableHoldings13FRealtimeWorker Worker(
+        ISecEdgarClient edgarClient,
+        CapturingLogger<Holdings13FRealtimeWorker> logger,
+        HoldingsRealtimeReplaySignal signal,
+        out IServiceScopeFactory scopes
     )
     {
         IServiceScopeFactory scopeFactory = null!;
         scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopes = scopeFactory;
         scopeFactory
             .CreateScope()
             .Returns(_ =>
@@ -368,7 +494,7 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                 sp.GetService(typeof(RealtimeSweepStateRepository))
                     .Returns(new RealtimeSweepStateRepository(ctx));
                 sp.GetService(typeof(HoldingsRealtimeReplaySignal))
-                    .Returns(new HoldingsRealtimeReplaySignal());
+                    .Returns(signal ?? new HoldingsRealtimeReplaySignal());
                 var importService = new HoldingsImportService(
                     scopeFactory,
                     Substitute.For<ILogger<HoldingsImportService>>(),

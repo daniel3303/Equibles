@@ -1,6 +1,7 @@
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Extensions;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Integrations.Sec.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -26,6 +27,23 @@ public class HoldingsServiceCollectionExtensionsTests
         services.AddHoldingsWorker();
 
         services.Should().Contain(d => d.ServiceType == typeof(HoldingsImportService));
+    }
+
+    [Fact]
+    public void AddHoldingsWorker_RegistersThe13FSinkOnTheLatestFilingsFeed()
+    {
+        // The feed poller resolves its sinks by interface; without this binding a 13F waits for
+        // the night's daily index again and nothing fails.
+        var services = new ServiceCollection();
+
+        services.AddHoldingsWorker();
+
+        services
+            .Should()
+            .Contain(d =>
+                d.ServiceType == typeof(IRecentFilingSink)
+                && d.ImplementationType == typeof(Recent13FFilingSink)
+            );
     }
 
     [Fact]

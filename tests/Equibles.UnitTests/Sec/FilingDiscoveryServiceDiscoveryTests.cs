@@ -52,13 +52,15 @@ public class FilingDiscoveryServiceDiscoveryTests
     private static FilingDiscoveryService CreateService(
         ISecEdgarClient secEdgarClient,
         EquiblesFinancialDbContext context,
-        DocumentScraperOptions options = null
+        DocumentScraperOptions options = null,
+        params IRecentFilingSink[] sinks
     ) =>
         new(
             secEdgarClient,
             new BackfillStateRepository(context),
             Options.Create(options ?? new DocumentScraperOptions()),
-            Substitute.For<ILogger<FilingDiscoveryService>>()
+            Substitute.For<ILogger<FilingDiscoveryService>>(),
+            sinks
         );
 
     private static EquityIssuer Tracked(string ticker, string cik) =>
@@ -102,6 +104,58 @@ public class FilingDiscoveryServiceDiscoveryTests
         var dirty = await CreateService(client, context).DiscoverCompaniesWithNewFilings([apple]);
 
         dirty.Should().ContainSingle().Which.Should().BeSameAs(apple);
+    }
+
+    // Another lane's forms ride the same poll: a sink is offered every entry the poll reads for
+    // the first time, whatever its form or filer, and a failing sink never fails discovery.
+    [Fact]
+    public async Task Feed_OffersEachNewEntryToEverySinkOnce_AndSurvivesAFailingSink()
+    {
+        await using var context = CreateContext();
+        EquityIssuer apple = Tracked("AAPL", "320193");
+        var client = ClientWithFeed(
+            new EdgarRecentFilingEntry
+            {
+                Cik = "0000320193",
+                FormType = "8-K",
+                AccessionNumber = "0000320193-26-000001",
+            },
+            new EdgarRecentFilingEntry
+            {
+                Cik = "0001167483",
+                FormType = "13F-HR",
+                AccessionNumber = "0000919574-26-008062",
+            }
+        );
+        var failing = Substitute.For<IRecentFilingSink>();
+        failing
+            .Offer(Arg.Any<IReadOnlyList<EdgarRecentFilingEntry>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("sink down"));
+        var offered = new List<string>();
+        var sink = Substitute.For<IRecentFilingSink>();
+        sink.Offer(Arg.Any<IReadOnlyList<EdgarRecentFilingEntry>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                offered.AddRange(
+                    call.Arg<IReadOnlyList<EdgarRecentFilingEntry>>()
+                        .Select(entry => entry.AccessionNumber)
+                );
+                return Task.CompletedTask;
+            });
+        var service = CreateService(
+            client,
+            context,
+            new DocumentScraperOptions { RecentFeedPollSeconds = 0 },
+            failing,
+            sink
+        );
+
+        var dirty = await service.DiscoverCompaniesFromRecentFeed([apple]);
+        // A second poll re-reads the same page: nothing is new, so nothing is offered again.
+        await service.DiscoverCompaniesFromRecentFeed([apple]);
+
+        dirty.Should().ContainSingle().Which.Should().BeSameAs(apple);
+        offered.Should().Equal("0000320193-26-000001", "0000919574-26-008062");
     }
 
     [Fact]

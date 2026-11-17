@@ -95,8 +95,9 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
             );
 
     // Discovery is not an import attempt and must not postpone an existing retry. A reopened row
-    // drops the reason it closed under, which a later write would otherwise contradict.
-    public Task EnqueueRecovery(
+    // drops the reason it closed under, which a later write would otherwise contradict. Returns 1
+    // when the filing was queued or reopened, 0 when it was already waiting.
+    public Task<int> EnqueueRecovery(
         string accession,
         string cik,
         DateOnly filed,
@@ -162,6 +163,22 @@ public class HoldingsImportFailureRepository(EquiblesFinancialDbContext dbContex
             """,
             cancellationToken
         );
+
+    // Brings forward the filer's rows first queued since <paramref name="discoveredSince"/>.
+    public Task<int> RetrySoon(
+        string cik,
+        DateTime discoveredSince,
+        DateTime nextAttemptAt,
+        CancellationToken cancellationToken
+    ) =>
+        GetAll()
+            .Where(row =>
+                row.Cik == cik && row.ResolvedAt == null && row.FirstFailedAt >= discoveredSince
+            )
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(row => row.NextAttemptAt, nextAttemptAt),
+                cancellationToken
+            );
 
     public Task Defer(string cik, DateTime attemptedAt, CancellationToken cancellationToken) =>
         GetAll()
