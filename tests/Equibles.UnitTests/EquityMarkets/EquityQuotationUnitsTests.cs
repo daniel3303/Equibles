@@ -11,6 +11,7 @@ public class EquityQuotationUnitsTests
     [InlineData("CAD", "CAD", 1)]
     [InlineData("JPY", "JPY", 1)]
     [InlineData("INR", "INR", 1)]
+    [InlineData("BRL", "BRL", 1)]
     [InlineData("GBp", "GBP", 0.01)]
     [InlineData("GBX", "GBP", 0.01)]
     public void KnownTokens_ResolveToIsoCurrencyAndMajorUnitMultiplier(

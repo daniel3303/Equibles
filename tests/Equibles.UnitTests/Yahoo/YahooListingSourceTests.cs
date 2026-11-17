@@ -185,6 +185,7 @@ public class YahooListingSourceTests
     [InlineData("ALPHA", "HK", "XHKG", null)]
     [InlineData("00000", "HK", "XHKG", null)]
     [InlineData("920000", "CN", "BJSE", null)]
+    [InlineData("PETR4", "BR", "BVMF", null)]
     [InlineData("NESN", "CH", "XSWX", null)]
     [InlineData("AIR", "FR", "XETR", null)]
     [InlineData("AIR", "FR", null, null)]

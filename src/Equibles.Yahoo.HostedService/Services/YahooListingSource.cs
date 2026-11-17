@@ -53,11 +53,8 @@ internal static class YahooListingSource
 
     private static DateTime PublishAfter(EquityMarket market, DateOnly day)
     {
-        var close =
-            market.ClosingAuctionEnd > market.SessionClose
-                ? market.ClosingAuctionEnd
-                : market.SessionClose;
-        return day.ToDateTime(close).AddMinutes(30);
+        var (sessionClose, auctionEnd) = market.CloseOn(day);
+        return day.ToDateTime(auctionEnd > sessionClose ? auctionEnd : sessionClose).AddMinutes(30);
     }
 
     // The catalog's suffix is only a candidate symbol: returned chart metadata must also pass MatchesChart,

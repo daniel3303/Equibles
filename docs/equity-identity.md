@@ -106,6 +106,7 @@
 ## Market capture
 
 - Beijing uses the ISO [BJSE market identifier](https://www.iso20022.org/sites/default/files/ISO10383_MIC/ISO10383_MIC.csv), CNY quotations and Asia/Shanghai time. Continuous trading ends at 14:57 and the closing auction ends at 15:00 under [BSE trading rules section 2.3.2](https://www.bse.cn/jygl_list/200028217.html).
+- B3 uses the ISO BVMF market identifier, BRL quotations and America/Sao_Paulo time. Continuous trading opens at 10:00 in São Paulo and ends at 15:55 in New York, with the closing call uncrossing at 16:00 there, so `EquityMarket.CloseOn` restates the São Paulo close for a trading day: 17:55 while the US keeps standard time, 16:55 under US daylight saving. It states no price provider.
 - A registered market can lack an available price provider; absent symbol suffix and exchange-code fields must remain null together, and no provider identity may be guessed from the venue name. Split-basis audits must retain applied markers when that provider cannot reconcile the market.
 
 - London directory discovery reads the one instrument list the exchange's report index names on its document host, with its publication date; an index that names none, several, an off-origin file or no date, or a workbook older than the committed directory, fails the pass and never reconciles a shorter or older market.

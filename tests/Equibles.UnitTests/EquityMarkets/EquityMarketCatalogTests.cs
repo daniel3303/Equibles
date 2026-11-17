@@ -187,6 +187,7 @@ public class EquityMarketCatalogTests
     [InlineData("cboe-canada", "NEOE", "CA", "CAD", ".NE", "NEO", "America/Toronto")]
     [InlineData("nse", "XNSE", "IN", "INR", ".NS", "NSI", "Asia/Kolkata")]
     [InlineData("bse", "XBOM", "IN", "INR", ".BO", "BSE", "Asia/Kolkata")]
+    [InlineData("sao-paulo", "BVMF", "BR", "BRL", null, null, "America/Sao_Paulo")]
     public void NativeMarketsRequireHostDirectoryEvidenceWithoutFirds(
         string code,
         string mic,
@@ -357,11 +358,50 @@ public class EquityMarketCatalogTests
         EquityMarketCatalog.ByMarketIdentifierCode(mic).Should().BeSameAs(market);
     }
 
+    // B3 opens at 10:00 in São Paulo and closes at 15:55 in New York with the closing call at 16:00 there, so the
+    // São Paulo close is 17:55 while the US keeps standard time and 16:55 under US daylight saving.
+    [Theory]
+    [InlineData(2026, 12, 1, 17, 55, 18, 0)]
+    [InlineData(2027, 7, 1, 16, 55, 17, 0)]
+    public void B3Close_FollowsNewYorksClock(
+        int year,
+        int month,
+        int day,
+        int closeHour,
+        int closeMinute,
+        int auctionHour,
+        int auctionMinute
+    )
+    {
+        var market = EquityMarketCatalog.TryGet("sao-paulo");
+        market.SessionOpen.Should().Be(new TimeOnly(10, 0));
+        market
+            .CloseOn(new DateOnly(year, month, day))
+            .Should()
+            .Be((new TimeOnly(closeHour, closeMinute), new TimeOnly(auctionHour, auctionMinute)));
+        EquityMarketCatalog.ByMarketIdentifierCode("BVMF").Should().BeSameAs(market);
+    }
+
+    [Fact]
+    public void AMarketOnItsOwnClock_ClosesAtTheSameTimeAllYear()
+    {
+        var market = EquityMarketCatalog.TryGet("euronext-paris");
+        market
+            .CloseOn(new DateOnly(2027, 7, 1))
+            .Should()
+            .Be(market.CloseOn(new DateOnly(2026, 12, 1)));
+        market
+            .CloseOn(new DateOnly(2027, 7, 1))
+            .Should()
+            .Be((market.SessionClose, market.ClosingAuctionEnd));
+    }
+
     [Fact]
     public void Nse_PrecedesBseAndLondonSoAnNseLineHoldsThePresentation()
     {
         var codes = EquityMarketCatalog.All.Select(market => market.Code).ToList();
         codes.IndexOf("nse").Should().BeLessThan(codes.IndexOf("bse"));
         codes.IndexOf("bse").Should().BeLessThan(codes.IndexOf("lse"));
+        codes.IndexOf("sao-paulo").Should().BeLessThan(codes.IndexOf("lse"));
     }
 }

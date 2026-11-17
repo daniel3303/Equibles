@@ -21,6 +21,7 @@ public static class EquityQuotationUnits
         ["HKD"] = ("HKD", 1m),
         ["JPY"] = ("JPY", 1m),
         ["INR"] = ("INR", 1m),
+        ["BRL"] = ("BRL", 1m),
         ["GBP"] = ("GBP", 1m),
         ["GBp"] = ("GBP", 0.01m),
         ["GBX"] = ("GBP", 0.01m),
