@@ -598,4 +598,93 @@ public class Realtime13FIngestionUntrackedOnlyTests : IAsyncLifetime
             .DisclosedPositionCount.Should()
             .Be(0, "the record is the only trace that the filer reported the quarter");
     }
+
+    // Recorded source: TestAssets/Holdings/13f-confidential-treatment-submission.txt (see README).
+    [Fact]
+    public async Task RecordConfidentialFilingsOf_RecordsOnlyFilingsAlreadyImported_AndReportsAnUnreadDay()
+    {
+        const string cik = "1374170";
+        const string accession = "0001374170-26-000023";
+        var day = new DateOnly(2026, 5, 11);
+        using var db = FreshContext();
+        // Imported before confidential-treatment reports were recorded.
+        db.Add(new ProcessedFiling { AccessionNumber = accession });
+        await db.SaveChangesAsync();
+        var submission = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Holdings",
+                "13f-confidential-treatment-submission.txt"
+            )
+        );
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar.GetDocumentContent(accession, cik, Arg.Any<CancellationToken>()).Returns(submission);
+        // The declared totals disagree with the public table, so the reader takes the standalone
+        // artifacts the envelope names; EDGAR serves them with the envelope's XML bodies.
+        foreach (
+            Match artifact in Regex.Matches(
+                submission,
+                @"<FILENAME>(?<name>\S+)\s*<TEXT>\s*<XML>\s*(?<xml>.*?)\s*</XML>",
+                RegexOptions.Singleline
+            )
+        )
+            edgar
+                .GetDocumentFileBytes(
+                    cik,
+                    accession,
+                    artifact.Groups["name"].Value,
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(System.Text.Encoding.UTF8.GetBytes(artifact.Groups["xml"].Value));
+        edgar
+            .GetDailyIndex(day, Arg.Any<CancellationToken>())
+            .Returns([
+                new EdgarDailyIndexEntry
+                {
+                    AccessionNumber = accession,
+                    Cik = cik,
+                    DateFiled = day,
+                    FormType = "13F-HR",
+                },
+                // Not imported yet: its own import records it.
+                new EdgarDailyIndexEntry
+                {
+                    AccessionNumber = "not-imported",
+                    Cik = "999",
+                    DateFiled = day,
+                    FormType = "13F-HR",
+                },
+            ]);
+        edgar
+            .GetDailyIndex(day.AddDays(1), Arg.Any<CancellationToken>())
+            .Returns<Task<List<EdgarDailyIndexEntry>>>(_ => throw new HttpRequestException("down"));
+        var ingestion = new Realtime13FIngestionService(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            null,
+            CreateScopeFactory(),
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+
+        (await ingestion.RecordConfidentialFilingsOf(day, CancellationToken.None))
+            .Should()
+            .BeTrue();
+        (await ingestion.RecordConfidentialFilingsOf(day.AddDays(1), CancellationToken.None))
+            .Should()
+            .BeFalse("a day that could not be read is retried, never skipped");
+
+        using var verify = FreshContext();
+        var confidential = await verify.Set<Form13FConfidentialFiling>().SingleAsync();
+        confidential.AccessionNumber.Should().Be(accession);
+        confidential.ReportDate.Should().Be(new DateOnly(2026, 3, 31));
+        confidential.DisclosedPositionCount.Should().Be(0);
+        await edgar
+            .DidNotReceive()
+            .GetDocumentContent("not-imported", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        (await verify.Set<InstitutionalHolding>().AnyAsync())
+            .Should()
+            .BeFalse("the pass reads the filing and imports nothing");
+    }
 }
