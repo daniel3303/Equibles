@@ -15,6 +15,7 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
 {
     private const string BaseUrl = "https://efdsearch.senate.gov";
     private const string HomeUrl = BaseUrl + "/search/home/";
+    private const string SearchPath = "/search/";
     private const int BrowserFetchTimeoutMs = 30_000;
 
     private readonly ILogger<PlaywrightSenateBrowserSession> _logger;
@@ -106,21 +107,33 @@ public class PlaywrightSenateBrowserSession : ISenateBrowserSession
 
             _page = response.Frame.Page;
 
-            // Accept the prohibition agreement disclaimer. Ticking the box submits
-            // the agreement form by script (the page has no submit button), and a
-            // refused agreement leaves every later search refused too.
+            // Accept the prohibition agreement disclaimer. Ticking the box submits the
+            // agreement form by script (the page has no submit button), and eFD accepts it
+            // only by redirecting to the search page: Akamai may first answer the POST with
+            // a 200 challenge page that re-submits by script, and a search sent before the
+            // redirect lands is refused for want of the agreement.
             var checkbox = _page.Locator("#agree_statement");
             if (await checkbox.IsVisibleAsync())
             {
-                var agreement = await _page.RunAndWaitForResponseAsync(
-                    () => checkbox.CheckAsync(),
-                    r => r.Request.IsNavigationRequest && r.Request.Method == "POST"
-                );
-                if (agreement.Status >= 400)
-                    throw new HttpRequestException(
-                        $"Senate eFD refused the prohibition agreement with HTTP {agreement.Status}"
+                await checkbox.CheckAsync();
+                try
+                {
+                    await _page.WaitForURLAsync(
+                        url => new Uri(url).AbsolutePath == SearchPath,
+                        new PageWaitForURLOptions
+                        {
+                            WaitUntil = WaitUntilState.NetworkIdle,
+                            Timeout = BrowserFetchTimeoutMs,
+                        }
                     );
-                await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                }
+                catch (TimeoutException ex)
+                {
+                    throw new HttpRequestException(
+                        $"Senate eFD did not accept the prohibition agreement; the page stayed on {_page.Url}",
+                        ex
+                    );
+                }
             }
 
             _authenticated = true;

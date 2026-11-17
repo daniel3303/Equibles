@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\src\Equibles.Migrations\Equibles.Migrations.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Messaging\Equibles.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Congress.HostedService\Equibles.Congress.HostedService.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/NativeListingSeed.cs" Link="Helpers/NativeListingSeed.cs" />
