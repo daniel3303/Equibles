@@ -250,7 +250,9 @@ public static class StockOwnershipPrecedence
 
     /// <summary>What a percentage-only row's figure is a share of, as a sentence words it.</summary>
     public static string PercentMeasure(StockHolderRow row) =>
-        row.Has(StockHolderRowFlags.PercentOfClass) ? "of the class" : "of voting rights";
+        row.Has(StockHolderRowFlags.PercentOfCapital) ? "of the share capital"
+        : row.Has(StockHolderRowFlags.PercentOfClass) ? "of the class"
+        : "of voting rights";
 
     private static bool IsSchedule(StockHolderSource source) =>
         source is StockHolderSource.Schedule13D or StockHolderSource.Schedule13G;
