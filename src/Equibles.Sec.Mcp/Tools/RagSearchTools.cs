@@ -269,7 +269,7 @@ public class RagSearchTools
 
     [McpServerTool(Name = "ListFilings", Title = "List Filings", ReadOnly = true)]
     [Description(
-        "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, EDGAR accession numbers and acceptance times (UTC; blank for filings stored before October 2026), and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. When the deployment summarizes documents, each row adds a one- or two-sentence summary of what the document says, and when it has a public document viewer, each row adds the filing's page URL to share with the user. Pass a returned ID to SearchDocument or ReadDocumentLines."
+        "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, EDGAR accession numbers and acceptance times (UTC; blank for filings stored before October 2026), and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. When the deployment summarizes documents, each row adds a short summary of what the document says, and when it has a public document viewer, each row adds the filing's page URL to share with the user. Pass a returned ID to SearchDocument or ReadDocumentLines."
     )]
     public Task<string> ListFilings(
         [Description(
