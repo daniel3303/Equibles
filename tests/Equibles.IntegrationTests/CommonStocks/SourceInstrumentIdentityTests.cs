@@ -269,9 +269,12 @@ public class SourceInstrumentIdentityTests(ParadeDbFixture fixture) : ParadeDbMc
         input.ProvenIssuerId = held.Id;
 
         var listingId = await importer.ImportListing(input);
-        // Once the issuer identifier is bound, the same line needs no proof to stay where it is.
-        input.ProvenIssuerId = null;
-        (await importer.ImportListing(input)).Should().Be(listingId);
+        // The source's issuer identifier is bound now: a sibling line stating nothing but that identifier joins the
+        // same issuer with no proof.
+        var sibling = Input("share-csan4", "line-csan4", "CSAN4", "BRL", issuer: "cvm:19836");
+        sibling.MarketIdentifierCode = "BVMF";
+        sibling.MarketCountryCode = "BR";
+        var siblingId = await importer.ImportListing(sibling);
 
         DbContext.ChangeTracker.Clear();
         var listing = await DbContext
@@ -284,8 +287,17 @@ public class SourceInstrumentIdentityTests(ParadeDbFixture fixture) : ParadeDbMc
         listing.IdentityState.Should().Be(EquityIdentityState.Verified);
         listing.Security.Issuer.Name.Should().Be("Cosan S.A.");
         listing.Security.Issuer.LegalEntityIdentifier.Should().Be("549300PGFCX2JMKKLC96");
+        (
+            await DbContext
+                .Set<EquityListing>()
+                .Where(row => row.Id == siblingId)
+                .Select(row => row.Security.EquityIssuerId)
+                .SingleAsync()
+        )
+            .Should()
+            .Be(held.Id);
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
-        (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(2);
+        (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(3);
     }
 
     [Theory]
