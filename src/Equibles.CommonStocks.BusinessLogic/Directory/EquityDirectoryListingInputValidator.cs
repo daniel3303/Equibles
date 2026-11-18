@@ -15,7 +15,8 @@ internal static class EquityDirectoryListingInputValidator
     }
 
     private static bool Source(EquityDirectoryListingInput input) =>
-        Text(input.Source, 64)
+        input.ProvenIssuerId != Guid.Empty
+        && Text(input.Source, 64)
         && Text(input.SourceIssuerIdentifier, 128)
         && Text(input.IssuerName, 500)
         && input.IssuerNameAliases != null

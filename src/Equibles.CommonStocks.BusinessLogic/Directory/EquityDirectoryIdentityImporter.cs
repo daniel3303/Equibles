@@ -205,6 +205,15 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
         var candidates = new HashSet<Guid>(instrumentIssuerIds);
         if (sourceIdentifier != null)
             candidates.Add(sourceIdentifier.EquityIssuerId);
+        // A proven issuer is one more candidate, so an identifier that names another issuer still refuses the row.
+        if (input.ProvenIssuerId is { } proven)
+        {
+            if (await repository.Get(proven) == null)
+                throw new InvalidDataException(
+                    "The issuer the source proved this company to be no longer exists."
+                );
+            candidates.Add(proven);
+        }
         if (input.LegalEntityIdentifier != null)
             candidates.UnionWith(
                 await repository
