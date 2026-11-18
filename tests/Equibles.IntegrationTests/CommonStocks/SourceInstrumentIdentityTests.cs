@@ -246,6 +246,95 @@ public class SourceInstrumentIdentityTests(ParadeDbFixture fixture) : ParadeDbMc
         (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(1);
     }
 
+    // A receipt is another security than the home share, so only the issuer is proven: the home share becomes a new
+    // security of the issuer we already hold, and the source's own issuer identifier is bound to it from then on.
+    [Fact]
+    public async Task ProvenIssuerTakesTheHomeShareOfACompanyHeldThroughAReceipt()
+    {
+        var held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "CSANY",
+            Name: "Cosan S.A.",
+            Cik: "1430162"
+        );
+        DbContext.Add(held);
+        await DbContext.SaveChangesAsync();
+        await using var services = Services();
+        var importer = Importer(services);
+        var input = Input("share-csan3", "line-csan3", "CSAN3", "BRL", "BRCSANACNOR6", "cvm:19836");
+        input.IssuerName = "COSAN S.A.";
+        input.LegalEntityIdentifier = "549300PGFCX2JMKKLC96";
+        input.RelatedIsins = ["BRCSANACNOR6"];
+        input.MarketIdentifierCode = "BVMF";
+        input.MarketCountryCode = "BR";
+        input.ProvenIssuerId = held.Id;
+
+        var listingId = await importer.ImportListing(input);
+        // Once the issuer identifier is bound, the same line needs no proof to stay where it is.
+        input.ProvenIssuerId = null;
+        (await importer.ImportListing(input)).Should().Be(listingId);
+
+        DbContext.ChangeTracker.Clear();
+        var listing = await DbContext
+            .Set<EquityListing>()
+            .Include(row => row.Security)
+                .ThenInclude(row => row.Issuer)
+            .SingleAsync(row => row.Id == listingId);
+        listing.Security.EquityIssuerId.Should().Be(held.Id);
+        listing.Security.Isin.Should().Be("BRCSANACNOR6");
+        listing.IdentityState.Should().Be(EquityIdentityState.Verified);
+        listing.Security.Issuer.Name.Should().Be("Cosan S.A.");
+        listing.Security.Issuer.LegalEntityIdentifier.Should().Be("549300PGFCX2JMKKLC96");
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
+        (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("another-legal-entity")]
+    [InlineData("identifier-bound-elsewhere")]
+    [InlineData("legal-entity-held-elsewhere")]
+    public async Task ProvenIssuerRefusesWhenAnIdentifierNamesAnotherIssuer(string conflict)
+    {
+        var held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "CSANY",
+            Name: "Cosan S.A.",
+            Cik: "1430162",
+            LegalEntityIdentifier: conflict == "another-legal-entity"
+                ? "5493000J801JZRCMFE49"
+                : null
+        );
+        var other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OTHR",
+            Name: "Another company",
+            Cik: "1000001",
+            LegalEntityIdentifier: conflict == "legal-entity-held-elsewhere"
+                ? "549300PGFCX2JMKKLC96"
+                : null
+        );
+        DbContext.AddRange(held, other);
+        await DbContext.SaveChangesAsync();
+        await using var services = Services();
+        var importer = Importer(services);
+        // The source's issuer identifier, already bound to an issuer of its own.
+        if (conflict == "identifier-bound-elsewhere")
+            await importer.ImportListing(Input(issuer: "cvm:19836"));
+        var issuers = await DbContext.Set<EquityIssuer>().CountAsync();
+        var input = Input("share-csan3", "line-csan3", "CSAN3", "BRL", "BRCSANACNOR6", "cvm:19836");
+        input.LegalEntityIdentifier = "549300PGFCX2JMKKLC96";
+        input.RelatedIsins = ["BRCSANACNOR6"];
+        input.MarketIdentifierCode = "BVMF";
+        input.MarketCountryCode = "BR";
+        input.ProvenIssuerId = conflict == "missing" ? Guid.NewGuid() : held.Id;
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => importer.ImportListing(input));
+
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(issuers);
+        (await DbContext.Set<EquityListing>().AnyAsync(row => row.Ticker == "CSAN3"))
+            .Should()
+            .BeFalse();
+    }
+
     [Theory]
     [InlineData("bound-elsewhere")]
     [InlineData("missing")]

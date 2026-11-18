@@ -16,6 +16,11 @@ public class EquityDirectoryListingInput
     // An existing security the source proved is this same share, such as an interlisted line's home-market
     // security; the listing joins it, and any identifier naming another security or issuer refuses the row.
     public Guid? ProvenSecurityId { get; set; }
+
+    // An existing issuer the source proved is this company, such as a registrant whose own regulatory filings state
+    // the company's national registration number; the listing joins it, and any identifier naming another issuer
+    // refuses the row.
+    public Guid? ProvenIssuerId { get; set; }
     public string IssuerName { get; set; }
     public List<string> IssuerNameAliases { get; set; } = [];
 
