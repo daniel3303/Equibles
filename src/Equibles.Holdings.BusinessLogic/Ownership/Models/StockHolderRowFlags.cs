@@ -35,4 +35,10 @@ public enum StockHolderRowFlags
     /// rights; the two differ for an issuer with several classes.
     /// </summary>
     PercentOfClass = 1 << 5,
+
+    /// <summary>
+    /// A non-US notification's percentage is of the issuer's whole share capital, as a notice that
+    /// names no class states it; it is neither of one class nor of the voting rights.
+    /// </summary>
+    PercentOfCapital = 1 << 6,
 }

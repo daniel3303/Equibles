@@ -407,6 +407,14 @@ public class StockOwnershipReaderPostgresTests : ParadeDbMcpTestBase
         (await tools.GetAllHolders("NVDA", source: "nonus"))
             .Should()
             .Contain("5.2% of the class as filed, no share count");
+
+        // A percentage of the whole share capital is neither, and stays visible like the others.
+        notification.Flags =
+            (notification.Flags & ~StockHolderRowFlags.PercentOfClass)
+            | StockHolderRowFlags.PercentOfCapital;
+        (await tools.GetAllHolders("NVDA", source: "nonus"))
+            .Should()
+            .Contain("5.2% of the share capital as filed, no share count");
     }
 
     private sealed class StubLane(params StockHolderRow[] rows) : IHolderSourceContributor
