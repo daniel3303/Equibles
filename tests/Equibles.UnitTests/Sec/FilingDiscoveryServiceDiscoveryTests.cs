@@ -106,6 +106,48 @@ public class FilingDiscoveryServiceDiscoveryTests
         dirty.Should().ContainSingle().Which.Should().BeSameAs(apple);
     }
 
+    // A filer with no listing yet is followed for its registration statements only, so its 8-K
+    // never dirties it while its amended S-1 does (SecForm.SyncsFor).
+    [Fact]
+    public async Task Feed_FilerWithNoListing_IsDirtiedOnlyByARegistrationStatement()
+    {
+        await using var context = CreateContext();
+        var registrant = new EquityIssuer
+        {
+            Id = Guid.NewGuid(),
+            Name = "Anthropic, PBC",
+            Cik = "2130357",
+        };
+        var currentReport = ClientWithFeed(
+            new EdgarRecentFilingEntry
+            {
+                Cik = "0002130357",
+                FormType = "8-K",
+                AccessionNumber = "0002130357-26-000001",
+            }
+        );
+
+        var dirtiedByCurrentReport = await CreateService(currentReport, context)
+            .DiscoverCompaniesWithNewFilings([registrant]);
+
+        dirtiedByCurrentReport.Should().BeEmpty();
+
+        FilingDiscoveryService.ResetCrossCycleStateForTests();
+        var amendment = ClientWithFeed(
+            new EdgarRecentFilingEntry
+            {
+                Cik = "0002130357",
+                FormType = "S-1/A",
+                AccessionNumber = "0001628280-26-074338",
+            }
+        );
+
+        var dirtiedByAmendment = await CreateService(amendment, context)
+            .DiscoverCompaniesWithNewFilings([registrant]);
+
+        dirtiedByAmendment.Should().ContainSingle().Which.Should().BeSameAs(registrant);
+    }
+
     // Another lane's forms ride the same poll: a sink is offered every entry the poll reads for
     // the first time, whatever its form or filer, and a failing sink never fails discovery.
     [Fact]

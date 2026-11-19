@@ -71,6 +71,7 @@ public sealed class DocumentType
     public static readonly DocumentType FThreeAsr = new("FThreeAsr", "F-3ASR");
     public static readonly DocumentType FFour = new("FFour", "F-4");
     public static readonly DocumentType FFourA = new("FFourA", "F-4/A");
+    public static readonly DocumentType FinalProspectus = new("FinalProspectus", "424B4");
     public static readonly DocumentType TenderOfferThirdParty = new(
         "TenderOfferThirdParty",
         "SC TO-T"
@@ -162,6 +163,7 @@ public sealed class DocumentType
         FThreeAsr,
         FFour,
         FFourA,
+        FinalProspectus,
         TenderOfferThirdParty,
         TenderOfferThirdPartyA,
         TenderOfferIssuer,

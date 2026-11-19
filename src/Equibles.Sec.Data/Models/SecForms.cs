@@ -1,3 +1,5 @@
+using Equibles.CommonStocks.Data.Models;
+
 namespace Equibles.Sec.Data.Models;
 
 /// <summary>The kind of SEC form, for surfaces that group or describe forms.</summary>
@@ -28,6 +30,13 @@ public sealed record SecForm(
     /// <summary>Ownership, offering and fund forms are parsed into their own datasets, never stored as documents.</summary>
     public bool IsDocument =>
         Family is not (SecFormFamily.Ownership or SecFormFamily.Offering or SecFormFamily.Fund);
+
+    /// <summary>
+    /// A filer with no listing yet (an IPO registrant) is followed for its registration statements only, so
+    /// the lanes that read periodic, current and ownership filings never meet a company without a listing.
+    /// </summary>
+    public bool SyncsFor(EquityIssuer issuer) =>
+        issuer.Presentation != null || Family == SecFormFamily.Registration;
 }
 
 /// <summary>
@@ -71,6 +80,8 @@ public static class SecForms
         new(DocumentType.FThreeAsr, SecFormFamily.Registration),
         new(DocumentType.FFour, SecFormFamily.Registration),
         new(DocumentType.FFourA, SecFormFamily.Registration, DocumentType.FFour),
+        // The final prospectus of a priced offering (Rule 424(b)(4)): an IPO's price, share count and underwriters.
+        new(DocumentType.FinalProspectus, SecFormFamily.Registration),
         new(DocumentType.TenderOfferThirdParty, SecFormFamily.TenderOffer),
         new(
             DocumentType.TenderOfferThirdPartyA,

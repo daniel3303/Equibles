@@ -335,6 +335,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                 if (
                     !long.TryParse(entry.Cik, out var numericCik)
                     || !cikToCompany.TryGetValue(numericCik, out EquityIssuer company)
+                    || !Syncs(entry.FormType, company)
                 )
                     continue;
 
@@ -451,7 +452,10 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                 if (!syncedForms.Contains(entry.FormType))
                     continue;
 
-                if (TryResolveCompany(cikToCompany, entry.Cik, out EquityIssuer company))
+                if (
+                    TryResolveCompany(cikToCompany, entry.Cik, out EquityIssuer company)
+                    && Syncs(entry.FormType, company)
+                )
                     dirty[company.Id] = company;
             }
 
@@ -522,6 +526,11 @@ public class FilingDiscoveryService : IFilingDiscoveryService
 
         return forms;
     }
+
+    // The scraper skips a form the company is not followed for (SecForm.SyncsFor); flagging one would
+    // only re-dirty the company until the pending accession expires.
+    private static bool Syncs(string edgarForm, EquityIssuer company) =>
+        SecForms.ForEdgarForm(edgarForm)?.SyncsFor(company) != false;
 
     private static bool TryResolveCompany(
         Dictionary<long, EquityIssuer> cikToCompany,
