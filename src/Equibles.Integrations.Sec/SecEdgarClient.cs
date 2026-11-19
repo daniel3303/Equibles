@@ -1353,7 +1353,8 @@ public class SecEdgarClient : ISecEdgarClient
             )
                 continue;
 
-            var exchange = row.Count > exchangeIndex ? row[exchangeIndex]?.ToString()?.Trim() : null;
+            var exchange =
+                row.Count > exchangeIndex ? row[exchangeIndex]?.ToString()?.Trim() : null;
             if (!string.IsNullOrEmpty(exchange))
             {
                 listedCiks.Add(cik);

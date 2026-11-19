@@ -35,17 +35,21 @@ public static class SecListingEvidence
 
     public static SecListingEvidenceResult Evaluate(IEnumerable<FilingData> filings, DateOnly today)
     {
-        var dated = filings.Where(f => f.Form != null && f.FilingDate != DateOnly.MinValue).ToList();
+        var dated = filings
+            .Where(f => f.Form != null && f.FilingDate != DateOnly.MinValue)
+            .ToList();
 
-        var certification = Latest(dated.Where(f =>
-            f.Form.StartsWith(CertificationFormPrefix, StringComparison.Ordinal)
-        ));
+        var certification = Latest(
+            dated.Where(f => f.Form.StartsWith(CertificationFormPrefix, StringComparison.Ordinal))
+        );
         var registration =
             certification == null
                 ? null
-                : Latest(dated.Where(f =>
-                    IsForm(f, RegistrationForm) && f.FilingDate <= certification.FilingDate
-                ));
+                : Latest(
+                    dated.Where(f =>
+                        IsForm(f, RegistrationForm) && f.FilingDate <= certification.FilingDate
+                    )
+                );
         if (certification == null || registration == null)
             return new SecListingEvidenceResult(SecListingEvidenceOutcome.NoCertification);
 
@@ -58,7 +62,8 @@ public static class SecListingEvidence
             .ThenBy(f => f.AccessionNumber, StringComparer.Ordinal)
             .FirstOrDefault();
 
-        var outcome = ending ? SecListingEvidenceOutcome.Withdrawn
+        var outcome =
+            ending ? SecListingEvidenceOutcome.Withdrawn
             : prospectus == null ? SecListingEvidenceOutcome.NoFinalProspectus
             : today.DayNumber - prospectus.FilingDate.DayNumber > AdmissionWindowDays
                 ? SecListingEvidenceOutcome.Stale

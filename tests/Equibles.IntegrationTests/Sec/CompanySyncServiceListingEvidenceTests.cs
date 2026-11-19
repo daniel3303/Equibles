@@ -65,7 +65,12 @@ public class CompanySyncServiceListingEvidenceTests : ParadeDbMcpTestBase
                 }
             );
         edgar
-            .GetCompanyFilings(NewCik, Arg.Any<string>(), Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+            .GetCompanyFilings(
+                NewCik,
+                Arg.Any<string>(),
+                Arg.Any<DateOnly?>(),
+                Arg.Any<DateOnly?>()
+            )
             .Returns(
                 new List<FilingData>
                 {
@@ -80,9 +85,11 @@ public class CompanySyncServiceListingEvidenceTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var issuers = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         var created = issuers.Should().ContainSingle(issuer => issuer.Cik == NewCik).Which;
-        created.Presentation.Listing.Should().Match<EquityListing>(listing =>
-            listing.Ticker == "ANT" && listing.Active && listing.MarketCountryCode == "US"
-        );
+        created
+            .Presentation.Listing.Should()
+            .Match<EquityListing>(listing =>
+                listing.Ticker == "ANT" && listing.Active && listing.MarketCountryCode == "US"
+            );
         issuers
             .Should()
             .ContainSingle(issuer => issuer.Cik == OldCik)

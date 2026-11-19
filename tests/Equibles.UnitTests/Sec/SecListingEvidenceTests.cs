@@ -37,7 +37,10 @@ public class SecListingEvidenceTests
         return await client.GetCompanyFilings(cik, fromDate: fromDate);
     }
 
-    private static async Task<SecListingEvidenceResult> Evaluate(string cik, bool lookback = true) =>
+    private static async Task<SecListingEvidenceResult> Evaluate(
+        string cik,
+        bool lookback = true
+    ) =>
         SecListingEvidence.Evaluate(
             await RecordedFilings(
                 cik,
@@ -96,9 +99,7 @@ public class SecListingEvidenceTests
         (await Evaluate("1923780", lookback: false))
             .Outcome.Should()
             .Be(SecListingEvidenceOutcome.Stale);
-        (await Evaluate("1923780"))
-            .Outcome.Should()
-            .Be(SecListingEvidenceOutcome.NoCertification);
+        (await Evaluate("1923780")).Outcome.Should().Be(SecListingEvidenceOutcome.NoCertification);
     }
 
     [Theory]
@@ -112,7 +113,10 @@ public class SecListingEvidenceTests
             ProspectusFiledOn = RecordedOn,
         };
 
-        SecListingEvidence.StillAdmitted(check, RecordedOn.AddDays(daysLater)).Should().Be(expected);
+        SecListingEvidence
+            .StillAdmitted(check, RecordedOn.AddDays(daysLater))
+            .Should()
+            .Be(expected);
     }
 
     private sealed class CassetteHandler(string body) : HttpMessageHandler
