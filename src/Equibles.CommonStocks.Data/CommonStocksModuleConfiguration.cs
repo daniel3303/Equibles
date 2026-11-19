@@ -39,6 +39,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
             .HasForeignKey(row => row.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<SecTickerDirectoryObservation>();
+        builder.Entity<SecListingEvidenceCheck>();
         ConfigureEquityIdentity(builder);
         builder.Entity<Industry>();
         builder.Entity<Sector>();

@@ -117,6 +117,16 @@ public class SecEdgarClient : ISecEdgarClient
         }
     }
 
+    public async Task<List<CompanyInfo>> GetUnlistedTickerRegistrants()
+    {
+        var url = $"{FilesBaseUrl}/files/company_tickers_exchange.json";
+        _logger.LogInformation("Requesting: {Url}", url);
+        var content = await FetchStringAsync(url);
+        return ParseUnlistedRegistrantsFromResponse(
+            JsonConvert.DeserializeObject<CompanyTickersResponse>(content)
+        );
+    }
+
     public async Task<List<FundClassTicker>> GetFundClassTickers()
     {
         try
@@ -1308,6 +1318,59 @@ public class SecEdgarClient : ISecEdgarClient
         }
 
         return companiesByCik.Values.ToList();
+    }
+
+    // The registrants whose every row has a blank exchange, the ones ParseCompaniesFromResponse
+    // skips entirely; a registrant with any exchange-listed row is not one of them.
+    private static List<CompanyInfo> ParseUnlistedRegistrantsFromResponse(
+        CompanyTickersResponse response
+    )
+    {
+        if (response?.Fields == null || response.Data == null)
+            return [];
+
+        var cikIndex = response.Fields.IndexOf("cik");
+        var nameIndex = response.Fields.IndexOf("name");
+        var tickerIndex = response.Fields.IndexOf("ticker");
+        var exchangeIndex = response.Fields.IndexOf("exchange");
+        if (cikIndex == -1 || nameIndex == -1 || tickerIndex == -1 || exchangeIndex == -1)
+            return [];
+
+        var unlisted = new Dictionary<string, CompanyInfo>();
+        var listedCiks = new HashSet<string>();
+        foreach (var row in response.Data)
+        {
+            if (
+                !TryExtractCompanyRow(
+                    row,
+                    cikIndex,
+                    nameIndex,
+                    tickerIndex,
+                    out var cik,
+                    out var name,
+                    out var ticker
+                )
+            )
+                continue;
+
+            var exchange =
+                row.Count > exchangeIndex ? row[exchangeIndex]?.ToString()?.Trim() : null;
+            if (!string.IsNullOrEmpty(exchange))
+            {
+                listedCiks.Add(cik);
+                continue;
+            }
+
+            if (!unlisted.TryGetValue(cik, out var company))
+            {
+                company = new CompanyInfo { Cik = cik, Name = name ?? string.Empty };
+                unlisted[cik] = company;
+            }
+            if (!company.Tickers.Contains(ticker))
+                company.Tickers.Add(ticker);
+        }
+
+        return unlisted.Values.Where(company => !listedCiks.Contains(company.Cik)).ToList();
     }
 
     private static bool TryExtractCompanyRow(

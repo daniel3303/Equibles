@@ -692,6 +692,37 @@ public class YahooPriceImportServiceTests : IDisposable
         await _yahooClient.Received(2).GetChart("NEW-A", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
     }
 
+    // An issuer admitted on its final prospectus has no directory span yet (SEC still shows no
+    // exchange), and the provider often answers "not found" on its first trading morning.
+    [Fact]
+    public async Task Import_UsSymbolAdmittedOnListingEvidence_KeepsBeingAskedWhileNotFound()
+    {
+        EquityIssuer stock = CreateStock("IPOX", "Listed This Morning");
+        await SeedStocks(stock);
+        _dbContext.Add(
+            new SecListingEvidenceCheck
+            {
+                Cik = stock.Cik,
+                Tickers = ["IPOX"],
+                CheckedAt = DateTime.UtcNow,
+                Outcome = SecListingEvidenceOutcome.Admitted,
+                ProspectusFiledOn = DateOnly.FromDateTime(DateTime.UtcNow),
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+        _yahooClient
+            .GetChart("IPOX", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .ThrowsAsync(
+                new HttpRequestException("not found", null, System.Net.HttpStatusCode.NotFound)
+            );
+
+        await AttributeFixtureActions();
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.Received(2).GetChart("IPOX", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+    }
+
     [Fact]
     public async Task Import_InactiveListingHttpFailure_CheckpointsAttemptWithoutCompleting()
     {

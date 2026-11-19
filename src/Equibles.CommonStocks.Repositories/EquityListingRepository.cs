@@ -51,7 +51,9 @@ public class EquityListingRepository : BaseRepository<EquityListing>
     /// Stamps a US listing whose symbol the price provider does not know, so the crawl can space
     /// its next ask. US listings carry no venue identity state, so the symbol itself is revalidated.
     /// A symbol SEC's directory first listed on or after <paramref name="newSymbolSince"/> is never
-    /// stamped: the provider picks a new listing or a changed ticker up within days.
+    /// stamped: the provider picks a new listing or a changed ticker up within days. Neither is the
+    /// listing of an issuer admitted on a final prospectus filed since then, which the directory
+    /// still shows without an exchange.
     /// </summary>
     public async Task<bool> StampUsPriceSyncAttempt(
         Guid listingId,
@@ -62,6 +64,7 @@ public class EquityListingRepository : BaseRepository<EquityListing>
     )
     {
         var observations = DbContext.Set<SecTickerDirectoryObservation>();
+        var admissions = DbContext.Set<SecListingEvidenceCheck>();
         // The directory ledger stores the identity form, without the class separator a listing keeps.
         var directoryTicker = TickerNormalizer.NormalizeIdentity(ticker);
         var current = GetAll()
@@ -74,6 +77,11 @@ public class EquityListingRepository : BaseRepository<EquityListing>
                     observation.Cik == listing.Security.Issuer.Cik
                     && observation.Ticker == directoryTicker
                     && observation.FirstObservedOn >= newSymbolSince
+                )
+                && !admissions.Any(check =>
+                    check.Cik == listing.Security.Issuer.Cik
+                    && check.Outcome == SecListingEvidenceOutcome.Admitted
+                    && check.ProspectusFiledOn >= newSymbolSince
                 )
             );
         if (DbContext.Database.IsRelational())

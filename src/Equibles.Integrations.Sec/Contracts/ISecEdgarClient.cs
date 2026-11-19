@@ -8,6 +8,13 @@ public interface ISecEdgarClient
     Task<List<CompanyInfo>> GetActiveCompanies();
 
     /// <summary>
+    /// The registrants SEC's ticker directory lists only with a blank exchange, each with those
+    /// tickers. <see cref="GetActiveCompanies"/> leaves them out; a caller admits one only on other
+    /// evidence of an exchange listing.
+    /// </summary>
+    Task<List<CompanyInfo>> GetUnlistedTickerRegistrants();
+
+    /// <summary>
     /// Fetches SEC's fund-class ticker directory (company_tickers_mf.json): one row per registered
     /// fund share class with its series id and trading symbol. The authoritative ticker source for
     /// mutual funds and ETFs, whose NPORT-P filings carry no trading symbol of their own.
