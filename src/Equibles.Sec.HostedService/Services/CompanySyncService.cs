@@ -720,9 +720,10 @@ public class CompanySyncService : ICompanySyncService
     // the closing 8-K) arrive within minutes of the listing, as a newly created company's do.
     private async Task ResetFilingSync(StockSyncState state, EquityIssuer issuer)
     {
+        List<CompanyFilingSyncState> stamps = [];
         try
         {
-            var stamps = await state
+            stamps = await state
                 .DbContext.Set<CompanyFilingSyncState>()
                 .Where(stamp => stamp.EquityIssuerId == issuer.Id)
                 .ToListAsync();
@@ -733,7 +734,10 @@ public class CompanySyncService : ICompanySyncService
         }
         catch (Exception ex)
         {
-            // A kept stamp only delays the other forms to the 24-hour reconciliation.
+            // A kept stamp only delays the other forms to the 24-hour reconciliation. The queued delete must
+            // not ride the run's next save, which would fail it if this one landed and only its reply was lost.
+            foreach (var stamp in stamps)
+                state.DbContext.Entry(stamp).State = EntityState.Detached;
             _logger.LogWarning(
                 ex,
                 "Could not reset the filing sync of newly listed {IssuerId}",
