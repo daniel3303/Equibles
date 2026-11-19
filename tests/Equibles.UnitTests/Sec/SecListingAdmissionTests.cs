@@ -48,7 +48,12 @@ public class SecListingAdmissionTests
         {
             var filings = await SecListingEvidenceTests.RecordedFilings(cik, null);
             edgar
-                .GetCompanyFilings(cik, Arg.Any<string>(), Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+                .GetCompanyFilings(
+                    cik,
+                    Arg.Any<string>(),
+                    Arg.Any<DateOnly?>(),
+                    Arg.Any<DateOnly?>()
+                )
                 .Returns(filings);
         }
         return edgar;
@@ -105,15 +110,21 @@ public class SecListingAdmissionTests
             .GetCompanyFilings(default, default, default, default);
     }
 
-    [Fact]
-    public async Task Admit_UnreadableIndex_KeepsTheStoredAdmission()
+    // SEC's client surfaces its two-minute HttpClient timeout as a TaskCanceledException, which
+    // must count as an unreadable index like any HTTP failure, not end the admission pass.
+    public static TheoryData<Exception> ReadFailures =>
+        [new HttpRequestException("503"), new TaskCanceledException("timeout")];
+
+    [Theory]
+    [MemberData(nameof(ReadFailures))]
+    public async Task Admit_UnreadableIndex_KeepsTheStoredAdmission(Exception failure)
     {
         await using var db = NewDb();
         await Admit(db, await RecordedEdgar("2130357"), Now, Anthropic);
         var failing = Substitute.For<ISecEdgarClient>();
         failing
             .GetCompanyFilings(default, default, default, default)
-            .ReturnsForAnyArgs(Task.FromException<List<FilingData>>(new HttpRequestException("503")));
+            .ReturnsForAnyArgs(Task.FromException<List<FilingData>>(failure));
 
         var later = Now.AddHours(2);
         var admitted = await Admit(db, failing, later, Anthropic, AfterNext);
@@ -125,6 +136,26 @@ public class SecListingAdmissionTests
     }
 
     [Fact]
+    public async Task Admit_TimeoutOnOneRegistrant_StillReadsTheOthers()
+    {
+        await using var db = NewDb();
+        var edgar = await RecordedEdgar("2130357");
+        edgar
+            .GetCompanyFilings(
+                "2087035",
+                Arg.Any<string>(),
+                Arg.Any<DateOnly?>(),
+                Arg.Any<DateOnly?>()
+            )
+            .Returns(Task.FromException<List<FilingData>>(new TaskCanceledException("timeout")));
+
+        var admitted = await Admit(db, edgar, Now, AfterNext, Anthropic);
+
+        admitted.Should().ContainSingle().Which.Cik.Should().Be("2130357");
+        (await db.Set<SecListingEvidenceCheck>().SingleAsync()).Cik.Should().Be("2130357");
+    }
+
+    [Fact]
     public async Task Admit_AfterTheWindow_LapsesWithoutAnotherRead()
     {
         await using var db = NewDb();
@@ -133,7 +164,12 @@ public class SecListingAdmissionTests
         check.ProspectusFiledOn = DateOnly.FromDateTime(Now).AddDays(-31);
         await db.SaveChangesAsync();
 
-        var admitted = await Admit(db, Substitute.For<ISecEdgarClient>(), Now.AddMinutes(10), Anthropic);
+        var admitted = await Admit(
+            db,
+            Substitute.For<ISecEdgarClient>(),
+            Now.AddMinutes(10),
+            Anthropic
+        );
 
         admitted.Should().BeEmpty();
     }

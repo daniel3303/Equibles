@@ -49,24 +49,28 @@ public static class SecListingAdmission
             stored.TryGetValue(cik, out var check);
             if (check == null || nowUtc - check.CheckedAt >= RecheckInterval)
             {
-                var result = await Read(secEdgarClient, company, today, logger);
+                var result = await Read(secEdgarClient, company, today, logger, cancellationToken);
                 if (result != null)
+                {
                     check = Record(dbContext, check, cik, company, result, nowUtc, logger);
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
             }
             if (check != null && SecListingEvidence.StillAdmitted(check, today))
                 admitted.Add(company);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
         return admitted;
     }
 
-    // An unreadable index leaves the stored outcome in force; the next sync reads it again.
+    // An unreadable index, an HTTP timeout included, leaves the stored outcome in force and the
+    // other registrants unaffected; the next sync reads it again. Only the caller's cancellation stops.
     private static async Task<SecListingEvidenceResult> Read(
         ISecEdgarClient secEdgarClient,
         CompanyInfo company,
         DateOnly today,
-        ILogger logger
+        ILogger logger,
+        CancellationToken cancellationToken
     )
     {
         try
@@ -77,7 +81,7 @@ public static class SecListingAdmission
             );
             return SecListingEvidence.Evaluate(filings, today);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning(
                 ex,
