@@ -64,6 +64,74 @@ public class SecEdgarClientParseCompaniesExchangeNullTests
         companies.Single(c => c.Cik == "0000789019").Tickers.Should().Equal(["MSFT"]);
     }
 
+    private static readonly MethodInfo ParseUnlistedRegistrantsFromResponseMethod =
+        typeof(SecEdgarClient).GetMethod(
+            "ParseUnlistedRegistrantsFromResponse",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+    // Rows as SEC's directory stated them on 2026-11-19, Anthropic's first trading day.
+    private static readonly List<List<object>> FirstTradingDayRows =
+    [
+        new() { 789019, "MICROSOFT CORP", "MSFT", "Nasdaq" },
+        new() { 1041859, "Childrens Place, Inc.", "PLCEQ", null },
+        new() { 2130357, "Anthropic, PBC", "ANT", null },
+        new() { 2142627, "BHAV Acquisition Corp II", "BHAI", null },
+        new() { 1041859, "Childrens Place, Inc.", "PLCE", "Nasdaq" },
+        new() { 1496254, "Alternative Strategies Income Fund", "LTAFX", null },
+        new() { 1496254, "Alternative Strategies Income Fund", "LTCFX", null },
+        new() { 2142627, "BHAV Acquisition Corp II", "BHAIU", "Nasdaq" },
+    ];
+
+    // Only a registrant with no exchange-listed row at all is offered for admission on other
+    // evidence; a blank row of a listed registrant (a SPAC's share symbol before it separates)
+    // stays skipped, and the listed set is unchanged.
+    [Fact]
+    public void ParseUnlistedRegistrantsFromResponse_KeepsOnlyRegistrantsWithNoListedRow()
+    {
+        var response = Response(FirstTradingDayRows);
+
+        var unlisted = (
+            (IEnumerable)ParseUnlistedRegistrantsFromResponseMethod.Invoke(null, [response])
+        )
+            .Cast<CompanyInfo>()
+            .ToDictionary(c => c.Cik, c => c.Tickers);
+
+        unlisted
+            .Should()
+            .BeEquivalentTo(
+                new Dictionary<string, List<string>>
+                {
+                    ["2130357"] = ["ANT"],
+                    ["1496254"] = ["LTAFX", "LTCFX"],
+                }
+            );
+        Parse(FirstTradingDayRows)
+            .ToDictionary(c => c.Cik, c => c.Tickers)
+            .Should()
+            .BeEquivalentTo(
+                new Dictionary<string, List<string>>
+                {
+                    ["789019"] = ["MSFT"],
+                    ["1041859"] = ["PLCE"],
+                    ["2142627"] = ["BHAIU"],
+                }
+            );
+    }
+
+    private static object Response(List<List<object>> data)
+    {
+        var responseType = typeof(SecEdgarClient).Assembly.GetType(
+            "Equibles.Integrations.Sec.Models.Responses.CompanyTickersResponse"
+        );
+        var response = Activator.CreateInstance(responseType);
+        responseType
+            .GetProperty("Fields")!
+            .SetValue(response, new List<string> { "cik", "name", "ticker", "exchange" });
+        responseType.GetProperty("Data")!.SetValue(response, data);
+        return response;
+    }
+
     // The directory's exchange is the dated statement the ticker ledger records, so every kept
     // ticker carries it verbatim, an over-the-counter line included.
     [Fact]

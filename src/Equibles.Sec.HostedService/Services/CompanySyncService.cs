@@ -70,6 +70,7 @@ public class CompanySyncService : ICompanySyncService
             );
 
             await MaintainFiledEvidence(secCompanies);
+            secCompanies.AddRange(await AdmitOnListingEvidence());
 
             if (_workerOptions.TickersToSync?.Count > 0)
             {
@@ -215,6 +216,47 @@ public class CompanySyncService : ICompanySyncService
         {
             _logger.LogError(ex, "Error re-stamping filed registration types");
             await ReportError("CompanySync.RestampRegistrationTypes", ex, "");
+        }
+    }
+
+    // SEC's directory can show a newly listed registrant with a blank exchange for days after it
+    // starts trading; those rows are admitted only on filed listing evidence (SecListingEvidence).
+    // A failure here admits nobody and never stops the sync.
+    private async Task<List<CompanyInfo>> AdmitOnListingEvidence()
+    {
+        try
+        {
+            var unlisted = await _secEdgarClient.GetUnlistedTickerRegistrants() ?? [];
+            if (_workerOptions.TickersToSync?.Count > 0)
+                unlisted = unlisted
+                    .Where(c =>
+                        c.Tickers.Any(ticker => _workerOptions.TickersToSync.Contains(ticker))
+                    )
+                    .ToList();
+            if (unlisted.Count == 0)
+                return [];
+
+            using var scope = _serviceScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            var admitted = await SecListingAdmission.Admit(
+                dbContext,
+                _secEdgarClient,
+                unlisted,
+                DateTime.UtcNow,
+                _logger
+            );
+            _logger.LogInformation(
+                "Admitted {Admitted} of {Unlisted} blank-exchange SEC registrants on listing evidence",
+                admitted.Count,
+                unlisted.Count
+            );
+            return admitted;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error admitting blank-exchange SEC registrants");
+            await ReportError("CompanySync.AdmitOnListingEvidence", ex, "");
+            return [];
         }
     }
 
