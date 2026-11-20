@@ -10,6 +10,7 @@ using Equibles.Errors.Data;
 using Equibles.Errors.Data.Models;
 using Equibles.Errors.Repositories;
 using Equibles.Integrations.Sec.Contracts;
+using Equibles.Integrations.Sec.Models;
 using Equibles.Media.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService;
@@ -123,6 +124,50 @@ public class DocumentScraperProcessCompanyScopeTests
             BindingFlags.NonPublic | BindingFlags.Instance
         );
         return await (Task<bool>)m.Invoke(scraper, [company, result]);
+    }
+
+    // An IPO registrant with no listing yet is read for its registration statements only, so no
+    // periodic, current or ownership filing reaches a company without a listing.
+    [Fact]
+    public async Task ProcessCompanyDocumentsWithScope_FilerWithNoListing_ReadsOnlyRegistrationForms()
+    {
+        using var db = NewDbContext();
+        var registrant = new EquityIssuer { Name = "Anthropic, PBC", Cik = "2130357" };
+        db.Set<EquityIssuer>().Add(registrant);
+        db.SaveChanges();
+        _secEdgarClient
+            .GetCompanyFilings(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<DateOnly?>(),
+                Arg.Any<DateOnly?>()
+            )
+            .Returns(new List<FilingData>());
+        var scraper = BuildScraper(
+            db,
+            new DocumentScraperOptions
+            {
+                UseEventDrivenDiscovery = false,
+                DocumentTypesToSync =
+                [
+                    DocumentType.TenK,
+                    DocumentType.EightK,
+                    DocumentType.FormFour,
+                    DocumentType.SOne,
+                    DocumentType.SOneA,
+                    DocumentType.FinalProspectus,
+                ],
+            }
+        );
+
+        await InvokeProcess(scraper, registrant, new ScrapingResult());
+
+        var readForms = _secEdgarClient
+            .ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(ISecEdgarClient.GetCompanyFilings))
+            .Select(call => (string)call.GetArguments()[1])
+            .ToList();
+        readForms.Should().BeEquivalentTo(["S-1", "S-1/A", "424B4"]);
     }
 
     [Fact]

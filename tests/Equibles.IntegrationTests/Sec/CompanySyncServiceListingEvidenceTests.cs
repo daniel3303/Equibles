@@ -7,6 +7,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -98,6 +99,92 @@ public class CompanySyncServiceListingEvidenceTests : ParadeDbMcpTestBase
         (await verify.Set<SecListingEvidenceCheck>().AsNoTracking().SingleAsync())
             .Outcome.Should()
             .Be(SecListingEvidenceOutcome.Admitted);
+    }
+
+    // Before it listed, the registrant was followed for its registration statements only. Its admission
+    // gives that same record the ticker, so the filings stored under it carry over, and drops its sync
+    // stamp so the scraper reads its other forms at once.
+    [Fact]
+    public async Task PreListingRecord_TakesItsTickerAtAdmission_AndIsReadInFullAtOnce()
+    {
+        var old = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: OldCik,
+            Ticker: "ANT",
+            Name: "Anteon International Corporation",
+            Active: false,
+            DelistedOn: new DateOnly(2006, 6, 9)
+        );
+        var registrant = new EquityIssuer { Name = "Anthropic, PBC", Cik = NewCik };
+        DbContext.AddRange(old, registrant);
+        DbContext.Add(
+            new CompanyFilingSyncState
+            {
+                EquityIssuerId = registrant.Id,
+                LastSyncedAt = DateTime.UtcNow,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var edgar = AdmittingEdgar(DateOnly.FromDateTime(DateTime.UtcNow));
+
+        await BuildSut(edgar).SyncCompaniesFromSecApi();
+
+        await using var verify = Fixture.CreateDbContext();
+        var issuers = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
+        var listed = issuers.Should().ContainSingle(issuer => issuer.Cik == NewCik).Which;
+        listed.Id.Should().Be(registrant.Id);
+        listed
+            .Presentation.Listing.Should()
+            .Match<EquityListing>(listing =>
+                listing.Ticker == "ANT" && listing.Active && listing.MarketCountryCode == "US"
+            );
+        issuers
+            .Should()
+            .ContainSingle(issuer => issuer.Cik == OldCik)
+            .Which.Presentation.Listing.Active.Should()
+            .BeFalse();
+        (
+            await verify
+                .Set<CompanyFilingSyncState>()
+                .AnyAsync(stamp => stamp.EquityIssuerId == registrant.Id)
+        )
+            .Should()
+            .BeFalse();
+    }
+
+    private static ISecEdgarClient AdmittingEdgar(DateOnly today)
+    {
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar.GetActiveCompanies().Returns(new List<CompanyInfo>());
+        edgar
+            .GetUnlistedTickerRegistrants()
+            .Returns(
+                new List<CompanyInfo>
+                {
+                    new()
+                    {
+                        Cik = NewCik,
+                        Name = "Anthropic, PBC",
+                        Tickers = ["ANT"],
+                    },
+                }
+            );
+        edgar
+            .GetCompanyFilings(
+                NewCik,
+                Arg.Any<string>(),
+                Arg.Any<DateOnly?>(),
+                Arg.Any<DateOnly?>()
+            )
+            .Returns(
+                new List<FilingData>
+                {
+                    Filing("8-A12B", today.AddDays(-2), "0001628280-26-074342"),
+                    Filing("CERT", today.AddDays(-1), "0001354457-26-001088"),
+                    Filing("424B4", today, "0001628280-26-074944"),
+                }
+            );
+        return edgar;
     }
 
     private static FilingData Filing(string form, DateOnly filedOn, string accession) =>

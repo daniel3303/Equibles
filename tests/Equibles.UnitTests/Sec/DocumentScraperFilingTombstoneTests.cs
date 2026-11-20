@@ -76,7 +76,7 @@ public class DocumentScraperFilingTombstoneTests
         return ctx;
     }
 
-    private static ISecEdgarClient EdgarWithOneFiling()
+    private static ISecEdgarClient EdgarWithOneFiling(string form = "10-K")
     {
         var secEdgar = Substitute.For<ISecEdgarClient>();
         secEdgar
@@ -90,7 +90,7 @@ public class DocumentScraperFilingTombstoneTests
                         AccessionNumber = Accession,
                         FilingDate = new DateOnly(2025, 1, 15),
                         ReportDate = new DateOnly(2024, 12, 31),
-                        Form = "10-K",
+                        Form = form,
                     },
                 }
             );
@@ -101,7 +101,8 @@ public class DocumentScraperFilingTombstoneTests
         EquiblesFinancialDbContext ctx,
         ISecEdgarClient secEdgar,
         IDocumentPersistenceService persistence,
-        bool withWorkingConversion = false
+        bool withWorkingConversion = false,
+        DocumentType syncedType = null
     )
     {
         var normalizer = Substitute.For<ISecDocumentHtmlNormalizer>();
@@ -149,7 +150,7 @@ public class DocumentScraperFilingTombstoneTests
                 new DocumentScraperOptions
                 {
                     UseEventDrivenDiscovery = false,
-                    DocumentTypesToSync = [DocumentType.TenK],
+                    DocumentTypesToSync = [syncedType ?? DocumentType.TenK],
                 }
             ),
             Options.Create(new WorkerOptions()),
@@ -204,8 +205,8 @@ public class DocumentScraperFilingTombstoneTests
         (await ctx.Set<FailedFilingIngest>().SingleAsync()).AttemptCount.Should().Be(1);
     }
 
-    // The scrape target list includes CIK issuers with no active U.S. presentation listing (an
-    // unlisted filer, or one mid-way through a ticker change). CreateDocument used to reload the
+    // The scrape target list includes CIK issuers with no presentation listing (an IPO registrant,
+    // followed for its registration statements only). CreateDocument used to reload the
     // issuer through the current-directory view, got null for them, and threw a
     // NullReferenceException inside the persistence probe (WORX, production 2026-09-23).
     [Fact]
@@ -227,7 +228,12 @@ public class DocumentScraperFilingTombstoneTests
             // The outer dedup probe misses, so the filing reaches CreateDocument, whose own
             // re-check then finds it stored and stops before any download.
             .Returns(false, true);
-        var scraper = BuildScraper(ctx, EdgarWithOneFiling(), persistence);
+        var scraper = BuildScraper(
+            ctx,
+            EdgarWithOneFiling("S-1"),
+            persistence,
+            syncedType: DocumentType.SOne
+        );
 
         var result = await scraper.ScrapeDocuments();
 
@@ -236,7 +242,7 @@ public class DocumentScraperFilingTombstoneTests
             .Received()
             .Exists(
                 Arg.Is<EquityIssuer>(company => company != null && company.Id == issuer.Id),
-                DocumentType.TenK,
+                DocumentType.SOne,
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
                 Accession

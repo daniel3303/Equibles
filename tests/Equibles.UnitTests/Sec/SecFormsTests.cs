@@ -89,6 +89,7 @@ public class SecFormsTests
     [InlineData("DEFA14A")]
     [InlineData("NT 10-Q")]
     [InlineData("ARS")]
+    [InlineData("424B4")]
     public void ForEdgarForm_ResolvesRealEdgarSpellings(string edgarForm)
     {
         SecForms.ForEdgarForm(edgarForm)!.EdgarForm.Should().Be(edgarForm);
@@ -104,6 +105,6 @@ public class SecFormsTests
             .IsEdgar(new DocumentType("EarningsCallTranscript", "Earnings Call"))
             .Should()
             .BeFalse();
-        SecForms.ForEdgarForm("424B4").Should().BeNull();
+        SecForms.ForEdgarForm("424B2").Should().BeNull();
     }
 }

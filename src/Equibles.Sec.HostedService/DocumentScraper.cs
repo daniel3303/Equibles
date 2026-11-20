@@ -439,6 +439,8 @@ public class DocumentScraper : IDocumentScraper
                     );
                     continue;
                 }
+                if (!secForm.SyncsFor(company))
+                    continue;
 
                 await ProcessDocumentTypeForCompany(
                     company,

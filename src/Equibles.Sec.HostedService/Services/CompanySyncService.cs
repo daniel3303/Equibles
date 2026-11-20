@@ -12,6 +12,7 @@ using Equibles.Integrations.Sec;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Messaging.Contracts.CommonStocks;
+using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Yahoo.Data.Models;
@@ -553,6 +554,8 @@ public class CompanySyncService : ICompanySyncService
                 .ToList()
         );
         var directorySnapshot = new EquityDirectorySnapshot(state.DbContext, existingStock);
+        var firstListing = existingStock.Presentation == null;
+        var listed = false;
         // Save old values for change detection.
         var oldUsListing = existingStock.Presentation?.Listing
             is { MarketCountryCode: "US" } usListing
@@ -651,6 +654,7 @@ public class CompanySyncService : ICompanySyncService
             await state.CommonStockManager.Update(existingStock);
             if (identityTransaction != null)
                 await identityTransaction.CommitAsync();
+            listed = firstListing;
 
             if (oldTicker != primaryTicker)
             {
@@ -704,6 +708,40 @@ public class CompanySyncService : ICompanySyncService
                 "CompanySync.UpdateStock",
                 ex,
                 $"ticker: {primaryTicker}, cik: {secCompany.Cik}"
+            );
+        }
+
+        if (listed)
+            await ResetFilingSync(state, existingStock);
+    }
+
+    // A filer followed before it listed was synced for its registration statements only (SecForm.SyncsFor).
+    // Dropping its sync stamp puts it first in the scraper's next reconciliation, so its other forms (Form 3s,
+    // the closing 8-K) arrive within minutes of the listing, as a newly created company's do.
+    private async Task ResetFilingSync(StockSyncState state, EquityIssuer issuer)
+    {
+        List<CompanyFilingSyncState> stamps = [];
+        try
+        {
+            stamps = await state
+                .DbContext.Set<CompanyFilingSyncState>()
+                .Where(stamp => stamp.EquityIssuerId == issuer.Id)
+                .ToListAsync();
+            if (stamps.Count == 0)
+                return;
+            state.DbContext.RemoveRange(stamps);
+            await state.DbContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            // A kept stamp only delays the other forms to the 24-hour reconciliation. The queued delete must
+            // not ride the run's next save, which would fail it if this one landed and only its reply was lost.
+            foreach (var stamp in stamps)
+                state.DbContext.Entry(stamp).State = EntityState.Detached;
+            _logger.LogWarning(
+                ex,
+                "Could not reset the filing sync of newly listed {IssuerId}",
+                issuer.Id
             );
         }
     }
