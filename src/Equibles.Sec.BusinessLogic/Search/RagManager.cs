@@ -220,7 +220,12 @@ public class RagManager : IRagManager
         foreach (var group in groupedChunks)
         {
             var firstChunk = group.First();
-            context.AppendLine($"## {firstChunk.Document.Issuer.Name} ({group.Key.Ticker})");
+            // A filer that has not listed yet has no ticker; its heading is the name alone.
+            context.AppendLine(
+                string.IsNullOrEmpty(group.Key.Ticker)
+                    ? $"## {firstChunk.Document.Issuer.Name}"
+                    : $"## {firstChunk.Document.Issuer.Name} ({group.Key.Ticker})"
+            );
             var filedOn = group.Key.ReportingDate.ToString(
                 "yyyy-MM-dd",
                 CultureInfo.InvariantCulture

@@ -12,6 +12,14 @@ internal static class DocumentTextFormat
         return $"{lineNumber, 6} │ {content}";
     }
 
-    internal static string Header(Document document) =>
-        $"{document.Issuer.Name} ({document.Issuer.Presentation?.Listing?.Ticker}) {document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}";
+    // A filer that has not listed yet (an IPO registrant) has no ticker, so it reads by name
+    // alone rather than with an empty "()".
+    internal static string Header(Document document)
+    {
+        var ticker = document.Issuer.Presentation?.Listing?.Ticker;
+        var company = string.IsNullOrEmpty(ticker)
+            ? document.Issuer.Name
+            : $"{document.Issuer.Name} ({ticker})";
+        return $"{company} {document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}";
+    }
 }
