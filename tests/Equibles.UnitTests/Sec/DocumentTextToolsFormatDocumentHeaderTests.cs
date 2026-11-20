@@ -56,4 +56,26 @@ public class DocumentTextToolsFormatDocumentHeaderTests
 
         result.Should().Be("Apple Inc. (AAPL) 10-K filed 2026-05-27");
     }
+
+    // A filer that has not listed yet (an IPO registrant) has no ticker: its banner names the
+    // company alone, never an empty "()".
+    [Fact]
+    public void FormatDocumentHeader_FilerWithNoListing_NamesTheCompanyAlone()
+    {
+        var document = new Document
+        {
+            Issuer = new EquityIssuer { Name = "PBT Land & Minerals, Inc." },
+            DocumentType = DocumentType.SOne,
+            ReportingDate = new DateOnly(2026, 7, 29),
+        };
+
+        var method = typeof(DocumentTextFormat).GetMethod(
+            "Header",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        var result = (string)method!.Invoke(null, [document]);
+
+        result.Should().Be("PBT Land & Minerals, Inc. S-1 filed 2026-07-29");
+    }
 }

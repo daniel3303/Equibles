@@ -140,4 +140,22 @@ public class RagManagerBuildContextExcerptLinkTests
 
         result.Should().NotContain("Link:");
     }
+
+    // A filer that has not listed yet (an IPO registrant) has no ticker: its heading names the
+    // company alone, never an empty "()".
+    [Fact]
+    public async Task BuildContext_FilerWithNoListing_HeadsTheDocumentWithTheNameAlone()
+    {
+        var document = new Document
+        {
+            Id = Guid.NewGuid(),
+            Issuer = new EquityIssuer { Name = "PBT Land & Minerals, Inc." },
+            DocumentType = DocumentType.SOne,
+            ReportingDate = new DateOnly(2026, 7, 29),
+        };
+
+        var result = await Sut().BuildContext([NewChunk(document, "Royalty revenue.")]);
+
+        result.Should().Contain("## PBT Land & Minerals, Inc.\n").And.NotContain("()");
+    }
 }
