@@ -63,6 +63,12 @@ public class SenateAgreementTests
             </body></html>
             """;
 
+        private const string Accepted = """
+            <html><head><title>eFD: Home</title></head><body>
+            <script>location.replace('/search/');</script>
+            </body></html>
+            """;
+
         private bool _agreed;
 
         public int AgreementPosts { get; private set; }
@@ -76,16 +82,10 @@ public class SenateAgreementTests
                 if (++AgreementPosts == 1)
                     return Html(route, Challenge);
                 _agreed = true;
-                return route.FulfillAsync(
-                    new RouteFulfillOptions
-                    {
-                        Status = 302,
-                        Headers = new Dictionary<string, string>
-                        {
-                            ["Location"] = Origin + "/search/",
-                        },
-                    }
-                );
+                // eFD redirects with a 302, but Firefox sends a fulfilled redirect's follow-up
+                // request past the route to the real site; landing on the search page by script
+                // keeps every request in the fake.
+                return Html(route, Accepted);
             }
             if (path == "/search/home/")
                 return Html(route, Home);
@@ -134,32 +134,9 @@ public class SenateAgreementTests
         )
         {
             var context = await browser.NewContextAsync();
-            // The agreement wait has failed only on CI runners; the trace there shows what the page did.
-            await context.Tracing.StartAsync(
-                new TracingStartOptions
-                {
-                    Screenshots = true,
-                    Snapshots = true,
-                    Sources = false,
-                }
-            );
             await context.RouteAsync(Origin + "/**", site.Answer);
             var home = await loadHome(context);
-            return new SenateBrowserContext(
-                home,
-                async ValueTask () =>
-                {
-                    var traces = Path.Combine(AppContext.BaseDirectory, "playwright-traces");
-                    Directory.CreateDirectory(traces);
-                    await context.Tracing.StopAsync(
-                        new TracingStopOptions
-                        {
-                            Path = Path.Combine(traces, "senate-agreement.zip"),
-                        }
-                    );
-                    await context.CloseAsync();
-                }
-            );
+            return new SenateBrowserContext(home, () => new ValueTask(context.CloseAsync()));
         }
     }
 
