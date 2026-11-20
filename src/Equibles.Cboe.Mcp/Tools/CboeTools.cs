@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Equibles.Cboe.Data.Models;
+using Equibles.Cboe.Mcp.Captures;
 using Equibles.Cboe.Repositories;
 using Equibles.Cboe.Repositories.Extensions;
 using Equibles.Core.Extensions;
@@ -145,8 +146,12 @@ public class CboeTools
                     .Take(maxResults)
                     .ToListAsync();
 
+                var shown = records.OrderBy(v => v.Date).ToList();
+                if (shown.Count > 0)
+                    McpResultCapture.Record(new VixHistoryCapture(shown, start, end, total));
+
                 var table = MarkdownTable.Render(
-                    records.OrderBy(v => v.Date).ToList(),
+                    shown,
                     "No VIX data found in the specified date range.",
                     "CBOE Volatility Index (VIX):",
                     "| Date | Open | High | Low | Close |",
