@@ -2393,6 +2393,11 @@ public class FtdImportService
         var grouped = new Dictionary<(Guid ListingId, DateOnly Date), FailToDeliver>();
 
         var strippedAliases = BuildListedStrippedAliases(tickerMap.Keys, exactOnlyTickers);
+        // A ticker can map to an issuer that has no single native US listing - the directory lists it
+        // twice under the same ticker, or not in the US at all. One such record must not abort the
+        // file: the caller then never records the data set as processed, so the whole file is fetched
+        // and parsed again on every cycle.
+        var unresolved = new HashSet<(Guid CommonStockId, string ListedTicker)>();
         foreach (var record in records)
         {
             if (
@@ -2405,9 +2410,10 @@ public class FtdImportService
             }
 
             if (!mappings.TryGetValue(listing, out var listingId))
-                throw new InvalidOperationException(
-                    $"No native listing identity for {listing.CommonStockId}/{listing.ListedTicker}."
-                );
+            {
+                unresolved.Add((listing.CommonStockId, listing.ListedTicker));
+                continue;
+            }
 
             var key = (listingId, record.SettlementDate);
             grouped[key] = new FailToDeliver
@@ -2419,6 +2425,16 @@ public class FtdImportService
                 Price = record.Price,
             };
         }
+
+        if (unresolved.Count > 0)
+            _logger.LogWarning(
+                "Skipped FTD records for {Count} ticker(s) with no single native US listing: {Tickers}",
+                unresolved.Count,
+                string.Join(
+                    ", ",
+                    unresolved.Select(row => row.ListedTicker).Order(StringComparer.Ordinal)
+                )
+            );
 
         return await BatchPersister.Persist(grouped.Values, InsertBatchSize, FlushBatch);
     }
