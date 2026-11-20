@@ -134,9 +134,32 @@ public class SenateAgreementTests
         )
         {
             var context = await browser.NewContextAsync();
+            // The agreement wait has failed only on CI runners; the trace there shows what the page did.
+            await context.Tracing.StartAsync(
+                new TracingStartOptions
+                {
+                    Screenshots = true,
+                    Snapshots = true,
+                    Sources = false,
+                }
+            );
             await context.RouteAsync(Origin + "/**", site.Answer);
             var home = await loadHome(context);
-            return new SenateBrowserContext(home, () => new ValueTask(context.CloseAsync()));
+            return new SenateBrowserContext(
+                home,
+                async ValueTask () =>
+                {
+                    var traces = Path.Combine(AppContext.BaseDirectory, "playwright-traces");
+                    Directory.CreateDirectory(traces);
+                    await context.Tracing.StopAsync(
+                        new TracingStopOptions
+                        {
+                            Path = Path.Combine(traces, "senate-agreement.zip"),
+                        }
+                    );
+                    await context.CloseAsync();
+                }
+            );
         }
     }
 
