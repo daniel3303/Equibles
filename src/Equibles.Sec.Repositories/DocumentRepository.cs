@@ -58,6 +58,15 @@ public class DocumentRepository : BaseRepository<Document>
         return GetAll().Where(d => d.EquityIssuerId == issuerId);
     }
 
+    // An earnings release is a current report under Item 2.02, Results of Operations and
+    // Financial Condition; the item is the filer's own classification of the 8-K.
+    public IQueryable<Document> GetEarningsReleasesByIssuerId(Guid issuerId) =>
+        GetByIssuerId(issuerId)
+            .Where(d =>
+                d.DocumentType == DocumentType.EightK || d.DocumentType == DocumentType.EightKa
+            )
+            .ReportingItem("2.02");
+
     public IQueryable<Document> GetByTicker(string ticker) =>
         GetAll().ForListingSymbol(ticker, DbContext);
 

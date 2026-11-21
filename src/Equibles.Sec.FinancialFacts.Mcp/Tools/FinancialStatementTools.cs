@@ -18,6 +18,7 @@ using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
+using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -31,17 +32,22 @@ public class FinancialStatementTools
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
+    private readonly DocumentRepository _documentRepository;
     private readonly McpToolRunner _runner;
 
+    // The document repository is optional: a host without the filings module has no stored
+    // earnings release to point at.
     public FinancialStatementTools(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
         EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
-        ILogger<FinancialStatementTools> logger
+        ILogger<FinancialStatementTools> logger,
+        DocumentRepository documentRepository = null
     )
     {
+        _documentRepository = documentRepository;
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
@@ -58,6 +64,8 @@ public class FinancialStatementTools
             + "period end. Quarterly flow rows are always discrete quarters: when the filer "
             + "reports only cumulative year-to-date values in a currency, the quarter is derived by "
             + "exact subtraction from the preceding cumulative period and marked Derived. "
+            + "Names the stored earnings release (8-K) when one was filed after the latest "
+            + "periodic report, since its period has no structured facts yet. "
             + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
             + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
             + "GetFinancialFact or CompareFinancialFact for one line item across periods "
@@ -157,8 +165,19 @@ public class FinancialStatementTools
                         : conceptIds,
                     conceptIds
                 );
+                // A request for an earlier fiscal year is not asking for the period the release covers.
+                var newerRelease = await NewerEarningsRelease.Find(
+                    _financialFactRepository,
+                    _documentRepository,
+                    stock.Id
+                );
+                var releaseNote =
+                    newerRelease != null
+                    && (storedYear == null || storedYear.Value >= newerRelease.LatestFiscalYear)
+                        ? newerRelease.Note
+                        : "";
                 if (periodError != null)
-                    return periodError;
+                    return periodError + releaseNote;
 
                 // An exact year and period render as asked. Otherwise the newest period that renders
                 // wins: a half-year filer's Q2 bucket holds only six-month spans, which a quarterly
@@ -179,19 +198,21 @@ public class FinancialStatementTools
                         operatingCostsClaimant
                     );
                     if (table != null)
-                        return skipped is { } newer
-                            ? table
-                                + SkippedPeriodNote(
-                                    stock,
-                                    statementType,
-                                    newer.FiscalYear,
-                                    newer.FiscalPeriod
-                                )
-                            : table;
+                        return (
+                                skipped is { } newer
+                                    ? table
+                                        + SkippedPeriodNote(
+                                            stock,
+                                            statementType,
+                                            newer.FiscalYear,
+                                            newer.FiscalPeriod
+                                        )
+                                    : table
+                            ) + releaseNote;
                     firstEmpty ??= empty;
                     skipped ??= candidate;
                 }
-                return firstEmpty;
+                return firstEmpty + releaseNote;
             },
             "GetFinancialStatement",
             $"ticker: {FactMarkdown.Clean(ticker)}, statement: {FactMarkdown.Clean(statement)}, "
