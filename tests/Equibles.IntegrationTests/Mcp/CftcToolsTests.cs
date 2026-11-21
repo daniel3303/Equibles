@@ -1,7 +1,9 @@
 using Equibles.Cftc.Data.Models;
+using Equibles.Cftc.Mcp.Captures;
 using Equibles.Cftc.Mcp.Tools;
 using Equibles.Cftc.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -119,10 +121,23 @@ public class CftcToolsTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
+        using var scope = McpResultCapture.Begin();
         var result = await Sut()
             .GetCftcPositioning("067651", startDate: "2026-03-01", endDate: "2026-04-30");
 
         result.Should().Contain("CRUDE OIL, LIGHT SWEET-WTI (067651) — Energy");
+        // A card beside the answer reads the same reports, oldest first, every cell as printed.
+        var capture = scope.Get<CftcPositioningCapture>();
+        capture
+            .Reports.Select(r => r.ReportDate)
+            .Should()
+            .Equal(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 8));
+        foreach (var r in capture.Reports)
+            result
+                .Should()
+                .Contain(
+                    $"| {r.ReportDate:yyyy-MM-dd} | {r.OpenInterestText} | {r.CommercialLongText} | {r.CommercialShortText} | {r.NonCommercialLongText} | {r.NonCommercialShortText} | {r.NonCommercialSpreadsText} |"
+                );
         result.Should().Contain("2026-04-01");
         result.Should().Contain("2026-04-08");
         result.Should().Contain("1,500,000");

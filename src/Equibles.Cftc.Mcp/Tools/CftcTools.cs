@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Equibles.Cftc.Data.Models;
+using Equibles.Cftc.Mcp.Captures;
 using Equibles.Cftc.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -91,15 +92,43 @@ public class CftcTools
                     .Take(maxResults)
                     .ToListAsync();
 
+                var rows = reports
+                    .OrderBy(r => r.ReportDate)
+                    .Select(r => new CftcReportRow(
+                        r.ReportDate,
+                        r.OpenInterest,
+                        McpFormat.WholeNumber(r.OpenInterest),
+                        r.CommLong,
+                        McpFormat.WholeNumber(r.CommLong),
+                        r.CommShort,
+                        McpFormat.WholeNumber(r.CommShort),
+                        r.NonCommLong,
+                        McpFormat.WholeNumber(r.NonCommLong),
+                        r.NonCommShort,
+                        McpFormat.WholeNumber(r.NonCommShort),
+                        r.NonCommSpreads,
+                        McpFormat.WholeNumber(r.NonCommSpreads)
+                    ))
+                    .ToList();
                 var table = MarkdownTable.Render(
-                    reports.OrderBy(r => r.ReportDate).ToList(),
+                    rows,
                     $"No COT reports found for {contract.MarketName} ({contract.MarketCode}) in the specified date range.",
                     $"{contract.MarketName} ({contract.MarketCode}) — {contract.Category.NameForHumans()}",
                     "| Date | Open Interest | Comm Long | Comm Short | Non-Comm Long | Non-Comm Short | Non-Comm Spread |",
                     "|------|--------------|-----------|------------|---------------|----------------|-----------------|",
                     r =>
-                        $"| {r.ReportDate:yyyy-MM-dd} | {McpFormat.WholeNumber(r.OpenInterest)} | {McpFormat.WholeNumber(r.CommLong)} | {McpFormat.WholeNumber(r.CommShort)} | {McpFormat.WholeNumber(r.NonCommLong)} | {McpFormat.WholeNumber(r.NonCommShort)} | {McpFormat.WholeNumber(r.NonCommSpreads)} |"
+                        $"| {r.ReportDate:yyyy-MM-dd} | {r.OpenInterestText} | {r.CommercialLongText} | {r.CommercialShortText} | {r.NonCommercialLongText} | {r.NonCommercialShortText} | {r.NonCommercialSpreadsText} |"
                 );
+                if (rows.Count > 0)
+                    McpResultCapture.Record(
+                        new CftcPositioningCapture(
+                            contract.MarketName,
+                            contract.MarketCode,
+                            contract.Category.NameForHumans(),
+                            rows,
+                            total
+                        )
+                    );
 
                 if (reports.Count < total)
                     table +=
