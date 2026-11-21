@@ -75,7 +75,7 @@ public class FinancialFactsTools
             + "company's own fiscal calendar. Warns when the selected alias ends materially "
             + "before the company's other structured facts, which can indicate an XBRL tag "
             + "change. Names the stored earnings release (8-K) when one was filed after the "
-            + "latest periodic report, since its period has no structured facts yet. "
+            + "latest periodic report, since these facts do not cover it. "
             + "Dimensioned disclosures such as customer concentration are outside this "
             + "consolidated-series tool. For a full statement use GetFinancialStatement; to "
             + "compare peers use CompareFinancialFact."

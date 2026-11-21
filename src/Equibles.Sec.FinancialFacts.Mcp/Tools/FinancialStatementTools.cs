@@ -65,7 +65,7 @@ public class FinancialStatementTools
             + "reports only cumulative year-to-date values in a currency, the quarter is derived by "
             + "exact subtraction from the preceding cumulative period and marked Derived. "
             + "Names the stored earnings release (8-K) when one was filed after the latest "
-            + "periodic report, since its period has no structured facts yet. "
+            + "periodic report, since these facts do not cover it. "
             + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
             + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
             + "GetFinancialFact or CompareFinancialFact for one line item across periods "

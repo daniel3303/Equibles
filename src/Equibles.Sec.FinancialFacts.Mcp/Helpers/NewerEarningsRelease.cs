@@ -8,7 +8,8 @@ namespace Equibles.Sec.FinancialFacts.Mcp.Helpers;
 /// <summary>
 /// The earnings release an issuer filed after the newest periodic report its structured facts
 /// come from. Structured facts wait for the 10-Q or 10-K, so the release holds the only stored
-/// statements for that period until then.
+/// statements for its period; a filer that stopped reporting never files one, so the note
+/// promises nothing about when facts follow.
 /// </summary>
 public sealed record NewerEarningsRelease(
     Guid DocumentId,
@@ -21,9 +22,9 @@ public sealed record NewerEarningsRelease(
     public string Note =>
         $"\n_Newer earnings release on file: 8-K filed {FiledDate:yyyy-MM-dd} (document ID "
         + $"{DocumentId}), after the latest periodic report in these facts (filed "
-        + $"{LatestPeriodicFiledDate:yyyy-MM-dd}). Structured facts for its period arrive once the "
-        + "10-Q or 10-K is filed and processed; until then read the release's statements with "
-        + "SearchDocument or ReadDocumentLines using that document ID._\n";
+        + $"{LatestPeriodicFiledDate:yyyy-MM-dd}). These facts come from 10-Q and 10-K reports, so "
+        + "they do not cover that release; read its statements with SearchDocument or "
+        + "ReadDocumentLines using that document ID._\n";
 
     // A release filed the same day as the periodic report is already covered by it, so only a
     // strictly later release counts. A host without the filings module passes no repository.
