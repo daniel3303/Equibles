@@ -1,3 +1,4 @@
+using Equibles.Core.Extensions;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -88,6 +89,27 @@ public static class ReleaseFigureReader
             .ToList();
     }
 
+    /// <summary>
+    /// The period a figure covers, read from its span. Its stamp is the comparative fact's, and
+    /// facts file a discrete fourth quarter under the full year and a year-to-date span under
+    /// its quarter, so the stamp alone names two different spans.
+    /// </summary>
+    public static ReleaseFigurePeriod PeriodOf(ReleaseStatementFigure figure)
+    {
+        var stamp = figure.FiscalPeriod;
+        if (figure.PeriodType == FactPeriodType.Instant)
+            return new ReleaseFigurePeriod(stamp, YearToDate: false, Balance: true);
+
+        var days = figure.PeriodEnd.DayNumber - figure.PeriodStart.DayNumber + 1;
+        if (days >= FiscalPeriodSpanDays.MinAnnual)
+            return new ReleaseFigurePeriod(SecFiscalPeriod.FullYear, false, false);
+        if (days > FiscalPeriodSpanDays.MaxQuarter)
+            return new ReleaseFigurePeriod(stamp, stamp != SecFiscalPeriod.FullYear, false);
+        var fourthQuarter =
+            stamp == SecFiscalPeriod.FullYear && days >= FiscalPeriodSpanDays.MinQuarter;
+        return new ReleaseFigurePeriod(fourthQuarter ? SecFiscalPeriod.Q4 : stamp, false, false);
+    }
+
     private static Dictionary<(FactTaxonomy, string), int> Rank(
         IReadOnlyList<FinancialConceptAliases.ConceptRef> concepts
     )
@@ -107,4 +129,25 @@ public static class ReleaseFigureReader
             figure.FinancialConcept.Tag,
             figure.Unit
         ) != FactSplitKind.None;
+}
+
+/// <summary>A release figure's period: a quarter, the full year, or the year to date through a quarter.</summary>
+public readonly record struct ReleaseFigurePeriod(
+    SecFiscalPeriod Period,
+    bool YearToDate,
+    bool Balance
+)
+{
+    public string Label => Period.NameForHumans() + (YearToDate ? " YTD" : "");
+
+    /// <summary>
+    /// Whether a request for one fiscal period asks for this figure. A year-to-date span answers
+    /// no single period, and the year-end balance is also the fourth quarter's.
+    /// </summary>
+    public bool Answers(SecFiscalPeriod requested) =>
+        !YearToDate
+        && (
+            Period == requested
+            || (Balance && Period == SecFiscalPeriod.FullYear && requested == SecFiscalPeriod.Q4)
+        );
 }

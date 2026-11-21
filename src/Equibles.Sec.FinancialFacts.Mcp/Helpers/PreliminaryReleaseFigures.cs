@@ -60,7 +60,7 @@ internal static class PreliminaryReleaseFigures
                 (withLine ? $"| {FactMarkdown.Cell(line)} " : "")
                     + $"| {figure.PeriodStart:yyyy-MM-dd} | {figure.PeriodEnd:yyyy-MM-dd} "
                     + $"| {FiscalYearLabel.For(figure.FiscalYear, stock)} "
-                    + $"| {figure.FiscalPeriod.NameForHumans()} "
+                    + $"| {ReleaseFigureReader.PeriodOf(figure).Label} "
                     + $"| {FactMarkdown.Value(figure.Value, figure.Unit)} "
                     + $"| {FactMarkdown.Cell(figure.Unit)} "
                     + $"| {FactMarkdown.Cell(figure.SourceLabel)} (line {figure.SourceLine}) "

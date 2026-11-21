@@ -261,7 +261,9 @@ public class FinancialFactsTools
                                     && (toBound == null || figure.PeriodEnd <= toBound.Value)
                                     && (
                                         periodFilter == null
-                                        || figure.FiscalPeriod == periodFilter.Value
+                                        || ReleaseFigureReader
+                                            .PeriodOf(figure)
+                                            .Answers(periodFilter.Value)
                                     )
                                 )
                                 .Select(figure => ((string)null, figure))

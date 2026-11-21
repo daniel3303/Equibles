@@ -192,7 +192,9 @@ public class FinancialStatementTools
                             (storedYear == null || row.Figure.FiscalYear == storedYear.Value)
                             && (
                                 requestedPeriod == null
-                                || row.Figure.FiscalPeriod == requestedPeriod.Value
+                                || ReleaseFigureReader
+                                    .PeriodOf(row.Figure)
+                                    .Answers(requestedPeriod.Value)
                             )
                         )
                         .Select(row => (row.Line.Label, row.Figure))
