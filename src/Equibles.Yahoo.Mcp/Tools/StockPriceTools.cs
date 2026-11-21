@@ -779,9 +779,8 @@ public class StockPriceTools
                     renderFrom,
                     maxResults,
                     holdNote,
-                    // Wilder smoothing never forgets; the warm-up's two periods are where the tool calls it settled.
-                    period * 2
-                        + 1,
+                    // Wilder smoothing never forgets: every value carries part of every bar loaded before it.
+                    records.Count,
                     ("ATR", atr)
                 );
 
