@@ -286,8 +286,9 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
         text.Should().Contain("Frequency: Monthly");
         text.Should().Contain("2025-01-01");
         text.Should().Contain("2025-03-01");
-        text.Should().Contain(4.33m.ToString("G"));
-        text.Should().Contain(4.50m.ToString("G"));
+        // Values print in plain digits without trailing zeros (#4952), so 4.50 reads 4.5.
+        text.Should().Contain("| 2025-01-01 | 4.33 |");
+        text.Should().Contain("| 2025-03-01 | 4.5 |");
     }
 
     [Fact]
