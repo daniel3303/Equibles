@@ -789,7 +789,8 @@ public class FinancialFactsTools
             );
             result.AppendLine();
             result.AppendLine(truncation);
-            notes.Add(truncation.Trim('_'));
+            // The card states the cut without the answer's advice on arguments, which only a model can act on.
+            notes.Add($"Showing the newest {perPeriod.Count} of {totalPeriods} periods.");
         }
 
         if (coverageNote != null)

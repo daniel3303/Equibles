@@ -505,6 +505,45 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         idx2023.Should().BeLessThan(idx2022, "rows are ordered newest period first");
     }
 
+    // The card states the cut without the answer's advice on arguments, which only a model can act on.
+    [Fact]
+    public async Task GetFinancialFact_TruncatedHistory_CardNoteStatesTheCut()
+    {
+        EquityIssuer stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
+        var revenues = AddConcept("Revenues");
+        AddFact(
+            stock,
+            revenues,
+            2022,
+            SecFiscalPeriod.FullYear,
+            320_000_000_000m,
+            new DateOnly(2023, 1, 15),
+            DocumentType.TenK,
+            "a-2022"
+        );
+        AddFact(
+            stock,
+            revenues,
+            2023,
+            SecFiscalPeriod.FullYear,
+            400_000_000_000m,
+            new DateOnly(2024, 1, 15),
+            DocumentType.TenK,
+            "a-2023"
+        );
+        await DbContext.SaveChangesAsync();
+
+        using var scope = McpResultCapture.Begin();
+        var result = await Sut().GetFinancialFact("AAPL", "revenue", maxResults: 1);
+
+        result.Should().Contain("Showing first 1 of 2 results - raise maxResults to see more.");
+        scope
+            .Get<FinancialFactHistoryCapture>()
+            .Notes.Should()
+            .Contain("Showing the newest 1 of 2 periods.");
+    }
+
     [Fact]
     public async Task GetFinancialFact_AsOriginallyReported_ShowsEarliestFiling()
     {
