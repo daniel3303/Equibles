@@ -12,6 +12,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic.ReleaseStatements;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
@@ -34,6 +35,7 @@ public class FinancialStatementTools
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly DocumentRepository _documentRepository;
+    private readonly ReleaseStatementFigureRepository _releaseFigureRepository;
     private readonly McpToolRunner _runner;
 
     // The document repository is optional: a host without the filings module has no stored
@@ -45,10 +47,12 @@ public class FinancialStatementTools
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<FinancialStatementTools> logger,
-        DocumentRepository documentRepository = null
+        DocumentRepository documentRepository = null,
+        ReleaseStatementFigureRepository releaseFigureRepository = null
     )
     {
         _documentRepository = documentRepository;
+        _releaseFigureRepository = releaseFigureRepository;
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
@@ -65,7 +69,7 @@ public class FinancialStatementTools
             + "period end. Quarterly flow rows are always discrete quarters: when the filer "
             + "reports only cumulative year-to-date values in a currency, the quarter is derived by "
             + "exact subtraction from the preceding cumulative period and marked Derived. "
-            + "Names a stored earnings release (8-K) filed after the latest periodic report. "
+            + "Adds a newer earnings release's figures as preliminary, or names that 8-K. "
             + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
             + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
             + "GetFinancialFact or CompareFinancialFact for one line item across periods "
@@ -171,11 +175,38 @@ public class FinancialStatementTools
                     _documentRepository,
                     stock.Id
                 );
+                // The release's own figures for this statement's lines where the lane placed
+                // them, in statement order, else the pointer to the release.
+                var preliminary = PreliminaryReleaseFigures.Render(
+                    ReleaseFigureReader
+                        .ForStatement(
+                            await PreliminaryReleaseFigures.Load(
+                                _releaseFigureRepository,
+                                _financialFactRepository,
+                                _stockSplitRepository,
+                                stock.Id
+                            ),
+                            statementType
+                        )
+                        .Where(row =>
+                            (storedYear == null || row.Figure.FiscalYear == storedYear.Value)
+                            && (
+                                requestedPeriod == null
+                                || ReleaseFigureReader
+                                    .PeriodOf(row.Figure)
+                                    .Answers(requestedPeriod.Value)
+                            )
+                        )
+                        .Select(row => (row.Line.Label, row.Figure))
+                        .ToList(),
+                    stock
+                );
                 var releaseNote =
-                    newerRelease != null
+                    preliminary.Length > 0 ? preliminary
+                    : newerRelease != null
                     && (storedYear == null || storedYear.Value >= newerRelease.LatestFiscalYear)
                         ? newerRelease.Note
-                        : "";
+                    : "";
                 if (periodError != null)
                     return periodError + releaseNote;
 
@@ -216,9 +247,10 @@ public class FinancialStatementTools
                                     .. new[]
                                     {
                                         note.Trim().Trim('_'),
-                                        newerRelease != null && releaseNote.Length > 0
+                                        preliminary.Length > 0 ? PreliminaryReleaseFigures.Lead
+                                        : newerRelease != null && releaseNote.Length > 0
                                             ? newerRelease.CardNote
-                                            : "",
+                                        : "",
                                     }.Where(text => text.Length > 0),
                                 ],
                             }

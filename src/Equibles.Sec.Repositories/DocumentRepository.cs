@@ -67,6 +67,14 @@ public class DocumentRepository : BaseRepository<Document>
             )
             .ReportingItem("2.02");
 
+    public IQueryable<Document> GetEarningsReleasesSince(DateOnly since) =>
+        GetAll()
+            .Where(d =>
+                d.ReportingDate >= since
+                && (d.DocumentType == DocumentType.EightK || d.DocumentType == DocumentType.EightKa)
+            )
+            .ReportingItem("2.02");
+
     public IQueryable<Document> GetByTicker(string ticker) =>
         GetAll().ForListingSymbol(ticker, DbContext);
 
