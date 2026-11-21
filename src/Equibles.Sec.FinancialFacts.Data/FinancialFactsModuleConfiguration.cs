@@ -69,6 +69,19 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
         });
 
         builder
+            .Entity<ReleaseStatementRead>()
+            .HasOne(read => read.Issuer)
+            .WithMany()
+            .HasForeignKey(read => read.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<ReleaseStatementFigure>()
+            .HasOne(figure => figure.Read)
+            .WithMany(read => read.Figures)
+            .HasForeignKey(figure => figure.ReleaseStatementReadId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder
             .Entity<FinancialFactsSyncStatus>()
             .HasOne(state => state.Issuer)
             .WithMany()

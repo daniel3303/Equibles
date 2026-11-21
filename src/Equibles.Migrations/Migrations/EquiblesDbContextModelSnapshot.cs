@@ -7487,6 +7487,96 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("IssuerSecurityRegistration");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReleaseStatementFigure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EquityIssuerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("FiledDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("FinancialConceptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FiscalPeriod")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FiscalYear")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ReleaseStatementReadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceLabel")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("SourceLine")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<decimal>("Value")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FinancialConceptId");
+
+                    b.HasIndex("EquityIssuerId", "PeriodEnd");
+
+                    b.HasIndex("ReleaseStatementReadId", "FinancialConceptId", "PeriodStart", "PeriodEnd")
+                        .IsUnique();
+
+                    b.ToTable("ReleaseStatementFigure");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReleaseStatementRead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EquityIssuerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FigureCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MatcherVersion")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId")
+                        .IsUnique();
+
+                    b.HasIndex("EquityIssuerId");
+
+                    b.ToTable("ReleaseStatementRead");
+                });
+
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReportedFinancialStatement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8783,6 +8873,44 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Issuer");
                 });
 
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReleaseStatementFigure", b =>
+                {
+                    b.HasOne("Equibles.Sec.FinancialFacts.Data.Models.FinancialConcept", "FinancialConcept")
+                        .WithMany()
+                        .HasForeignKey("FinancialConceptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Equibles.Sec.FinancialFacts.Data.Models.ReleaseStatementRead", "Read")
+                        .WithMany("Figures")
+                        .HasForeignKey("ReleaseStatementReadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FinancialConcept");
+
+                    b.Navigation("Read");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReleaseStatementRead", b =>
+                {
+                    b.HasOne("Equibles.Sec.Data.Models.Document", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", "Issuer")
+                        .WithMany()
+                        .HasForeignKey("EquityIssuerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Issuer");
+                });
+
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReportedFinancialStatement", b =>
                 {
                     b.HasOne("Equibles.Sec.Data.Models.Document", "Document")
@@ -8967,6 +9095,11 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.FinancialDimensionSet", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReleaseStatementRead", b =>
+                {
+                    b.Navigation("Figures");
                 });
 #pragma warning restore 612, 618
         }
