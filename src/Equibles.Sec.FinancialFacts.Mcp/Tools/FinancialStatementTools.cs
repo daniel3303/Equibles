@@ -216,7 +216,9 @@ public class FinancialStatementTools
                                     .. new[]
                                     {
                                         note.Trim().Trim('_'),
-                                        releaseNote.Length > 0 ? newerRelease.CardNote : "",
+                                        newerRelease != null && releaseNote.Length > 0
+                                            ? newerRelease.CardNote
+                                            : "",
                                     }.Where(text => text.Length > 0),
                                 ],
                             }

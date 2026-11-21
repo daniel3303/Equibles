@@ -278,7 +278,7 @@ public class FinancialFactsTools
                     )
                     : null;
                 table += releaseNote;
-                if (releaseNote.Length > 0)
+                if (newerRelease != null && releaseNote.Length > 0)
                 {
                     notes.Add(newerRelease.CardNote);
                 }
