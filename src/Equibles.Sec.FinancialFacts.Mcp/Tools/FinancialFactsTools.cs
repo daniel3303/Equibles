@@ -278,16 +278,17 @@ public class FinancialFactsTools
                     )
                     : null;
                 table += releaseNote;
-                if (releaseNote.Length > 0)
+                if (newerRelease != null && releaseNote.Length > 0)
                 {
-                    notes.Add(releaseNote.Trim().Trim('_'));
+                    notes.Add(newerRelease.CardNote);
                 }
+                // The card's notes leave out the answer's pointers to other tools, which only a model can follow.
                 if (tagWarning != null)
                 {
                     var warning =
                         $"{tagWarning} GetFinancialStatement shows Revenue − Cost of Revenue for those periods.";
                     table += $"\n_{warning}_\n";
-                    notes.Add(warning);
+                    notes.Add(tagWarning);
                 }
                 McpResultCapture.Record(capture with { Notes = notes });
                 return table;
@@ -633,10 +634,10 @@ public class FinancialFactsTools
                     var warning =
                         $"Tag warning: the figure {string.Join(", ", mistaggedTickers)} "
                         + "tagged as gross profit for this period equals its operating income, "
-                        + "while Revenue − Cost of Revenue states a different figure; "
-                        + "GetFinancialStatement shows Revenue − Cost of Revenue.";
-                    table += $"\n_{warning}_\n";
-                    notes.Add(warning);
+                        + "while Revenue − Cost of Revenue states a different figure";
+                    table +=
+                        $"\n_{warning}; GetFinancialStatement shows Revenue − Cost of Revenue._\n";
+                    notes.Add(warning + ".");
                 }
                 if (capture.Rows.Count > 0)
                     McpResultCapture.Record(capture with { Notes = notes });
@@ -788,7 +789,8 @@ public class FinancialFactsTools
             );
             result.AppendLine();
             result.AppendLine(truncation);
-            notes.Add(truncation.Trim('_'));
+            // The card states the cut without the answer's advice on arguments, which only a model can act on.
+            notes.Add($"Showing the newest {perPeriod.Count} of {totalPeriods} periods.");
         }
 
         if (coverageNote != null)

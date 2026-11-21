@@ -9,6 +9,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Yahoo.Mcp.Captures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -124,6 +125,24 @@ public class DividendTools
                     result.AppendLine(pagingNote);
                 }
 
+                // The card states the same page, without the answer's advice on arguments.
+                McpResultCapture.Record(
+                    new DividendHistoryCapture(
+                        listing,
+                        label,
+                        venue,
+                        dated,
+                        dividends,
+                        total,
+                        offset,
+                        string.IsNullOrEmpty(pagingNote)
+                            ? []
+                            :
+                            [
+                                $"Showing dividends {offset + 1}-{offset + dividends.Count} of {total}.",
+                            ]
+                    )
+                );
                 return result.ToString();
             },
             "GetDividendHistory",

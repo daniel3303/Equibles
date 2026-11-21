@@ -29,6 +29,12 @@ public sealed record NewerEarningsRelease(
         + "not hold its figures: read them from the release with SearchDocument or ReadDocumentLines "
         + "using that document ID._\n";
 
+    // The same note for a card, whose reader cannot open a document by its ID or call a tool, so it names the release only.
+    public string CardNote =>
+        $"An earnings release was filed {FiledDate:yyyy-MM-dd} (8-K), after the latest periodic report in these facts "
+        + $"(filed {LatestPeriodicFiledDate:yyyy-MM-dd}, period ended {LatestPeriodEnd:yyyy-MM-dd}). Where it reports a "
+        + "later period, these facts do not hold its figures.";
+
     // A release filed the same day as the periodic report is already covered by it, and one filed
     // before another quarter could have ended restates the reported quarter (many filers publish
     // the release a day after the 10-Q). A host without the filings module passes no repository.

@@ -2,9 +2,11 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
 
@@ -217,5 +219,46 @@ public class FinancialToolsMistaggedGrossProfitAndOperatingCostsTests : ParadeDb
 
         result.Should().Contain("$47,800,000");
         result.Should().Contain("_Tag warning: the figure EBS tagged as gross profit");
+    }
+
+    // The card keeps the warning and leaves out the answer's pointer to another tool, which only a model can follow.
+    [Fact]
+    public async Task GetFinancialFact_GrossProfitIsTheOperatingIncome_CardNoteKeepsTheWarning()
+    {
+        await SeedEbs();
+
+        using var scope = McpResultCapture.Begin();
+        await FactsSut().GetFinancialFact("EBS", "gross-profit");
+
+        scope
+            .Get<FinancialFactHistoryCapture>()
+            .Notes.Should()
+            .Contain(
+                "Tag warning: for FY2017 Q3 the figure tagged as gross profit equals that period's operating "
+                    + "income, while Revenue − Cost of Revenue states a different figure."
+            );
+    }
+
+    [Fact]
+    public async Task CompareFinancialFact_GrossProfitIsTheOperatingIncome_CardNoteKeepsTheWarning()
+    {
+        await SeedEbs();
+
+        using var scope = McpResultCapture.Begin();
+        var result = await FactsSut()
+            .CompareFinancialFact(["EBS"], "gross-profit", fiscalYear: 2017, fiscalPeriod: "Q3");
+
+        result
+            .Should()
+            .Contain(
+                "states a different figure; GetFinancialStatement shows Revenue − Cost of Revenue._"
+            );
+        scope
+            .Get<FinancialFactComparisonCapture>()
+            .Notes.Should()
+            .Contain(
+                "Tag warning: the figure EBS tagged as gross profit for this period equals its operating "
+                    + "income, while Revenue − Cost of Revenue states a different figure."
+            );
     }
 }
