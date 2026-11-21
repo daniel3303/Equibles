@@ -55,6 +55,11 @@ public static class SecForms
         new(DocumentType.TwentyFa, SecFormFamily.Periodic, DocumentType.TwentyF),
         new(DocumentType.FortyF, SecFormFamily.Periodic),
         new(DocumentType.FortyFa, SecFormFamily.Periodic, DocumentType.FortyF),
+        // A registered fund reports to its shareholders on N-CSR and N-CSRS where a company files 10-K and 10-Q.
+        new(DocumentType.NCsr, SecFormFamily.Periodic),
+        new(DocumentType.NCsrA, SecFormFamily.Periodic, DocumentType.NCsr),
+        new(DocumentType.NCsrs, SecFormFamily.Periodic),
+        new(DocumentType.NCsrsA, SecFormFamily.Periodic, DocumentType.NCsrs),
         new(DocumentType.EightK, SecFormFamily.Current),
         new(DocumentType.EightKa, SecFormFamily.Current, DocumentType.EightK),
         new(DocumentType.SixK, SecFormFamily.Current),

@@ -51,6 +51,12 @@ public sealed class DocumentType
     public static readonly DocumentType NCenA = new("NCenA", "N-CEN/A");
     public static readonly DocumentType NportP = new("NportP", "NPORT-P");
     public static readonly DocumentType NportPa = new("NportPa", "NPORT-P/A");
+
+    // A registered fund's certified shareholder report: annual (N-CSR) and semi-annual (N-CSRS).
+    public static readonly DocumentType NCsr = new("NCsr", "N-CSR");
+    public static readonly DocumentType NCsrA = new("NCsrA", "N-CSR/A");
+    public static readonly DocumentType NCsrs = new("NCsrs", "N-CSRS");
+    public static readonly DocumentType NCsrsA = new("NCsrsA", "N-CSRS/A");
     public static readonly DocumentType Def14A = new("Def14A", "DEF 14A");
     public static readonly DocumentType Defa14A = new("Defa14A", "DEFA14A");
     public static readonly DocumentType Defm14A = new("Defm14A", "DEFM14A");
@@ -143,6 +149,10 @@ public sealed class DocumentType
         NCenA,
         NportP,
         NportPa,
+        NCsr,
+        NCsrA,
+        NCsrs,
+        NCsrsA,
         Def14A,
         Defa14A,
         Defm14A,

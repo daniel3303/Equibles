@@ -188,6 +188,8 @@ public static class FinancialConceptAliases
         ],
         ["eps-basic"] = [G("EarningsPerShareBasic"), I("BasicEarningsLossPerShare")],
         ["eps-diluted"] = [G("EarningsPerShareDiluted"), I("DilutedEarningsLossPerShare")],
+        // A registered fund's headline per-share figure; its shareholder reports tag no EPS.
+        ["nav-per-share"] = [G("NetAssetValuePerShare")],
         ["weighted-average-shares-basic"] =
         [
             G("WeightedAverageNumberOfSharesOutstandingBasic"),
@@ -457,6 +459,8 @@ public static class FinancialConceptAliases
         ["pp&e"] = "property-plant-and-equipment",
         ["aoci"] = "accumulated-oci",
         ["apic"] = "additional-paid-in-capital",
+        ["nav"] = "nav-per-share",
+        ["net-asset-value-per-share"] = "nav-per-share",
     };
 
     // Balance-sheet positions and share counts: each value is as of a date, so a series of
@@ -494,6 +498,7 @@ public static class FinancialConceptAliases
         "stockholders-equity",
         "total-liabilities-and-equity",
         "shares-outstanding",
+        "nav-per-share",
     ];
 
     public static IReadOnlyCollection<string> SupportedAliases => Map.Keys;
