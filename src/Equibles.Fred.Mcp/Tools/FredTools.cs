@@ -3,6 +3,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
+using Equibles.Fred.Mcp.Captures;
 using Equibles.Fred.Repositories;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
@@ -148,6 +149,28 @@ public class FredTools
                         + Environment.NewLine;
                 }
 
+                // The card states the same cut and coverage, without the answer's advice on arguments.
+                if (observations.Count > 0)
+                {
+                    var notes = new List<string>();
+                    if (observations.Count < total)
+                        notes.Add(
+                            $"Showing the newest {observations.Count} of {total} observations in the range."
+                        );
+                    if (coverageNote.Length > 0)
+                        notes.Add(coverageNote.Trim().Trim('_'));
+                    McpResultCapture.Record(
+                        new EconomicIndicatorCapture(
+                            series,
+                            observations.OrderBy(o => o.Date).ToList(),
+                            start,
+                            end,
+                            total,
+                            notes
+                        )
+                    );
+                }
+
                 return table + coverageNote;
             },
             "GetEconomicIndicator",
@@ -252,6 +275,7 @@ public class FredTools
                 );
 
                 var currentCategory = (FredSeriesCategory?)null;
+                var rows = new List<LatestEconomicIndicatorRow>();
 
                 foreach (var series in allSeries)
                 {
@@ -280,8 +304,12 @@ public class FredTools
                     result.AppendLine(
                         $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {previousStr} | {changeStr} | {series.Units} | {FrequencyName(series.Frequency)} |"
                     );
+                    rows.Add(
+                        new LatestEconomicIndicatorRow(series, latestObs, previousObs, change)
+                    );
                 }
 
+                McpResultCapture.Record(new LatestEconomicIndicatorsCapture(countryCode, rows));
                 return result.ToString();
             },
             "GetLatestEconomicIndicators",
@@ -528,6 +556,37 @@ public class FredTools
                         + Environment.NewLine;
                 }
 
+                // The card states the same cuts, without the answer's advice on arguments.
+                if (entries.Count > 0)
+                {
+                    var notes = new List<string>();
+                    if (truncated)
+                        notes.Add(
+                            $"Showing the first {entries.Count} of {total} release dates, through {entries[^1].Date:yyyy-MM-dd}."
+                        );
+                    if (leftOut > 0)
+                        notes.Add(
+                            $"{leftOut} release date(s) below {shownTier} importance are left out to fit the {maxResults}-row limit."
+                        );
+                    McpResultCapture.Record(
+                        new EconomicCalendarCapture(
+                            start,
+                            end,
+                            entries
+                                .Select(e => new EconomicCalendarEntry(
+                                    e.Date,
+                                    e.CountryCode,
+                                    e.ReleaseName,
+                                    e.ReferencePeriod,
+                                    e.Importance,
+                                    e.Series
+                                ))
+                                .ToList(),
+                            notes
+                        )
+                    );
+                }
+
                 return table;
             },
             "GetEconomicCalendar",
@@ -537,7 +596,7 @@ public class FredTools
 
     // Previous and Change span one observation, so the row states how far apart observations are:
     // a daily rate and a quarterly output figure otherwise read as the same kind of move.
-    private static string FrequencyName(string code) =>
+    public static string FrequencyName(string code) =>
         code?.Trim().ToUpperInvariant() switch
         {
             "D" => "Daily",
@@ -557,7 +616,7 @@ public class FredTools
             ? ""
             : $" | Country: {series.CountryCode} | Source: {SourceName(series.Source)}";
 
-    private static string SourceName(IndicatorSource source) =>
+    public static string SourceName(IndicatorSource source) =>
         source switch
         {
             IndicatorSource.BankOfCanada => "Bank of Canada",

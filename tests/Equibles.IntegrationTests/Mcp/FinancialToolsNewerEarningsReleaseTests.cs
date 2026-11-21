@@ -2,10 +2,12 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
@@ -194,5 +196,34 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
             .GetFinancialStatement("NVDA", statement: "balance", year: 2025);
 
         result.Should().NotContain("Newer earnings release");
+    }
+
+    // A card reader can neither open a document by its ID nor call a tool, so the card names the release only.
+    private const string ReleaseCardNote =
+        "Newer earnings release on file: 8-K filed 2026-11-17, after the latest periodic report in these facts "
+        + "(filed 2026-08-26). These facts come from 10-Q and 10-K reports, so they do not cover that release.";
+
+    [Fact]
+    public async Task GetFinancialFact_NewerRelease_CardNoteNamesTheRelease()
+    {
+        var stock = await SeedIssuerWithQuarterlyReport();
+        await SeedCurrentReport(stock, new DateOnly(2026, 11, 17), "2.02,9.01");
+
+        using var scope = McpResultCapture.Begin();
+        await Facts().GetFinancialFact("NVDA", "inventory");
+
+        scope.Get<FinancialFactHistoryCapture>().Notes.Should().Contain(ReleaseCardNote);
+    }
+
+    [Fact]
+    public async Task GetFinancialStatement_NewerRelease_CardNoteNamesTheRelease()
+    {
+        var stock = await SeedIssuerWithQuarterlyReport();
+        await SeedCurrentReport(stock, new DateOnly(2026, 11, 17), "2.02,9.01");
+
+        using var scope = McpResultCapture.Begin();
+        await Statements().GetFinancialStatement("NVDA", statement: "balance");
+
+        scope.Get<FinancialStatementCapture>().Notes.Should().Contain(ReleaseCardNote);
     }
 }

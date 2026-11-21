@@ -214,9 +214,11 @@ public class FinancialStatementTools
                                 Notes =
                                 [
                                     .. capture.Notes,
-                                    .. new[] { note, releaseNote }
-                                        .Where(text => text.Length > 0)
-                                        .Select(text => text.Trim().Trim('_')),
+                                    .. new[]
+                                    {
+                                        note.Trim().Trim('_'),
+                                        releaseNote.Length > 0 ? newerRelease.CardNote : "",
+                                    }.Where(text => text.Length > 0),
                                 ],
                             }
                         );

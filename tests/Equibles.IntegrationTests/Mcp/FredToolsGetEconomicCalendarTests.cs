@@ -1,7 +1,9 @@
 using Equibles.Fred.Data.Models;
+using Equibles.Fred.Mcp.Captures;
 using Equibles.Fred.Mcp.Tools;
 using Equibles.Fred.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -305,5 +307,26 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
         var result = await Sut().GetEconomicCalendar("2026-09-01", "2026-09-30");
 
         result.Should().Contain("No economic releases between 2026-09-01 and 2026-09-30.");
+    }
+
+    // A card beside the answer gets the rows the answer kept and both cuts in a reader's words.
+    [Fact]
+    public async Task GetEconomicCalendar_RecordsTheRowsItListed()
+    {
+        using var scope = McpResultCapture.Begin();
+        await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", maxResults: 1);
+
+        var capture = scope.Get<EconomicCalendarCapture>();
+        var entry = capture.Entries.Should().ContainSingle().Subject;
+        entry.Date.Should().Be(new DateOnly(2026, 6, 5));
+        entry.ReleaseName.Should().Be("Employment Situation");
+        entry.Importance.Should().Be(FredReleaseImportance.High);
+        entry.Series.Should().Equal("UNRATE");
+        capture
+            .Notes.Should()
+            .Equal(
+                "Showing the first 1 of 2 release dates, through 2026-06-05.",
+                "1 release date(s) below High importance are left out to fit the 1-row limit."
+            );
     }
 }

@@ -26,6 +26,12 @@ public sealed record NewerEarningsRelease(
         + "they do not cover that release; read its statements with SearchDocument or "
         + "ReadDocumentLines using that document ID._\n";
 
+    // Note for a card: a reader cannot open a document by its ID or call a tool, so it names the release only.
+    public string CardNote =>
+        $"Newer earnings release on file: 8-K filed {FiledDate:yyyy-MM-dd}, after the latest periodic report in "
+        + $"these facts (filed {LatestPeriodicFiledDate:yyyy-MM-dd}). These facts come from 10-Q and 10-K reports, "
+        + "so they do not cover that release.";
+
     // A release filed the same day as the periodic report is already covered by it, so only a
     // strictly later release counts. A host without the filings module passes no repository.
     public static async Task<NewerEarningsRelease> Find(
