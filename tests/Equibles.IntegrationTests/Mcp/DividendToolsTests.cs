@@ -4,6 +4,8 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
+using Equibles.Yahoo.Mcp.Captures;
 using Equibles.Yahoo.Mcp.Tools;
 using Xunit;
 
@@ -224,5 +226,29 @@ public class DividendToolsTests : ParadeDbMcpTestBase
 
         (await Sut().GetDividendHistory("MC.PA")).Should().Contain("LVMH (XPAR:MC)");
         (await Sut().GetDividendHistory("MC")).Should().NotContain("LVMH");
+    }
+
+    // A card beside the answer gets the page of dividends the answer listed, newest first, and the page in a reader's
+    // words.
+    [Fact]
+    public async Task GetDividendHistory_RecordsThePageItListed()
+    {
+        EquityIssuer stock = await SeedStock();
+        await SeedDividend(stock, new DateOnly(2025, 2, 10), 0.25m);
+        await SeedDividend(stock, new DateOnly(2025, 5, 12), 0.26m);
+        await SeedDividend(stock, new DateOnly(2025, 8, 11), 0.26m);
+
+        using var scope = McpResultCapture.Begin();
+        await Sut().GetDividendHistory("AAPL", maxResults: 2);
+
+        var capture = scope.Get<DividendHistoryCapture>();
+        capture
+            .Dividends.Select(dividend => dividend.ExDate)
+            .Should()
+            .Equal(new DateOnly(2025, 8, 11), new DateOnly(2025, 5, 12));
+        capture.Venue.Should().BeFalse();
+        capture.Dated.Should().BeFalse();
+        capture.Total.Should().Be(3);
+        capture.Notes.Should().Equal("Showing dividends 1-2 of 3.");
     }
 }
