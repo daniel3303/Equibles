@@ -11,6 +11,10 @@ internal static class EquityDirectorySnapshotIdentity
             row.SourceSecurityIdentifier != null || row.SourceListingIdentifier != null
         );
 
+    // The product half of a venue, the same split the manager's withdrawal query states.
+    internal static bool IsProduct(EquitySecurityKind? kind) =>
+        kind is EquitySecurityKind.ExchangeTradedFund or EquitySecurityKind.ExchangeTradedNote;
+
     internal static bool ValidListings(EquityDirectorySnapshotInput input)
     {
         if (
@@ -120,10 +124,13 @@ internal static class EquityDirectorySnapshotIdentity
             if (row.Ticker == listing.Ticker)
                 retained.Add(listing.Id);
         }
+        // A share capture and a product capture of one source each state only their own half of the venue, as the
+        // manager withdraws only that half's absentees; rewriting the other half's flags would unlist every line it states.
         foreach (
             var binding in bindings.Values.Where(binding =>
                 binding.Listing.MarketCountryCode == input.MarketCountryCode
                 && input.MarketIdentifierCodes.Contains(binding.Listing.MarketIdentifierCode)
+                && IsProduct(binding.Listing.Security.SecurityType) == input.ExchangeTradedProducts
             )
         )
         {
