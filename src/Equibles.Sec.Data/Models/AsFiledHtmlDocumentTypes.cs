@@ -14,6 +14,10 @@ public static class AsFiledHtmlDocumentTypes
             DocumentType.FortyFa,
             DocumentType.SixK,
             DocumentType.SixKa,
+            DocumentType.NCsr,
+            DocumentType.NCsrA,
+            DocumentType.NCsrs,
+            DocumentType.NCsrsA,
         ]);
 
     // Forms whose primary alone earns an as-filed page: periodic reports, and forms whose primary has no
