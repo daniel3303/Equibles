@@ -160,7 +160,7 @@ internal static class DocumentKeywordScan
                 isMatch ? ClipAroundMatch(line, keyword, maxExcerptChars)
                 : matchSet.Contains(lineIndex - 1) ? ClipHead(line, maxExcerptChars)
                 : ClipTail(line, maxExcerptChars);
-            clipped |= shown.Length != line.Length;
+            clipped |= !ReferenceEquals(shown, line);
             var content = isMatch ? HighlightKeyword(shown, keyword) : shown;
             result.AppendLine(DocumentTextFormat.Line(lineIndex + 1, content));
             previous = lineIndex;
@@ -179,14 +179,16 @@ internal static class DocumentKeywordScan
         return clipped;
     }
 
-    // A matched line cut to maxChars around its first match, so the hit always stays in view;
-    // each cut side is marked with an ellipsis and never splits a word next to the window.
+    // A matched line cut to maxChars around its first match, so the hit always stays in view (a
+    // query longer than maxChars widens the window to the whole match); each cut side is marked
+    // with an ellipsis and never splits a word next to the window.
     internal static string ClipAroundMatch(string line, string keyword, int maxChars)
     {
-        if (maxChars <= 0 || line.Length <= maxChars)
+        var matchLength = string.IsNullOrEmpty(keyword) ? 0 : keyword.Length;
+        maxChars = maxChars <= 0 ? 0 : Math.Max(maxChars, matchLength);
+        if (maxChars == 0 || line.Length <= maxChars)
             return line;
 
-        var matchLength = string.IsNullOrEmpty(keyword) ? 0 : keyword.Length;
         var matchIndex =
             matchLength == 0
                 ? 0

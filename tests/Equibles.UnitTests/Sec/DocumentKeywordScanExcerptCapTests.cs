@@ -59,6 +59,16 @@ public class DocumentKeywordScanExcerptCapTests
         capped.Should().Contain(Paragraphs[0]).And.Contain(Paragraphs[2]).And.NotContain("…");
     }
 
+    [Fact]
+    public void AQueryLongerThanTheCap_IsShownWhole()
+    {
+        const string phrase = "around 870 commercial aircraft deliveries";
+
+        var clipped = DocumentKeywordScan.ClipAroundMatch(Paragraphs[1], phrase, 20);
+
+        clipped.Should().Be("…" + phrase + "…");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
