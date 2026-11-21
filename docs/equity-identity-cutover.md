@@ -250,6 +250,7 @@
 - The current snapshot record fences every subsequent product import, so superseded work cannot reactivate an old symbol.
 - A returning exact security/venue reuses its sole undated inactive listing; explicit retirement dates and ambiguous episodes never collapse.
 - Source snapshots, original listing IDs and attached prices survive disappearance and symbol reuse.
+- A venue's share capture and its exchange-traded product capture each withdraw only their own half's absentees and rewrite only that half's per-line listed flags, also when one source states both (pinned by `SourceDirectorySnapshotTests`).
 
 ## Price history during directory retirement
 

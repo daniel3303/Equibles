@@ -148,6 +148,98 @@ public class SourceDirectorySnapshotTests(ParadeDbFixture fixture) : ParadeDbMcp
         (await Active(shareId)).Should().BeTrue();
     }
 
+    // One source can capture a venue's shares and its exchange-traded products separately; each capture states only its
+    // own half, so it must leave the other half's per-line listed flags as they are.
+    [Fact]
+    public async Task ShareAndProductCapturesOfOneSource_KeepTheOtherHalfsLinesListed()
+    {
+        await using var services = Services();
+        var factory = services.GetRequiredService<IServiceScopeFactory>();
+        var snapshots = new EquityDirectorySnapshotManager(factory);
+        var importer = new EquityDirectoryIdentityImporter(factory);
+        var share = SourceLine("share", "VALE3", EquitySecurityKind.OrdinaryShare);
+        var fund = SourceLine("fund", "BOVA11", EquitySecurityKind.ExchangeTradedFund);
+        share.DirectorySnapshotId = await snapshots.Reconcile(SourceSnapshot(0, false, share));
+        await importer.ImportListing(share);
+        fund.DirectorySnapshotId = await snapshots.Reconcile(SourceSnapshot(0, true, fund));
+        await importer.ImportListing(fund);
+
+        await snapshots.Reconcile(SourceSnapshot(1, false, share));
+        await snapshots.Reconcile(SourceSnapshot(1, true, fund));
+
+        var flags = await DbContext
+            .Set<EquityListingSourceIdentifier>()
+            .AsNoTracking()
+            .Where(row => row.Source == "official-directory")
+            .ToDictionaryAsync(row => row.Identifier, row => row.IsDirectoryListed);
+        flags.Should().Equal(new Dictionary<string, bool> { ["share"] = true, ["fund"] = true });
+
+        // A product capture that drops the fund unlists its line and leaves the share's.
+        await snapshots.Reconcile(
+            SourceSnapshot(2, true, SourceLine("other-fund", "IVVB11", EquitySecurityKind.ExchangeTradedFund))
+        );
+        (
+            await DbContext
+                .Set<EquityListingSourceIdentifier>()
+                .AsNoTracking()
+                .Where(row => row.Source == "official-directory")
+                .ToDictionaryAsync(row => row.Identifier, row => row.IsDirectoryListed)
+        )
+            .Should()
+            .Equal(new Dictionary<string, bool> { ["share"] = true, ["fund"] = false });
+    }
+
+    private static EquityDirectoryListingInput SourceLine(
+        string id,
+        string ticker,
+        EquitySecurityKind kind
+    ) =>
+        new()
+        {
+            Source = "official-directory",
+            SourceIssuerIdentifier = "issuer-" + id,
+            IssuerName = "Source issuer " + id,
+            SourceSecurityIdentifier = "security-" + id,
+            SourceListingIdentifier = id,
+            Ticker = ticker,
+            MarketCountryCode = "BR",
+            MarketIdentifierCode = "BVMF",
+            TradingCurrency = "BRL",
+            QuoteUnitMultiplier = 1m,
+            SecurityType = kind,
+            SourceUrl = "https://example.org/instruments/" + id,
+            PayloadJson = JsonSerializer.Serialize(new { id, ticker }),
+        };
+
+    private static EquityDirectorySnapshotInput SourceSnapshot(
+        int revision,
+        bool products,
+        params EquityDirectoryListingInput[] listings
+    ) =>
+        new()
+        {
+            Source = "official-directory",
+            EvidenceSource = "official-directory-snapshot",
+            SourceRecordKey = products
+                ? "https://example.org/products"
+                : "https://example.org/shares",
+            PayloadJson = JsonSerializer.Serialize(new { revision, products }),
+            ObservedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(revision),
+            MarketCountryCode = "BR",
+            MarketIdentifierCodes = ["BVMF"],
+            ExchangeTradedProducts = products,
+            Listings = listings
+                .Select(row => new EquityDirectoryListingKey(
+                    row.Isin,
+                    row.MarketIdentifierCode,
+                    row.Ticker,
+                    row.TradingCurrency,
+                    row.SourceSecurityIdentifier,
+                    row.SourceListingIdentifier
+                ))
+                .ToList(),
+        };
+
     private async Task<bool> Active(Guid listingId) =>
         (
             await DbContext
