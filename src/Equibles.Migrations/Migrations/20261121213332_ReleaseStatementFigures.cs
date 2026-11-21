@@ -62,6 +62,12 @@ namespace Equibles.Migrations.Migrations
                 {
                     table.PrimaryKey("PK_ReleaseStatementFigure", x => x.Id);
                     table.ForeignKey(
+                        name: "FK_ReleaseStatementFigure_EquityIssuer_EquityIssuerId",
+                        column: x => x.EquityIssuerId,
+                        principalTable: "EquityIssuer",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
                         name: "FK_ReleaseStatementFigure_FinancialConcept_FinancialConceptId",
                         column: x => x.FinancialConceptId,
                         principalTable: "FinancialConcept",

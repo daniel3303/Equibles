@@ -8875,6 +8875,12 @@ namespace Equibles.Migrations.Migrations
 
             modelBuilder.Entity("Equibles.Sec.FinancialFacts.Data.Models.ReleaseStatementFigure", b =>
                 {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", null)
+                        .WithMany()
+                        .HasForeignKey("EquityIssuerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Equibles.Sec.FinancialFacts.Data.Models.FinancialConcept", "FinancialConcept")
                         .WithMany()
                         .HasForeignKey("FinancialConceptId")

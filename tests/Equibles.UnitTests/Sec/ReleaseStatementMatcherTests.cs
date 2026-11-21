@@ -201,6 +201,21 @@ public class ReleaseStatementMatcherTests
     }
 
     [Fact]
+    public void Match_NewPeriodCellWithMisgroupedDigits_LeavesTheRowOut()
+    {
+        // A footnote mark flattened into the cell: 176,360 printed as "176,3601".
+        var release = IncomeStatement.Replace("| 176,360 |", "| 176,3601 |");
+        release.Should().NotBe(IncomeStatement);
+
+        var figures = Match(release);
+
+        figures
+            .Should()
+            .NotContain(f => f.ConceptId == _concepts["Revenues"] && f.PeriodStart == Q3Start2026);
+        Figure(figures, "Revenues", YearStart2026, Q3End2026).Value.Should().Be(480_491_000m);
+    }
+
+    [Fact]
     public void Match_NoStatementLinesOnFile_PlacesNothing()
     {
         _lines.Clear();

@@ -14,7 +14,8 @@ public sealed partial class ReleaseTable
     public List<string[]> HeaderRows { get; } = [];
     public List<ReleaseTableRow> Rows { get; } = [];
 
-    [GeneratedRegex(@"^\(?-?\$?\s*\(?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*\)?$")]
+    // Commas must group thousands: a footnote digit flattened into a cell ("127,2361") is no figure.
+    [GeneratedRegex(@"^\(?-?\$?\s*\(?\s*((?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)\s*\)?$")]
     private static partial Regex NumberPattern();
 
     [GeneratedRegex("[A-Za-z]{3}")]

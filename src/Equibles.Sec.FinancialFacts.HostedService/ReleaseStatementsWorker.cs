@@ -20,9 +20,11 @@ public class ReleaseStatementsWorker : BaseScraperWorker
 {
     private readonly ReleaseStatementsOptions _options;
 
-    // A release whose read threw is skipped until the process restarts: the cause is a defect
-    // or a lost file, and the next cycle would only report it again.
-    private readonly HashSet<Guid> _failed = [];
+    // Consecutive failures that end a cycle: the cause is then the database or the file store,
+    // not the releases, and the rest of the batch is left untouched for the next cycle.
+    private const int OutageFailures = 3;
+
+    private readonly ReleaseReadBackoff _backoff = new();
 
     protected override string WorkerName => "Earnings release statements";
     protected override TimeSpan SleepInterval { get; }
@@ -55,8 +57,9 @@ public class ReleaseStatementsWorker : BaseScraperWorker
             var reads = scope.ServiceProvider.GetRequiredService<ReleaseStatementReadRepository>();
             var reader = scope.ServiceProvider.GetRequiredService<ReleaseStatementReadService>();
 
+            var waiting = _backoff.Waiting(DateTime.UtcNow);
             var batch = await Unread(documents, reads, since)
-                .Where(release => !_failed.Contains(release.Id))
+                .Where(release => !waiting.Contains(release.Id))
                 .OrderByDescending(release => release.ReportingDate)
                 .Take(batchSize)
                 .ToListAsync(stoppingToken);
@@ -64,12 +67,15 @@ public class ReleaseStatementsWorker : BaseScraperWorker
                 return;
 
             var figures = 0;
+            var failuresInARow = 0;
             foreach (var release in batch)
             {
                 stoppingToken.ThrowIfCancellationRequested();
                 try
                 {
                     figures += await reader.Read(release, stoppingToken);
+                    _backoff.Succeeded(release.Id);
+                    failuresInARow = 0;
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -77,7 +83,7 @@ public class ReleaseStatementsWorker : BaseScraperWorker
                 }
                 catch (Exception ex)
                 {
-                    _failed.Add(release.Id);
+                    _backoff.Failed(release.Id, DateTime.UtcNow);
                     reads.ClearChangeTracker();
                     Logger.LogWarning(
                         ex,
@@ -91,6 +97,8 @@ public class ReleaseStatementsWorker : BaseScraperWorker
                         ex,
                         $"documentId: {release.Id}, accession: {release.AccessionNumber}"
                     );
+                    if (++failuresInARow >= OutageFailures)
+                        return;
                 }
             }
 

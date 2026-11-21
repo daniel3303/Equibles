@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -80,6 +81,13 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
             .WithMany(read => read.Figures)
             .HasForeignKey(figure => figure.ReleaseStatementReadId)
             .OnDelete(DeleteBehavior.Cascade);
+        // The key the issuer merge follows: a figure moves with its reading when two issuers fold.
+        builder
+            .Entity<ReleaseStatementFigure>()
+            .HasOne<EquityIssuer>()
+            .WithMany()
+            .HasForeignKey(figure => figure.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder
             .Entity<FinancialFactsSyncStatus>()
