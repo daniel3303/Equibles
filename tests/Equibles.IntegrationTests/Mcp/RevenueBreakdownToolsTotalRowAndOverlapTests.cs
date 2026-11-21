@@ -3,9 +3,11 @@ using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
 
@@ -114,8 +116,18 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
 
+        using var scope = McpResultCapture.Begin();
         var result = await Sut().GetRevenueBreakdown("AAPL");
 
+        var table = scope.Get<RevenueBreakdownCapture>().Tables.Single();
+        table.Title.Should().Be("By product & service");
+        table.TotalLabel.Should().Be("Total revenue (consolidated)");
+        table.Totals.Should().Equal(416_000_000_000m);
+        table.Notes.Should().Contain(note => note.StartsWith("Rows on this axis overlap"));
+        table.Additive.Should().BeFalse("overlapping rows would double count when stacked");
+        table
+            .Series.Members.Should()
+            .Contain(member => member.Label == "IPhone" && member.Values[0] == 200_000_000_000m);
         result.Should().Contain("Total revenue (consolidated)");
         result.Should().Contain("$416,000,000,000");
         result.Should().Contain("Rows on this axis overlap");
@@ -148,8 +160,10 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
 
+        using var scope = McpResultCapture.Begin();
         var result = await Sut().GetRevenueBreakdown("CLEAN");
 
+        scope.Get<RevenueBreakdownCapture>().Tables.Single().Additive.Should().BeTrue();
         result.Should().Contain("Total revenue (consolidated)");
         result.Should().Contain("$100,000,000,000");
         result.Should().NotContain("Rows on this axis overlap");

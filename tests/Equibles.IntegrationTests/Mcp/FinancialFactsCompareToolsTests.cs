@@ -3,9 +3,11 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Xunit;
@@ -146,7 +148,17 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         AddRevenue(msft, 211_000_000_000m, new DateOnly(2024, 1, 20), accn: "msft");
         await DbContext.SaveChangesAsync();
 
+        using var scope = McpResultCapture.Begin();
         var result = await Sut().CompareFinancialFact("aapl, msft, googl, zzzz", "revenue", 2023);
+
+        var capture = scope.Get<FinancialFactComparisonCapture>();
+        capture
+            .Rows.Select(row => (row.Ticker, row.Symbol, row.Fact.Value))
+            .Should()
+            .Equal(("AAPL", "AAPL", 400_000_000_000m), ("MSFT", "MSFT", 211_000_000_000m));
+        capture
+            .Notes.Should()
+            .Contain(note => note.StartsWith("Skipped:") && note.Contains("GOOGL (no data)"));
 
         result.Should().Contain("revenue — 2023 FY peer comparison:");
         result.Should().Contain("| AAPL | Apple Inc. | $400,000,000,000 | USD |");

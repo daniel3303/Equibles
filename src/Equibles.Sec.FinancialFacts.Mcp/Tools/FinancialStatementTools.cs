@@ -16,6 +16,7 @@ using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
@@ -187,7 +188,7 @@ public class FinancialStatementTools
                 (int FiscalYear, SecFiscalPeriod FiscalPeriod)? skipped = null;
                 foreach (var candidate in candidates.Take(pinned ? 1 : MaxDefaultPeriodAttempts))
                 {
-                    var (table, empty) = await RenderPeriod(
+                    var (table, empty, capture) = await RenderPeriod(
                         stock,
                         statementType,
                         statementLines,
@@ -198,17 +199,29 @@ public class FinancialStatementTools
                         operatingCostsClaimant
                     );
                     if (table != null)
-                        return (
-                                skipped is { } newer
-                                    ? table
-                                        + SkippedPeriodNote(
-                                            stock,
-                                            statementType,
-                                            newer.FiscalYear,
-                                            newer.FiscalPeriod
-                                        )
-                                    : table
-                            ) + releaseNote;
+                    {
+                        var note = skipped is { } newer
+                            ? SkippedPeriodNote(
+                                stock,
+                                statementType,
+                                newer.FiscalYear,
+                                newer.FiscalPeriod
+                            )
+                            : "";
+                        McpResultCapture.Record(
+                            capture with
+                            {
+                                Notes =
+                                [
+                                    .. capture.Notes,
+                                    .. new[] { note, releaseNote }
+                                        .Where(text => text.Length > 0)
+                                        .Select(text => text.Trim().Trim('_')),
+                                ],
+                            }
+                        );
+                        return table + note + releaseNote;
+                    }
                     firstEmpty ??= empty;
                     skipped ??= candidate;
                 }
@@ -220,8 +233,12 @@ public class FinancialStatementTools
         );
     }
 
-    // Renders one fiscal (year, period): the table, or null with the message that explains its absence.
-    private async Task<(string Table, string Empty)> RenderPeriod(
+    // Renders one fiscal (year, period): the table and its capture, or null with the message that explains its absence.
+    private async Task<(
+        string Table,
+        string Empty,
+        FinancialStatementCapture Capture
+    )> RenderPeriod(
         EquityIssuer stock,
         FinancialStatementType statementType,
         IReadOnlyList<StatementLine> statementLines,
@@ -318,7 +335,8 @@ public class FinancialStatementTools
         if (facts.Count == 0)
             return (
                 null,
-                EmptyPeriodMessage(stock, statementType, selectedYear, selectedPeriod, allEvidence)
+                EmptyPeriodMessage(stock, statementType, selectedYear, selectedPeriod, allEvidence),
+                null
             );
 
         // A filing re-reports comparative spans under its own fiscal stamp, and a stale
@@ -391,7 +409,8 @@ public class FinancialStatementTools
                         : $"No cash flow figures are held for {EquityListingSymbol.Display(stock)} "
                             + $"for FY{FiscalYearLabel.For(selectedYear, stock)} {selectedPeriod.NameForHumans()}: its facts for "
                             + "that year state no operating, investing or financing cash flow line. "
-                            + "Use statement 'income' or 'balance' for the figures held."
+                            + "Use statement 'income' or 'balance' for the figures held.",
+                    null
                 );
             }
         }
@@ -414,7 +433,7 @@ public class FinancialStatementTools
                 .ToListAsync()
             : [];
 
-        var table = RenderStatementTable(
+        var (table, capture) = RenderStatementTable(
             stock,
             statementType,
             selectedYear,
@@ -436,7 +455,8 @@ public class FinancialStatementTools
                     selectedPeriod,
                     allEvidence
                 )
-                : null
+                : null,
+            capture
         );
     }
 
@@ -480,7 +500,7 @@ public class FinancialStatementTools
         + $"{statementType.NameForHumans().ToLowerInvariant()} line items this tool can show, so "
         + "the newest period that has them is shown._\n";
 
-    private static string RenderStatementTable(
+    private static (string Table, FinancialStatementCapture Capture) RenderStatementTable(
         EquityIssuer stock,
         FinancialStatementType statementType,
         int selectedYear,
@@ -501,6 +521,8 @@ public class FinancialStatementTools
             "|-----------|------:|------|-------|--------------|------------|------|-------|"
         );
 
+        var lines = new List<FinancialStatementCaptureLine>();
+        var notes = new List<string>();
         var rendered = 0;
         var omitted = 0;
         var splitAdjusted = false;
@@ -551,6 +573,25 @@ public class FinancialStatementTools
                 : summed ? "Sum of reported parts"
                 : StatementQuarterDerivation.IsDerived(fact) ? "Derived quarter"
                 : "Reported";
+            lines.Add(
+                new FinancialStatementCaptureLine(
+                    line.Label,
+                    line.Alias,
+                    basis,
+                    new FinancialFactCaptureRow(
+                        FiscalYearLabel.For(fact.FiscalYear, stock),
+                        fact.FiscalPeriod,
+                        fact.PeriodStart,
+                        fact.PeriodEnd,
+                        value,
+                        fact.Unit,
+                        unresolved,
+                        summed,
+                        fact.Form?.DisplayName,
+                        fact.FiledDate
+                    )
+                )
+            );
             result.AppendLine(
                 $"| {FactMarkdown.Cell(line.Label)} | "
                     + $"{FactMarkdown.Value(value, fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
@@ -569,44 +610,57 @@ public class FinancialStatementTools
         }
 
         if (rendered == 0)
-            return null;
+            return (null, null);
 
+        void Note(string text)
+        {
+            result.AppendLine($"\n_{text}_");
+            notes.Add(text);
+        }
         if (omitted > 0)
-            result.AppendLine(
-                "\n_Line items the filer did not report for this period are omitted._"
-            );
+            Note("Line items the filer did not report for this period are omitted.");
 
         if (splitAdjusted)
-            result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+            Note(FinancialFactSplitAdjustment.Note);
         if (unresolvedBasis)
-            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
+            Note(FinancialFactSplitAdjustment.UnresolvedNote);
         if (grossProfitReplaced)
-            result.AppendLine($"\n_{GrossProfitMistag.ReplacedNote}_");
+            Note(GrossProfitMistag.ReplacedNote);
         if (depreciationSummed)
-            result.AppendLine($"\n_{DepreciationTotal.SumNote}_");
+            Note(DepreciationTotal.SumNote);
         if (FiscalYearLabel.Note(stock) is { } namingNote)
-            result.AppendLine($"\n_{namingNote}_");
+            Note(namingNote);
 
         if (
             selectedPeriod != SecFiscalPeriod.FullYear
             && statementType != FinancialStatementType.BalanceSheet
         )
-            result.AppendLine(
-                "\n_All flow rows span one discrete quarter. A Derived quarter is exact "
+            Note(
+                "All flow rows span one discrete quarter. A Derived quarter is exact "
                     + "subtraction of consecutive cumulative facts with the same concept, "
-                    + "currency and fiscal-year start; an unprovable YTD-only line is omitted._"
+                    + "currency and fiscal-year start; an unprovable YTD-only line is omitted."
             );
 
         // Each line independently takes its latest restatement, so one
         // statement can mix filing vintages — flag it so a partially restated
         // total that disagrees with non-restated components is explainable.
         if (earliestFiled != latestFiled)
-            result.AppendLine(
-                $"\n_Values reflect the latest restatement per line; source filings span "
-                    + $"{earliestFiled:yyyy-MM-dd} to {latestFiled:yyyy-MM-dd} — see the Filed column._"
+            Note(
+                $"Values reflect the latest restatement per line; source filings span "
+                    + $"{earliestFiled:yyyy-MM-dd} to {latestFiled:yyyy-MM-dd} — see the Filed column."
             );
 
-        return result.ToString();
+        return (
+            result.ToString(),
+            new FinancialStatementCapture(
+                stock,
+                statementType,
+                FiscalYearLabel.For(selectedYear, stock),
+                selectedPeriod,
+                lines,
+                notes
+            )
+        );
     }
 
     // The line the issuer's operating costs continue (OperatingCostsContinuation), read off its
