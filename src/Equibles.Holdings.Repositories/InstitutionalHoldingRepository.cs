@@ -1143,15 +1143,26 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // table. A brand-new filer entity (often a CIK migration of an existing manager)
     // shows its whole book as a "buy"; flagging first-time filers lets the consumer
     // tell a genuinely new position from a filer-identity artifact.
+    // One seek per holder on (InstitutionalHolderId, ReportDate): grouping the holders' rows instead
+    // read every 13F position the largest filers ever reported (millions of rows, past the API's
+    // statement timeout) to keep one date each.
     public IQueryable<KeyValuePair<Guid, DateOnly>> GetEarliest13FReportDates(
         IReadOnlyCollection<Guid> holderIds
     )
     {
-        return GetAll()
-            .Where(Is13F)
-            .Where(h => holderIds.Contains(h.InstitutionalHolderId))
-            .GroupBy(h => h.InstitutionalHolderId)
-            .Select(g => new KeyValuePair<Guid, DateOnly>(g.Key, g.Min(h => h.ReportDate)));
+        var holdings = GetAll().Where(Is13F);
+        return DbContext
+            .Set<InstitutionalHolder>()
+            .Where(holder => holderIds.Contains(holder.Id))
+            .Select(holder => new
+            {
+                holder.Id,
+                First = holdings
+                    .Where(h => h.InstitutionalHolderId == holder.Id)
+                    .Min(h => (DateOnly?)h.ReportDate),
+            })
+            .Where(row => row.First != null)
+            .Select(row => new KeyValuePair<Guid, DateOnly>(row.Id, row.First.Value));
     }
 
     // Per-stock churn between two 13F quarters: how many filers initiated a position
