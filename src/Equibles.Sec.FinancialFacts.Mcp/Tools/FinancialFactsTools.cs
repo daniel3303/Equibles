@@ -20,6 +20,7 @@ using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -231,7 +232,7 @@ public class FinancialFactsTools
                         .ToListAsync()
                     : [];
 
-                var table = RenderFactHistoryTable(
+                var (table, capture) = RenderFactHistory(
                     concept,
                     stock,
                     asOriginallyReported,
@@ -241,8 +242,12 @@ public class FinancialFactsTools
                     splits,
                     conceptsById
                 );
+                var notes = capture.Notes.ToList();
                 if (shown.Any(DepreciationTotal.IsSum))
+                {
                     table += SumFootnote;
+                    notes.Add(SumFootnoteText);
+                }
                 // The rows keep the filer's tagged figure; a gross profit that is the period's
                 // operating income is named, and the statement shows the derived figure.
                 var tagWarning = GrossProfitMistag.IsGrossProfit(conceptRefs)
@@ -251,11 +256,15 @@ public class FinancialFactsTools
                         stock.FiscalYearLabelOffset
                     )
                     : null;
-                return tagWarning == null
-                    ? table
-                    : table
-                        + $"\n_{tagWarning} GetFinancialStatement shows Revenue − Cost of "
-                        + "Revenue for those periods._\n";
+                if (tagWarning != null)
+                {
+                    var warning =
+                        $"{tagWarning} GetFinancialStatement shows Revenue − Cost of Revenue for those periods.";
+                    table += $"\n_{warning}_\n";
+                    notes.Add(warning);
+                }
+                McpResultCapture.Record(capture with { Notes = notes });
+                return table;
             },
             "GetFinancialFact",
             $"ticker: {FactMarkdown.Clean(ticker)}, concept: {FactMarkdown.Clean(concept)}, "
@@ -564,7 +573,7 @@ public class FinancialFactsTools
                             .GroupBy(split => split.EquityIssuerId)
                             .ToDictionary(group => group.Key, group => group.ToList());
 
-                var table = RenderComparisonTable(
+                var (table, capture) = RenderComparison(
                     concept,
                     fiscalYear,
                     period,
@@ -582,16 +591,29 @@ public class FinancialFactsTools
                     )
                     .Select(row => row.Ticker)
                     .ToList();
+                var notes = capture.Notes.ToList();
                 if (rows.Any(row => DepreciationTotal.IsSum(row.Fact)))
+                {
                     table += SumFootnote;
-                table += OwnNamingFootnote(rows, stocks);
-                return mistaggedTickers.Count == 0
-                    ? table
-                    : table
-                        + $"\n_Tag warning: the figure {string.Join(", ", mistaggedTickers)} "
+                    notes.Add(SumFootnoteText);
+                }
+                var ownNaming = OwnNamingFootnote(rows, stocks);
+                table += ownNaming;
+                if (ownNaming.Length > 0)
+                    notes.Add(ownNaming.Trim().Trim('_'));
+                if (mistaggedTickers.Count > 0)
+                {
+                    var warning =
+                        $"Tag warning: the figure {string.Join(", ", mistaggedTickers)} "
                         + "tagged as gross profit for this period equals its operating income, "
                         + "while Revenue − Cost of Revenue states a different figure; "
-                        + "GetFinancialStatement shows Revenue − Cost of Revenue._\n";
+                        + "GetFinancialStatement shows Revenue − Cost of Revenue.";
+                    table += $"\n_{warning}_\n";
+                    notes.Add(warning);
+                }
+                if (capture.Rows.Count > 0)
+                    McpResultCapture.Record(capture with { Notes = notes });
+                return table;
             },
             "CompareFinancialFact",
             $"tickers: {FactMarkdown.Clean(string.Join(",", tickers ?? []))}, concept: {FactMarkdown.Clean(concept)}, "
@@ -640,8 +662,10 @@ public class FinancialFactsTools
     private static string SumMark(FinancialFact fact) =>
         DepreciationTotal.IsSum(fact) ? " " + DepreciationTotal.SumMarker : "";
 
-    private const string SumFootnote =
-        "\n_" + DepreciationTotal.SumMarker + ": " + DepreciationTotal.SumNote + "_\n";
+    private const string SumFootnoteText =
+        DepreciationTotal.SumMarker + ": " + DepreciationTotal.SumNote;
+
+    private const string SumFootnote = "\n_" + SumFootnoteText + "_\n";
 
     private static string RenderFactHistoryTable(
         string concept,
@@ -652,8 +676,32 @@ public class FinancialFactsTools
         string coverageNote,
         IReadOnlyList<StockSplit> splits,
         IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
+    ) =>
+        RenderFactHistory(
+            concept,
+            stock,
+            asOriginallyReported,
+            perPeriod,
+            totalPeriods,
+            coverageNote,
+            splits,
+            conceptsById
+        ).Table;
+
+    // The table and the capture of the rows it printed, with the notes under it.
+    private static (string Table, FinancialFactHistoryCapture Capture) RenderFactHistory(
+        string concept,
+        EquityIssuer stock,
+        bool asOriginallyReported,
+        List<FinancialFact> perPeriod,
+        int totalPeriods,
+        string coverageNote,
+        IReadOnlyList<StockSplit> splits,
+        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
     )
     {
+        var rows = new List<FinancialFactCaptureRow>();
+        var notes = new List<string>();
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
         var result = MarkdownTable.Start(
             $"{concept} for {EquityListingSymbol.Display(stock)} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
@@ -676,6 +724,9 @@ public class FinancialFactsTools
                 var unresolved = restated.Unresolved;
                 unresolvedBasis |= unresolved;
                 splitAdjusted |= restated.Adjusted;
+                rows.Add(
+                    CaptureRow(f, FiscalYearLabel.For(f.FiscalYear, stock), value, unresolved)
+                );
                 return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {FiscalYearLabel.For(f.FiscalYear, stock)} | "
                     + $"{f.FiscalPeriod.NameForHumans()} | "
                     + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(f)} | "
@@ -686,33 +737,67 @@ public class FinancialFactsTools
             }
         );
 
+        void Note(string text)
+        {
+            result.AppendLine($"\n_{text}_");
+            notes.Add(text);
+        }
         if (splitAdjusted)
-            result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+            Note(FinancialFactSplitAdjustment.Note);
         if (unresolvedBasis)
-            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
+            Note(FinancialFactSplitAdjustment.UnresolvedNote);
         if (FiscalYearLabel.Note(stock) is { } namingNote)
-            result.AppendLine($"\n_{namingNote}_");
+            Note(namingNote);
 
         // Rows are newest first, so "first N" reads correctly; a no-op empty
         // line when nothing was cut off.
         if (perPeriod.Count < totalPeriods)
         {
-            result.AppendLine();
-            result.AppendLine(
-                McpOutput.TruncationNote(
-                    perPeriod.Count,
-                    totalPeriods,
-                    cap: MaxResultsCap,
-                    atCapAdvice: "narrow the period range with fromDate/toDate to see older periods"
-                )
+            var truncation = McpOutput.TruncationNote(
+                perPeriod.Count,
+                totalPeriods,
+                cap: MaxResultsCap,
+                atCapAdvice: "narrow the period range with fromDate/toDate to see older periods"
             );
+            result.AppendLine();
+            result.AppendLine(truncation);
+            notes.Add(truncation.Trim('_'));
         }
 
         if (coverageNote != null)
-            result.AppendLine($"\n_{coverageNote}_");
+            Note(coverageNote);
 
-        return result.ToString();
+        return (
+            result.ToString(),
+            new FinancialFactHistoryCapture(
+                stock,
+                concept,
+                asOriginallyReported,
+                rows,
+                totalPeriods,
+                notes
+            )
+        );
     }
+
+    private static FinancialFactCaptureRow CaptureRow(
+        FinancialFact fact,
+        int fiscalYear,
+        decimal value,
+        bool asFiled
+    ) =>
+        new(
+            fiscalYear,
+            fact.FiscalPeriod,
+            fact.PeriodStart,
+            fact.PeriodEnd,
+            value,
+            fact.Unit,
+            asFiled,
+            DepreciationTotal.IsSum(fact),
+            fact.Form?.DisplayName,
+            fact.FiledDate
+        );
 
     internal static string BuildCoverageNote(
         string ticker,
@@ -876,8 +961,32 @@ public class FinancialFactsTools
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
         IReadOnlyDictionary<Guid, Guid> listingIdsByStock,
         IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
+    ) =>
+        RenderComparison(
+            concept,
+            fiscalYear,
+            period,
+            rows,
+            skipped,
+            splitsByStock,
+            listingIdsByStock,
+            conceptsById
+        ).Table;
+
+    // The table and the capture of the rows it printed, with the notes under it.
+    private static (string Table, FinancialFactComparisonCapture Capture) RenderComparison(
+        string concept,
+        int fiscalYear,
+        SecFiscalPeriod period,
+        List<(string Ticker, string Name, FinancialFact Fact)> rows,
+        List<string> skipped,
+        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        IReadOnlyDictionary<Guid, Guid> listingIdsByStock,
+        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
     )
     {
+        var captured = new List<FinancialFactComparisonRow>();
+        var notes = new List<string>();
         var result = MarkdownTable.Start(
             $"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:",
             "| Ticker | Company | Value | Unit | Period End | Form | Filed |",
@@ -900,6 +1009,13 @@ public class FinancialFactsTools
                 var unresolved = restated.Unresolved;
                 unresolvedBasis |= unresolved;
                 splitAdjusted |= restated.Adjusted;
+                captured.Add(
+                    new FinancialFactComparisonRow(
+                        r.Ticker,
+                        r.Name,
+                        CaptureRow(r.Fact, r.Fact.FiscalYear, value, unresolved)
+                    )
+                );
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
                     + $"{FactMarkdown.Value(value, r.Fact.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(r.Fact)} | "
                     + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
@@ -909,26 +1025,28 @@ public class FinancialFactsTools
             }
         );
 
+        void Note(string text)
+        {
+            result.AppendLine($"\n_{text}_");
+            notes.Add(text);
+        }
         if (splitAdjusted)
-            result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+            Note(FinancialFactSplitAdjustment.Note);
         if (unresolvedBasis)
-            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
+            Note(FinancialFactSplitAdjustment.UnresolvedNote);
 
         if (rows.Count == 0)
-            result.AppendLine(
-                $"\n_No company reported '{concept}' for {fiscalYear} "
-                    + $"{period.NameForHumans()}._"
-            );
+            Note($"No company reported '{concept}' for {fiscalYear} {period.NameForHumans()}.");
 
         if (rows.Count > 1)
         {
             var earliest = rows.Min(r => r.Fact.PeriodEnd);
             var latest = rows.Max(r => r.Fact.PeriodEnd);
             if (latest.DayNumber - earliest.DayNumber > MaxAlignedPeriodEndSpreadDays)
-                result.AppendLine(
-                    $"\n_Note: fiscal calendars differ across these companies — period ends "
+                Note(
+                    $"Note: fiscal calendars differ across these companies — period ends "
                         + $"span {earliest:yyyy-MM-dd} to {latest:yyyy-MM-dd}. Each row covers "
-                        + "that company's own fiscal period, not the same calendar months._"
+                        + "that company's own fiscal period, not the same calendar months."
                 );
         }
 
@@ -938,15 +1056,18 @@ public class FinancialFactsTools
             .Distinct(StringComparer.Ordinal)
             .ToList();
         if (units.Count > 1)
-            result.AppendLine(
-                $"\n_Note: these rows are in different units ({FactMarkdown.Cell(string.Join(", ", units))}); "
-                    + "convert them to one currency before comparing values._"
+            Note(
+                $"Note: these rows are in different units ({FactMarkdown.Cell(string.Join(", ", units))}); "
+                    + "convert them to one currency before comparing values."
             );
 
         if (skipped.Count > 0)
-            result.AppendLine($"\n_Skipped: {string.Join(", ", skipped)}._");
+            Note($"Skipped: {string.Join(", ", skipped)}.");
 
-        return result.ToString();
+        return (
+            result.ToString(),
+            new FinancialFactComparisonCapture(concept, fiscalYear, period, captured, notes)
+        );
     }
 
     // The operating-costs facts the alias claims (OperatingCostsContinuation), with their concept

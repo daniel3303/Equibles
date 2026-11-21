@@ -3,9 +3,11 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -119,7 +121,19 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
 
         // No year/period given — must default to the latest reported period.
+        using var scope = McpResultCapture.Begin();
         var result = await Sut().GetFinancialStatement("AAPL", statement: "income");
+
+        var capture = scope.Get<FinancialStatementCapture>();
+        capture.FiscalYear.Should().Be(2023);
+        capture.Period.Should().Be(SecFiscalPeriod.FullYear);
+        capture.Lines.Should().ContainSingle();
+        capture.Lines[0].Label.Should().Be("Revenue");
+        capture.Lines[0].Concept.Should().Be("revenue");
+        capture.Lines[0].Fact.Value.Should().Be(400_000_000_000m);
+        capture
+            .Notes.Should()
+            .Contain("Line items the filer did not report for this period are omitted.");
 
         result.Should().Contain("Income Statement for AAPL (Apple Inc.) — FY2023 FY:");
         result.Should().Contain("| Revenue | $400,000,000,000 | USD |");
