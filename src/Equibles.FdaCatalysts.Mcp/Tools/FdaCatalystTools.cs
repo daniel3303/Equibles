@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
+using Equibles.FdaCatalysts.Mcp.Captures;
 using Equibles.FdaCatalysts.Repositories;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
@@ -82,15 +83,26 @@ public class FdaCatalystTools
                 if (records.Count == 0)
                     return await EmptyRangeMessage(start, end);
 
+                var rows = records
+                    .Select(c => new FdaMeetingRow(
+                        c.MeetingDate,
+                        Clean(c.Title),
+                        Clean(c.Center),
+                        c.CatalystType.NameForHumans(),
+                        c.EndDate.HasValue ? c.EndDate.Value.ToString("yyyy-MM-dd") : "—",
+                        string.IsNullOrEmpty(c.SourceUrl) ? null : c.SourceUrl
+                    ))
+                    .ToList();
                 var result = MarkdownTable.Render(
-                    records,
+                    rows,
                     string.Empty,
                     $"FDA Catalyst Calendar (advisory-committee meetings, {start:yyyy-MM-dd} to {end:yyyy-MM-dd}):",
                     "| Date | Meeting | Center | Type | Through | Details |",
                     "|------|---------|--------|------|---------|---------|",
                     c =>
-                        $"| {c.MeetingDate:yyyy-MM-dd} | {Clean(c.Title)} | {Clean(c.Center)} | {c.CatalystType.NameForHumans()} | {(c.EndDate.HasValue ? c.EndDate.Value.ToString("yyyy-MM-dd") : "—")} | {(string.IsNullOrEmpty(c.SourceUrl) ? "—" : c.SourceUrl)} |"
+                        $"| {c.MeetingDate:yyyy-MM-dd} | {c.Title} | {c.Center} | {c.Type} | {c.Through} | {c.Url ?? "—"} |"
                 );
+                McpResultCapture.Record(new FdaMeetingsCapture(start, end, rows, total));
                 var truncation = McpOutput.TruncationNote(records.Count, total);
                 return truncation.Length == 0 ? result : result + "\n" + truncation + "\n";
             },
