@@ -15,6 +15,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic.ReleaseStatements;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -42,6 +43,7 @@ public class FinancialFactsTools
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly DocumentRepository _documentRepository;
+    private readonly ReleaseStatementFigureRepository _releaseFigureRepository;
     private readonly McpToolRunner _runner;
 
     // The document repository is optional: a host without the filings module has no stored
@@ -53,10 +55,12 @@ public class FinancialFactsTools
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<FinancialFactsTools> logger,
-        DocumentRepository documentRepository = null
+        DocumentRepository documentRepository = null,
+        ReleaseStatementFigureRepository releaseFigureRepository = null
     )
     {
         _documentRepository = documentRepository;
+        _releaseFigureRepository = releaseFigureRepository;
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
@@ -75,8 +79,8 @@ public class FinancialFactsTools
             + "Each row carries its actual period start/end; fiscal years/quarters follow the "
             + "company's own fiscal calendar. Warns when the selected alias ends materially "
             + "before the company's other structured facts, which can indicate an XBRL tag "
-            + "change. Names a stored earnings release (8-K) filed after the latest periodic "
-            + "report. "
+            + "change. Adds a newer earnings release's figures as preliminary, or names that "
+            + "8-K. "
             + "Dimensioned disclosures such as customer concentration are outside this "
             + "consolidated-series tool. For a full statement use GetFinancialStatement; to "
             + "compare peers use CompareFinancialFact."
@@ -237,11 +241,42 @@ public class FinancialFactsTools
                     _documentRepository,
                     stock.Id
                 );
+                // The release's own figures for this line where the lane placed them, else the
+                // pointer to the release. A form filter asks for one periodic form's facts.
+                var preliminary =
+                    formFilter == null
+                        ? PreliminaryReleaseFigures.Render(
+                            ReleaseFigureReader
+                                .ForAlias(
+                                    await PreliminaryReleaseFigures.Load(
+                                        _releaseFigureRepository,
+                                        _financialFactRepository,
+                                        _stockSplitRepository,
+                                        stock.Id
+                                    ),
+                                    concept
+                                )
+                                .Where(figure =>
+                                    (fromBound == null || figure.PeriodEnd >= fromBound.Value)
+                                    && (toBound == null || figure.PeriodEnd <= toBound.Value)
+                                    && (
+                                        periodFilter == null
+                                        || ReleaseFigureReader
+                                            .PeriodOf(figure)
+                                            .Answers(periodFilter.Value)
+                                    )
+                                )
+                                .Select(figure => ((string)null, figure))
+                                .ToList(),
+                            stock
+                        )
+                        : "";
                 var releaseNote =
-                    newerRelease != null
+                    preliminary.Length > 0 ? preliminary
+                    : newerRelease != null
                     && (toBound == null || toBound.Value > newerRelease.LatestPeriodEnd)
                         ? newerRelease.Note
-                        : "";
+                    : "";
 
                 if (shown.Count == 0)
                     return $"No '{concept}' data found for {EquityListingSymbol.Display(stock)} with the given filters."
@@ -278,7 +313,11 @@ public class FinancialFactsTools
                     )
                     : null;
                 table += releaseNote;
-                if (newerRelease != null && releaseNote.Length > 0)
+                if (preliminary.Length > 0)
+                {
+                    notes.Add(PreliminaryReleaseFigures.Lead);
+                }
+                else if (newerRelease != null && releaseNote.Length > 0)
                 {
                     notes.Add(newerRelease.CardNote);
                 }
