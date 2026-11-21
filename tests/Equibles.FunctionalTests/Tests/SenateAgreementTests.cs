@@ -63,6 +63,12 @@ public class SenateAgreementTests
             </body></html>
             """;
 
+        private const string Accepted = """
+            <html><head><title>eFD: Home</title></head><body>
+            <script>location.replace('/search/');</script>
+            </body></html>
+            """;
+
         private bool _agreed;
 
         public int AgreementPosts { get; private set; }
@@ -76,16 +82,10 @@ public class SenateAgreementTests
                 if (++AgreementPosts == 1)
                     return Html(route, Challenge);
                 _agreed = true;
-                return route.FulfillAsync(
-                    new RouteFulfillOptions
-                    {
-                        Status = 302,
-                        Headers = new Dictionary<string, string>
-                        {
-                            ["Location"] = Origin + "/search/",
-                        },
-                    }
-                );
+                // eFD redirects with a 302, but Firefox sends a fulfilled redirect's follow-up
+                // request past the route to the real site; landing on the search page by script
+                // keeps every request in the fake.
+                return Html(route, Accepted);
             }
             if (path == "/search/home/")
                 return Html(route, Home);
