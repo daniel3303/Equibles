@@ -1370,6 +1370,49 @@ public class InstitutionalHoldingsTools
                                 .ToList()
                         );
 
+                McpResultCapture.Record(
+                    new InstitutionPortfolioCapture(
+                        holder,
+                        targetDate,
+                        reportDates,
+                        offset,
+                        totalRows,
+                        totalPositions,
+                        totalValue,
+                        unvaluedPositions,
+                        declaringFiling?.DeclaredPositionCount,
+                        declaringFiling?.DeclaredTotalValue,
+                        holdings
+                            .Select(h =>
+                            {
+                                var (listedTicker, shares, percent, facts) = PortfolioRowFigures(
+                                    h,
+                                    targetDate,
+                                    splitsByStock,
+                                    positionFacts,
+                                    totalValue
+                                );
+                                return new InstitutionPortfolioCaptureRow(
+                                    h.Id,
+                                    h.EquityIssuerId,
+                                    listedTicker,
+                                    h.Issuer?.Presentation?.Listing?.Ticker,
+                                    h.Issuer?.Name,
+                                    h.OptionType,
+                                    h.ShareType,
+                                    shares,
+                                    h.Value,
+                                    percent,
+                                    facts?.HeldQuarters,
+                                    facts?.HeldSinceCoverageStart == true,
+                                    facts?.CostStatus,
+                                    RestatedCostPerShare(facts, h.Shares, shares)
+                                );
+                            })
+                            .ToList()
+                    )
+                );
+
                 return RenderInstitutionPortfolio(
                     holder,
                     targetDate,
@@ -1388,6 +1431,44 @@ public class InstitutionalHoldingsTools
             "GetInstitutionPortfolio",
             $"institution: {institutionName}, offset: {offset}"
         );
+    }
+
+    // The figures one portfolio row prints, shared by the answer and its card capture.
+    private static (
+        string ListedTicker,
+        long Shares,
+        double Percent,
+        HolderPositionFacts Facts
+    ) PortfolioRowFigures(
+        InstitutionalHolding h,
+        DateOnly targetDate,
+        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        IReadOnlyDictionary<HolderSecurityKey, HolderPositionFacts> positionFacts,
+        long totalValue
+    )
+    {
+        // The exact listing held: a GOOG position must not render as GOOGL, and a
+        // sibling ETF split must not rescale this row.
+        var listedTicker = h.ListedTicker ?? h.Issuer?.Presentation?.Listing?.Ticker;
+        var shares =
+            h.ShareType == ShareType.Principal
+                ? h.Shares
+                : SplitAdjustment.AdjustShareCount(
+                    h.Shares,
+                    targetDate,
+                    ShareCountSplitScope.ForListedSeries(
+                        SplitsFor(splitsByStock, h.EquityIssuerId),
+                        h.Issuer?.Presentation?.Listing?.Ticker,
+                        listedTicker
+                    )
+                );
+        var facts =
+            h.ShareType == ShareType.Shares && h.OptionType == null
+                ? positionFacts.GetValueOrDefault(
+                    new HolderSecurityKey(h.EquityIssuerId, h.ListedTicker)
+                )
+                : null;
+        return (listedTicker, shares, Percentage.Of(h.Value, totalValue), facts);
     }
 
     private static string RenderInstitutionPortfolio(
@@ -1466,28 +1547,13 @@ public class InstitutionalHoldingsTools
             holdings,
             (rank, h) =>
             {
-                // The exact listing held: a GOOG position must not render as GOOGL, and a
-                // sibling ETF split must not rescale this row.
-                var listedTicker = h.ListedTicker ?? h.Issuer?.Presentation?.Listing?.Ticker;
-                var shares =
-                    h.ShareType == ShareType.Principal
-                        ? h.Shares
-                        : SplitAdjustment.AdjustShareCount(
-                            h.Shares,
-                            targetDate,
-                            ShareCountSplitScope.ForListedSeries(
-                                SplitsFor(splitsByStock, h.EquityIssuerId),
-                                h.Issuer?.Presentation?.Listing?.Ticker,
-                                listedTicker
-                            )
-                        );
-                var pct = Percentage.Of(h.Value, totalValue);
-                var facts =
-                    h.ShareType == ShareType.Shares && h.OptionType == null
-                        ? positionFacts.GetValueOrDefault(
-                            new HolderSecurityKey(h.EquityIssuerId, h.ListedTicker)
-                        )
-                        : null;
+                var (listedTicker, shares, pct, facts) = PortfolioRowFigures(
+                    h,
+                    targetDate,
+                    splitsByStock,
+                    positionFacts,
+                    totalValue
+                );
                 // Rank is the ABSOLUTE position in the value-ranked rows, so page two
                 // continues 21, 22, … instead of restarting at 1.
                 return $"| {offset + rank} | {listedTicker ?? "—"} | {h.Issuer.Name} | "
@@ -2612,6 +2678,17 @@ public class InstitutionalHoldingsTools
 
     // The slot is on the quarter's filing basis; the Shares column is restated onto today's, so
     // the cost per share moves by the inverse of the same factor.
+    private static decimal? RestatedCostPerShare(
+        HolderPositionFacts facts,
+        long filedShares,
+        long restatedShares
+    ) =>
+        facts is { CostStatus: HolderCostStatus.Estimated, EstimatedCostPerShare: { } cost }
+        && filedShares > 0
+        && restatedShares > 0
+            ? cost * filedShares / restatedShares
+            : null;
+
     private static string EstimatedCostCell(
         HolderPositionFacts facts,
         long filedShares,
@@ -2620,10 +2697,8 @@ public class InstitutionalHoldingsTools
         facts?.CostStatus switch
         {
             HolderCostStatus.Estimated
-                when facts.EstimatedCostPerShare is { } cost
-                    && filedShares > 0
-                    && restatedShares > 0 => "$"
-                + McpFormat.Price(cost * filedShares / restatedShares),
+                when RestatedCostPerShare(facts, filedShares, restatedShares) is { } cost => "$"
+                + McpFormat.Price(cost),
             HolderCostStatus.UnknownEntry => "before history",
             HolderCostStatus.Unpriced => "unpriced",
             _ => "—",
