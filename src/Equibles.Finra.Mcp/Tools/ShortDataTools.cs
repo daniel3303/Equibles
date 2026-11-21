@@ -13,6 +13,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.BusinessLogic.Models;
 using Equibles.Finra.Data.Models;
+using Equibles.Finra.Mcp.Captures;
 using Equibles.Finra.Mcp.Contracts;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
@@ -294,6 +295,25 @@ public class ShortDataTools
                 );
 
                 var answer = AppendNote(table, NewestKeptNote(display.Count, total, "settlements"));
+                if (display.Count > 0)
+                    McpResultCapture.Record(
+                        new ShortInterestCapture(
+                            listedTicker,
+                            SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
+                                ? null
+                                : stock.Name,
+                            display
+                                .Select(r =>
+                                    ShortInterestCells(
+                                        r,
+                                        SplitAdjustment.ShareCountFactor(r.SettlementDate, splits),
+                                        changeById[r.Id]
+                                    )
+                                )
+                                .ToList(),
+                            total
+                        )
+                    );
                 if (!WindowReachesPresent(end))
                     return answer;
                 if (SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker))
@@ -683,16 +703,25 @@ public class ShortDataTools
         long? changeOverride = null
     )
     {
+        var row = ShortInterestCells(r, shareFactor, changeOverride);
+        return $"| {leadCell} | {row.PositionText} | {row.ChangeText} | {row.AverageDailyVolumeText} | {row.DaysToCoverText} |";
+    }
+
+    private static ShortInterestRow ShortInterestCells(
+        ShortInterest r,
+        decimal shareFactor = 1m,
+        long? changeOverride = null
+    )
+    {
         var position = SplitAdjustment.AdjustShareCount(r.CurrentShortPosition, shareFactor);
-        var changeStr = FormatSignedChange(
-            changeOverride ?? SplitAdjustment.AdjustShareCount(r.ChangeInShortPosition, shareFactor)
-        );
+        var change =
+            changeOverride
+            ?? SplitAdjustment.AdjustShareCount(r.ChangeInShortPosition, shareFactor);
         // Average daily volume is a share count as-of the settlement; restate it too so the
         // row stays self-consistent (position ÷ ADV still reconciles to Days to Cover).
         var adv = r.AverageDailyVolume.HasValue
             ? SplitAdjustment.AdjustShareCount(r.AverageDailyVolume.Value, shareFactor)
             : (long?)null;
-        var advStr = McpFormat.OrDash(adv, "N0");
         // Days to cover is a same-settlement ratio — left as reported (split-invariant).
         // FINRA stores 999.99 as a cap sentinel meaning "999.99 or more"; render it
         // distinctly so an "F1" round-up never presents a fictitious "1000.0" as real data.
@@ -700,7 +729,17 @@ public class ShortDataTools
             r.DaysToCover >= FinraDaysToCoverCap
                 ? ">=999.99 (FINRA cap)"
                 : McpFormat.OrDash(r.DaysToCover, "F1");
-        return $"| {leadCell} | {McpFormat.WholeNumber(position)} | {changeStr} | {advStr} | {dtcStr} |";
+        return new ShortInterestRow(
+            r.SettlementDate,
+            position,
+            McpFormat.WholeNumber(position),
+            change,
+            FormatSignedChange(change),
+            adv,
+            McpFormat.OrDash(adv, "N0"),
+            r.DaysToCover,
+            dtcStr
+        );
     }
 
     // Squeeze-score days-to-cover: the manager already nulls FINRA's zero-volume 999.99

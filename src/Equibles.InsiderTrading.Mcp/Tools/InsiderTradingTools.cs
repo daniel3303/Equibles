@@ -14,6 +14,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
+using Equibles.InsiderTrading.Mcp.Captures;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.InsiderTrading.Repositories.Models;
 using Equibles.Mcp;
@@ -238,44 +239,19 @@ public class InsiderTradingTools
                 sb.AppendLine(
                     "|------|-------|---------|------|------|--------|-------|-------|-------------|----------|-----------|--------|"
                 );
-                sb.AppendRows(
-                    transactions,
-                    t =>
-                    {
-                        var role = InsiderRoleLabel.Of(t.InsiderOwner, t.OwnerRelationship);
-                        // Reserve the Buy/Sell trade labels strictly for open-market
-                        // purchases/sales; every other SEC code renders its own meaning so
-                        // comp mechanics (conversions, tax withholding, expirations) are
-                        // never mistaken for conviction trades.
-                        var type = t.TransactionCode switch
-                        {
-                            TransactionCode.Purchase => "Buy",
-                            TransactionCode.Sale => "Sell",
-                            _ => TypeLabel(t.TransactionCode),
-                        };
-
-                        var value = t.Shares * t.PricePerShare;
-                        var ownedAfter = SplitAdjustment.AdjustShareCount(
-                            t.SharesOwnedAfter,
-                            t.TransactionDate,
-                            splits
-                        );
-                        var plan = t.IsRule10b5One switch
-                        {
-                            true => "Yes",
-                            false => "No",
-                            null => "-",
-                        };
-                        // The filed security title distinguishes several securities of the
-                        // same kind (e.g. TSM common shares vs ADS); the kind is the
-                        // fallback when a filing names no title.
-                        var security = MarkdownTable.EscapeCell(
-                            t.SecurityTitle,
-                            t.SecurityKind.NameForHumans()
-                        );
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(ownedAfter)} | {security} | {t.OwnershipNature.NameForHumans()} | {plan} |";
-                    }
-                );
+                var rows = transactions.Select(t => Row(t, splits)).ToList();
+                for (var index = 0; index < rows.Count; index++)
+                {
+                    var row = rows[index];
+                    var t = transactions[index];
+                    var security = MarkdownTable.EscapeCell(
+                        t.SecurityTitle,
+                        t.SecurityKind.NameForHumans()
+                    );
+                    sb.AppendLine(
+                        $"| {row.Date:yyyy-MM-dd} | {row.Filed:yyyy-MM-dd} | {row.Insider} | {row.Role} | {row.Type} | {row.SharesText} | {row.PriceText} | {row.ValueText} | {row.OwnedAfterText} | {security} | {row.Ownership} | {row.Plan} |"
+                    );
+                }
 
                 var truncation = McpOutput.PagedTruncationNote(transactions.Count, total, offset);
                 if (truncation.Length > 0)
@@ -284,6 +260,15 @@ public class InsiderTradingTools
                     sb.AppendLine(truncation);
                 }
 
+                McpResultCapture.Record(
+                    new InsiderTransactionsCapture(
+                        stock.Name,
+                        stock.Presentation.Listing.Ticker,
+                        rows,
+                        offset,
+                        total
+                    )
+                );
                 return sb.ToString();
             },
             "GetInsiderTransactions",
@@ -562,6 +547,58 @@ public class InsiderTradingTools
     // The standard Form 144 materiality signal: the proposed sale as a share of the ISSUER
     // record's shares outstanding (the notice's own noOfUnitsOutstanding field is not trusted —
     // filers sometimes type their sale count there). "-" when the issuer share count is unknown.
+    // One transaction as the answer prints it. Shares, Price and Value stay as filed so Shares × Price = Value holds
+    // within the row; only Owned After, compared across dates and insiders, is restated onto today's split basis.
+    private static InsiderTransactionRow Row(InsiderTransaction t, IReadOnlyList<StockSplit> splits)
+    {
+        var role = InsiderRoleLabel.Of(t.InsiderOwner, t.OwnerRelationship);
+        // Reserve the Buy/Sell trade labels strictly for open-market purchases/sales; every other SEC code renders
+        // its own meaning so comp mechanics are never mistaken for conviction trades.
+        var type = t.TransactionCode switch
+        {
+            TransactionCode.Purchase => "Buy",
+            TransactionCode.Sale => "Sell",
+            _ => TypeLabel(t.TransactionCode),
+        };
+        var value = t.Shares * t.PricePerShare;
+        var ownedAfter = SplitAdjustment.AdjustShareCount(
+            t.SharesOwnedAfter,
+            t.TransactionDate,
+            splits
+        );
+        var plan = t.IsRule10b5One switch
+        {
+            true => "Yes",
+            false => "No",
+            null => "-",
+        };
+        // The filed security title distinguishes several securities of the same kind (e.g. TSM common shares vs
+        // ADS); the kind is the fallback when a filing names no title.
+        var security = string.IsNullOrEmpty(t.SecurityTitle)
+            ? t.SecurityKind.NameForHumans()
+            : t.SecurityTitle;
+        return new InsiderTransactionRow(
+            t.TransactionDate,
+            t.FilingDate,
+            t.InsiderOwner.Name,
+            role,
+            type,
+            t.TransactionCode is TransactionCode.Purchase or TransactionCode.Sale,
+            t.TransactionCode == TransactionCode.Purchase,
+            t.Shares,
+            McpFormat.WholeNumber(t.Shares),
+            t.PricePerShare,
+            $"${McpFormat.Invariant(t.PricePerShare, "N2")}",
+            value,
+            $"${McpFormat.WholeNumber(value)}",
+            ownedAfter,
+            McpFormat.WholeNumber(ownedAfter),
+            security,
+            t.OwnershipNature.NameForHumans(),
+            plan
+        );
+    }
+
     private static string FormatPercentOfOutstanding(long sharesToBeSold, long sharesOutstanding)
     {
         if (sharesOutstanding <= 0)

@@ -4,9 +4,11 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.Data.Models;
+using Equibles.Finra.Mcp.Captures;
 using Equibles.Finra.Mcp.Tools;
 using Equibles.Finra.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Sec.Repositories;
 using Equibles.Yahoo.Repositories;
 using Microsoft.Extensions.Caching.Memory;
@@ -345,6 +347,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
+        using var scope = McpResultCapture.Begin();
         var result = await Sut()
             .GetShortInterest("GME", startDate: "2026-01-01", endDate: "2026-04-30");
 
@@ -353,6 +356,16 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("50,000,000");
         result.Should().Contain("+5,000,000"); // Positive sign rendered explicitly.
         result.Should().Contain("5.0");
+        // A card beside the answer reads the same settlement, every cell as printed.
+        var capture = scope.Get<ShortInterestCapture>();
+        capture.CompanyName.Should().Be("GameStop Corp");
+        var row = capture.Rows.Should().ContainSingle().Subject;
+        result
+            .Should()
+            .Contain(
+                $"| 2026-03-15 | {row.PositionText} | {row.ChangeText} | {row.AverageDailyVolumeText} | {row.DaysToCoverText} |"
+            );
+        row.Change.Should().Be(5_000_000);
     }
 
     [Fact]
