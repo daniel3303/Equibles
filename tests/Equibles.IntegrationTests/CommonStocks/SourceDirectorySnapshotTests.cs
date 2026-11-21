@@ -176,7 +176,11 @@ public class SourceDirectorySnapshotTests(ParadeDbFixture fixture) : ParadeDbMcp
 
         // A product capture that drops the fund unlists its line and leaves the share's.
         await snapshots.Reconcile(
-            SourceSnapshot(2, true, SourceLine("other-fund", "IVVB11", EquitySecurityKind.ExchangeTradedFund))
+            SourceSnapshot(
+                2,
+                true,
+                SourceLine("other-fund", "IVVB11", EquitySecurityKind.ExchangeTradedFund)
+            )
         );
         (
             await DbContext
