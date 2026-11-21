@@ -47,7 +47,7 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
             new DocumentRepository(DbContext)
         );
 
-    // One issuer whose newest structured fact is the inventory balance of a 10-Q.
+    // One issuer whose newest structured facts are a 10-Q's quarter revenue and inventory balance.
     private async Task<EquityIssuer> SeedIssuerWithQuarterlyReport()
     {
         var stock = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -78,6 +78,34 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
                     PeriodStart = QuarterEnd,
                     PeriodEnd = QuarterEnd,
                     Value = 31_575_000_000m,
+                    FiscalYear = 2026,
+                    FiscalPeriod = SecFiscalPeriod.Q2,
+                    Form = DocumentType.TenQ,
+                    FiledDate = QuarterlyReportFiled,
+                    AccessionNumber = "0001045810-26-000075",
+                }
+            );
+        var revenue = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "Revenues",
+            Label = "Revenues",
+        };
+        DbContext.Set<FinancialConcept>().Add(revenue);
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    Id = Guid.NewGuid(),
+                    EquityIssuerId = stock.Id,
+                    FinancialConceptId = revenue.Id,
+                    Unit = "USD",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2026, 4, 27),
+                    PeriodEnd = QuarterEnd,
+                    Value = 96_200_000_000m,
                     FiscalYear = 2026,
                     FiscalPeriod = SecFiscalPeriod.Q2,
                     Form = DocumentType.TenQ,
@@ -127,9 +155,9 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
         var result = await Facts().GetFinancialFact("NVDA", "inventory");
 
         result.Should().Contain("31,575,000,000");
-        result.Should().Contain("Newer earnings release on file: 8-K filed 2026-11-17");
+        result.Should().Contain("An earnings release was filed 2026-11-17");
         result.Should().Contain(release.Id.ToString());
-        result.Should().Contain("filed 2026-08-26");
+        result.Should().Contain("filed 2026-08-26, period ended 2026-07-26");
     }
 
     [Fact]
@@ -153,12 +181,15 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
         var result = await Facts().GetFinancialFact("NVDA", "inventory", toDate: "2026-07-26");
 
         result.Should().Contain("31,575,000,000");
-        result.Should().NotContain("Newer earnings release");
+        result.Should().NotContain("earnings release was filed");
     }
 
     [Theory]
     // Filed with the periodic report: the report already carries the release's period.
     [InlineData("2026-08-26", "2.02,9.01")]
+    // Filed the day after the periodic report, before another quarter could have ended: it
+    // restates the quarter the report already covers.
+    [InlineData("2026-08-27", "2.02,9.01")]
     // A later current report that is not a results release.
     [InlineData("2026-11-12", "5.02,9.01")]
     // Item 12.02 does not exist, but a substring match on 2.02 would accept it.
@@ -171,7 +202,7 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
         var result = await Facts().GetFinancialFact("NVDA", "inventory");
 
         result.Should().Contain("31,575,000,000");
-        result.Should().NotContain("Newer earnings release");
+        result.Should().NotContain("earnings release was filed");
     }
 
     [Fact]
@@ -195,13 +226,13 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
         var result = await Statements()
             .GetFinancialStatement("NVDA", statement: "balance", year: 2025);
 
-        result.Should().NotContain("Newer earnings release");
+        result.Should().NotContain("earnings release was filed");
     }
 
     // A card reader can neither open a document by its ID nor call a tool, so the card names the release only.
     private const string ReleaseCardNote =
-        "Newer earnings release on file: 8-K filed 2026-11-17, after the latest periodic report in these facts "
-        + "(filed 2026-08-26). These facts come from 10-Q and 10-K reports, so they do not cover that release.";
+        "An earnings release was filed 2026-11-17 (8-K), after the latest periodic report in these facts "
+        + "(filed 2026-08-26, period ended 2026-07-26). Where it reports a later period, these facts do not hold its figures.";
 
     [Fact]
     public async Task GetFinancialFact_NewerRelease_CardNoteNamesTheRelease()

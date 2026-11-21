@@ -1,4 +1,5 @@
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -19,21 +20,24 @@ public sealed record NewerEarningsRelease(
     int LatestFiscalYear
 )
 {
+    // Dates cannot prove which period a release reports (a release can follow a late 10-K by a
+    // day), so the note states the dates and leaves the period to the reader of the release.
     public string Note =>
-        $"\n_Newer earnings release on file: 8-K filed {FiledDate:yyyy-MM-dd} (document ID "
-        + $"{DocumentId}), after the latest periodic report in these facts (filed "
-        + $"{LatestPeriodicFiledDate:yyyy-MM-dd}). These facts come from 10-Q and 10-K reports, so "
-        + "they do not cover that release; read its statements with SearchDocument or "
-        + "ReadDocumentLines using that document ID._\n";
+        $"\n_An earnings release was filed {FiledDate:yyyy-MM-dd} (8-K, document ID {DocumentId}), "
+        + $"after the latest periodic report in these facts (filed {LatestPeriodicFiledDate:yyyy-MM-dd}, "
+        + $"period ended {LatestPeriodEnd:yyyy-MM-dd}). Where it reports a later period, these facts do "
+        + "not hold its figures: read them from the release with SearchDocument or ReadDocumentLines "
+        + "using that document ID._\n";
 
-    // Note for a card: a reader cannot open a document by its ID or call a tool, so it names the release only.
+    // The same note for a card, whose reader cannot open a document by its ID or call a tool, so it names the release only.
     public string CardNote =>
-        $"Newer earnings release on file: 8-K filed {FiledDate:yyyy-MM-dd}, after the latest periodic report in "
-        + $"these facts (filed {LatestPeriodicFiledDate:yyyy-MM-dd}). These facts come from 10-Q and 10-K reports, "
-        + "so they do not cover that release.";
+        $"An earnings release was filed {FiledDate:yyyy-MM-dd} (8-K), after the latest periodic report in these facts "
+        + $"(filed {LatestPeriodicFiledDate:yyyy-MM-dd}, period ended {LatestPeriodEnd:yyyy-MM-dd}). Where it reports a "
+        + "later period, these facts do not hold its figures.";
 
-    // A release filed the same day as the periodic report is already covered by it, so only a
-    // strictly later release counts. A host without the filings module passes no repository.
+    // A release filed the same day as the periodic report is already covered by it, and one filed
+    // before another quarter could have ended restates the reported quarter (many filers publish
+    // the release a day after the 10-Q). A host without the filings module passes no repository.
     public static async Task<NewerEarningsRelease> Find(
         FinancialFactRepository facts,
         DocumentRepository documents,
@@ -59,16 +63,19 @@ public sealed record NewerEarningsRelease(
             .Select(g => new
             {
                 Filed = g.Max(f => f.FiledDate),
-                PeriodEnd = g.Max(f => f.PeriodEnd),
+                // Flows end on the reported period; a cover-page share count is dated weeks later.
+                FlowEnd = g.Max(f => f.PeriodEnd > f.PeriodStart ? (DateOnly?)f.PeriodEnd : null),
                 FiscalYear = g.Max(f => f.FiscalYear),
             })
             .FirstOrDefaultAsync();
-        if (latest == null)
+        if (latest?.FlowEnd is not { } flowEnd)
             return null;
 
+        var nextQuarterEnd = flowEnd.AddDays(FiscalPeriodSpanDays.MinQuarter);
+        var after = latest.Filed > nextQuarterEnd ? latest.Filed : nextQuarterEnd;
         var release = await documents
             .GetEarningsReleasesByIssuerId(issuerId)
-            .Where(d => d.ReportingDate > latest.Filed)
+            .Where(d => d.ReportingDate > after)
             .OrderByDescending(d => d.ReportingDate)
             .Select(d => new { d.Id, d.ReportingDate })
             .FirstOrDefaultAsync();
@@ -78,7 +85,7 @@ public sealed record NewerEarningsRelease(
                 release.Id,
                 release.ReportingDate,
                 latest.Filed,
-                latest.PeriodEnd,
+                flowEnd,
                 latest.FiscalYear
             );
     }
