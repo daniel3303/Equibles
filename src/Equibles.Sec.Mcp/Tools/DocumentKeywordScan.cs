@@ -19,7 +19,8 @@ internal static class DocumentKeywordScan
         Guid documentId,
         string keyword,
         int maxResults,
-        IDocumentExcerptLinkBuilder linkBuilder = null
+        IDocumentExcerptLinkBuilder linkBuilder = null,
+        int maxExcerptChars = 0
     )
     {
         var (document, lines, error) = await LoadDocumentLines(
@@ -60,9 +61,21 @@ internal static class DocumentKeywordScan
         );
         result.AppendLine();
 
-        AppendMatchBlocks(result, lines, matches, keyword, document, linkBuilder);
+        var clipped = AppendMatchBlocks(
+            result,
+            lines,
+            matches,
+            keyword,
+            document,
+            linkBuilder,
+            maxExcerptChars
+        );
 
         result.AppendLine(McpOutput.TruncationNote(matches.Count, allMatches.Count));
+        if (clipped)
+            result.AppendLine(
+                $"_Lines longer than {McpFormat.WholeNumber(maxExcerptChars)} characters are cut around the match (…) — raise maxExcerptChars or use ReadDocumentLines for the full text._"
+            );
 
         return result.ToString();
     }
@@ -90,16 +103,20 @@ internal static class DocumentKeywordScan
     // Renders each match with one line of context on each side, merging overlapping and
     // adjacent blocks grep-style so a document line never prints twice; a blank line
     // separates non-contiguous blocks. When a link builder is registered, each block ends
-    // with a link anchored on the block's line span and its first matched line's text.
-    private static void AppendMatchBlocks(
+    // with a link anchored on the block's line span and its first matched line's full text.
+    // A positive maxExcerptChars cuts every printed line to it (a filing whose lines are whole
+    // paragraphs otherwise prints thousands of characters per match); returns whether it cut one.
+    internal static bool AppendMatchBlocks(
         StringBuilder result,
         string[] lines,
         List<int> matches,
         string keyword,
         Document document,
-        IDocumentExcerptLinkBuilder linkBuilder
+        IDocumentExcerptLinkBuilder linkBuilder,
+        int maxExcerptChars = 0
     )
     {
+        var clipped = false;
         var matchSet = matches.ToHashSet();
         var linesToPrint = new SortedSet<int>();
         foreach (var lineIndex in matches)
@@ -137,7 +154,14 @@ internal static class DocumentKeywordScan
             if (isMatch && blockFirstMatch == null)
                 blockFirstMatch = lineIndex;
 
-            var content = isMatch ? HighlightKeyword(lines[lineIndex], keyword) : lines[lineIndex];
+            var line = lines[lineIndex];
+            // A context line keeps the side nearest a match: the head below one, the tail above one.
+            var shown =
+                isMatch ? ClipAroundMatch(line, keyword, maxExcerptChars)
+                : matchSet.Contains(lineIndex - 1) ? ClipHead(line, maxExcerptChars)
+                : ClipTail(line, maxExcerptChars);
+            clipped |= !ReferenceEquals(shown, line);
+            var content = isMatch ? HighlightKeyword(shown, keyword) : shown;
             result.AppendLine(DocumentTextFormat.Line(lineIndex + 1, content));
             previous = lineIndex;
         }
@@ -152,6 +176,62 @@ internal static class DocumentKeywordScan
             blockFirstMatch
         );
         result.AppendLine();
+        return clipped;
+    }
+
+    // A matched line cut to maxChars around its first match, so the hit always stays in view (a
+    // query longer than maxChars widens the window to the whole match); each cut side is marked
+    // with an ellipsis and never splits a word next to the window.
+    internal static string ClipAroundMatch(string line, string keyword, int maxChars)
+    {
+        var matchLength = string.IsNullOrEmpty(keyword) ? 0 : keyword.Length;
+        maxChars = maxChars <= 0 ? 0 : Math.Max(maxChars, matchLength);
+        if (maxChars == 0 || line.Length <= maxChars)
+            return line;
+
+        var matchIndex =
+            matchLength == 0
+                ? 0
+                : Math.Max(
+                    0,
+                    TypographyFold
+                        .Fold(line)
+                        .IndexOf(TypographyFold.Fold(keyword), StringComparison.OrdinalIgnoreCase)
+                );
+        var lead = Math.Max(0, (maxChars - matchLength) / 2);
+        var start = Math.Clamp(matchIndex - lead, 0, line.Length - maxChars);
+        var end = start + maxChars;
+        if (start > 0)
+        {
+            var space = line.IndexOf(' ', start);
+            if (space >= 0 && space < matchIndex)
+                start = space + 1;
+        }
+        if (end < line.Length)
+        {
+            var space = line.LastIndexOf(' ', end - 1);
+            if (space >= matchIndex + matchLength)
+                end = space;
+        }
+        return (start > 0 ? "…" : "") + line[start..end].Trim() + (end < line.Length ? "…" : "");
+    }
+
+    private static string ClipHead(string line, int maxChars)
+    {
+        if (maxChars <= 0 || line.Length <= maxChars)
+            return line;
+        var cut = line.LastIndexOf(' ', maxChars - 1);
+        return line[..(cut > 0 ? cut : maxChars)].TrimEnd() + "…";
+    }
+
+    private static string ClipTail(string line, int maxChars)
+    {
+        if (maxChars <= 0 || line.Length <= maxChars)
+            return line;
+        var start = line.Length - maxChars;
+        var space = line.IndexOf(' ', start);
+        return "…"
+            + line[(space >= 0 && space < line.Length - 1 ? space + 1 : start)..].TrimStart();
     }
 
     private static void AppendBlockLink(

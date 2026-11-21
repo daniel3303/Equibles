@@ -224,7 +224,8 @@ public class RagSearchTools
                         documentId,
                         query,
                         maxResults,
-                        _excerptLinkBuilder
+                        _excerptLinkBuilder,
+                        maxExcerptChars
                     );
                 if (mode != "semantic")
                     return $"Unknown searchMode \"{searchMode}\" — pass 'semantic' (default) or 'exact'.";

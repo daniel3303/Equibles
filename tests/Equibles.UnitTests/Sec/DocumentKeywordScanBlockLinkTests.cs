@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Sec.BusinessLogic.Search;
@@ -14,7 +13,7 @@ namespace Equibles.UnitTests.Sec;
 // existed.
 public class DocumentKeywordScanBlockLinkTests
 {
-    private sealed class RecordingLinkBuilder : IDocumentExcerptLinkBuilder
+    internal sealed class RecordingLinkBuilder : IDocumentExcerptLinkBuilder
     {
         public readonly List<(int FromLine, int ToLine, string ExcerptText)> Calls = [];
 
@@ -33,17 +32,14 @@ public class DocumentKeywordScanBlockLinkTests
             throw new NotSupportedException();
     }
 
-    private static string Render(
+    internal static string Render(
         string[] lines,
         List<int> matches,
         string keyword,
-        IDocumentExcerptLinkBuilder linkBuilder
+        IDocumentExcerptLinkBuilder linkBuilder,
+        int maxExcerptChars = 0
     )
     {
-        var method = typeof(DocumentKeywordScan).GetMethod(
-            "AppendMatchBlocks",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
         var result = new StringBuilder();
         var document = new Document
         {
@@ -58,7 +54,15 @@ public class DocumentKeywordScanBlockLinkTests
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 12, 31),
         };
-        method!.Invoke(null, [result, lines, matches, keyword, document, linkBuilder]);
+        DocumentKeywordScan.AppendMatchBlocks(
+            result,
+            lines,
+            matches,
+            keyword,
+            document,
+            linkBuilder,
+            maxExcerptChars
+        );
         return result.ToString();
     }
 
