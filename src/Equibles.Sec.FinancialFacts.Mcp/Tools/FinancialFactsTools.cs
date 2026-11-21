@@ -584,7 +584,8 @@ public class FinancialFactsTools
                         stock => stock.Id,
                         stock => stock.Presentation.EquityListingId
                     ),
-                    conceptsById
+                    conceptsById,
+                    stocks.ToDictionary(stock => stock.Id, EquityListingSymbol.Display)
                 );
                 var mistaggedTickers = rows.Where(row =>
                         mistaggedStockIds.Contains(row.Fact.EquityIssuerId)
@@ -970,7 +971,8 @@ public class FinancialFactsTools
             skipped,
             splitsByStock,
             listingIdsByStock,
-            conceptsById
+            conceptsById,
+            new Dictionary<Guid, string>()
         ).Table;
 
     // The table and the capture of the rows it printed, with the notes under it.
@@ -982,7 +984,8 @@ public class FinancialFactsTools
         List<string> skipped,
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
         IReadOnlyDictionary<Guid, Guid> listingIdsByStock,
-        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
+        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById,
+        IReadOnlyDictionary<Guid, string> symbolsByStock
     )
     {
         var captured = new List<FinancialFactComparisonRow>();
@@ -1013,7 +1016,8 @@ public class FinancialFactsTools
                     new FinancialFactComparisonRow(
                         r.Ticker,
                         r.Name,
-                        CaptureRow(r.Fact, r.Fact.FiscalYear, value, unresolved)
+                        CaptureRow(r.Fact, r.Fact.FiscalYear, value, unresolved),
+                        symbolsByStock.GetValueOrDefault(r.Fact.EquityIssuerId)
                     )
                 );
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "

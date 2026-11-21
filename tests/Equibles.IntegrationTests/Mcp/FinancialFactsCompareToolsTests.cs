@@ -153,9 +153,9 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
 
         var capture = scope.Get<FinancialFactComparisonCapture>();
         capture
-            .Rows.Select(row => (row.Ticker, row.Fact.Value))
+            .Rows.Select(row => (row.Ticker, row.Symbol, row.Fact.Value))
             .Should()
-            .Equal(("AAPL", 400_000_000_000m), ("MSFT", 211_000_000_000m));
+            .Equal(("AAPL", "AAPL", 400_000_000_000m), ("MSFT", "MSFT", 211_000_000_000m));
         capture
             .Notes.Should()
             .Contain(note => note.StartsWith("Skipped:") && note.Contains("GOOGL (no data)"));
