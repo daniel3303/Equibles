@@ -566,12 +566,12 @@ public class InsiderTradingTools
             t.TransactionDate,
             splits
         );
-        var plan = t.IsRule10b5One switch
-        {
-            true => "Yes",
-            false => "No",
-            null => "-",
-        };
+        // A filing older than the 2023 checkbox states no plan either way.
+        var plan = t.IsRule10b5One is { } planned
+            ? planned
+                ? "Yes"
+                : "No"
+            : "-";
         // The filed security title distinguishes several securities of the same kind (e.g. TSM common shares vs
         // ADS); the kind is the fallback when a filing names no title.
         var security = string.IsNullOrEmpty(t.SecurityTitle)
