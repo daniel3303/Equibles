@@ -141,6 +141,16 @@ public class StockPriceToolsCaptureTests : ParadeDbMcpTestBase
         capture.Values[1][^1].Should().Be(138m);
         text.Should().Contain("| 2026-04-09 | 140.00 |").And.Contain("| 138.00 |");
         capture.TotalInRange.Should().Be(40);
+        // A 5-bar band reads four bars before the first printed row (seeded one a day, so 04-03 to 04-06).
+        capture.ReadsBack.Should().Be(5);
+        capture
+            .WarmupDates.Should()
+            .Equal(
+                new DateOnly(2026, 4, 3),
+                new DateOnly(2026, 4, 4),
+                new DateOnly(2026, 4, 5),
+                new DateOnly(2026, 4, 6)
+            );
     }
 
     [Fact]

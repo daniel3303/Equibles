@@ -690,6 +690,7 @@ public class StockPriceTools
                     renderFrom,
                     maxResults,
                     holdNote,
+                    kPeriod + dPeriod - 1,
                     ("%K", k),
                     ("%D", d)
                 );
@@ -778,6 +779,9 @@ public class StockPriceTools
                     renderFrom,
                     maxResults,
                     holdNote,
+                    // Wilder smoothing never forgets; the warm-up's two periods are where the tool calls it settled.
+                    period * 2
+                        + 1,
                     ("ATR", atr)
                 );
 
@@ -854,6 +858,8 @@ public class StockPriceTools
                     0,
                     maxResults,
                     holdNote,
+                    // A day's step reads the close before it.
+                    2,
                     ("OBV", obv.Select(value => (decimal?)value).ToList())
                 );
 
@@ -940,6 +946,7 @@ public class StockPriceTools
                     renderFrom,
                     maxResults,
                     holdNote,
+                    period,
                     ("Lower", lower),
                     ("Middle", middle),
                     ("Upper", upper)
@@ -1027,10 +1034,12 @@ public class StockPriceTools
         int renderFrom,
         int maxResults,
         string holdNote,
+        int readsBack,
         params (string Name, IReadOnlyList<decimal?> Values)[] lines
     )
     {
         var first = Math.Max(renderFrom, records.Count - maxResults);
+        var warmupFrom = Math.Max(0, first - (readsBack - 1));
         McpResultCapture.Record(
             new StockIndicatorCapture(
                 CaptureListing(listing),
@@ -1042,7 +1051,13 @@ public class StockPriceTools
                     .Select(line => (IReadOnlyList<decimal?>)line.Values.Skip(first).ToList())
                     .ToList(),
                 records.Count - renderFrom,
-                holdNote
+                holdNote,
+                readsBack,
+                records
+                    .Skip(warmupFrom)
+                    .Take(first - warmupFrom)
+                    .Select(price => price.Date)
+                    .ToList()
             )
         );
     }

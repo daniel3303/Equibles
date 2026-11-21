@@ -4,7 +4,9 @@ namespace Equibles.Yahoo.Mcp.Captures;
 
 // What one technical-indicator answer showed, oldest first: the daily bars of the rows printed and, per line
 // (Lines[i]), the value printed on each bar (Values[i][bar]; null where the table prints a dash). Parameters
-// is the window the title states, and TotalInRange counts the rows the range held before maxResults cut it.
+// is the window the title states, and TotalInRange counts the rows the range held before maxResults cut it. Each
+// value reads ReadsBack bars ending at its own; WarmupDates are the bars before the first printed row that the first
+// rows read, oldest first, so a reader can tell which values a split inside that window reaches.
 public sealed record StockIndicatorCapture(
     StockPriceCaptureListing Listing,
     StockIndicatorKind Kind,
@@ -13,5 +15,7 @@ public sealed record StockIndicatorCapture(
     IReadOnlyList<PriceBar> Bars,
     IReadOnlyList<IReadOnlyList<decimal?>> Values,
     int TotalInRange,
-    string HoldNote
+    string HoldNote,
+    int ReadsBack,
+    IReadOnlyList<DateOnly> WarmupDates
 );
