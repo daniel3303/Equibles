@@ -26,6 +26,7 @@ using Equibles.Holdings.BusinessLogic.Ownership.Models;
 using Equibles.Holdings.BusinessLogic.Signals;
 using Equibles.Holdings.BusinessLogic.Signals.Models;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Mcp.Captures;
 using Equibles.Holdings.Mcp.Helpers;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Extensions;
@@ -261,6 +262,7 @@ public class InstitutionalHoldingsTools
                         Id = h.Id,
                         InstitutionalHolderId = h.InstitutionalHolderId,
                         InstitutionName = h.InstitutionalHolder.Name,
+                        Cik = h.InstitutionalHolder.Cik,
                         Shares = h.Shares,
                         Value = h.Value,
                         ReportDate = h.ReportDate,
@@ -301,7 +303,17 @@ public class InstitutionalHoldingsTools
                 // Totals and percentages stay over every institution; a filter only selects rows.
                 var totalShares = holdings.Sum(h => h.Shares);
                 var totalValue = holdings.Sum(h => h.Value);
-                var totalComposition = OptionShareComposition(holdings, totalShares);
+                var totalCallShares = holdings
+                    .Where(h => h.OptionType == OptionType.Call)
+                    .Sum(h => h.Shares);
+                var totalPutShares = holdings
+                    .Where(h => h.OptionType == OptionType.Put)
+                    .Sum(h => h.Shares);
+                var totalComposition = OptionShareComposition(
+                    totalShares,
+                    totalCallShares,
+                    totalPutShares
+                );
                 if (typeFilter != null)
                 {
                     await LoadEntityTypes(holdings);
@@ -343,6 +355,62 @@ public class InstitutionalHoldingsTools
                 if (styleFilter == null)
                     await LoadStyleBands(holdings, styleAsOf);
 
+                var carriedFrom = presentCombined
+                    ? RequirePreviousReportDate(anchor)
+                    : (DateOnly?)null;
+                var withheldCarried = presentCombined
+                    ? await HoldingsComparisonCoverage.WithheldHolderIds(
+                        _holdingRepository,
+                        targetDate,
+                        holdings
+                            .Where(h => h.ReportDate != targetDate)
+                            .Select(h => h.InstitutionalHolderId)
+                            .Distinct()
+                            .ToList()
+                    )
+                    : null;
+                McpResultCapture.Record(
+                    new TopHoldersCapture(
+                        stock,
+                        listedTicker,
+                        exactListingScope,
+                        targetDate,
+                        carriedFrom,
+                        reportDates,
+                        totalInstitutions,
+                        totalRows,
+                        offset,
+                        totalShares,
+                        totalValue,
+                        totalCallShares,
+                        totalPutShares,
+                        filterDescription,
+                        styleAsOf,
+                        holdings
+                            .Select(h => new TopHoldersCaptureRow(
+                                h.Id,
+                                h.InstitutionalHolderId,
+                                h.InstitutionName,
+                                h.Cik,
+                                h.Shares,
+                                h.Value,
+                                Percentage.Of(h.Shares, totalShares),
+                                h.ReportDate,
+                                h.ListedTicker,
+                                h.OptionType,
+                                h.ShareType,
+                                h.EntityType,
+                                h.StyleBand,
+                                IsCarried(h, carriedFrom),
+                                IsCarried(h, carriedFrom)
+                                    && withheldCarried != null
+                                    && withheldCarried.Contains(h.InstitutionalHolderId)
+                            ))
+                            .ToList(),
+                        carriedFrom == null ? withheld : []
+                    )
+                );
+
                 var table = RenderAdjustedTopHoldersTable(
                     stock,
                     ticker,
@@ -360,19 +428,9 @@ public class InstitutionalHoldingsTools
                     filterDescription,
                     styleAsOf,
                     totalComposition,
-                    presentCombined ? RequirePreviousReportDate(anchor) : null,
+                    carriedFrom,
                     withheld,
-                    presentCombined
-                        ? await HoldingsComparisonCoverage.WithheldHolderIds(
-                            _holdingRepository,
-                            targetDate,
-                            holdings
-                                .Where(h => h.ReportDate != targetDate)
-                                .Select(h => h.InstitutionalHolderId)
-                                .Distinct()
-                                .ToList()
-                        )
-                        : null
+                    withheldCarried
                 );
                 var advisedNote = await AdvisedFundsNote(
                     stock,
@@ -390,10 +448,8 @@ public class InstitutionalHoldingsTools
 
     // The total and the percent column count option rows at their underlying share count, so the
     // line says how much of the total is held outright whenever an option row is in it.
-    private static string OptionShareComposition(List<TopHolderRow> holdings, long totalShares)
+    private static string OptionShareComposition(long totalShares, long callShares, long putShares)
     {
-        var callShares = holdings.Where(h => h.OptionType == OptionType.Call).Sum(h => h.Shares);
-        var putShares = holdings.Where(h => h.OptionType == OptionType.Put).Sum(h => h.Shares);
         return callShares == 0 && putShares == 0
             ? null
             : $" ({McpFormat.WholeNumber(totalShares - callShares - putShares)} shares held outright; the total also counts calls on {McpFormat.WholeNumber(callShares)} and puts on {McpFormat.WholeNumber(putShares)} underlying shares)";
@@ -688,6 +744,7 @@ public class InstitutionalHoldingsTools
         public Guid Id { get; set; }
         public Guid InstitutionalHolderId { get; set; }
         public string InstitutionName { get; set; }
+        public string Cik { get; set; }
         public long Shares { get; set; }
         public long Value { get; set; }
         public DateOnly ReportDate { get; set; }
