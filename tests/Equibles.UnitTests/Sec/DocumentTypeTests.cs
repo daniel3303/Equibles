@@ -62,6 +62,10 @@ public class DocumentTypeTests
     [InlineData("N-CEN/A", "NCenA")]
     [InlineData("NPORT-P", "NportP")]
     [InlineData("NPORT-P/A", "NportPa")]
+    [InlineData("N-CSR", "NCsr")]
+    [InlineData("N-CSR/A", "NCsrA")]
+    [InlineData("N-CSRS", "NCsrs")]
+    [InlineData("N-CSRS/A", "NCsrsA")]
     [InlineData("DEF 14A", "Def14A")]
     public void FromDisplayName_ReturnsCorrectType(string displayName, string expectedValue)
     {

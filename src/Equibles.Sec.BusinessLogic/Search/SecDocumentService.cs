@@ -199,15 +199,7 @@ public class SecDocumentService : ISecDocumentService
 
         if (itemNumber != null)
         {
-            var first = itemNumber + ",";
-            var middle = "," + itemNumber + ",";
-            var last = "," + itemNumber;
-            query = query.Where(d =>
-                d.Items == itemNumber
-                || d.Items.StartsWith(first)
-                || d.Items.Contains(middle)
-                || d.Items.EndsWith(last)
-            );
+            query = query.ReportingItem(itemNumber);
         }
 
         return query;

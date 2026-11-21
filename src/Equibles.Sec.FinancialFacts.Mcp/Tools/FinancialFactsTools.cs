@@ -23,6 +23,7 @@ using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
+using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -40,17 +41,22 @@ public class FinancialFactsTools
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
+    private readonly DocumentRepository _documentRepository;
     private readonly McpToolRunner _runner;
 
+    // The document repository is optional: a host without the filings module has no stored
+    // earnings release to point at.
     public FinancialFactsTools(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
         EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
-        ILogger<FinancialFactsTools> logger
+        ILogger<FinancialFactsTools> logger,
+        DocumentRepository documentRepository = null
     )
     {
+        _documentRepository = documentRepository;
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
@@ -69,7 +75,9 @@ public class FinancialFactsTools
             + "Each row carries its actual period start/end; fiscal years/quarters follow the "
             + "company's own fiscal calendar. Warns when the selected alias ends materially "
             + "before the company's other structured facts, which can indicate an XBRL tag "
-            + "change. Dimensioned disclosures such as customer concentration are outside this "
+            + "change. Names the stored earnings release (8-K) when one was filed after the "
+            + "latest periodic report, since its period has no structured facts yet. "
+            + "Dimensioned disclosures such as customer concentration are outside this "
             + "consolidated-series tool. For a full statement use GetFinancialStatement; to "
             + "compare peers use CompareFinancialFact."
     )]
@@ -223,8 +231,21 @@ public class FinancialFactsTools
 
                 var shown = perPeriod.Take(Math.Clamp(maxResults, 1, MaxResultsCap)).ToList();
 
+                // A request bounded to history is not asking for the period the release covers.
+                var newerRelease = await NewerEarningsRelease.Find(
+                    _financialFactRepository,
+                    _documentRepository,
+                    stock.Id
+                );
+                var releaseNote =
+                    newerRelease != null
+                    && (toBound == null || toBound.Value > newerRelease.LatestPeriodEnd)
+                        ? newerRelease.Note
+                        : "";
+
                 if (shown.Count == 0)
-                    return $"No '{concept}' data found for {EquityListingSymbol.Display(stock)} with the given filters.";
+                    return $"No '{concept}' data found for {EquityListingSymbol.Display(stock)} with the given filters."
+                        + releaseNote;
 
                 var splits = shown.Any(f => SplitKind(f, conceptsById) != FactSplitKind.None)
                     ? await _stockSplitRepository
@@ -256,6 +277,11 @@ public class FinancialFactsTools
                         stock.FiscalYearLabelOffset
                     )
                     : null;
+                table += releaseNote;
+                if (releaseNote.Length > 0)
+                {
+                    notes.Add(releaseNote.Trim().Trim('_'));
+                }
                 if (tagWarning != null)
                 {
                     var warning =
