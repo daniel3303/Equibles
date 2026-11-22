@@ -326,7 +326,7 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
             .Notes.Should()
             .Equal(
                 "Showing the first 1 of 2 release dates, through 2026-06-05.",
-                "1 release date(s) below High importance are left out to fit the 1-row limit."
+                "1 less important release date is left out."
             );
     }
 }

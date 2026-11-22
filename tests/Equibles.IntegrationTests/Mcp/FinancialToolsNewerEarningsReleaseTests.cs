@@ -231,8 +231,7 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
 
     // A card reader can neither open a document by its ID nor call a tool, so the card names the release only.
     private const string ReleaseCardNote =
-        "An earnings release was filed 2026-11-17 (8-K), after the latest periodic report in these facts "
-        + "(filed 2026-08-26, period ended 2026-07-26). Where it reports a later period, these facts do not hold its figures.";
+        "An earnings release filed 2026-11-17 may report a later period than these figures.";
 
     [Fact]
     public async Task GetFinancialFact_NewerRelease_CardNoteNamesTheRelease()
