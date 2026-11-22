@@ -29,11 +29,9 @@ public sealed record NewerEarningsRelease(
         + "not hold its figures: read them from the release with SearchDocument or ReadDocumentLines "
         + "using that document ID._\n";
 
-    // The same note for a card, whose reader cannot open a document by its ID or call a tool, so it names the release only.
+    // The same note for a card: one short line for its reader, who cannot open a document by its ID or call a tool.
     public string CardNote =>
-        $"An earnings release was filed {FiledDate:yyyy-MM-dd} (8-K), after the latest periodic report in these facts "
-        + $"(filed {LatestPeriodicFiledDate:yyyy-MM-dd}, period ended {LatestPeriodEnd:yyyy-MM-dd}). Where it reports a "
-        + "later period, these facts do not hold its figures.";
+        $"An earnings release filed {FiledDate:yyyy-MM-dd} may report a later period than these figures.";
 
     // A release filed the same day as the periodic report is already covered by it, and one filed
     // before another quarter could have ended restates the reported quarter (many filers publish

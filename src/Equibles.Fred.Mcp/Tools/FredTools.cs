@@ -566,7 +566,7 @@ public class FredTools
                         );
                     if (leftOut > 0)
                         notes.Add(
-                            $"{leftOut} release date(s) below {shownTier} importance are left out to fit the {maxResults}-row limit."
+                            $"{leftOut} less important release date{(leftOut == 1 ? " is" : "s are")} left out."
                         );
                     McpResultCapture.Record(
                         new EconomicCalendarCapture(

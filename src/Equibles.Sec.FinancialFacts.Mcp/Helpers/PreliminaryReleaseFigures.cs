@@ -23,6 +23,10 @@ internal static class PreliminaryReleaseFigures
         + "They are the release's own figures, a later filing can state them differently, "
         + "and no calculated value uses them.";
 
+    // The card's one line for the same block.
+    internal const string CardLead =
+        "Preliminary figures from the earnings release; a later filing can state them differently.";
+
     internal static Task<List<ReleaseStatementFigure>> Load(
         ReleaseStatementFigureRepository figures,
         FinancialFactRepository facts,

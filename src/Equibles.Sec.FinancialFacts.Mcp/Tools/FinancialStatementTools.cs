@@ -238,20 +238,28 @@ public class FinancialStatementTools
                                 newer.FiscalPeriod
                             )
                             : "";
+                        // A card keeps two notes, so what changes the reading of every figure comes first.
                         McpResultCapture.Record(
                             capture with
                             {
                                 Notes =
                                 [
-                                    .. capture.Notes,
                                     .. new[]
                                     {
-                                        note.Trim().Trim('_'),
-                                        preliminary.Length > 0 ? PreliminaryReleaseFigures.Lead
+                                        preliminary.Length > 0 ? PreliminaryReleaseFigures.CardLead
                                         : newerRelease != null && releaseNote.Length > 0
                                             ? newerRelease.CardNote
                                         : "",
+                                        skipped is { } skippedPeriod
+                                            ? SkippedPeriodCardNote(
+                                                stock,
+                                                statementType,
+                                                skippedPeriod.FiscalYear,
+                                                skippedPeriod.FiscalPeriod
+                                            )
+                                            : "",
                                     }.Where(text => text.Length > 0),
+                                    .. capture.Notes,
                                 ],
                             }
                         );
@@ -535,6 +543,15 @@ public class FinancialStatementTools
         + $"{statementType.NameForHumans().ToLowerInvariant()} line items this tool can show, so "
         + "the newest period that has them is shown._\n";
 
+    private static string SkippedPeriodCardNote(
+        EquityIssuer stock,
+        FinancialStatementType statementType,
+        int fiscalYear,
+        SecFiscalPeriod fiscalPeriod
+    ) =>
+        $"FY{FiscalYearLabel.For(fiscalYear, stock)} {fiscalPeriod.NameForHumans()} is newer but has no "
+        + $"{statementType.NameForHumans().ToLowerInvariant()} lines yet.";
+
     private static (string Table, FinancialStatementCapture Capture) RenderStatementTable(
         EquityIssuer stock,
         FinancialStatementType statementType,
@@ -647,24 +664,36 @@ public class FinancialStatementTools
         if (rendered == 0)
             return (null, null);
 
-        void Note(string text)
+        // The answer prints each note in full; its card takes a short line for its reader, most important first.
+        void Note(string text, string card)
         {
             result.AppendLine($"\n_{text}_");
-            notes.Add(text);
+            notes.Add(card);
         }
         if (omitted > 0)
-            Note("Line items the filer did not report for this period are omitted.");
+            result.AppendLine(
+                "\n_Line items the filer did not report for this period are omitted._"
+            );
 
         if (splitAdjusted)
-            Note(FinancialFactSplitAdjustment.Note);
+            Note(FinancialFactSplitAdjustment.Note, FinancialFactSplitAdjustment.CardNote);
         if (unresolvedBasis)
-            Note(FinancialFactSplitAdjustment.UnresolvedNote);
+            Note(
+                FinancialFactSplitAdjustment.UnresolvedNote,
+                FinancialFactSplitAdjustment.UnresolvedCardNote
+            );
         if (grossProfitReplaced)
-            Note(GrossProfitMistag.ReplacedNote);
+            Note(
+                GrossProfitMistag.ReplacedNote,
+                "Gross Profit is Revenue − Cost of Revenue where the tagged figure was operating income."
+            );
         if (depreciationSummed)
-            Note(DepreciationTotal.SumNote);
+            Note(
+                DepreciationTotal.SumNote,
+                "Depreciation & amortization adds the reported parts where no total is tagged."
+            );
         if (FiscalYearLabel.Note(stock) is { } namingNote)
-            Note(namingNote);
+            Note(namingNote, "Fiscal years are named for the calendar year they start in.");
 
         if (
             selectedPeriod != SecFiscalPeriod.FullYear
@@ -673,7 +702,8 @@ public class FinancialStatementTools
             Note(
                 "All flow rows span one discrete quarter. A Derived quarter is exact "
                     + "subtraction of consecutive cumulative facts with the same concept, "
-                    + "currency and fiscal-year start; an unprovable YTD-only line is omitted."
+                    + "currency and fiscal-year start; an unprovable YTD-only line is omitted.",
+                "Each row is one quarter; Derived rows are computed from year-to-date totals."
             );
 
         // Each line independently takes its latest restatement, so one
@@ -682,8 +712,11 @@ public class FinancialStatementTools
         if (earliestFiled != latestFiled)
             Note(
                 $"Values reflect the latest restatement per line; source filings span "
-                    + $"{earliestFiled:yyyy-MM-dd} to {latestFiled:yyyy-MM-dd} — see the Filed column."
+                    + $"{earliestFiled:yyyy-MM-dd} to {latestFiled:yyyy-MM-dd} — see the Filed column.",
+                "Each line takes its latest restatement, so filing dates differ."
             );
+        if (omitted > 0)
+            notes.Add("Lines the company did not report are left out.");
 
         return (
             result.ToString(),
