@@ -323,10 +323,19 @@ public class FredReleaseCalendarImportServiceTests : IDisposable
     [Fact]
     public async Task Import_UpcomingDateFredNoLongerLists_IsRemovedAndPastDatesStay()
     {
+        // The import drops every date of a release FRED lists on a weekend (a carry-forward fill), so
+        // the listed dates are weekdays whatever day the suite runs; it failed on Sundays and Mondays.
+        static DateOnly Weekday(DateOnly date) =>
+            date.DayOfWeek switch
+            {
+                DayOfWeek.Saturday => date.AddDays(2),
+                DayOfWeek.Sunday => date.AddDays(1),
+                _ => date,
+            };
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var past = today.AddDays(-40);
-        var dropped = today.AddDays(20);
-        var moved = today.AddDays(48);
+        var dropped = Weekday(today.AddDays(20));
+        var moved = Weekday(today.AddDays(48));
         var release = new FredRelease { ReleaseId = 50, Name = "Employment Situation" };
         _releaseRepo.Add(release);
         await _releaseRepo.SaveChanges();
