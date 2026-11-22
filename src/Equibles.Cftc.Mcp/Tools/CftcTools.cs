@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using Equibles.Cftc.Data.Models;
-using Equibles.Cftc.Mcp.Captures;
+using Equibles.Cftc.Mcp.Models;
 using Equibles.Cftc.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -119,17 +119,6 @@ public class CftcTools
                     r =>
                         $"| {r.ReportDate:yyyy-MM-dd} | {r.OpenInterestText} | {r.CommercialLongText} | {r.CommercialShortText} | {r.NonCommercialLongText} | {r.NonCommercialShortText} | {r.NonCommercialSpreadsText} |"
                 );
-                if (rows.Count > 0)
-                    McpResultCapture.Record(
-                        new CftcPositioningCapture(
-                            contract.MarketName,
-                            contract.MarketCode,
-                            contract.Category.NameForHumans(),
-                            rows,
-                            total
-                        )
-                    );
-
                 if (reports.Count < total)
                     table +=
                         Environment.NewLine

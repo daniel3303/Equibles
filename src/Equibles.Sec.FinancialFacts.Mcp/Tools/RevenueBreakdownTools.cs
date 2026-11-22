@@ -11,7 +11,6 @@ using Equibles.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Statements;
-using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -188,8 +187,6 @@ public class RevenueBreakdownTools
                     );
 
                 var years = Math.Clamp(maxYears, 1, MaxYearsCap);
-                var captured = new List<RevenueBreakdownCaptureTable>();
-                var notes = new List<string>();
                 var result = new StringBuilder();
                 result.AppendLine(
                     $"Revenue breakdown for {EquityListingSymbol.Display(stock)} ({FactMarkdown.Cell(stock.Name)}) — "
@@ -197,23 +194,20 @@ public class RevenueBreakdownTools
                 );
                 if (rows.Count == 0)
                 {
-                    const string none =
-                        "No dimensional revenue tagging is on record; segment profitability "
-                        + "below is shown only when the issuer separately tags it.";
-                    result.AppendLine($"_{none}_");
-                    notes.Add(none);
+                    result.AppendLine(
+                        "_No dimensional revenue tagging is on record; segment profitability "
+                            + "below is shown only when the issuer separately tags it._"
+                    );
                 }
                 else
                 {
-                    const string asTagged =
-                        "Components are shown exactly as the issuer tags them: a renamed member "
-                        + "appears as a new row, so '—' gaps can reflect renames or "
-                        + "reclassifications rather than zero revenue.";
-                    result.AppendLine($"_{asTagged}_");
-                    notes.Add(asTagged);
+                    result.AppendLine(
+                        "_Components are shown exactly as the issuer tags them: a renamed member "
+                            + "appears as a new row, so '—' gaps can reflect renames or "
+                            + "reclassifications rather than zero revenue._"
+                    );
                     AppendAxis(
                         result,
-                        captured,
                         "By segment",
                         rows,
                         RevenueBreakdownCore.SegmentAxes,
@@ -223,7 +217,6 @@ public class RevenueBreakdownTools
                     );
                     AppendAxis(
                         result,
-                        captured,
                         "By geography",
                         rows,
                         RevenueBreakdownCore.GeographyAxes,
@@ -233,7 +226,6 @@ public class RevenueBreakdownTools
                     );
                     AppendAxis(
                         result,
-                        captured,
                         "By product & service",
                         rows,
                         RevenueBreakdownCore.ProductAxes,
@@ -245,7 +237,6 @@ public class RevenueBreakdownTools
 
                 var hasSegmentOperatingIncome = await AppendSegmentOperatingIncome(
                     result,
-                    captured,
                     stock,
                     years,
                     rows,
@@ -255,8 +246,6 @@ public class RevenueBreakdownTools
                     return $"{EquityListingSymbol.Display(stock)} has no dimensional revenue or segment operating "
                         + "income tagging on record.";
 
-                if (captured.Count > 0)
-                    McpResultCapture.Record(new RevenueBreakdownCapture(stock, captured, notes));
                 return result.ToString();
             },
             "GetRevenueBreakdown",
@@ -385,7 +374,6 @@ public class RevenueBreakdownTools
     // (its own consolidated totals) and never mixed into the revenue tables above.
     private async Task<bool> AppendSegmentOperatingIncome(
         StringBuilder result,
-        List<RevenueBreakdownCaptureTable> captured,
         EquityIssuer stock,
         int years,
         List<DimensionalRevenueRow> revenueRows,
@@ -451,7 +439,6 @@ public class RevenueBreakdownTools
 
         AppendAxis(
             result,
-            captured,
             "Segment operating income",
             rows,
             RevenueBreakdownCore.SegmentAxes,
@@ -461,12 +448,11 @@ public class RevenueBreakdownTools
             totalLabel: "Total operating income (consolidated)",
             checkOverlap: false
         );
-        const string unallocated =
-            "Segment operating income is tagged on the same business-segment axis as the revenue "
-            + "facts; unallocated corporate costs mean the members need not add up to "
-            + "consolidated operating income.";
-        result.AppendLine($"_{unallocated}_");
-        captured[^1] = captured[^1] with { Notes = [.. captured[^1].Notes, unallocated] };
+        result.AppendLine(
+            "_Segment operating income is tagged on the same business-segment axis as the revenue "
+                + "facts; unallocated corporate costs mean the members need not add up to "
+                + "consolidated operating income._"
+        );
 
         var revenueSeries = RevenueBreakdownCore.BuildAxisSeries(
             revenueRows,
@@ -481,20 +467,10 @@ public class RevenueBreakdownTools
         if (marginSeries.Members.Count > 0)
         {
             AppendSeriesTable(result, "Segment operating margin", marginSeries);
-            const string derived =
-                "Derived as segment operating income ÷ revenue × 100 only where the same folded "
-                + "raw member QName and exact period match and revenue is positive; missing cells "
-                + "are not estimated.";
-            result.AppendLine($"_{derived}_");
-            captured.Add(
-                new RevenueBreakdownCaptureTable(
-                    "Segment operating margin",
-                    marginSeries,
-                    null,
-                    [],
-                    [derived],
-                    Additive: false
-                )
+            result.AppendLine(
+                "_Derived as segment operating income ÷ revenue × 100 only where the same folded "
+                    + "raw member QName and exact period match and revenue is positive; missing cells "
+                    + "are not estimated._"
             );
         }
 
@@ -509,7 +485,6 @@ public class RevenueBreakdownTools
 
     private static void AppendAxis(
         StringBuilder result,
-        List<RevenueBreakdownCaptureTable> captured,
         string title,
         List<DimensionalRevenueRow> rows,
         string[] axes,
@@ -542,10 +517,8 @@ public class RevenueBreakdownTools
                     : "—"
             )
             .ToList();
-        var printsTotal = totalCells.Any(c => c != "—");
-        if (printsTotal)
+        if (totalCells.Any(c => c != "—"))
             result.AppendLine($"| **{totalLabel}** | " + string.Join(" | ", totalCells) + " |");
-        var tableNotes = new List<string>();
 
         // An issuer can tag a parent level alongside its components on the same
         // axis (XOM's Canada highlight inside Non-US; NVDA's Data Center next to
@@ -554,24 +527,19 @@ public class RevenueBreakdownTools
         // over consolidated revenue — say so rather than let a consumer
         // double-count.
         var overlaps = false;
-        var checkedPeriods = 0;
         for (var i = 0; i < periodEnds.Count && !overlaps && checkOverlap; i++)
         {
             if (!displayTotals.TryGetValue((periodEnds[i], unit), out var total) || total == 0m)
                 continue;
-            checkedPeriods++;
             var memberSum = members.Sum(m => m.Values[i] ?? 0m);
             overlaps = memberSum - total > Math.Abs(total) * OverlapNoteTolerance;
         }
         if (overlaps)
-        {
-            const string overlapNote =
-                "Rows on this axis overlap: the issuer tags more than one granularity "
-                + "(a parent component alongside its parts), so rows must NOT be summed — "
-                + "reconcile against the consolidated total row.";
-            result.AppendLine($"\n_{overlapNote}_");
-            tableNotes.Add(overlapNote);
-        }
+            result.AppendLine(
+                "\n_Rows on this axis overlap: the issuer tags more than one granularity "
+                    + "(a parent component alongside its parts), so rows must NOT be summed — "
+                    + "reconcile against the consolidated total row._"
+            );
 
         // Older fiscal years beyond maxYears exist — say so instead of letting
         // the series read as the full history.
@@ -580,36 +548,13 @@ public class RevenueBreakdownTools
             .Distinct()
             .Count();
         if (availableYears > periodEnds.Count)
-        {
-            var olderNote =
+            result.AppendLine(
                 periodEnds.Count >= MaxYearsCap
-                    ? $"Showing the latest {periodEnds.Count} of {availableYears} fiscal "
-                        + "years (the tool's maximum)."
-                    : $"Showing the latest {periodEnds.Count} of {availableYears} fiscal "
-                        + $"years — raise maxYears (max {MaxYearsCap}) to see more.";
-            result.AppendLine($"\n_{olderNote}_");
-            tableNotes.Add(olderNote);
-        }
-
-        captured.Add(
-            new RevenueBreakdownCaptureTable(
-                title,
-                series,
-                printsTotal ? totalLabel : null,
-                printsTotal
-                    ? periodEnds
-                        .Select(p =>
-                            displayTotals.TryGetValue((p, unit), out var total)
-                                ? total
-                                : (decimal?)null
-                        )
-                        .ToList()
-                    : [],
-                tableNotes,
-                // A year without a consolidated total cannot be checked, so it leaves the rows unproven.
-                Additive: checkOverlap && !overlaps && checkedPeriods == periodEnds.Count
-            )
-        );
+                    ? $"\n_Showing the latest {periodEnds.Count} of {availableYears} fiscal "
+                        + "years (the tool's maximum)._"
+                    : $"\n_Showing the latest {periodEnds.Count} of {availableYears} fiscal "
+                        + $"years — raise maxYears (max {MaxYearsCap}) to see more._"
+            );
     }
 
     private static void AppendSeriesTable(StringBuilder result, string title, AxisSeries series)

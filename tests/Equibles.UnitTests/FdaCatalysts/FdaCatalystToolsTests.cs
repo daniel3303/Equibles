@@ -4,10 +4,8 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.FdaCatalysts.Data;
 using Equibles.FdaCatalysts.Data.Models;
-using Equibles.FdaCatalysts.Mcp.Captures;
 using Equibles.FdaCatalysts.Mcp.Tools;
 using Equibles.FdaCatalysts.Repositories;
-using Equibles.Mcp;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -81,16 +79,8 @@ public class FdaCatalystToolsTests
         );
         await ctx.SaveChangesAsync();
 
-        using var scope = McpResultCapture.Begin();
         var result = await Tools(ctx).GetFdaAdvisoryCommitteeMeetings();
 
-        // A card beside the answer reads the same meeting, every cell as printed.
-        var row = scope.Get<FdaMeetingsCapture>().Meetings.Should().ContainSingle().Subject;
-        result
-            .Should()
-            .Contain(
-                $"| {row.MeetingDate:yyyy-MM-dd} | {row.Title} | {row.Center} | {row.Type} | {row.Through} | {row.Url} |"
-            );
         result
             .Should()
             .Contain(

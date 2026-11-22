@@ -299,7 +299,6 @@ public class StockPriceTools
                 // Quote unit of each venue row, named in a note because the table has no currency column.
                 var venueUnits = new Dictionary<string, string>(StringComparer.Ordinal);
                 var placeholderByTicker = new Dictionary<string, string>();
-                var captureRows = new List<LatestClosingPriceCaptureRow>();
                 var hold = await GetHold();
 
                 foreach (var ticker in tickerList)
@@ -363,7 +362,6 @@ public class StockPriceTools
                     if (!latestByTicker.TryGetValue(ticker, out var selection))
                     {
                         result.AppendLine(PlaceholderRow(ticker, placeholderByTicker[ticker]));
-                        captureRows.Add(PlaceholderCaptureRow(ticker, placeholderByTicker[ticker]));
                         continue;
                     }
 
@@ -486,21 +484,6 @@ public class StockPriceTools
                     splitLimitedWindow |= rangeWindow.IsSplitLimited;
 
                     rowDates.Add(price.Date);
-                    captureRows.Add(
-                        new LatestClosingPriceCaptureRow(
-                            rowSymbol,
-                            CaptureListing(listing),
-                            null,
-                            price.Date,
-                            price.Close,
-                            dayChange,
-                            dayChangePercent,
-                            price.Volume,
-                            range?.High,
-                            range?.Low,
-                            cells.Starred
-                        )
-                    );
                     result.AppendLine(
                         $"| {rowSymbol} | {price.Date:yyyy-MM-dd} | {McpFormat.Price(price.Close)} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} | {cells.High} | {cells.Low} | {cells.OffHigh} | {cells.AboveLow} |"
                     );
@@ -594,7 +577,6 @@ public class StockPriceTools
                     result.AppendLine(
                         PlaceholderRow(MarkdownTable.EscapeCell(segment), "Invalid ticker")
                     );
-                    captureRows.Add(PlaceholderCaptureRow(segment, "Invalid ticker"));
                 }
                 if (invalidSegments.Count > 0)
                 {
@@ -611,9 +593,6 @@ public class StockPriceTools
                     );
                 }
 
-                McpResultCapture.Record(
-                    new LatestClosingPricesCapture(captureRows, unread, hold?.Note)
-                );
                 return WithHoldNote(result.ToString(), hold?.Note);
             },
             "GetLatestClosingPrices",
@@ -1528,11 +1507,6 @@ public class StockPriceTools
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
     // keeping the em-dash columns identical across the per-ticker fallback branches.
     private const int MaxLatestPriceTickers = 25;
-
-    private static LatestClosingPriceCaptureRow PlaceholderCaptureRow(
-        string ticker,
-        string status
-    ) => new(ticker, null, status, null, null, null, null, null, null, null, false);
 
     private static string PlaceholderRow(string ticker, string status) =>
         $"| {ticker} | — | {status} | — | — | — | — | — | — | — |";

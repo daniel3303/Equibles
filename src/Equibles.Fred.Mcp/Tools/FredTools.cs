@@ -275,7 +275,6 @@ public class FredTools
                 );
 
                 var currentCategory = (FredSeriesCategory?)null;
-                var rows = new List<LatestEconomicIndicatorRow>();
 
                 foreach (var series in allSeries)
                 {
@@ -304,12 +303,8 @@ public class FredTools
                     result.AppendLine(
                         $"| {series.SeriesId} | {series.Title} | {dateStr} | {valueStr} | {previousStr} | {changeStr} | {series.Units} | {FrequencyName(series.Frequency)} |"
                     );
-                    rows.Add(
-                        new LatestEconomicIndicatorRow(series, latestObs, previousObs, change)
-                    );
                 }
 
-                McpResultCapture.Record(new LatestEconomicIndicatorsCapture(countryCode, rows));
                 return result.ToString();
             },
             "GetLatestEconomicIndicators",
@@ -554,37 +549,6 @@ public class FredTools
                         Environment.NewLine
                         + $"{leftOut} release date(s) below {shownTier} importance are left out to fit maxResults ({maxResults}). Narrow the date range or raise maxResults (max 500) to see them."
                         + Environment.NewLine;
-                }
-
-                // The card states the same cuts, without the answer's advice on arguments.
-                if (entries.Count > 0)
-                {
-                    var notes = new List<string>();
-                    if (truncated)
-                        notes.Add(
-                            $"Showing the first {entries.Count} of {total} release dates, through {entries[^1].Date:yyyy-MM-dd}."
-                        );
-                    if (leftOut > 0)
-                        notes.Add(
-                            $"{leftOut} less important release date{(leftOut == 1 ? " is" : "s are")} left out."
-                        );
-                    McpResultCapture.Record(
-                        new EconomicCalendarCapture(
-                            start,
-                            end,
-                            entries
-                                .Select(e => new EconomicCalendarEntry(
-                                    e.Date,
-                                    e.CountryCode,
-                                    e.ReleaseName,
-                                    e.ReferencePeriod,
-                                    e.Importance,
-                                    e.Series
-                                ))
-                                .ToList(),
-                            notes
-                        )
-                    );
                 }
 
                 return table;

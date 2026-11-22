@@ -1,4 +1,4 @@
-namespace Equibles.Cftc.Mcp.Captures;
+namespace Equibles.Cftc.Mcp.Models;
 
 // One weekly COT report of a GetCftcPositioning answer: the contract counts behind its cells, and each cell as printed.
 public sealed record CftcReportRow(

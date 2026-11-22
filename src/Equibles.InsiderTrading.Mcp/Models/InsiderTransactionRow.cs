@@ -1,4 +1,4 @@
-namespace Equibles.InsiderTrading.Mcp.Captures;
+namespace Equibles.InsiderTrading.Mcp.Models;
 
 // One row of a GetInsiderTransactions answer as printed, with the filed values behind its number cells and whether it
 // is an open-market purchase or sale.
