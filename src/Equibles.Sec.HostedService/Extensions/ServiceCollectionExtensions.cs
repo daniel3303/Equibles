@@ -47,6 +47,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DocumentNormalizationBackfillService>();
         services.AddScoped<DocumentImageService>();
         services.AddScoped<FilingItemsBackfillService>();
+        services.AddScoped<FundReportPeriodBackfillService>();
         services.AddScoped<ChunkTickerConvergenceService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
         services.AddScoped<IFilingDiscoveryService, FilingDiscoveryService>();
@@ -62,6 +63,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<XbrlDocumentSetRecaptureWorker>();
         services.AddHostedService<DocumentNormalizationBackfillWorker>();
         services.AddHostedService<FilingItemsBackfillWorker>();
+        services.AddHostedService<FundReportPeriodBackfillWorker>();
         services.AddHostedService<InsiderFilingReprocessWorker>();
         services.AddHostedService<Form144FilerCikBackfillWorker>();
         services.AddHostedService<NportFilingReprocessWorker>();

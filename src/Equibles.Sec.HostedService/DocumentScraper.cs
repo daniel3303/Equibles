@@ -1208,13 +1208,23 @@ public class DocumentScraper : IDocumentScraper
                         return false;
                 }
 
+                // EDGAR's index leaves some fund reports' period blank; their cover states it.
+                var reportingForDate = filing.ReportDate;
+                if (
+                    reportingForDate == DateOnly.MinValue
+                    && FundReportCoverPeriod.AppliesTo(documentType)
+                )
+                    reportingForDate =
+                        FundReportCoverPeriod.Read(markdownDocument, filing.FilingDate)
+                        ?? DateOnly.MinValue;
+
                 await persistenceService.Save(
                     company,
                     Encoding.UTF8.GetBytes(markdownDocument),
                     $"{(company.Presentation?.Listing?.Ticker ?? company.Cik)}_{documentType.DisplayName}_{filing.FilingDate:yyyy-MM-dd}.txt",
                     documentType,
                     filing.FilingDate,
-                    filing.ReportDate,
+                    reportingForDate,
                     filing.DocumentUrl,
                     filing.AccessionNumber,
                     filing.Items,
