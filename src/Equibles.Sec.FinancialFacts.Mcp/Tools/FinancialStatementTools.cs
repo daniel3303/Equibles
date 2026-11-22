@@ -549,8 +549,8 @@ public class FinancialStatementTools
         int fiscalYear,
         SecFiscalPeriod fiscalPeriod
     ) =>
-        $"FY{FiscalYearLabel.For(fiscalYear, stock)} {fiscalPeriod.NameForHumans()} is newer but has no "
-        + $"{statementType.NameForHumans().ToLowerInvariant()} lines yet.";
+        $"FY{FiscalYearLabel.For(fiscalYear, stock)} {fiscalPeriod.NameForHumans()} is newer, but none of its "
+        + $"{statementType.NameForHumans().ToLowerInvariant()} figures can be shown here.";
 
     private static (string Table, FinancialStatementCapture Capture) RenderStatementTable(
         EquityIssuer stock,
@@ -703,7 +703,7 @@ public class FinancialStatementTools
                 "All flow rows span one discrete quarter. A Derived quarter is exact "
                     + "subtraction of consecutive cumulative facts with the same concept, "
                     + "currency and fiscal-year start; an unprovable YTD-only line is omitted.",
-                "Each row is one quarter; Derived rows are computed from year-to-date totals."
+                "Each row is one quarter; Derived quarter rows are computed from year-to-date totals."
             );
 
         // Each line independently takes its latest restatement, so one

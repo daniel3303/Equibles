@@ -2,9 +2,11 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Mcp.Captures;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -35,9 +37,16 @@ public class FinancialStatementToolsHalfYearFilerTests : ParadeDbMcpTestBase
     {
         await SeedHsbc();
 
+        using var scope = McpResultCapture.Begin();
         var result = await Sut().GetFinancialStatement("HSBC", statement: "income");
 
         result.Should().Contain("Income Statement for HSBC (Hsbc Holdings PLC) — FY2025 FY:");
+        // The skipped half has figures, just none a quarterly statement can show, so the card never says "none yet".
+        scope
+            .Get<FinancialStatementCapture>()
+            .Notes[0]
+            .Should()
+            .Be("FY2026 Q2 is newer, but none of its income statement figures can be shown here.");
         result
             .Should()
             .Contain("| Net Income | $23,131,000,000 | USD | Reported | 2025-01-01 | 2025-12-31 |");
