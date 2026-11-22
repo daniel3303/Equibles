@@ -308,25 +308,4 @@ public class FredToolsGetEconomicCalendarTests : ParadeDbMcpTestBase
 
         result.Should().Contain("No economic releases between 2026-09-01 and 2026-09-30.");
     }
-
-    // A card beside the answer gets the rows the answer kept and both cuts in a reader's words.
-    [Fact]
-    public async Task GetEconomicCalendar_RecordsTheRowsItListed()
-    {
-        using var scope = McpResultCapture.Begin();
-        await Sut().GetEconomicCalendar("2026-06-01", "2026-06-30", maxResults: 1);
-
-        var capture = scope.Get<EconomicCalendarCapture>();
-        var entry = capture.Entries.Should().ContainSingle().Subject;
-        entry.Date.Should().Be(new DateOnly(2026, 6, 5));
-        entry.ReleaseName.Should().Be("Employment Situation");
-        entry.Importance.Should().Be(FredReleaseImportance.High);
-        entry.Series.Should().Equal("UNRATE");
-        capture
-            .Notes.Should()
-            .Equal(
-                "Showing the first 1 of 2 release dates, through 2026-06-05.",
-                "1 less important release date is left out."
-            );
-    }
 }

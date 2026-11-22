@@ -1,4 +1,4 @@
-namespace Equibles.Finra.Mcp.Captures;
+namespace Equibles.Finra.Mcp.Models;
 
 // One settlement of a GetShortInterest answer: the restated figures behind its cells and each cell as printed.
 public sealed record ShortInterestRow(

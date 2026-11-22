@@ -9,10 +9,8 @@ using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
 using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Models;
-using Equibles.InsiderTrading.Mcp.Captures;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.InsiderTrading.Repositories;
-using Equibles.Mcp;
 using Equibles.Media.Data;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -156,20 +154,10 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
         db.Add(transaction);
         await db.SaveChangesAsync();
 
-        using var scope = McpResultCapture.Begin();
         var output = await Sut(db).GetInsiderTransactions("AAPL");
 
         output.Should().Contain("| Date | Filed | Insider |");
         output.Should().Contain("| 2024-03-14 | 2024-03-19 | John Doe |");
-        // A card beside the answer reads the same row: its printed cells and the filed values behind them.
-        var row = scope.Get<InsiderTransactionsCapture>().Rows.Should().ContainSingle().Subject;
-        output
-            .Should()
-            .Contain(
-                $"| {row.Date:yyyy-MM-dd} | {row.Filed:yyyy-MM-dd} | {row.Insider} | {row.Role} | {row.Type} | {row.SharesText} | {row.PriceText} | {row.ValueText} | {row.OwnedAfterText} | {row.Security} | {row.Ownership} | {row.Plan} |"
-            );
-        row.Should()
-            .Match<InsiderTransactionRow>(r => r.OpenMarket && r.IsPurchase && r.Value == 100_000m);
     }
 
     [Fact]

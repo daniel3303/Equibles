@@ -684,19 +684,4 @@ public class FredToolsTests : ParadeDbMcpTestBase
         capture.TotalInRange.Should().Be(5);
         capture.Notes.Should().Equal("Showing the newest 2 of 5 observations in the range.");
     }
-
-    [Fact]
-    public async Task GetLatestEconomicIndicators_RecordsEachRowWithTheChangeItPrinted()
-    {
-        using var scope = McpResultCapture.Begin();
-        await Sut().GetLatestEconomicIndicators("InterestRates");
-
-        var capture = scope.Get<LatestEconomicIndicatorsCapture>();
-        capture.CountryCode.Should().Be("US");
-        var row = capture.Rows.Should().ContainSingle().Subject;
-        row.Series.SeriesId.Should().Be("FEDFUNDS");
-        row.Latest.Value.Should().Be(4.00m);
-        row.Previous.Value.Should().Be(4.25m);
-        row.Change.Should().Be(-0.25m);
-    }
 }

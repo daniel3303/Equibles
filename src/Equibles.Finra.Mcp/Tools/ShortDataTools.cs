@@ -13,8 +13,8 @@ using Equibles.Errors.Data.Models;
 using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.BusinessLogic.Models;
 using Equibles.Finra.Data.Models;
-using Equibles.Finra.Mcp.Captures;
 using Equibles.Finra.Mcp.Contracts;
+using Equibles.Finra.Mcp.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
 using Equibles.Mcp.Extensions;
@@ -295,25 +295,6 @@ public class ShortDataTools
                 );
 
                 var answer = AppendNote(table, NewestKeptNote(display.Count, total, "settlements"));
-                if (display.Count > 0)
-                    McpResultCapture.Record(
-                        new ShortInterestCapture(
-                            listedTicker,
-                            SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
-                                ? null
-                                : stock.Name,
-                            display
-                                .Select(r =>
-                                    ShortInterestCells(
-                                        r,
-                                        SplitAdjustment.ShareCountFactor(r.SettlementDate, splits),
-                                        changeById[r.Id]
-                                    )
-                                )
-                                .ToList(),
-                            total
-                        )
-                    );
                 if (!WindowReachesPresent(end))
                     return answer;
                 if (SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker))

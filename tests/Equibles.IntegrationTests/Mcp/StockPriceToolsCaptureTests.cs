@@ -152,26 +152,4 @@ public class StockPriceToolsCaptureTests : ParadeDbMcpTestBase
                 new DateOnly(2026, 4, 6)
             );
     }
-
-    [Fact]
-    public async Task GetLatestClosingPrices_RecordsDataRowsAndPlaceholdersInTableOrder()
-    {
-        await SeedAapl(3, new DateOnly(2026, 4, 7));
-        using var scope = McpResultCapture.Begin();
-
-        await Sut().GetLatestClosingPrices(["AAPL", "ZZZZ", "^GSPC"]);
-
-        var capture = scope.Get<LatestClosingPricesCapture>();
-        capture.Rows.Select(row => row.Symbol).Should().Equal("AAPL", "ZZZZ", "^GSPC");
-        var apple = capture.Rows[0];
-        apple.Close.Should().Be(103m);
-        apple.Change.Should().Be(1m);
-        apple.Date.Should().Be(new DateOnly(2026, 4, 9));
-        apple.High52Weeks.Should().Be(103m);
-        apple.Low52Weeks.Should().Be(101m);
-        apple.RangeStarred.Should().BeTrue();
-        capture.Rows[1].Status.Should().Be("Not found");
-        capture.Rows[2].Status.Should().Be("Invalid ticker");
-        capture.Rows[1].Listing.Should().BeNull();
-    }
 }

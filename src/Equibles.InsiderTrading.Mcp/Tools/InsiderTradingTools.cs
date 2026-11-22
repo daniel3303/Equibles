@@ -14,7 +14,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
-using Equibles.InsiderTrading.Mcp.Captures;
+using Equibles.InsiderTrading.Mcp.Models;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.InsiderTrading.Repositories.Models;
 using Equibles.Mcp;
@@ -260,15 +260,6 @@ public class InsiderTradingTools
                     sb.AppendLine(truncation);
                 }
 
-                McpResultCapture.Record(
-                    new InsiderTransactionsCapture(
-                        stock.Name,
-                        stock.Presentation.Listing.Ticker,
-                        rows,
-                        offset,
-                        total
-                    )
-                );
                 return sb.ToString();
             },
             "GetInsiderTransactions",

@@ -2,7 +2,7 @@ using System.ComponentModel;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
-using Equibles.FdaCatalysts.Mcp.Captures;
+using Equibles.FdaCatalysts.Mcp.Models;
 using Equibles.FdaCatalysts.Repositories;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
@@ -102,7 +102,6 @@ public class FdaCatalystTools
                     c =>
                         $"| {c.MeetingDate:yyyy-MM-dd} | {c.Title} | {c.Center} | {c.Type} | {c.Through} | {c.Url ?? "—"} |"
                 );
-                McpResultCapture.Record(new FdaMeetingsCapture(start, end, rows, total));
                 var truncation = McpOutput.TruncationNote(records.Count, total);
                 return truncation.Length == 0 ? result : result + "\n" + truncation + "\n";
             },
