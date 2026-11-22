@@ -54,7 +54,24 @@ public class FundReportPeriodBackfillService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 result.Selected++;
-                var text = Encoding.UTF8.GetString(await _fileManager.GetContent(document.Content));
+                string text;
+                try
+                {
+                    text = Encoding.UTF8.GetString(await _fileManager.GetContent(document.Content));
+                }
+                // An unreadable stored file fails the same way on every pass: it skips this report, never the rest.
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    result.Unreadable++;
+                    _logger.LogWarning(
+                        ex,
+                        "Fund report {DocumentId} ({AccessionNumber}): its stored text could not be read; it stays undated.",
+                        document.Id,
+                        document.AccessionNumber
+                    );
+                    continue;
+                }
+
                 if (FundReportCoverPeriod.Read(text, document.ReportingDate) is { } period)
                 {
                     document.ReportingForDate = period;

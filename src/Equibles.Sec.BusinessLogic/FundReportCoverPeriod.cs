@@ -23,10 +23,11 @@ public static class FundReportCoverPeriod
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled
     );
 
-    // A two-digit year is this century's: Form N-CSR dates from 2003.
+    // A two-digit year is this century's: Form N-CSR dates from 2003. A written date's day and year share a line, so a
+    // year opening the next paragraph never completes it; converted covers may break between the month and the day.
     private const string Day =
         @"(?:\d{1,2}/\d{1,2}/(?:\d{4}|\d{2})(?!\d)|(?:January|February|March|April|May|June|July|August|September"
-        + @"|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\.?\s+\d{1,2},?\s+\d{4})";
+        + @"|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\.?\s+\d{1,2},?[^\S\r\n]+\d{4})";
 
     // The statement directly after the label: one day, a range ending in the period, or the periods of several series
     // filed together, whose latest is the filing's period as EDGAR states it. Markdown punctuation (a table cell, bold,

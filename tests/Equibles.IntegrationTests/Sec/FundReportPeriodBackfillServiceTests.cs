@@ -68,7 +68,13 @@ public class FundReportPeriodBackfillServiceTests : ParadeDbMcpTestBase
     private FundReportPeriodBackfillService Service()
     {
         var files = Substitute.For<IFileManager>();
-        files.GetContent(Arg.Any<File>()).Returns(call => _stored[call.Arg<File>().Id]);
+        files
+            .GetContent(Arg.Any<File>())
+            .Returns(call =>
+                _stored.TryGetValue(call.Arg<File>().Id, out var bytes)
+                    ? bytes
+                    : throw new FileNotFoundException("stored text is missing")
+            );
         return new FundReportPeriodBackfillService(
             new DocumentRepository(DbContext),
             files,
@@ -120,5 +126,39 @@ public class FundReportPeriodBackfillServiceTests : ParadeDbMcpTestBase
         (await Period(withoutAccession)).Should().Be(DateOnly.MinValue);
         (await Period(proxy)).Should().Be(DateOnly.MinValue);
         (result.Selected, result.Dated).Should().Be((2, 1));
+    }
+
+    // A stored file that cannot be read skips its own report; the others are still dated.
+    [Fact]
+    public async Task Backfill_UnreadableStoredText_SkipsOnlyThatReport()
+    {
+        var unreadable = await Seed(
+            DocumentType.NCsr,
+            DateOnly.MinValue,
+            StatedCover,
+            "0001193125-22-236201"
+        );
+        var readable = await Seed(
+            DocumentType.NCsr,
+            DateOnly.MinValue,
+            StatedCover,
+            "0001193125-22-236250"
+        );
+        await using (var lookup = Fixture.CreateDbContext())
+        {
+            var contentId = await lookup
+                .Set<Document>()
+                .Where(d => d.Id == unreadable)
+                .Select(d => d.ContentId)
+                .SingleAsync();
+            _stored.Remove(contentId);
+        }
+        DbContext.ChangeTracker.Clear();
+
+        var result = await Service().Backfill();
+
+        (await Period(unreadable)).Should().Be(DateOnly.MinValue);
+        (await Period(readable)).Should().Be(new DateOnly(2022, 6, 30));
+        (result.Dated, result.Unreadable).Should().Be((1, 1));
     }
 }

@@ -33,9 +33,10 @@ public class FundReportPeriodBackfillWorker : BaseScraperWorker
             .ServiceProvider.GetRequiredService<FundReportPeriodBackfillService>()
             .Backfill(stoppingToken);
         Logger.LogInformation(
-            "Fund report period backfill complete. Undated: {Selected}, dated from their cover: {Dated}",
+            "Fund report period backfill complete. Undated: {Selected}, dated from their cover: {Dated}, unreadable: {Unreadable}",
             result.Selected,
-            result.Dated
+            result.Dated,
+            result.Unreadable
         );
     }
 }

@@ -44,6 +44,11 @@ public class FundReportCoverPeriodTests
         "Date of reporting period: 12/31/24 **Item 1. Reports to Stockholders.** | (a)",
         "2024-12-31"
     )]
+    // The month on its own paragraph (0001193125-24-232900).
+    [InlineData(
+        "Date of reporting period:\n\nJuly\n\n31, 2024\n\n***\n\n| Item 1. | Reports to Stockholders. |",
+        "2024-07-31"
+    )]
     // Several series filed together: the latest is the period EDGAR states (0001133228-22-007346).
     [InlineData(
         "Date of reporting period: **September 30, 2022 and October 31, 2022** Form N-CSR is to be used",
@@ -54,13 +59,15 @@ public class FundReportCoverPeriodTests
         FundReportCoverPeriod.Read(cover, Filed).Should().Be(DateOnly.Parse(period));
     }
 
-    // The label states no full date, so the next date in the report is never taken for it.
-    [Fact]
-    public void Read_LabelWithoutAFullDate_IsNull()
+    // The label states no full date, so the next date in the report, or a year opening the next paragraph, never
+    // completes it.
+    [Theory]
+    [InlineData(
+        "Date of fiscal year end: December 31\n\nDate of reporting period: December 31\n\nAnnual Report June 30, 2022"
+    )]
+    [InlineData("Date of reporting period: December 31\n\n2022 Annual Report")]
+    public void Read_LabelWithoutAFullDate_IsNull(string cover)
     {
-        var cover =
-            "Date of fiscal year end: December 31\n\nDate of reporting period: December 31\n\nAnnual Report June 30, 2022";
-
         FundReportCoverPeriod.Read(cover, Filed).Should().BeNull();
     }
 
