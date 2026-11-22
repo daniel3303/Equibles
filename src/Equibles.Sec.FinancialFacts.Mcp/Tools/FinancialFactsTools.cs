@@ -302,7 +302,7 @@ public class FinancialFactsTools
                 if (shown.Any(DepreciationTotal.IsSum))
                 {
                     table += SumFootnote;
-                    notes.Add(SumFootnoteText);
+                    notes.Add(SumFootnoteCardText);
                 }
                 // The rows keep the filer's tagged figure; a gross profit that is the period's
                 // operating income is named, and the statement shows the derived figure.
@@ -313,13 +313,14 @@ public class FinancialFactsTools
                     )
                     : null;
                 table += releaseNote;
+                // A card keeps two notes, so the line that changes the reading of every figure comes first.
                 if (preliminary.Length > 0)
                 {
-                    notes.Add(PreliminaryReleaseFigures.Lead);
+                    notes.Insert(0, PreliminaryReleaseFigures.CardLead);
                 }
                 else if (newerRelease != null && releaseNote.Length > 0)
                 {
-                    notes.Add(newerRelease.CardNote);
+                    notes.Insert(0, newerRelease.CardNote);
                 }
                 // The card's notes leave out the answer's pointers to other tools, which only a model can follow.
                 if (tagWarning != null)
@@ -662,7 +663,7 @@ public class FinancialFactsTools
                 if (rows.Any(row => DepreciationTotal.IsSum(row.Fact)))
                 {
                     table += SumFootnote;
-                    notes.Add(SumFootnoteText);
+                    notes.Add(SumFootnoteCardText);
                 }
                 var ownNaming = OwnNamingFootnote(rows, stocks);
                 table += ownNaming;
@@ -734,6 +735,10 @@ public class FinancialFactsTools
 
     private const string SumFootnote = "\n_" + SumFootnoteText + "_\n";
 
+    private const string SumFootnoteCardText =
+        DepreciationTotal.SumMarker
+        + " marks depreciation & amortization added up from its reported parts.";
+
     private static string RenderFactHistoryTable(
         string concept,
         EquityIssuer stock,
@@ -804,17 +809,21 @@ public class FinancialFactsTools
             }
         );
 
-        void Note(string text)
+        // The answer prints each note in full; its card takes a short line for its reader.
+        void Note(string text, string card)
         {
             result.AppendLine($"\n_{text}_");
-            notes.Add(text);
+            notes.Add(card);
         }
         if (splitAdjusted)
-            Note(FinancialFactSplitAdjustment.Note);
+            Note(FinancialFactSplitAdjustment.Note, FinancialFactSplitAdjustment.CardNote);
         if (unresolvedBasis)
-            Note(FinancialFactSplitAdjustment.UnresolvedNote);
+            Note(
+                FinancialFactSplitAdjustment.UnresolvedNote,
+                FinancialFactSplitAdjustment.UnresolvedCardNote
+            );
         if (FiscalYearLabel.Note(stock) is { } namingNote)
-            Note(namingNote);
+            Note(namingNote, "Fiscal years are named for the calendar year they start in.");
 
         // Rows are newest first, so "first N" reads correctly; a no-op empty
         // line when nothing was cut off.
@@ -832,8 +841,15 @@ public class FinancialFactsTools
             notes.Add($"Showing the newest {perPeriod.Count} of {totalPeriods} periods.");
         }
 
+        // A card keeps two notes, and a series that stops early is the one its reader most needs told.
         if (coverageNote != null)
-            Note(coverageNote);
+        {
+            result.AppendLine($"\n_{coverageNote}_");
+            notes.Insert(
+                0,
+                "Recent rows may be missing: the company may have changed how it tags this measure."
+            );
+        }
 
         return (
             result.ToString(),
@@ -1096,18 +1112,26 @@ public class FinancialFactsTools
             }
         );
 
-        void Note(string text)
+        // The answer prints each note in full; its card takes a short line for its reader.
+        void Note(string text, string card)
         {
             result.AppendLine($"\n_{text}_");
-            notes.Add(text);
+            notes.Add(card);
         }
         if (splitAdjusted)
-            Note(FinancialFactSplitAdjustment.Note);
+            Note(FinancialFactSplitAdjustment.Note, FinancialFactSplitAdjustment.CardNote);
         if (unresolvedBasis)
-            Note(FinancialFactSplitAdjustment.UnresolvedNote);
+            Note(
+                FinancialFactSplitAdjustment.UnresolvedNote,
+                FinancialFactSplitAdjustment.UnresolvedCardNote
+            );
 
         if (rows.Count == 0)
-            Note($"No company reported '{concept}' for {fiscalYear} {period.NameForHumans()}.");
+        {
+            var none =
+                $"No company reported '{concept}' for {fiscalYear} {period.NameForHumans()}.";
+            Note(none, none);
+        }
 
         if (rows.Count > 1)
         {
@@ -1117,7 +1141,8 @@ public class FinancialFactsTools
                 Note(
                     $"Note: fiscal calendars differ across these companies — period ends "
                         + $"span {earliest:yyyy-MM-dd} to {latest:yyyy-MM-dd}. Each row covers "
-                        + "that company's own fiscal period, not the same calendar months."
+                        + "that company's own fiscal period, not the same calendar months.",
+                    $"Fiscal calendars differ: period ends span {earliest:yyyy-MM-dd} to {latest:yyyy-MM-dd}."
                 );
         }
 
@@ -1129,11 +1154,15 @@ public class FinancialFactsTools
         if (units.Count > 1)
             Note(
                 $"Note: these rows are in different units ({FactMarkdown.Cell(string.Join(", ", units))}); "
-                    + "convert them to one currency before comparing values."
+                    + "convert them to one currency before comparing values.",
+                $"These rows are in different units: {string.Join(", ", units)}."
             );
 
         if (skipped.Count > 0)
-            Note($"Skipped: {string.Join(", ", skipped)}.");
+        {
+            var skippedNote = $"Skipped: {string.Join(", ", skipped)}.";
+            Note(skippedNote, skippedNote);
+        }
 
         return (
             result.ToString(),

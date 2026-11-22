@@ -131,9 +131,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         capture.Lines[0].Label.Should().Be("Revenue");
         capture.Lines[0].Concept.Should().Be("revenue");
         capture.Lines[0].Fact.Value.Should().Be(400_000_000_000m);
-        capture
-            .Notes.Should()
-            .Contain("Line items the filer did not report for this period are omitted.");
+        capture.Notes.Should().Contain("Lines the company did not report are left out.");
 
         result.Should().Contain("Income Statement for AAPL (Apple Inc.) — FY2023 FY:");
         result.Should().Contain("| Revenue | $400,000,000,000 | USD |");
