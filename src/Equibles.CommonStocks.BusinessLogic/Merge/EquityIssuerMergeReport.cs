@@ -15,6 +15,10 @@ public sealed class EquityIssuerMergeRequest
     // prefix of their own.
     public IReadOnlyList<string> WithdrawnFactForms { get; init; } = [];
 
+    // The survivor's own figures govern only the periods ending by this date: the withdrawals above then remove
+    // only those periods, and the retired issuer's later figures follow the merge beside the survivor's.
+    public DateOnly? SurvivorFiguresGovernThrough { get; init; }
+
     // False runs every step and rolls back, so a preview reports exactly what a merge would do.
     public bool Execute { get; init; }
 
