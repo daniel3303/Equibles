@@ -154,25 +154,55 @@ public class EquityIssuerMergeManager
             $"DELETE FROM \"EquityIssuerPresentation\" WHERE \"EquityIssuerId\" = {retiredId}",
             cancellationToken
         );
+        // No bound withdraws every period; a bound leaves the later ones to follow the merge.
+        var through = request.SurvivorFiguresGovernThrough;
         foreach (var prefix in request.WithdrawnFactPrefixes.Distinct(StringComparer.Ordinal))
         {
-            report.WithdrawnFacts += await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"FinancialFact\" WHERE \"EquityIssuerId\" = {retiredId} AND starts_with(\"AccessionNumber\", {prefix})",
-                cancellationToken
-            );
+            report.WithdrawnFacts += through is { } bound
+                ? await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"FinancialFact\" WHERE \"EquityIssuerId\" = {retiredId} AND starts_with(\"AccessionNumber\", {prefix}) AND \"PeriodEnd\" <= {bound}",
+                    cancellationToken
+                )
+                : await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"FinancialFact\" WHERE \"EquityIssuerId\" = {retiredId} AND starts_with(\"AccessionNumber\", {prefix})",
+                    cancellationToken
+                );
         }
 
         foreach (var form in request.WithdrawnFactForms.Distinct(StringComparer.Ordinal))
         {
-            report.WithdrawnFacts += await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"FinancialFact\" WHERE \"EquityIssuerId\" = {retiredId} AND \"Form\" = {form}",
-                cancellationToken
-            );
+            report.WithdrawnFacts += through is { } bound
+                ? await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"FinancialFact\" WHERE \"EquityIssuerId\" = {retiredId} AND \"Form\" = {form} AND \"PeriodEnd\" <= {bound}",
+                    cancellationToken
+                )
+                : await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"FinancialFact\" WHERE \"EquityIssuerId\" = {retiredId} AND \"Form\" = {form}",
+                    cancellationToken
+                );
         }
 
-        // Checked after the withdrawals: figures left on both sides are two governing sources, which refuse.
+        // The governed range keeps one source: a retired figure the withdrawals did not name would follow into it.
+        if (
+            through is { } governed
+            && await _context
+                .Database.SqlQuery<bool>(
+                    $"""SELECT EXISTS (SELECT 1 FROM "FinancialFact" WHERE "EquityIssuerId" = {retiredId} AND "PeriodEnd" <= {governed}) AS "Value" """
+                )
+                .SingleAsync(cancellationToken)
+        )
+        {
+            report.Refusals.Add(
+                "The retired issuer keeps figures of a period the survivor's figures govern."
+            );
+            return;
+        }
+
+        // Checked after the withdrawals: figures left on both sides are two governing sources, which refuse,
+        // unless the survivor's govern only the periods before the retired issuer's.
         var figuresFollow =
             request.SuccessorFold
+            || through != null
             || !await _context
                 .Database.SqlQuery<bool>(
                     $"""SELECT EXISTS (SELECT 1 FROM "FinancialFact" WHERE "EquityIssuerId" = {survivorId}) AS "Value" """
@@ -224,8 +254,10 @@ public class EquityIssuerMergeManager
             cancellationToken
         );
         await Enrich(survivor, retired, request.SuccessorFold, cancellationToken);
+        // Beside the survivor's own figures its calendar stays: Validate refused two that differ.
         if (
             !request.SuccessorFold
+            && (request.SurvivorFiguresGovernThrough == null || survivor.FiscalYearEndMonth == null)
             && report.Changes.Any(change => change.Table == "FinancialFact" && change.Moved > 0)
         )
             await AdoptFiscalCalendar(survivor, retired, cancellationToken);
@@ -482,6 +514,19 @@ public class EquityIssuerMergeManager
             refusals.Add(
                 "A withdrawn fact prefix must name a source; a blank one matches every fact."
             );
+        if (request.SurvivorFiguresGovernThrough != null)
+        {
+            if (request.SuccessorFold)
+                refusals.Add("A successor fold moves every figure; it takes no governed range.");
+            // The figures that follow carry the retired issuer's fiscal labels beside the survivor's own.
+            if (
+                retired.FiscalYearEndMonth != null
+                && survivor.FiscalYearEndMonth != null
+                && (retired.FiscalYearEndMonth, retired.FiscalYearEndDay)
+                    != (survivor.FiscalYearEndMonth, survivor.FiscalYearEndDay)
+            )
+                refusals.Add("The two issuers record different fiscal year ends.");
+        }
         if (request.SuccessorFold)
         {
             if (retired.Cik == null || survivor.Cik == null)

@@ -292,6 +292,63 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .Be("0001577552-26-000001");
     }
 
+    // A survivor whose own figures stopped governs only the periods they state: the retired issuer's figures of
+    // those periods are withdrawn, its later ones follow, and a covered one the withdrawals did not name refuses.
+    [Fact]
+    public async Task ABoundedWithdrawalKeepsTheRetiredFiguresAfterTheSurvivorsRange()
+    {
+        await using var services = Services();
+        var (retired, survivor, _) = await SeedDuplicate(services);
+        var concept = new FinancialConcept { Taxonomy = FactTaxonomy.IfrsFull, Tag = "Revenue" };
+        DbContext.Add(concept);
+        await DbContext.SaveChangesAsync();
+        var covered = Fact(retired, concept, "VENUE-2024-0001");
+        var own = Fact(survivor.Id, concept, "0001577552-24-000001");
+        foreach (var fact in new[] { covered, own })
+        {
+            fact.PeriodStart = new DateOnly(2023, 4, 1);
+            fact.PeriodEnd = new DateOnly(2024, 3, 31);
+            fact.FiscalYear = 2024;
+        }
+        DbContext.AddRange(covered, own, Fact(retired, concept, "VENUE-2026-0001"));
+        await DbContext.SaveChangesAsync();
+        var evidence = await Evidence();
+        EquityIssuerMergeRequest Bounded(string prefix) =>
+            new()
+            {
+                RetiredIssuerId = retired,
+                SurvivingIssuerId = survivor.Id,
+                EvidenceKind = "gleif-related-isin",
+                EvidenceSourceRecordIds = [evidence.Id],
+                MergedBy = "operator@example.org",
+                WithdrawnFactPrefixes = [prefix],
+                SurvivorFiguresGovernThrough = new DateOnly(2024, 3, 31),
+                Execute = true,
+            };
+
+        var unnamed = await Manager().Merge(Bounded("OTHER-"));
+        unnamed
+            .Executed.Should()
+            .BeFalse("a covered figure the withdrawals did not name would follow into the range");
+
+        var report = await Manager().Merge(Bounded("VENUE-"));
+
+        report.Refusals.Should().BeEmpty();
+        report.Executed.Should().BeTrue();
+        report.WithdrawnFacts.Should().Be(1);
+        DbContext.ChangeTracker.Clear();
+        (
+            await DbContext
+                .Set<FinancialFact>()
+                .Where(fact => fact.EquityIssuerId == survivor.Id)
+                .Select(fact => fact.AccessionNumber)
+                .OrderBy(accession => accession)
+                .ToListAsync()
+        )
+            .Should()
+            .Equal("0001577552-24-000001", "VENUE-2026-0001");
+    }
+
     // A US registration that supplied no figures takes the home issuer's, with the fiscal year end they were
     // labelled against; they stay the company's one source.
     [Fact]
