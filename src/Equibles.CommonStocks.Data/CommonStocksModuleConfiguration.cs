@@ -61,6 +61,12 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
             .HasForeignKey(row => row.SourceRecordId)
             .OnDelete(DeleteBehavior.Restrict);
         builder
+            .Entity<IsinShareClassLookup>()
+            .HasOne(row => row.SourceRecord)
+            .WithMany()
+            .HasForeignKey(row => row.SourceRecordId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
             .Entity<EquityDirectorySnapshotState>()
             .HasOne(row => row.SourceRecord)
             .WithMany()

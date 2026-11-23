@@ -959,6 +959,49 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("IsinLegalEntityLookup");
                 });
 
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IsinShareClassLookup", b =>
+                {
+                    b.Property<string>("Isin")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<DateTime?>("CheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("QuotedOverTheCounter")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ShareClassFigi")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<Guid?>("SourceRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UsSecurityType")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.PrimitiveCollection<List<string>>("UsTickers")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.HasKey("Isin");
+
+                    b.HasIndex("NextAttemptAt");
+
+                    b.HasIndex("SourceRecordId");
+
+                    b.ToTable("IsinShareClassLookup");
+                });
+
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.SecListingEvidenceCheck", b =>
                 {
                     b.Property<string>("Cik")
@@ -7980,6 +8023,16 @@ namespace Equibles.Migrations.Migrations
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IsinLegalEntityLookup", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityDirectorySourceRecord", "SourceRecord")
+                        .WithMany()
+                        .HasForeignKey("SourceRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("SourceRecord");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.IsinShareClassLookup", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.EquityDirectorySourceRecord", "SourceRecord")
                         .WithMany()

@@ -53,4 +53,24 @@ public class EquityMarketsWorkerRegistrationTests
             .Should()
             .NotBeNull();
     }
+
+    [Fact]
+    public void TheShareClassLookupRunsAsAHostedWorker()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddEquityMarketsWorker();
+        services
+            .Should()
+            .Contain(descriptor =>
+                descriptor.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)
+                && descriptor.ImplementationType
+                    == typeof(Equibles.EquityMarkets.HostedService.IsinShareClassLookupWorker)
+            );
+        using var provider = services.BuildServiceProvider();
+        provider
+            .GetRequiredService<Equibles.EquityMarkets.BusinessLogic.Directory.IsinShareClassLookupImporter>()
+            .Should()
+            .NotBeNull();
+    }
 }
