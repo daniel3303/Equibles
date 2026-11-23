@@ -14,6 +14,7 @@
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Esma\Equibles.Integrations.Esma.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.OpenFigi\Equibles.Integrations.OpenFigi.csproj" />
     <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
   </ItemGroup>
 </Project>

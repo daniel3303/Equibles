@@ -9,6 +9,7 @@ using Equibles.Integrations.Gleif;
 using Equibles.Integrations.Gpw;
 using Equibles.Integrations.Lse;
 using Equibles.Integrations.NasdaqNordic;
+using Equibles.Integrations.OpenFigi;
 using Equibles.Integrations.Xetra;
 
 namespace Equibles.EquityMarkets.HostedService.Extensions;
@@ -21,6 +22,7 @@ public static class ServiceCollectionExtensions
 
         AddSourceClient<EuronextDirectoryClient>(services);
         AddSourceClient<GleifIdentityClient>(services);
+        AddSourceClient<OpenFigiClient>(services);
         AddSourceClient<XetraInstrumentListClient>(services);
         AddSourceClient<NasdaqNordicClient>(services);
         AddSourceClient<BmeClient>(services);
@@ -49,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<FirdsUniverseWorker>();
         services.AddHostedService<EquityMarketDirectoryWorker>();
         services.AddHostedService<IsinLegalEntityLookupWorker>();
+        services.AddHostedService<IsinShareClassLookupWorker>();
         return services;
     }
 
