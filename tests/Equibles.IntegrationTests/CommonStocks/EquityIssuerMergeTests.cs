@@ -249,6 +249,49 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
     }
 
+    // Beside the survivor's own figures the retired issuer's are withdrawn by report form, for a source whose
+    // accessions carry no prefix; only the named form goes.
+    [Fact]
+    public async Task RetiredFiguresOnAWithdrawnFormLeaveTheSurvivorsAsTheOneSource()
+    {
+        await using var services = Services();
+        var (retired, survivor, _) = await SeedDuplicate(services);
+        var concept = new FinancialConcept { Taxonomy = FactTaxonomy.IfrsFull, Tag = "Revenue" };
+        DbContext.Add(concept);
+        await DbContext.SaveChangesAsync();
+        var homeFact = Fact(retired, concept, "FILING-2026-0001");
+        homeFact.Form = DocumentType.EsefAnnualReport;
+        DbContext.AddRange(homeFact, Fact(survivor.Id, concept, "0001577552-26-000001"));
+        await DbContext.SaveChangesAsync();
+        var evidence = await Evidence();
+        var request = Request(retired, survivor.Id, evidence.Id);
+
+        var kept = await Manager().Merge(request);
+        kept.Executed.Should().BeFalse("the retired figures would be a second governing source");
+
+        var report = await Manager()
+            .Merge(
+                new EquityIssuerMergeRequest
+                {
+                    RetiredIssuerId = request.RetiredIssuerId,
+                    SurvivingIssuerId = request.SurvivingIssuerId,
+                    EvidenceKind = request.EvidenceKind,
+                    EvidenceSourceRecordIds = request.EvidenceSourceRecordIds,
+                    MergedBy = request.MergedBy,
+                    WithdrawnFactForms = [DocumentType.EsefAnnualReport.Value],
+                    Execute = true,
+                }
+            );
+
+        report.Refusals.Should().BeEmpty();
+        report.Executed.Should().BeTrue();
+        report.WithdrawnFacts.Should().Be(1);
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<FinancialFact>().SingleAsync())
+            .AccessionNumber.Should()
+            .Be("0001577552-26-000001");
+    }
+
     // A US registration that supplied no figures takes the home issuer's, with the fiscal year end they were
     // labelled against; they stay the company's one source.
     [Fact]

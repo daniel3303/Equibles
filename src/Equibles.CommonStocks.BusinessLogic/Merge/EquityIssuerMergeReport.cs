@@ -11,6 +11,10 @@ public sealed class EquityIssuerMergeRequest
     // Accession prefixes of retired facts that are withdrawn because the survivor's source governs them.
     public IReadOnlyList<string> WithdrawnFactPrefixes { get; init; } = [];
 
+    // Stored report forms of retired facts withdrawn for the same reason, for a source whose accessions carry no
+    // prefix of their own.
+    public IReadOnlyList<string> WithdrawnFactForms { get; init; } = [];
+
     // False runs every step and rolls back, so a preview reports exactly what a merge would do.
     public bool Execute { get; init; }
 
