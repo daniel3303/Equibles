@@ -358,7 +358,7 @@ public static class EquityMarketCatalog
         // Brazil has no FIRDS register either; a host-owned directory states B3's listings. Continuous trading
         // opens at 10:00 in São Paulo and ends at 15:55 in New York, with the closing call uncrossing five
         // minutes later, so the São Paulo close moves an hour with US daylight saving. No provider symbol is
-        // stated, so the price lane holds no B3 series.
+        // stated, so the price lane holds no B3 series; ".SA" is only read from a caller.
         new(
             "sao-paulo",
             "B3",
@@ -378,6 +378,7 @@ public static class EquityMarketCatalog
         )
         {
             CloseTimeZoneId = "America/New_York",
+            CallerSuffix = ".SA",
         },
         // Last on purpose: the FCA register homes the EEA issuers' London lines too, so their EEA directories
         // run first and hold the presentation before a London listing of the same share arrives. AIM is its own

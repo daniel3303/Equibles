@@ -128,6 +128,20 @@ public class ListingSymbolResolutionExtensionsTests : IDisposable
         usWins.Venue.Should().BeNull();
     }
 
+    // B3 states no provider symbol, so the suffix people write for it is read from the caller alone.
+    [Fact]
+    public async Task CallerSuffix_ReachesAMarketWithoutAProviderSymbol()
+    {
+        Venue("PETR4", "BVMF", "BR", "Petrobras");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.ResolveListing("petr4.sa");
+
+        result.Stock.Name.Should().Be("Petrobras");
+        result.Venue.MarketIdentifierCode.Should().Be("BVMF");
+        (await _repository.ResolveListing("VALE3.SA")).Error.Should().Contain("not found");
+    }
+
     // NSE spells a few companies with an ampersand; the venue symbol and the provider suffix reach it.
     [Fact]
     public async Task AmpersandSpelling_ReachesTheStoredVenueTicker()

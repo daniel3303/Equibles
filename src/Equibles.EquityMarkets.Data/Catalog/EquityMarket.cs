@@ -41,6 +41,10 @@ public sealed record EquityMarket(
     // it names the market for a reader and is never stored on a listing.
     public string OperatingCode { get; init; }
 
+    // The suffix people write after a ticker on a market that states no provider symbol (B3's ".SA"); it names
+    // the market for a reader and never starts a price series.
+    public string CallerSuffix { get; init; }
+
     // The zone whose clock fixes the close when it is not the market's own (B3 closes on New York's clock);
     // SessionClose and ClosingAuctionEnd then state the market's clock while both zones keep standard time.
     public string CloseTimeZoneId { get; init; }
