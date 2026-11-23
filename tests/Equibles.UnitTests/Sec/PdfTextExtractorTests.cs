@@ -99,6 +99,58 @@ public class PdfTextExtractorTests
     }
 
     [Fact]
+    public void Extract_TypesetReportPage_KeepsTheSpacesBetweenItsWords()
+    {
+        // Page 41 of KB Home's annual report to shareholders (SEC, 2026-03-13): the file stores no
+        // space between words, so reading the stored letters alone gave
+        // "grossprofitmarginfor2025mainlyreflected...".
+        var sut = new PdfTextExtractor(Substitute.For<ILogger<PdfTextExtractor>>());
+        var pdf = File.ReadAllBytes(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Sec",
+                "annual-report-typeset-page.pdf"
+            )
+        );
+
+        var result = sut.Extract(pdf);
+
+        result.Should().Contain("gross profit margin for 2025 mainly reflected price reductions");
+        result.Should().NotContain("grossprofitmargin");
+    }
+
+    [Fact]
+    public void Extract_SeveralPages_KeepsEachPageInItsPlaceWithFormFeeds()
+    {
+        var sut = new PdfTextExtractor(Substitute.For<ILogger<PdfTextExtractor>>());
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(
+            UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica
+        );
+        builder.AddPage(595, 842).AddText("First page", 12, new PdfPoint(50, 750), font);
+        // A page of pictures holds no text and still counts.
+        builder.AddPage(595, 842);
+        builder.AddPage(595, 842).AddText("Third page", 12, new PdfPoint(50, 750), font);
+
+        var result = sut.Extract(builder.Build());
+
+        result.Split('\f').Should().Equal("First page", string.Empty, "Third page");
+    }
+
+    [Fact]
+    public void Extract_PdfWithNoTextOnAnyPage_ReturnsWhitespaceOnly()
+    {
+        // The scraper stores such a file as an original without text.
+        var sut = new PdfTextExtractor(Substitute.For<ILogger<PdfTextExtractor>>());
+        var builder = new PdfDocumentBuilder();
+        builder.AddPage(595, 842);
+        builder.AddPage(595, 842);
+
+        sut.Extract(builder.Build()).Should().BeNullOrWhiteSpace();
+    }
+
+    [Fact]
     public void Extract_MalformedBytes_ReturnsEmptyAndLogsWarning()
     {
         var logger = Substitute.For<ILogger<PdfTextExtractor>>();

@@ -3,6 +3,8 @@ using Equibles.Core.AutoWiring;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Content;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace Equibles.Sec.BusinessLogic;
 
@@ -25,19 +27,18 @@ public class PdfTextExtractor : IPdfTextExtractor
         {
             using var document = PdfDocument.Open(pdfBytes);
 
+            // One entry a page with a form feed between them, empty pages included, so page N of
+            // the text is page N of the file.
             var result = new StringBuilder();
-
             foreach (var page in document.GetPages())
             {
-                var text = page.Text;
-                if (string.IsNullOrWhiteSpace(text))
-                    continue;
-
-                result.AppendLine(text);
-                result.AppendLine();
+                if (result.Length > 0 || page.Number > 1)
+                    result.Append('\f');
+                result.Append(PageText(page));
             }
 
-            return result.ToString();
+            // A file with no text on any page is whitespace only, which callers read as no text.
+            return result.ToString().TrimEnd();
         }
         catch (Exception ex)
         {
@@ -45,6 +46,21 @@ public class PdfTextExtractor : IPdfTextExtractor
             // The caller logs a follow-up warning identifying the filing.
             _logger.LogWarning(ex, "PdfPig could not read PDF ({Bytes} bytes)", pdfBytes.Length);
             return string.Empty;
+        }
+    }
+
+    // The page's words in reading order, with the spaces and line ends their places on the page
+    // imply. Page.Text is only the letters the file stores, and a typeset report stores no space
+    // between its words, so it comes out as one run of letters.
+    private static string PageText(Page page)
+    {
+        try
+        {
+            return ContentOrderTextExtractor.GetText(page).Replace("\r", string.Empty).TrimEnd();
+        }
+        catch (Exception)
+        {
+            return page.Text ?? string.Empty;
         }
     }
 }
