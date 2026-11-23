@@ -715,7 +715,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Change from a year earlier, in percent");
         result.Should().Contain("| 2025-03-01 | 317 | 312.23 | 1.53 |");
         result.Should().Contain("| 2025-02-01 | 316.2 | N/A | N/A |");
-        result.Should().Contain("1 of these observations have no stored observation a year earlier");
+        result
+            .Should()
+            .Contain("1 of these observations have no stored observation a year earlier");
         // The year-earlier rows are bases, not part of the range or its cut.
         result.Should().NotContain("Showing the newest");
         var capture = scope.Get<EconomicIndicatorCapture>();

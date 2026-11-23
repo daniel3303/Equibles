@@ -40,7 +40,10 @@ public class FredImportServiceHistoryBackfillTests : IDisposable
 
     public void Dispose() => _dbContext.Dispose();
 
-    private FredImportService Sut(DateTime? historyStart = null, FredObservationRepository observations = null) =>
+    private FredImportService Sut(
+        DateTime? historyStart = null,
+        FredObservationRepository observations = null
+    ) =>
         new(
             ServiceScopeSubstitute.Create(
                 (typeof(FredSeriesRepository), _seriesRepo),
@@ -85,12 +88,20 @@ public class FredImportServiceHistoryBackfillTests : IDisposable
         return series;
     }
 
-    private void FredHolds(DateOnly start, DateOnly end, params (string Date, string Value)[] rows) =>
+    private void FredHolds(
+        DateOnly start,
+        DateOnly end,
+        params (string Date, string Value)[] rows
+    ) =>
         _fredClient
             .GetObservations("CPIAUCSL", start, end)
             .Returns(
                 Task.FromResult(
-                    rows.Select(row => new FredObservationRecord { Date = row.Date, Value = row.Value })
+                    rows.Select(row => new FredObservationRecord
+                        {
+                            Date = row.Date,
+                            Value = row.Value,
+                        })
                         .ToList()
                 )
             );
@@ -98,7 +109,11 @@ public class FredImportServiceHistoryBackfillTests : IDisposable
     private Task ReceivedHistoryCalls(int count) =>
         _fredClient
             .Received(count)
-            .GetObservations("CPIAUCSL", Arg.Any<DateOnly?>(), Arg.Is<DateOnly?>(end => end != null));
+            .GetObservations(
+                "CPIAUCSL",
+                Arg.Any<DateOnly?>(),
+                Arg.Is<DateOnly?>(end => end != null)
+            );
 
     [Fact]
     public async Task Import_StoredHistoryStartsAfterTheSeries_FillsItBackOnce()
@@ -115,8 +130,13 @@ public class FredImportServiceHistoryBackfillTests : IDisposable
         await Sut().Import(CancellationToken.None);
         await Sut().Import(CancellationToken.None);
 
-        var dates = await _obsRepo.GetBySeries(series).OrderBy(o => o.Date).Select(o => o.Date).ToListAsync();
-        dates.Should()
+        var dates = await _obsRepo
+            .GetBySeries(series)
+            .OrderBy(o => o.Date)
+            .Select(o => o.Date)
+            .ToListAsync();
+        dates
+            .Should()
             .Equal(
                 new DateOnly(1947, 1, 1),
                 new DateOnly(1947, 2, 1),
@@ -151,7 +171,9 @@ public class FredImportServiceHistoryBackfillTests : IDisposable
             .Received(1)
             .GetObservations("CPIAUCSL", new DateOnly(2010, 1, 1), new DateOnly(2019, 12, 31));
         // The configured floor is ours, not FRED's: the series keeps its own recorded start.
-        (await _seriesRepo.Get(series.Id)).ObservationStart.Should().Be(new DateOnly(1947, 1, 1));
+        (await _seriesRepo.Get(series.Id))
+            .ObservationStart.Should()
+            .Be(new DateOnly(1947, 1, 1));
     }
 
     // A worker restart mid-fill: the batches already saved must leave the gap visible, so the next cycle completes it.
@@ -162,12 +184,22 @@ public class FredImportServiceHistoryBackfillTests : IDisposable
         var series = await SeedCpi(start, "2020-01-01");
         var history = Enumerable.Range(0, 1500).Select(day => start.AddDays(day)).ToList();
         _fredClient
-            .GetObservations("CPIAUCSL", Arg.Any<DateOnly?>(), Arg.Is<DateOnly?>(end => end != null))
+            .GetObservations(
+                "CPIAUCSL",
+                Arg.Any<DateOnly?>(),
+                Arg.Is<DateOnly?>(end => end != null)
+            )
             .Returns(call =>
                 Task.FromResult(
                     history
-                        .Where(date => date >= call.ArgAt<DateOnly?>(1) && date <= call.ArgAt<DateOnly?>(2))
-                        .Select(date => new FredObservationRecord { Date = $"{date:yyyy-MM-dd}", Value = "250" })
+                        .Where(date =>
+                            date >= call.ArgAt<DateOnly?>(1) && date <= call.ArgAt<DateOnly?>(2)
+                        )
+                        .Select(date => new FredObservationRecord
+                        {
+                            Date = $"{date:yyyy-MM-dd}",
+                            Value = "250",
+                        })
                         .ToList()
                 )
             );

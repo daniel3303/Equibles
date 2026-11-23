@@ -498,10 +498,9 @@ public class FinancialFactsTools
                     : [];
                 // One fiscal year's pick per company, and the companies whose gross profit that pick proves
                 // mis-tagged. A calendar comparison runs it for the two years that can hold the calendar year.
-                async Task<(
-                    Dictionary<Guid, FinancialFact> Best,
-                    HashSet<Guid> Mistagged
-                )> Slice(int year)
+                async Task<(Dictionary<Guid, FinancialFact> Best, HashSet<Guid> Mistagged)> Slice(
+                    int year
+                )
                 {
                     var loadedConceptIds = conceptPriority
                         .Keys.Concat(bankComponentIds.NetInterestIncome)
@@ -520,7 +519,10 @@ public class FinancialFactsTools
                             f.FiscalYear == year
                             && (
                                 f.FiscalPeriod == period
-                                || (includeFullYearForQ4 && f.FiscalPeriod == SecFiscalPeriod.FullYear)
+                                || (
+                                    includeFullYearForQ4
+                                    && f.FiscalPeriod == SecFiscalPeriod.FullYear
+                                )
                             )
                             && loadedConceptIds.Contains(f.FinancialConceptId)
                         )
@@ -595,16 +597,21 @@ public class FinancialFactsTools
                                 // One period shows none of the filer's history, so its interest
                                 // expense is what proves revenue before interest expense.
                                 g.Where(f =>
-                                        bankComponentIds.InterestExpense.Contains(f.FinancialConceptId)
+                                        bankComponentIds.InterestExpense.Contains(
+                                            f.FinancialConceptId
+                                        )
                                     )
                                     .ToList()
                             );
                             (candidates, priority) = OperatingCostsContinuation.Fold(
                                 claimableAlias,
-                                operatingCosts.ClaimedStockIds.Contains(g.Key) ? claimableAlias : null,
+                                operatingCosts.ClaimedStockIds.Contains(g.Key)
+                                    ? claimableAlias
+                                    : null,
                                 candidates,
                                 priority,
-                                g.Where(f => operatingCosts.Ids.Contains(f.FinancialConceptId)).ToList()
+                                g.Where(f => operatingCosts.Ids.Contains(f.FinancialConceptId))
+                                    .ToList()
                             );
                             return (
                                 StockId: g.Key,
@@ -616,8 +623,7 @@ public class FinancialFactsTools
                     var mistagged =
                         grossProfitComponents.Count == 0
                             ? []
-                            : best
-                                .Where(entry =>
+                            : best.Where(entry =>
                                 {
                                     var stockFacts = facts
                                         .Where(f => f.EquityIssuerId == entry.Key)
@@ -662,7 +668,10 @@ public class FinancialFactsTools
                         endingInYear.Best,
                         endingNextYear.Best
                     );
-                    bestByStock = chosen.ToDictionary(entry => entry.Key, entry => entry.Value.Fact);
+                    bestByStock = chosen.ToDictionary(
+                        entry => entry.Key,
+                        entry => entry.Value.Fact
+                    );
                     mistaggedStockIds = chosen
                         .Where(entry =>
                             (
@@ -1265,7 +1274,14 @@ public class FinancialFactsTools
 
         return (
             result.ToString(),
-            new FinancialFactComparisonCapture(concept, fiscalYear, period, captured, notes, calendar)
+            new FinancialFactComparisonCapture(
+                concept,
+                fiscalYear,
+                period,
+                captured,
+                notes,
+                calendar
+            )
         );
     }
 

@@ -156,7 +156,9 @@ public class FredTools
                 // Format with InvariantCulture so the MCP markdown does not fork the
                 // decimal separator by host locale (e.g. de-DE would render 5,25).
                 static string Printed(decimal? value) =>
-                    value.HasValue ? McpFormat.Invariant(value.Value, McpFormat.PlainDecimal) : "N/A";
+                    value.HasValue
+                        ? McpFormat.Invariant(value.Value, McpFormat.PlainDecimal)
+                        : "N/A";
                 var table = MarkdownTable.Render(
                     observations.OrderBy(o => o.Date).ToList(),
                     $"No observations found for {series.SeriesId} ({series.Title}) in the specified date range.",

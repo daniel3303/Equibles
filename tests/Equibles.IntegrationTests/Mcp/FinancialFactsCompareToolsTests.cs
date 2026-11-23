@@ -281,9 +281,16 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         first.Should().NotContain("$350,000,000,000");
         second.Should().Be(first, "the pick is deterministic across calls");
     }
+
     // ── Calendar basis ─────────────────────────────────────────────────
 
-    private void AddFiscalYear(EquityIssuer stock, int stamp, string start, string end, decimal value) =>
+    private void AddFiscalYear(
+        EquityIssuer stock,
+        int stamp,
+        string start,
+        string end,
+        decimal value
+    ) =>
         DbContext
             .Set<FinancialFact>()
             .Add(
@@ -321,7 +328,8 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
         using var scope = McpResultCapture.Begin();
 
-        var result = await Sut().CompareFinancialFact("NVDA,AMD,MSFT", "revenue", 2025, "FY", "calendar");
+        var result = await Sut()
+            .CompareFinancialFact("NVDA,AMD,MSFT", "revenue", 2025, "FY", "calendar");
 
         result.Should().Contain("calendar 2025 peer comparison");
         result.Should().Contain("| FY2026 | 2025-01-27 to 2026-01-25 |");
@@ -350,7 +358,8 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task CompareFinancialFact_CalendarBasisForAQuarter_IsRefused()
     {
-        var result = await Sut().CompareFinancialFact("NVDA,AMD", "revenue", 2025, "Q2", "calendar");
+        var result = await Sut()
+            .CompareFinancialFact("NVDA,AMD", "revenue", 2025, "Q2", "calendar");
 
         result.Should().Contain("whole fiscal years only");
     }

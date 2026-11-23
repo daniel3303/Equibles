@@ -118,9 +118,8 @@ public class FredImportService : IImporter
     {
         if (series.ObservationStart is not { } seriesStart)
             return;
-        var floor = _historyStart is { } configured && configured > seriesStart
-            ? configured
-            : seriesStart;
+        var floor =
+            _historyStart is { } configured && configured > seriesStart ? configured : seriesStart;
 
         DateOnly earliest;
         using (var scope = _scopeFactory.CreateScope())

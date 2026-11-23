@@ -7,7 +7,12 @@ namespace Equibles.UnitTests.Sec;
 // their days, so "2025 revenue of NVDA, MSFT, AAPL, WMT and COST" lines up the same months.
 public class CalendarYearAlignmentTests
 {
-    private static FinancialFact Fact(string start, string end, int stamp = 0, Guid? stock = null) =>
+    private static FinancialFact Fact(
+        string start,
+        string end,
+        int stamp = 0,
+        Guid? stock = null
+    ) =>
         new()
         {
             EquityIssuerId = stock ?? Guid.NewGuid(),
@@ -63,7 +68,9 @@ public class CalendarYearAlignmentTests
     [Fact]
     public void Choose_PeersWithDifferentCalendars_TakesEachCompanysYearFallingMostlyInTheYear()
     {
-        Guid nvda = Guid.NewGuid(), aapl = Guid.NewGuid(), amd = Guid.NewGuid();
+        Guid nvda = Guid.NewGuid(),
+            aapl = Guid.NewGuid(),
+            amd = Guid.NewGuid();
         var endingIn2025 = new Dictionary<Guid, FinancialFact>
         {
             [nvda] = Fact("2024-01-29", "2025-01-26", 2025, nvda),
@@ -90,7 +97,10 @@ public class CalendarYearAlignmentTests
         var nvda = Guid.NewGuid();
         var chosen = CalendarYearAlignment.Choose(
             2025,
-            new Dictionary<Guid, FinancialFact> { [nvda] = Fact("2024-01-29", "2025-01-26", 2025, nvda) },
+            new Dictionary<Guid, FinancialFact>
+            {
+                [nvda] = Fact("2024-01-29", "2025-01-26", 2025, nvda),
+            },
             new Dictionary<Guid, FinancialFact>()
         );
 
@@ -103,8 +113,14 @@ public class CalendarYearAlignmentTests
         var retailer = Guid.NewGuid();
         var chosen = CalendarYearAlignment.Choose(
             2025,
-            new Dictionary<Guid, FinancialFact> { [retailer] = Fact("2024-12-29", "2026-01-03", 2025, retailer) },
-            new Dictionary<Guid, FinancialFact> { [retailer] = Fact("2024-12-29", "2026-01-03", 2026, retailer) }
+            new Dictionary<Guid, FinancialFact>
+            {
+                [retailer] = Fact("2024-12-29", "2026-01-03", 2025, retailer),
+            },
+            new Dictionary<Guid, FinancialFact>
+            {
+                [retailer] = Fact("2024-12-29", "2026-01-03", 2026, retailer),
+            }
         );
 
         chosen[retailer].Stamp.Should().Be(2025);

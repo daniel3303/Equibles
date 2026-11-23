@@ -47,7 +47,10 @@ public class FredClientGetObservationsStartDateTests
         await sut.GetObservations("CPIAUCSL", new DateOnly(1947, 1, 1), new DateOnly(2019, 12, 31));
 
         var query = handler.Requests[0].RequestUri!.Query;
-        query.Should().Contain("observation_start=1947-01-01").And.Contain("observation_end=2019-12-31");
+        query
+            .Should()
+            .Contain("observation_start=1947-01-01")
+            .And.Contain("observation_end=2019-12-31");
     }
 
     private sealed class CapturingHandler : HttpMessageHandler

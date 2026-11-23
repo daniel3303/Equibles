@@ -5,7 +5,9 @@ namespace Equibles.UnitTests.Fred;
 
 public class YearOverYearTests
 {
-    private static Dictionary<DateOnly, FredObservation> Stated(params (string Date, decimal Value)[] rows) =>
+    private static Dictionary<DateOnly, FredObservation> Stated(
+        params (string Date, decimal Value)[] rows
+    ) =>
         rows.ToDictionary(
             row => DateOnly.Parse(row.Date),
             row => new FredObservation { Date = DateOnly.Parse(row.Date), Value = row.Value }
@@ -16,10 +18,7 @@ public class YearOverYearTests
     {
         var stated = Stated(("2024-09-01", 314.851m), ("2024-10-01", 315.564m));
 
-        YearOverYear
-            .Base(new DateOnly(2025, 10, 1), "M", stated)!
-            .Value.Should()
-            .Be(315.564m);
+        YearOverYear.Base(new DateOnly(2025, 10, 1), "M", stated)!.Value.Should().Be(315.564m);
     }
 
     [Fact]
