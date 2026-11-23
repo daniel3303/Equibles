@@ -8,6 +8,7 @@ using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Models;
@@ -28,6 +29,7 @@ namespace Equibles.Sec.HostedService.Services;
 public class EsefReportImportService(
     XbrlFilingsClient client,
     EquityIssuerRepository issuerRepository,
+    FinancialFactRepository factRepository,
     DocumentRepository documentRepository,
     EsefOversizedReportRepository oversizedRepository,
     IDocumentPersistenceService documentPersistence,
@@ -197,28 +199,57 @@ public class EsefReportImportService(
     }
 
     /// <summary>
-    /// The issuers this lane may capture for: a legal entity identifier to match the index on, and no CIK.
-    /// The current directory also carries US listings; those are left to the SEC lane by the CIK rule, and
-    /// one whose CIK is not yet resolved is admitted here but matches nothing in a European index. An issuer that also files with the SEC is left to that lane, whose facts a later-filed
-    /// European report would otherwise supersede on the readers' filed-date tie-break.
+    /// The issuers this lane may capture for: a legal entity identifier to match the index on, and no figures
+    /// the SEC lane supplied. A CIK alone governs nothing: a registration that never filed statements, such as an
+    /// over-the-counter line's, leaves the European report as the company's one source. An issuer whose CIK did
+    /// supply figures is left to that lane, whose facts a later-filed European report would otherwise supersede on
+    /// the readers' filed-date tie-break.
     /// </summary>
-    private async Task<Dictionary<string, EsefCandidateIssuer>> LoadCandidateIssuers(
+    internal async Task<Dictionary<string, EsefCandidateIssuer>> LoadCandidateIssuers(
         CancellationToken cancellationToken
     )
     {
+        var facts = factRepository.GetAll();
         var rows = await issuerRepository
             .GetCurrentDirectory()
-            .Where(issuer => issuer.Cik == null && issuer.LegalEntityIdentifier != null)
-            .Select(issuer => new EsefCandidateIssuer(
+            .Where(issuer =>
+                issuer.LegalEntityIdentifier != null
+                && (
+                    issuer.Cik == null
+                    || !facts.Any(fact =>
+                        fact.EquityIssuerId == issuer.Id
+                        && fact.Form != DocumentType.EsefAnnualReport
+                        && fact.Form != DocumentType.EsefReport
+                    )
+                )
+            )
+            .Select(issuer => new
+            {
                 issuer.Id,
                 issuer.LegalEntityIdentifier,
-                issuer.Presentation.Listing.MarketCountryCode
-            ))
+                issuer.Cik,
+                Presented = issuer.Presentation.Listing.MarketCountryCode,
+                PresentedOnVenue = issuer.Presentation.Listing.MarketIdentifierCode != null,
+                // A CIK holder presents its US line, which no European index files under; an issuer without a CIK
+                // keeps the country it presents, so the filing it already stored stays the one picked.
+                Venue = issuer
+                    .Securities.SelectMany(security => security.Listings)
+                    .Where(listing => listing.Active && listing.MarketIdentifierCode != null)
+                    .OrderBy(listing => listing.MarketCountryCode)
+                    .Select(listing => listing.MarketCountryCode)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
         var issuers = new Dictionary<string, EsefCandidateIssuer>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in rows)
+        // Two records of one legal entity are a duplicate the issuer queue resolves; until then the one without a
+        // CIK keeps the reports, as before.
+        foreach (var row in rows.OrderBy(row => row.Cik == null))
         {
-            issuers[row.LegalEntityIdentifier] = row;
+            issuers[row.LegalEntityIdentifier] = new EsefCandidateIssuer(
+                row.Id,
+                row.LegalEntityIdentifier,
+                row.Cik == null || row.PresentedOnVenue ? row.Presented : row.Venue ?? row.Presented
+            );
         }
         return issuers;
     }

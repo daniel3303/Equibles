@@ -52,8 +52,9 @@ public class EquityIssuerMergeManager
             )
         );
 
-    // A successor's own figures come from the same SEC source as the predecessor's, so they follow the fold.
-    private EquityReferencePolicy SuccessorPolicy() =>
+    // Figures follow the merge where they stay the company's one source: a successor's come from the same SEC
+    // source as the predecessor's, and a survivor holding none takes the retired issuer's.
+    private EquityReferencePolicy FiguresFollowPolicy() =>
         new(Policy().Rules.Where(rule => rule.Table != "FinancialFact"));
 
     /// <summary>Runs the merge; a request that does not execute, or any refusal, rolls everything back.</summary>
@@ -161,7 +162,15 @@ public class EquityIssuerMergeManager
             );
         }
 
-        var policy = request.SuccessorFold ? SuccessorPolicy() : Policy();
+        // Checked after the withdrawals: figures left on both sides are two governing sources, which refuse.
+        var figuresFollow =
+            request.SuccessorFold
+            || !await _context
+                .Database.SqlQuery<bool>(
+                    $"""SELECT EXISTS (SELECT 1 FROM "FinancialFact" WHERE "EquityIssuerId" = {survivorId}) AS "Value" """
+                )
+                .SingleAsync(cancellationToken);
+        var policy = figuresFollow ? FiguresFollowPolicy() : Policy();
         var rekeyer = await EquityReferenceRekeyer.Create(
             _context.Database,
             policy,
@@ -207,6 +216,11 @@ public class EquityIssuerMergeManager
             cancellationToken
         );
         await Enrich(survivor, retired, request.SuccessorFold, cancellationToken);
+        if (
+            !request.SuccessorFold
+            && report.Changes.Any(change => change.Table == "FinancialFact" && change.Moved > 0)
+        )
+            await AdoptFiscalCalendar(survivor, retired, cancellationToken);
         if (request.SuccessorFold)
             await AdoptRegistrant(survivor, retired, cancellationToken);
     }
@@ -509,7 +523,29 @@ public class EquityIssuerMergeManager
             refusals.Add("Every merge cites stored source evidence.");
     }
 
-    // Names stay searchable, and only empty survivor fields are filled; fiscal calendars never transfer.
+    // Figures that followed the merge were labelled against the retired issuer's fiscal year end, so that calendar
+    // follows them; the survivor's own came from a registration that supplied no figures.
+    private async Task AdoptFiscalCalendar(
+        EquityIssuer survivor,
+        EquityIssuer retired,
+        CancellationToken token
+    )
+    {
+        if (retired.FiscalYearEndMonth == null)
+            return;
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE "EquityIssuer" SET
+                "FiscalYearEndMonth" = {retired.FiscalYearEndMonth},
+                "FiscalYearEndDay" = {retired.FiscalYearEndDay}
+            WHERE "Id" = {survivor.Id}
+            """,
+            token
+        );
+    }
+
+    // Names stay searchable, and only empty survivor fields are filled; a fiscal calendar transfers only with
+    // the figures it labelled.
     // A successor fold takes the retired issuer's name, the registrant's current one, and keeps the old
     // name as an alias.
     private async Task Enrich(

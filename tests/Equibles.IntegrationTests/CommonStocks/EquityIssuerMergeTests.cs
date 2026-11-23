@@ -8,6 +8,8 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Repositories;
+using Equibles.Sec.HostedService.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
@@ -247,6 +249,79 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
     }
 
+    // A US registration that supplied no figures takes the home issuer's, with the fiscal year end they were
+    // labelled against; they stay the company's one source.
+    [Fact]
+    public async Task FiguresFollowTheMergeIntoASurvivorThatHoldsNone()
+    {
+        await using var services = Services();
+        var (retired, survivor, _) = await SeedDuplicate(services);
+        var concept = new FinancialConcept { Taxonomy = FactTaxonomy.IfrsFull, Tag = "Revenue" };
+        DbContext.Add(concept);
+        await DbContext.SaveChangesAsync();
+        var homeFact = Fact(retired, concept, "FILING-2026-0001");
+        homeFact.Form = DocumentType.EsefAnnualReport;
+        DbContext.Add(homeFact);
+        await DbContext.SaveChangesAsync();
+        await DbContext
+            .Set<EquityIssuer>()
+            .Where(row => row.Id == retired)
+            .ExecuteUpdateAsync(setter =>
+                setter
+                    .SetProperty(row => row.LegalEntityIdentifier, HomeLei)
+                    .SetProperty(row => row.FiscalYearEndMonth, 3)
+                    .SetProperty(row => row.FiscalYearEndDay, 31)
+            );
+        await DbContext
+            .Set<EquityIssuer>()
+            .Where(row => row.Id == survivor.Id)
+            .ExecuteUpdateAsync(setter =>
+                setter
+                    .SetProperty(row => row.FiscalYearEndMonth, 3)
+                    .SetProperty(row => row.FiscalYearEndDay, 30)
+            );
+        var evidence = await Evidence();
+
+        var report = await Manager().Merge(Request(retired, survivor.Id, evidence.Id));
+
+        report.Refusals.Should().BeEmpty();
+        report.Executed.Should().BeTrue();
+        report.WithdrawnFacts.Should().Be(0);
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<FinancialFact>().SingleAsync())
+            .EquityIssuerId.Should()
+            .Be(survivor.Id);
+        var stored = await DbContext.Set<EquityIssuer>().SingleAsync(row => row.Id == survivor.Id);
+        stored.FiscalYearEndMonth.Should().Be(3);
+        stored.FiscalYearEndDay.Should().Be(31);
+
+        // The home report source keeps feeding the company under its home market, until its CIK supplies figures.
+        var candidates = await EsefCandidates();
+        candidates.Should().ContainKey(HomeLei).WhoseValue.MarketCountryCode.Should().Be("HK");
+        DbContext.Add(Fact(survivor.Id, concept, "SEC-2026-0001"));
+        await DbContext.SaveChangesAsync();
+        (await EsefCandidates()).Should().NotContainKey(HomeLei);
+    }
+
+    private const string HomeLei = "5493001KJTIIGC8Y1R12";
+
+    private Task<
+        Dictionary<string, EsefReportImportService.EsefCandidateIssuer>
+    > EsefCandidates() =>
+        new EsefReportImportService(
+            null,
+            new EquityIssuerRepository(DbContext),
+            new FinancialFactRepository(DbContext),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        ).LoadCandidateIssuers(CancellationToken.None);
+
     [Fact]
     public async Task PreviewReportsTheMergeAndWritesNothing()
     {
@@ -300,6 +375,9 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
                     : "VENUE-2026-0001"
             )
         );
+        // A retired fact no prefix withdraws refuses only beside the survivor's own figures.
+        if (defect is "governing-fact" or "blank-prefix")
+            DbContext.Add(Fact(survivor.Id, concept, "SURVIVOR-2026-0001"));
         if (defect == "duplicate-registration")
         {
             foreach (var issuer in new[] { retired, survivor.Id })
