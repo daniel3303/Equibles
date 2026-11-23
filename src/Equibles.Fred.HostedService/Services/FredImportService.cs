@@ -4,6 +4,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
+using Equibles.Fred.HostedService.Configuration;
 using Equibles.Fred.Repositories;
 using Equibles.Integrations.Fred;
 using Equibles.Integrations.Fred.Contracts;
@@ -30,13 +31,15 @@ public class FredImportService : IImporter
     private readonly IFredClient _fredClient;
     private readonly WorkerOptions _workerOptions;
     private readonly ErrorReporter _errorReporter;
+    private readonly DateOnly? _historyStart;
 
     public FredImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<FredImportService> logger,
         IFredClient fredClient,
         IOptions<WorkerOptions> workerOptions,
-        ErrorReporter errorReporter
+        ErrorReporter errorReporter,
+        IOptions<FredScraperOptions> scraperOptions = null
     )
     {
         _scopeFactory = scopeFactory;
@@ -44,6 +47,9 @@ public class FredImportService : IImporter
         _fredClient = fredClient;
         _workerOptions = workerOptions.Value;
         _errorReporter = errorReporter;
+        _historyStart = scraperOptions?.Value.HistoryStart is { } historyStart
+            ? DateOnly.FromDateTime(historyStart)
+            : null;
     }
 
     public async Task Import(CancellationToken cancellationToken)
@@ -97,6 +103,92 @@ public class FredImportService : IImporter
         if (series == null)
             return;
 
+        await ImportRecent(curated, series, cancellationToken);
+        await BackfillHistory(curated, series, cancellationToken);
+    }
+
+    // The incremental import starts a new series at Worker:MinSyncDate, which left no year-ago base for its first
+    // year and no long-run history. Each series is filled back once, below its earliest stored observation, to its
+    // own first observation (or FredScraper:HistoryStart when that is later).
+    private async Task BackfillHistory(
+        CuratedSeries curated,
+        FredSeries series,
+        CancellationToken cancellationToken
+    )
+    {
+        if (series.ObservationStart is not { } seriesStart)
+            return;
+        var floor = _historyStart is { } configured && configured > seriesStart
+            ? configured
+            : seriesStart;
+
+        DateOnly earliest;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var obsRepo = scope.ServiceProvider.GetRequiredService<FredObservationRepository>();
+            earliest = await obsRepo.GetEarliestDate(series).FirstOrDefaultAsync(cancellationToken);
+        }
+        if (earliest == default || floor >= earliest)
+            return;
+
+        var records = await _fredClient.GetObservations(
+            curated.SeriesId,
+            floor,
+            earliest.AddDays(-1)
+        );
+        // Saved newest first, batch by batch: a fill cut short leaves one block ending at the stored start, so the
+        // next cycle resumes below it. Oldest first would store the series' first date and hide the gap for good.
+        var older = ParseObservationDates(records)
+            .Where(parsed => parsed.Date >= floor && parsed.Date < earliest)
+            .GroupBy(parsed => parsed.Date)
+            .Select(group => group.First())
+            .OrderByDescending(parsed => parsed.Date)
+            .ToList();
+        if (older.Count == 0)
+        {
+            // FRED serves nothing before the stored start (a licensed series keeps a rolling window): the stored
+            // start becomes the series' own, so the next cycle does not ask again.
+            if (floor == seriesStart)
+                await SetObservationStart(series.Id, earliest);
+            return;
+        }
+
+        var inserted = await BatchPersister.Persist<FredObservation, FredObservationRepository>(
+            older
+                .Select(parsed => new FredObservation
+                {
+                    FredSeriesId = series.Id,
+                    Date = parsed.Date,
+                    Value = ParseFredValue(parsed.Record.Value),
+                })
+                .ToList(),
+            InsertBatchSize,
+            _scopeFactory
+        );
+        _logger.LogInformation(
+            "Backfilled {Count} observations for FRED series {SeriesId} from {From} to {To}",
+            inserted,
+            curated.SeriesId,
+            older[^1].Date,
+            older[0].Date
+        );
+    }
+
+    private async Task SetObservationStart(Guid seriesId, DateOnly observationStart)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var seriesRepo = scope.ServiceProvider.GetRequiredService<FredSeriesRepository>();
+        var dbSeries = await seriesRepo.Get(seriesId);
+        dbSeries.ObservationStart = observationStart;
+        await seriesRepo.SaveChanges();
+    }
+
+    private async Task ImportRecent(
+        CuratedSeries curated,
+        FredSeries series,
+        CancellationToken cancellationToken
+    )
+    {
         DateOnly startDate;
         using (var scope = _scopeFactory.CreateScope())
         {

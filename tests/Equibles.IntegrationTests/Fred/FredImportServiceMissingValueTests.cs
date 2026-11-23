@@ -72,7 +72,7 @@ public class FredImportServiceMissingValueTests : IDisposable
                 )
             );
         fredClient
-            .GetObservations(curated.SeriesId, Arg.Any<DateOnly?>())
+            .GetObservations(curated.SeriesId, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
             .Returns(
                 Task.FromResult(
                     new List<FredObservationRecord>

@@ -80,7 +80,8 @@ public class FredClient : IFredClient
 
     public async Task<List<FredObservationRecord>> GetObservations(
         string seriesId,
-        DateOnly? startDate = null
+        DateOnly? startDate = null,
+        DateOnly? endDate = null
     )
     {
         _logger.LogDebug(
@@ -106,6 +107,11 @@ public class FredClient : IFredClient
             if (startDate.HasValue)
             {
                 url += $"&observation_start={startDate.Value:yyyy-MM-dd}";
+            }
+
+            if (endDate.HasValue)
+            {
+                url += $"&observation_end={endDate.Value:yyyy-MM-dd}";
             }
 
             var content = await SendWithRetry(url);

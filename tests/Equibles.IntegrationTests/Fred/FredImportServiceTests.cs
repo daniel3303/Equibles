@@ -101,7 +101,7 @@ public class FredImportServiceTests : IDisposable
     {
         _fredClient.GetSeriesMetadata(seriesId).Returns(Task.FromResult(metadata));
         _fredClient
-            .GetObservations(seriesId, Arg.Any<DateOnly?>())
+            .GetObservations(seriesId, Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
             .Returns(Task.FromResult(observations));
     }
 
@@ -112,8 +112,8 @@ public class FredImportServiceTests : IDisposable
             .GetSeriesMetadata(Arg.Any<string>())
             .Returns(Task.FromResult<FredSeriesRecord>(null));
         _fredClient
-            .GetObservations(Arg.Any<string>(), Arg.Any<DateOnly?>())
-            .Returns(Task.FromResult(new List<FredObservationRecord>()));
+            .GetObservations(Arg.Any<string>(), Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
+            .Returns(_ => Task.FromResult(new List<FredObservationRecord>()));
     }
 
     // ── ImportSeries: creates new series ──────────────────────────────
@@ -148,6 +148,10 @@ public class FredImportServiceTests : IDisposable
         metadata.ObservationEnd = "2024-12-31";
 
         SetupApiForSeries("FEDFUNDS", metadata, CreateObservationRecords(("2024-06-01", "5.50")));
+        // The history backfill finds FRED's observations from the recorded start, so the start stands.
+        _fredClient
+            .GetObservations("FEDFUNDS", new DateOnly(2020, 1, 1), new DateOnly(2024, 5, 31))
+            .Returns(Task.FromResult(CreateObservationRecords(("2020-01-01", "1.55"))));
 
         await _sut.Import(CancellationToken.None);
 
@@ -183,7 +187,7 @@ public class FredImportServiceTests : IDisposable
         var observations = CreateObservationRecords(("2024-07-01", "5.40"), ("2024-08-01", "5.35"));
         // Series already exists, so GetSeriesMetadata should not be called
         _fredClient
-            .GetObservations("FEDFUNDS", Arg.Any<DateOnly?>())
+            .GetObservations("FEDFUNDS", Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
             .Returns(Task.FromResult(observations));
 
         await _sut.Import(CancellationToken.None);
@@ -259,7 +263,7 @@ public class FredImportServiceTests : IDisposable
             ("2024-01-02", "5.34") // new
         );
         _fredClient
-            .GetObservations("FEDFUNDS", Arg.Any<DateOnly?>())
+            .GetObservations("FEDFUNDS", Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
             .Returns(Task.FromResult(observations));
 
         await _sut.Import(CancellationToken.None);
@@ -301,7 +305,7 @@ public class FredImportServiceTests : IDisposable
 
         // The BEA annual update restated July; the API now states the revised vintage.
         _fredClient
-            .GetObservations("PCEPILFE", Arg.Any<DateOnly?>())
+            .GetObservations("PCEPILFE", Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>())
             .Returns(
                 Task.FromResult(
                     CreateObservationRecords(("2026-07-01", "130.148"), ("2026-08-01", "130.489"))

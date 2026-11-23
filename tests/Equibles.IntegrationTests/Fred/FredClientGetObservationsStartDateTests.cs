@@ -33,6 +33,23 @@ public class FredClientGetObservationsStartDateTests
         query.Should().Contain("observation_start=2024-03-15");
     }
 
+    // The history backfill asks only for the gap below the stored start, never the whole series again.
+    [Fact]
+    public async Task GetObservations_EndDateSupplied_AppendsObservationEndParameter()
+    {
+        var handler = new CapturingHandler("""{"count":0,"offset":0,"observations":[]}""");
+        var sut = new FredClient(
+            new HttpClient(handler),
+            Substitute.For<ILogger<FredClient>>(),
+            Options.Create(new FredOptions { ApiKey = "test-key" })
+        );
+
+        await sut.GetObservations("CPIAUCSL", new DateOnly(1947, 1, 1), new DateOnly(2019, 12, 31));
+
+        var query = handler.Requests[0].RequestUri!.Query;
+        query.Should().Contain("observation_start=1947-01-01").And.Contain("observation_end=2019-12-31");
+    }
+
     private sealed class CapturingHandler : HttpMessageHandler
     {
         private readonly string _payload;
