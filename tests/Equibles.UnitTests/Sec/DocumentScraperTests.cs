@@ -661,7 +661,7 @@ public class DocumentScraperTests
             ]);
         harness
             .SecEdgarClient.GetCompanyFilings("0000222222", "10-K", null)
-            .Returns([BuildFiling("0000222222", "NVDA-1", "10-K")]);
+            .Returns([Recent(BuildFiling("0000222222", "NVDA-1", "10-K"))]);
         var stored = new List<string>();
         harness
             .SecEdgarClient.GetDocumentContent(Arg.Any<FilingData>())
@@ -704,6 +704,72 @@ public class DocumentScraperTests
         }
 
         stored.Should().Equal("TRUST-1", "NVDA-1", "TRUST-2");
+    }
+
+    // A discovered fund trust's never-read reports waited in front of today's filing; the recent one now goes
+    // first and the backlog follows in a full pass, which alone marks the company synced.
+    [Fact]
+    public async Task ScrapeDocuments_DiscoveredCompanyWithABacklog_StoresItsRecentFilingFirst()
+    {
+        DocumentScraper.ResetCompanySyncThrottleForTests();
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        EquityIssuer trust = SeedCompany(dbContext, ticker: "TRST", cik: "0000111111");
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000111111", "10-K", null)
+            .Returns([
+                BuildFiling("0000111111", "OLD-1", "10-K"),
+                Recent(BuildFiling("0000111111", "TODAY-1", "10-K")),
+            ]);
+        var stored = new List<string>();
+        var stampedWhenStored = new List<bool>();
+        harness
+            .SecEdgarClient.GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(call =>
+            {
+                stored.Add(call.Arg<FilingData>().AccessionNumber);
+                stampedWhenStored.Add(dbContext.Set<CompanyFilingSyncState>().Any());
+                return "<html>filing</html>";
+            });
+        harness
+            .Persistence.Exists(
+                Arg.Any<EquityIssuer>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
+            )
+            .Returns(call => stored.Contains(call.ArgAt<string>(4)));
+        harness.Normalizer.Normalize(Arg.Any<string>()).Returns(call => call.Arg<string>());
+        harness.Converter.Convert(Arg.Any<string>()).Returns("# Document");
+        harness
+            .Discovery.DiscoverCompaniesWithNewFilings(default, default)
+            .ReturnsForAnyArgs(new List<EquityIssuer> { trust });
+        harness
+            .Discovery.DiscoverCompaniesFromRecentFeed(default, default)
+            .ReturnsForAnyArgs(new List<EquityIssuer>());
+
+        try
+        {
+            await harness
+                .BuildScraper(
+                    dbContext,
+                    new DocumentScraperOptions
+                    {
+                        UseEventDrivenDiscovery = true,
+                        DocumentTypesToSync = [DocumentType.TenK],
+                    }
+                )
+                .ScrapeDocuments();
+        }
+        finally
+        {
+            DocumentScraper.ResetCompanySyncThrottleForTests();
+        }
+
+        stored.Should().Equal("TODAY-1", "OLD-1");
+        stampedWhenStored.Should().Equal(false, false);
+        dbContext.Set<CompanyFilingSyncState>().Should().ContainSingle();
     }
 
     [Fact]
@@ -1149,6 +1215,12 @@ public class DocumentScraperTests
             PrimaryDocument = $"{accession}.htm",
             DocumentUrl = $"https://sec.gov/{accession}.htm",
         };
+
+    private static FilingData Recent(FilingData filing)
+    {
+        filing.FilingDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        return filing;
+    }
 
     private static EquityIssuer SeedCompany(
         EquiblesFinancialDbContext dbContext,

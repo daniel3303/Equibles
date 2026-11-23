@@ -50,6 +50,14 @@ public class DocumentScraper : IDocumentScraper
     // Event-driven cycles only; legacy full sweeps have no feed to poll.
     private FreshFilingPreemption _preemption;
 
+    // Deeper than the latest-filings feed walk reaches across a weekend, so a fresh pass reads every
+    // filing the feed could have flagged.
+    internal const int FreshFilingWindowDays = 7;
+
+    // Set only during a fresh pass; fresh passes never nest, so one pair of fields serves them.
+    private DateOnly? _freshFilingsFrom;
+    private bool _olderFilingsLeft;
+
     public DocumentScraper(
         IServiceScopeFactory serviceScopeFactory,
         ICompanySyncService companySyncService,
@@ -99,6 +107,7 @@ public class DocumentScraper : IDocumentScraper
                             cancellationToken
                         ),
                     company => ProcessTarget(company, stampSyncState: true, result),
+                    company => ProcessFreshTarget(company, result),
                     cancellationToken
                 );
                 await ProcessPreemptingReconciliation(
@@ -216,9 +225,9 @@ public class DocumentScraper : IDocumentScraper
     }
 
     /// <summary>
-    /// Processes the discovered companies, then the reconciliation batch with fresh filings preempting it:
-    /// a re-sweep can ingest years of filings, so newly flagged companies run before each one, and a company
-    /// already processed this cycle is not re-swept.
+    /// Reads the discovered companies' recent filings first, then their older ones, then the reconciliation
+    /// batch, with fresh filings preempting every full pass: a re-sweep can ingest years of filings, and a
+    /// company already processed this cycle is not re-swept.
     /// </summary>
     internal static async Task ProcessPreemptingReconciliation(
         IEnumerable<EquityIssuer> discovered,
@@ -231,16 +240,18 @@ public class DocumentScraper : IDocumentScraper
         {
             if (cancellationToken.IsCancellationRequested)
                 return;
-            await preemption.Process(company);
+            await preemption.ProcessFresh(company);
         }
         foreach (var company in reconciliation)
         {
             if (cancellationToken.IsCancellationRequested)
                 return;
             await preemption.RunFresh();
+            await preemption.DrainFullPasses();
             if (!preemption.WasProcessed(company))
                 await preemption.Process(company);
         }
+        await preemption.DrainFullPasses();
     }
 
     private async Task ProcessTarget(
@@ -256,6 +267,30 @@ public class DocumentScraper : IDocumentScraper
             await StampFilingSyncState(company);
 
         result.CompaniesProcessed++;
+    }
+
+    // A pass that left older filings unread is no sync: stamping it would park that backlog behind the
+    // whole reconciliation queue.
+    private async Task<bool> ProcessFreshTarget(EquityIssuer company, ScrapingResult result)
+    {
+        _freshFilingsFrom = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-FreshFilingWindowDays);
+        _olderFilingsLeft = false;
+        bool found;
+        try
+        {
+            found = await ProcessCompanyDocumentsWithScope(company, result);
+        }
+        finally
+        {
+            _freshFilingsFrom = null;
+        }
+        if (!found)
+            return false;
+
+        if (!_olderFilingsLeft)
+            await StampFilingSyncState(company);
+        result.CompaniesProcessed++;
+        return _olderFilingsLeft;
     }
 
     private async Task<List<EquityIssuer>> SelectReconciliationBatch(
@@ -672,6 +707,14 @@ public class DocumentScraper : IDocumentScraper
             newFilings = await FilterTombstonedFilings(newFilings);
 
             result.DocumentsSkipped += filings.Count - newFilings.Count;
+
+            if (_freshFilingsFrom is { } freshFrom)
+            {
+                var recent = newFilings.Where(f => f.FilingDate >= freshFrom).ToList();
+                if (recent.Count < newFilings.Count)
+                    _olderFilingsLeft = true;
+                newFilings = recent;
+            }
 
             foreach (var filing in newFilings)
             {
