@@ -287,6 +287,11 @@ public class FilingDiscoveryService : IFilingDiscoveryService
 
         PruneSeenFeedEntries(utcNow);
 
+        // EDGAR lists some filings twice under one filer (a fund's 485 filings), so an entry this
+        // poll already read is a repeat, never the overlap with an earlier poll: counting it as
+        // overlap ended the walk on its page, and after a restart every later page went unread.
+        var readThisPoll = new HashSet<string>();
+
         for (var page = 0; page < _options.RecentFeedMaxPages; page++)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -322,9 +327,11 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                 // subject, reporting owner), each with its own CIK — key on both
                 // so a page boundary can't hide the tracked side of a filing.
                 var seenKey = $"{entry.AccessionNumber}|{entry.Cik}";
+                var firstReadThisPoll = readThisPoll.Add(seenKey);
                 if (!SeenFeedEntries.TryAdd(seenKey, utcNow))
                 {
-                    sawKnownEntry = true;
+                    if (firstReadThisPoll)
+                        sawKnownEntry = true;
                     continue;
                 }
                 fresh.Add(entry);

@@ -249,6 +249,48 @@ public class FilingDiscoveryServiceDiscoveryTests
         secondCycle.Should().BeEmpty();
     }
 
+    // A fund's 485 filing listed twice on the first page ended the walk there after every restart, so
+    // an 8-K on the third page was never flagged.
+    [Fact]
+    public async Task Feed_FilingListedTwiceOnOnePage_StillPagesOnToLaterFilings()
+    {
+        await using var context = CreateContext();
+        EquityIssuer nvidia = Tracked("NVDA", "1045810");
+        var firstPage = Enumerable
+            .Range(0, 98)
+            .Select(i => new EdgarRecentFilingEntry
+            {
+                Cik = "0000999999",
+                FormType = "4",
+                AccessionNumber = $"0000999999-26-{i:D6}",
+            })
+            .ToList();
+        var fundFiling = new EdgarRecentFilingEntry
+        {
+            Cik = "0001810747",
+            FormType = "485BXT",
+            AccessionNumber = "0001829126-26-012723",
+        };
+        firstPage.Add(fundFiling);
+        firstPage.Add(fundFiling);
+        var client = ClientWithFeed();
+        client.GetRecentFilings(0, 100, Arg.Any<CancellationToken>()).Returns(firstPage);
+        client
+            .GetRecentFilings(100, 100, Arg.Any<CancellationToken>())
+            .Returns([
+                new EdgarRecentFilingEntry
+                {
+                    Cik = "0001045810",
+                    FormType = "8-K",
+                    AccessionNumber = "0001045810-26-000090",
+                },
+            ]);
+
+        var dirty = await CreateService(client, context).DiscoverCompaniesWithNewFilings([nvidia]);
+
+        dirty.Should().ContainSingle().Which.Should().BeSameAs(nvidia);
+    }
+
     [Fact]
     public async Task Feed_PollFailure_IsSwallowed()
     {
