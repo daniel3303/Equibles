@@ -3,75 +3,134 @@ using Equibles.Sec.HostedService;
 
 namespace Equibles.UnitTests.Sec;
 
-// A fund trust's first sweep read 90 reports for over an hour while every new filing on EDGAR waited,
-// because the feed was polled only between companies.
+// A fund trust's first sweep read 90 reports for over an hour while every new filing on EDGAR waited; running
+// whole passes inside one another then starved early-flagged filings behind other trusts' backlogs.
 public class FreshFilingPreemptionTests
 {
     private static EquityIssuer Company(string name) => new() { Id = Guid.NewGuid(), Name = name };
 
+    private static Func<Task<List<EquityIssuer>>> Polls(params List<EquityIssuer>[] polls)
+    {
+        var queue = new Queue<List<EquityIssuer>>(polls);
+        return () => Task.FromResult(queue.Count > 0 ? queue.Dequeue() : []);
+    }
+
     [Fact]
-    public async Task RunFresh_BetweenOneCompanysFilings_RunsTheFlaggedCompanyBeforeTheNextFiling()
+    public async Task RunFresh_BetweenAFullPassesFilings_ReadsTheFlaggedCompanyBeforeTheNextFiling()
     {
         var trust = Company("trust");
         var fresh = Company("fresh");
-        var polls = new Queue<List<EquityIssuer>>([
-            [],
-            [fresh],
-        ]);
         var order = new List<string>();
         FreshFilingPreemption preemption = null;
         preemption = new FreshFilingPreemption(
-            () => Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []),
-            async company =>
+            Polls([], [fresh]),
+            async _ =>
             {
-                if (company != trust)
-                {
-                    order.Add(company.Name);
-                    return;
-                }
                 foreach (var filing in new[] { "report 1", "report 2" })
                 {
                     await preemption.RunFresh();
                     order.Add(filing);
                 }
             },
-            CancellationToken.None
-        );
-
-        await preemption.Process(trust);
-
-        order.Should().Equal("report 1", "fresh", "report 2");
-    }
-
-    // Its enumeration was read before the flag, so the new filing needs another pass, never a nested one.
-    [Fact]
-    public async Task RunFresh_CompanyFlaggedWhileInFlight_RunsAgainAfterItsPass()
-    {
-        var trust = Company("trust");
-        var polls = new Queue<List<EquityIssuer>>([
-            [trust],
-        ]);
-        var passes = 0;
-        var depth = 0;
-        var deepest = 0;
-        FreshFilingPreemption preemption = null;
-        preemption = new FreshFilingPreemption(
-            () => Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []),
-            async _ =>
+            company =>
             {
-                passes++;
-                depth++;
-                deepest = Math.Max(deepest, depth);
-                await preemption.RunFresh();
-                depth--;
+                order.Add($"{company.Name} recent");
+                return Task.FromResult(false);
             },
             CancellationToken.None
         );
 
         await preemption.Process(trust);
 
-        passes.Should().Be(2);
-        deepest.Should().Be(1);
+        order.Should().Equal("report 1", "fresh recent", "report 2");
+    }
+
+    // A second trust flagged during the first one's sweep reads only its recent filings there; its backlog waits
+    // for its own full pass, between companies, and nothing polls inside its fresh pass.
+    [Fact]
+    public async Task RunFresh_FlaggedCompanyWithABacklog_ReadsOnlyItsRecentFilingsUntilItsOwnFullPass()
+    {
+        var first = Company("first trust");
+        var second = Company("second trust");
+        var late = Company("late");
+        var polls = new Queue<List<EquityIssuer>>([
+            [second],
+            [],
+            [late],
+        ]);
+        var pollCount = 0;
+        var order = new List<string>();
+        FreshFilingPreemption preemption = null;
+        preemption = new FreshFilingPreemption(
+            () =>
+            {
+                pollCount++;
+                return Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []);
+            },
+            async company =>
+            {
+                if (company == second)
+                {
+                    order.Add("second trust backlog");
+                    return;
+                }
+                foreach (var filing in new[] { "report 1", "report 2" })
+                {
+                    await preemption.RunFresh();
+                    order.Add($"first trust {filing}");
+                }
+            },
+            async company =>
+            {
+                await preemption.RunFresh();
+                order.Add($"{company.Name} recent");
+                return company == second;
+            },
+            CancellationToken.None
+        );
+
+        await preemption.Process(first);
+        await preemption.DrainFullPasses();
+
+        order
+            .Should()
+            .Equal(
+                "second trust recent",
+                "first trust report 1",
+                "first trust report 2",
+                "late recent",
+                "second trust backlog"
+            );
+        pollCount.Should().Be(3);
+        preemption.WasProcessed(second).Should().BeTrue();
+    }
+
+    // Its enumeration was read before the flag, so the new filing needs a fresh pass after it, never a nested one.
+    [Fact]
+    public async Task RunFresh_CompanyFlaggedDuringItsOwnFullPass_GetsAFreshPassAfterIt()
+    {
+        var trust = Company("trust");
+        var passes = new List<string>();
+        FreshFilingPreemption preemption = null;
+        preemption = new FreshFilingPreemption(
+            Polls([trust]),
+            async _ =>
+            {
+                passes.Add("full start");
+                await preemption.RunFresh();
+                passes.Add("full end");
+            },
+            _ =>
+            {
+                passes.Add("fresh");
+                return Task.FromResult(false);
+            },
+            CancellationToken.None
+        );
+
+        await preemption.Process(trust);
+
+        passes.Should().Equal("full start", "full end", "fresh");
     }
 
     // A deploy stopping the worker mid-poll must not skip the rest of the sweep's filings.
@@ -86,56 +145,12 @@ public class FreshFilingPreemptionTests
                 throw new OperationCanceledException(shutdown.Token);
             },
             _ => Task.CompletedTask,
+            _ => Task.FromResult(false),
             shutdown.Token
         );
 
         var poll = () => preemption.RunFresh();
 
         await poll.Should().NotThrowAsync();
-    }
-
-    // A second trust flagged during the first one's sweep keeps polling too, or its own backlog blocks the feed.
-    [Fact]
-    public async Task RunFresh_FlaggedCompanyWithItsOwnBacklog_StillLetsLaterFilingsPreemptIt()
-    {
-        var first = Company("first trust");
-        var second = Company("second trust");
-        var fresh = Company("fresh");
-        var polls = new Queue<List<EquityIssuer>>([
-            [second],
-            [],
-            [fresh],
-        ]);
-        var order = new List<string>();
-        FreshFilingPreemption preemption = null;
-        preemption = new FreshFilingPreemption(
-            () => Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []),
-            async company =>
-            {
-                if (company == fresh)
-                {
-                    order.Add(company.Name);
-                    return;
-                }
-                foreach (var filing in new[] { "report 1", "report 2" })
-                {
-                    await preemption.RunFresh();
-                    order.Add($"{company.Name} {filing}");
-                }
-            },
-            CancellationToken.None
-        );
-
-        await preemption.Process(first);
-
-        order
-            .Should()
-            .Equal(
-                "second trust report 1",
-                "fresh",
-                "second trust report 2",
-                "first trust report 1",
-                "first trust report 2"
-            );
     }
 }

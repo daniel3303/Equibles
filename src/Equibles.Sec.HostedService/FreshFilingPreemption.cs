@@ -3,27 +3,34 @@ using Equibles.CommonStocks.Data.Models;
 namespace Equibles.Sec.HostedService;
 
 /// <summary>
-/// Runs companies the real-time feed flags ahead of the sweep in progress, polled between companies and
-/// between one company's filings: a fund trust's first sweep can read hours of reports, and every new
-/// filing on EDGAR waited behind it.
+/// Orders one scraping cycle so no backlog filing is read while a flagged filing waits. A full pass reads every
+/// unread filing and polls the feed between them; each company the poll flags gets a fresh pass, which reads only
+/// recent filings and never polls. A company a fresh pass left older filings for gets its full pass later, between
+/// companies. Running whole passes inside one another starved early-flagged filings behind fund-trust backlogs.
 /// </summary>
 internal sealed class FreshFilingPreemption
 {
     private readonly Func<Task<List<EquityIssuer>>> _pollFresh;
-    private readonly Func<EquityIssuer, Task> _process;
+    private readonly Func<EquityIssuer, Task> _processFull;
+    private readonly Func<EquityIssuer, Task<bool>> _processFresh;
     private readonly CancellationToken _cancellationToken;
     private readonly HashSet<Guid> _processed = [];
-    private readonly List<Guid> _inFlight = [];
-    private readonly Dictionary<Guid, EquityIssuer> _flaggedWhileInFlight = [];
+    private readonly List<EquityIssuer> _awaitingFullPass = [];
+    private Guid? _fullPassInFlight;
+    private bool _flaggedDuringFullPass;
+    private bool _freshPassInFlight;
 
+    /// <param name="processFresh">Reads only recent filings; true when it left older filings unread.</param>
     public FreshFilingPreemption(
         Func<Task<List<EquityIssuer>>> pollFresh,
-        Func<EquityIssuer, Task> process,
+        Func<EquityIssuer, Task> processFull,
+        Func<EquityIssuer, Task<bool>> processFresh,
         CancellationToken cancellationToken
     )
     {
         _pollFresh = pollFresh;
-        _process = process;
+        _processFull = processFull;
+        _processFresh = processFresh;
         _cancellationToken = cancellationToken;
     }
 
@@ -32,31 +39,49 @@ internal sealed class FreshFilingPreemption
     public async Task Process(EquityIssuer company)
     {
         _processed.Add(company.Id);
-        _inFlight.Add(company.Id);
+        _awaitingFullPass.RemoveAll(c => c.Id == company.Id);
+        _fullPassInFlight = company.Id;
+        _flaggedDuringFullPass = false;
         try
         {
-            await _process(company);
+            await _processFull(company);
         }
         finally
         {
-            _inFlight.RemoveAt(_inFlight.Count - 1);
+            _fullPassInFlight = null;
         }
 
         // Its enumeration was read before this flag, so the flagged filing is not in it.
-        if (
-            _flaggedWhileInFlight.Remove(company.Id, out var flagged)
-            && !_cancellationToken.IsCancellationRequested
-        )
-            await Process(flagged);
+        if (_flaggedDuringFullPass && !_cancellationToken.IsCancellationRequested)
+            await ProcessFresh(company);
+    }
+
+    public async Task ProcessFresh(EquityIssuer company)
+    {
+        _freshPassInFlight = true;
+        bool leftOlderFilings;
+        try
+        {
+            leftOlderFilings = await _processFresh(company);
+        }
+        finally
+        {
+            _freshPassInFlight = false;
+        }
+
+        if (!leftOlderFilings)
+            _processed.Add(company.Id);
+        else if (!_processed.Contains(company.Id) && _awaitingFullPass.All(c => c.Id != company.Id))
+            _awaitingFullPass.Add(company);
     }
 
     /// <summary>
-    /// Processes every company the feed flags now. A company already in flight is never nested inside
-    /// itself; it runs again once its current pass ends.
+    /// Gives every company the feed flags now a fresh pass. Inside a fresh pass it does nothing, so a flagged
+    /// filing never waits behind another company's reading.
     /// </summary>
     public async Task RunFresh()
     {
-        if (_cancellationToken.IsCancellationRequested)
+        if (_cancellationToken.IsCancellationRequested || _freshPassInFlight)
             return;
 
         // Any poll failure during shutdown must not escape into the filing loop: its per-type catch would skip
@@ -75,12 +100,23 @@ internal sealed class FreshFilingPreemption
         {
             if (_cancellationToken.IsCancellationRequested)
                 return;
-            if (_inFlight.Contains(company.Id))
+            if (company.Id == _fullPassInFlight)
             {
-                _flaggedWhileInFlight[company.Id] = company;
+                _flaggedDuringFullPass = true;
                 continue;
             }
-            await Process(company);
+            await ProcessFresh(company);
+        }
+    }
+
+    public async Task DrainFullPasses()
+    {
+        while (_awaitingFullPass.Count > 0 && !_cancellationToken.IsCancellationRequested)
+        {
+            await RunFresh();
+            if (_awaitingFullPass.Count == 0)
+                return;
+            await Process(_awaitingFullPass[0]);
         }
     }
 }
