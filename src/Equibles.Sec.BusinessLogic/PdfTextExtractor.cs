@@ -28,14 +28,31 @@ public class PdfTextExtractor : IPdfTextExtractor
             using var document = PdfDocument.Open(pdfBytes);
 
             // One entry a page with a form feed between them, empty pages included, so page N of
-            // the text is page N of the file.
+            // the text is page N of the file. A page PdfPig cannot read (a font its resources
+            // lack) is an empty entry: one bad page never costs the document its other pages.
             var result = new StringBuilder();
-            foreach (var page in document.GetPages())
+            var unread = 0;
+            for (var number = 1; number <= document.NumberOfPages; number++)
             {
-                if (result.Length > 0 || page.Number > 1)
+                if (number > 1)
                     result.Append('\f');
-                result.Append(PageText(page));
+                try
+                {
+                    result.Append(PageText(document.GetPage(number)));
+                }
+                catch (Exception)
+                {
+                    unread++;
+                }
             }
+
+            if (unread > 0)
+                _logger.LogWarning(
+                    "PdfPig could not read {Unread} of {Pages} pages of a PDF ({Bytes} bytes)",
+                    unread,
+                    document.NumberOfPages,
+                    pdfBytes.Length
+                );
 
             // A file with no text on any page is whitespace only, which callers read as no text.
             return result.ToString().TrimEnd();
@@ -54,13 +71,17 @@ public class PdfTextExtractor : IPdfTextExtractor
     // between its words, so it comes out as one run of letters.
     private static string PageText(Page page)
     {
+        string text;
         try
         {
-            return ContentOrderTextExtractor.GetText(page).Replace("\r", string.Empty).TrimEnd();
+            text = ContentOrderTextExtractor.GetText(page);
         }
         catch (Exception)
         {
-            return page.Text ?? string.Empty;
+            text = page.Text ?? string.Empty;
         }
+
+        // A form feed of the page's own would shift every later page by one.
+        return text.Replace("\r", string.Empty).Replace('\f', ' ').TrimEnd();
     }
 }

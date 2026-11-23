@@ -139,6 +139,80 @@ public class PdfTextExtractorTests
     }
 
     [Fact]
+    public void Extract_PageWhoseFontTheFileLacks_KeepsTheOtherPagesInTheirPlace()
+    {
+        // PdfPig throws on a page that shows text in a font its resources do not hold.
+        var logger = Substitute.For<ILogger<PdfTextExtractor>>();
+        var sut = new PdfTextExtractor(logger);
+
+        var result = sut.Extract(ThreePages(secondPageFont: "/Missing", secondPageText: "Lost"));
+
+        result.Split('\f').Should().Equal("First page", string.Empty, "Third page");
+        logger
+            .ReceivedCalls()
+            .Count(c =>
+                c.GetMethodInfo().Name == "Log"
+                && c.GetArguments().OfType<LogLevel>().FirstOrDefault() == LogLevel.Warning
+            )
+            .Should()
+            .Be(1);
+    }
+
+    [Fact]
+    public void Extract_FormFeedInsideAPagesOwnText_DoesNotShiftTheLaterPages()
+    {
+        var sut = new PdfTextExtractor(Substitute.For<ILogger<PdfTextExtractor>>());
+
+        var result = sut.Extract(ThreePages(secondPageFont: "/F1", secondPageText: "Mid\\014dle"));
+
+        var pages = result.Split('\f');
+        pages.Should().HaveCount(3);
+        pages[2].Should().Be("Third page");
+    }
+
+    // A three-page file written by hand: the builder cannot leave a font out of a page's resources.
+    private static byte[] ThreePages(string secondPageFont, string secondPageText)
+    {
+        string Stream(string font, string text)
+        {
+            var content = $"BT {font} 12 Tf 50 750 Td ({text}) Tj ET";
+            return $"<< /Length {content.Length} >>\nstream\n{content}\nendstream";
+        }
+
+        string Page(int contents) =>
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 9 0 R >> >> /Contents {contents} 0 R >>";
+
+        var objects = new[]
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+            Page(6),
+            Page(7),
+            Page(8),
+            Stream("/F1", "First page"),
+            Stream(secondPageFont, secondPageText),
+            Stream("/F1", "Third page"),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        };
+        var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        for (var index = 0; index < objects.Length; index++)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append($"{index + 1} 0 obj\n{objects[index]}\nendobj\n");
+        }
+
+        var xref = pdf.Length;
+        pdf.Append($"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            pdf.Append($"{offset:D10} 00000 n \n");
+        pdf.Append(
+            $"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+        );
+        return System.Text.Encoding.ASCII.GetBytes(pdf.ToString());
+    }
+
+    [Fact]
     public void Extract_PdfWithNoTextOnAnyPage_ReturnsWhitespaceOnly()
     {
         // The scraper stores such a file as an original without text.
