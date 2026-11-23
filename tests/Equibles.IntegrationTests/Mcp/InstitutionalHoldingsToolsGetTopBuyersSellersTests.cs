@@ -101,9 +101,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
             );
         var capture = scope.Get<InstitutionalActivityCapture>();
         (capture.ReportDate, capture.PreviousReportDate).Should().Be((latest, prior));
-        (capture.Adding, capture.NewPositions, capture.Cutting, capture.SoldOut)
-            .Should()
-            .Be((2, 1, 2, 1));
+        capture.Counts.Should().Be(new InstitutionalActivityCounts(2, 1, 2, 1));
         capture
             .Buyers.Select(row =>
                 (row.Name, row.Cik, row.PreviousShares, row.CurrentShares, row.DeltaShares)
@@ -366,6 +364,66 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         output.Should().Contain("as of 2024-12-31");
         output.Should().Contain("vs prior quarter 2024-09-30");
         output.Should().Contain("+400");
+    }
+
+    [Fact]
+    public async Task GetTopInstitutionalBuyersSellers_ReverseSplitBetweenQuarters_LeavesOutTheCounts()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "RVSP",
+            Name: "Reverse Split Corp.",
+            Cik: "0001999001"
+        );
+        var buyer = new InstitutionalHolder { Cik = "61", Name = "Real Buyer LP" };
+        var passive = new InstitutionalHolder { Cik = "62", Name = "Passive Index Trust" };
+        var prior = new DateOnly(2024, 9, 30);
+        var latest = new DateOnly(2024, 12, 31);
+        DbContext.AddRange(
+            stock,
+            buyer,
+            passive,
+            MakeHolding(stock, buyer, prior, shares: 10_000),
+            MakeHolding(stock, buyer, latest, shares: 5_000),
+            // 1,005 shares become 100.5 in a 1-for-10 reverse split: the filer reports 100 after
+            // cash in lieu, while the restated prior count rounds to 101.
+            MakeHolding(stock, passive, prior, shares: 1_005),
+            MakeHolding(stock, passive, latest, shares: 100),
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                EffectiveDate = new DateOnly(2024, 11, 1),
+                Numerator = 1,
+                Denominator = 10,
+                PriceSeriesTicker = "RVSP",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new EquityIssuerRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        using var scope = McpResultCapture.Begin();
+        var output = await sut.GetTopInstitutionalBuyersSellers("RVSP");
+
+        // The ranking still lists the real buyer first; a count of "cutting" holders would
+        // report the passive holder's rounded share as a sale.
+        output.Should().Contain("Real Buyer LP");
+        output.Should().NotContain("Among the filers compared");
+        var capture = scope.Get<InstitutionalActivityCapture>();
+        capture.Counts.Should().BeNull();
+        capture.Buyers.Should().ContainSingle().Which.DeltaShares.Should().Be(4_000);
     }
 
     [Fact]

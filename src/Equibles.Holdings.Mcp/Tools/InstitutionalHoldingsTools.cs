@@ -1786,16 +1786,17 @@ public class InstitutionalHoldingsTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                long AdjustShares(long shares, DateOnly asOf, string listedTicker)
-                {
-                    var exactTicker = listedTicker ?? stock.Presentation.Listing.Ticker;
-                    var scoped = ShareCountSplitScope.ForListedSeries(
-                        splits,
-                        stock.Presentation.Listing.Ticker,
-                        exactTicker
+                decimal ShareFactor(DateOnly asOf, string listedTicker) =>
+                    SplitAdjustment.ShareCountFactor(
+                        asOf,
+                        ShareCountSplitScope.ForListedSeries(
+                            splits,
+                            stock.Presentation.Listing.Ticker,
+                            listedTicker ?? stock.Presentation.Listing.Ticker
+                        )
                     );
-                    return SplitAdjustment.AdjustShareCount(shares, asOf, scoped);
-                }
+                long AdjustShares(long shares, DateOnly asOf, string listedTicker) =>
+                    SplitAdjustment.AdjustShareCount(shares, ShareFactor(asOf, listedTicker));
 
                 // A filer continued by one successor under a new CIK is compared through it.
                 var movers = activity
@@ -1960,11 +1961,25 @@ public class InstitutionalHoldingsTools
                     )
                     .ToList();
 
-                // Over every filer the ranking draws from, so the counts stand beside the same exclusions.
-                var adding = movers.Count(m => m.DeltaShares > 0);
-                var newPositions = movers.Count(m => m.DeltaShares > 0 && m.PreviousShares == 0);
-                var cutting = movers.Count(m => m.DeltaShares < 0);
-                var soldOut = movers.Count(m => m.DeltaShares < 0 && m.CurrentShares == 0);
+                // Over every filer the ranking draws from, so the counts stand beside the same
+                // exclusions. A reverse or fractional split restates a count to a rounded share,
+                // so a holder that did nothing can read one share up or down: the counts are
+                // stated only when both quarters restate by whole multiples.
+                var restatesExactly = activity
+                    .Select(row => row.ListedTicker)
+                    .Distinct()
+                    .All(series =>
+                        ShareFactor(targetDate, series) % 1m == 0m
+                        && ShareFactor(previousDate ?? targetDate, series) % 1m == 0m
+                    );
+                var counts = restatesExactly
+                    ? new InstitutionalActivityCounts(
+                        movers.Count(m => m.DeltaShares > 0),
+                        movers.Count(m => m.DeltaShares > 0 && m.PreviousShares == 0),
+                        movers.Count(m => m.DeltaShares < 0),
+                        movers.Count(m => m.DeltaShares < 0 && m.CurrentShares == 0)
+                    )
+                    : null;
                 InstitutionalActivityCaptureRow Captured(
                     (
                         Guid Id,
@@ -1997,10 +2012,7 @@ public class InstitutionalHoldingsTools
                         reportDates,
                         maxResults,
                         windowOpen,
-                        adding,
-                        newPositions,
-                        cutting,
-                        soldOut,
+                        counts,
                         buyerRows.Select(row => Captured(row, buyer: true)).ToList(),
                         sellerRows.Select(row => Captured(row, buyer: false)).ToList(),
                         comparison
@@ -2046,7 +2058,9 @@ public class InstitutionalHoldingsTools
                     JoinNotes(
                         JoinNotes(dateNote, comparisonNote),
                         comparison?.Note,
-                        $"Among the filers compared, {McpFormat.WholeNumber(adding)} added shares ({McpFormat.WholeNumber(newPositions)} new {(newPositions == 1 ? "position" : "positions")}) and {McpFormat.WholeNumber(cutting)} cut ({McpFormat.WholeNumber(soldOut)} sold out)."
+                        counts == null
+                            ? null
+                            : $"Among the filers compared, {McpFormat.WholeNumber(counts.Adding)} added shares ({McpFormat.WholeNumber(counts.NewPositions)} new {(counts.NewPositions == 1 ? "position" : "positions")}) and {McpFormat.WholeNumber(counts.Cutting)} cut ({McpFormat.WholeNumber(counts.SoldOut)} sold out)."
                     )
                 );
             },
