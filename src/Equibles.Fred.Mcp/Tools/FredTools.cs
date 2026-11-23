@@ -4,6 +4,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
 using Equibles.Fred.Data.Models;
 using Equibles.Fred.Mcp.Captures;
+using Equibles.Fred.Mcp.Helpers;
 using Equibles.Fred.Repositories;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
@@ -55,7 +56,11 @@ public class FredTools
         [Description(
             "Maximum number of observations to return (default: 100, max: 500). When the range holds more, the newest maxResults are kept; rows are always listed in ascending date order."
         )]
-            int maxResults = 100
+            int maxResults = 100,
+        [Description(
+            "level (default): the values as published. yoy: also each observation's change from a year earlier, in percent, or in percentage points for a series already stated in percent (inflation from CPIAUCSL, say)."
+        )]
+            string transform = null
     )
     {
         return _runner.Execute(
@@ -65,6 +70,15 @@ public class FredTools
 
                 if (series == null)
                     return $"No match for '{seriesId}' in the tracked economic-indicator set. Use SearchEconomicIndicators to list or search that curated set.";
+
+                var view = string.IsNullOrWhiteSpace(transform)
+                    ? "level"
+                    : transform.Trim().ToLowerInvariant();
+                if (view is not ("level" or "yoy"))
+                    return McpOutput.InvalidArgument("transform", transform, "'level' or 'yoy'");
+                var yearOverYear = view == "yoy";
+                if (yearOverYear && YearOverYear.AlreadyAChange(series.Units))
+                    return $"{series.SeriesId} is already stated as a change ({series.Units}); read its levels, or pick the underlying level series with SearchEconomicIndicators.";
 
                 var end = DateOnly.FromDateTime(DateTime.UtcNow);
                 if (!string.IsNullOrWhiteSpace(endDate))
@@ -90,9 +104,9 @@ public class FredTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                // Stored history starts where the import began (2020 for most series), not
-                // where FRED's does; a range that reaches further back must say it was cut, or
-                // a short table reads as the complete answer.
+                // Stored history can start after FRED's (a series not yet filled back, or one capped
+                // by FredScraper:HistoryStart); a range that reaches further back must say it was
+                // cut, or a short table reads as the complete answer.
                 var earliestStored = await _observationRepository
                     .GetEarliestDate(series)
                     .FirstOrDefaultAsync();
@@ -117,24 +131,58 @@ public class FredTools
                     .Take(maxResults)
                     .ToListAsync();
 
+                // The year-earlier bases sit outside the range, so they never count toward it or its cut.
+                var inPoints = YearOverYear.InPoints(series.Units);
+                var bases = new Dictionary<DateOnly, FredObservation>();
+                if (yearOverYear && observations.Count > 0)
+                {
+                    var from = YearOverYear.EarliestBaseDate(observations.Min(o => o.Date));
+                    var to = YearOverYear.LatestBaseDate(observations.Max(o => o.Date));
+                    bases = (
+                        await _observationRepository
+                            .GetBySeries(series, from, to)
+                            .Where(o => o.Value != null)
+                            .ToListAsync()
+                    )
+                        .GroupBy(o => o.Date)
+                        .ToDictionary(g => g.Key, g => g.First());
+                }
+                FredObservation BaseOf(FredObservation observation) =>
+                    YearOverYear.Base(observation.Date, series.Frequency, bases);
+                decimal? ChangeOf(FredObservation observation) =>
+                    YearOverYear.Change(observation.Value, BaseOf(observation)?.Value, inPoints);
+                var changeUnit = inPoints ? "percentage points" : "percent";
+
+                // Format with InvariantCulture so the MCP markdown does not fork the
+                // decimal separator by host locale (e.g. de-DE would render 5,25).
+                static string Printed(decimal? value) =>
+                    value.HasValue
+                        ? McpFormat.Invariant(value.Value, McpFormat.PlainDecimal)
+                        : "N/A";
                 var table = MarkdownTable.Render(
                     observations.OrderBy(o => o.Date).ToList(),
                     $"No observations found for {series.SeriesId} ({series.Title}) in the specified date range.",
                     $"{series.Title} ({series.SeriesId})",
                     $"Units: {series.Units} | Frequency: {series.Frequency} | Seasonal Adj: {series.SeasonalAdjustment}"
-                        + SourceNote(series),
-                    "| Date | Value |",
-                    "|------|-------|",
+                        + SourceNote(series)
+                        + (yearOverYear ? $" | Change from a year earlier, in {changeUnit}" : ""),
+                    yearOverYear ? "| Date | Value | Year earlier | Change |" : "| Date | Value |",
+                    yearOverYear ? "|------|-------|--------------|--------|" : "|------|-------|",
                     obs =>
-                    {
-                        // Format with InvariantCulture so the MCP markdown does not fork the
-                        // decimal separator by host locale (e.g. de-DE would render 5,25).
-                        var valueStr = obs.Value.HasValue
-                            ? McpFormat.Invariant(obs.Value.Value, McpFormat.PlainDecimal)
-                            : "N/A";
-                        return $"| {obs.Date:yyyy-MM-dd} | {valueStr} |";
-                    }
+                        yearOverYear
+                            ? $"| {obs.Date:yyyy-MM-dd} | {Printed(obs.Value)} | {Printed(BaseOf(obs)?.Value)} | {Printed(ChangeOf(obs))} |"
+                            : $"| {obs.Date:yyyy-MM-dd} | {Printed(obs.Value)} |"
                 );
+
+                var withoutBase = yearOverYear
+                    ? observations.Count(o => o.Value.HasValue && BaseOf(o) == null)
+                    : 0;
+                var baseNote =
+                    withoutBase > 0
+                        ? $"{withoutBase} of these observations have no stored observation a year earlier, so their change reads N/A."
+                        : "";
+                if (baseNote.Length > 0)
+                    table += Environment.NewLine + $"_{baseNote}_" + Environment.NewLine;
 
                 // The kept rows are the NEWEST maxResults of the range (rendered
                 // ascending), so the shared "first N" truncation note would mislabel
@@ -159,14 +207,19 @@ public class FredTools
                         );
                     if (coverageNote.Length > 0)
                         notes.Add(coverageNote.Trim().Trim('_'));
+                    if (baseNote.Length > 0)
+                        notes.Add(baseNote);
+                    var kept = observations.OrderBy(o => o.Date).ToList();
                     McpResultCapture.Record(
                         new EconomicIndicatorCapture(
                             series,
-                            observations.OrderBy(o => o.Date).ToList(),
+                            kept,
                             start,
                             end,
                             total,
-                            notes
+                            notes,
+                            yearOverYear ? kept.Select(ChangeOf).ToList() : null,
+                            inPoints
                         )
                     );
                 }
@@ -174,7 +227,7 @@ public class FredTools
                 return table + coverageNote;
             },
             "GetEconomicIndicator",
-            $"seriesId: {seriesId}"
+            $"seriesId: {seriesId}, transform: {transform}"
         );
     }
 

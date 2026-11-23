@@ -98,7 +98,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 `FinancialFactsTools`:
 
 - `GetFinancialFact` — time series for one XBRL concept (e.g. `us-gaap:Revenues`) on one ticker, with the exact period start/end and a coverage warning when the alias materially trails the company's other structured facts.
-- `CompareFinancialFact` — same concept compared across multiple tickers.
+- `CompareFinancialFact` — same concept compared across multiple tickers, by fiscal year or (`basis` `calendar`) lined up by calendar year.
 
 `FinancialStatementTools`:
 
@@ -121,7 +121,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `FredTools`:
 
-- `GetEconomicIndicator` — observations for a FRED series (e.g. `DGS10`, `UNRATE`), with units, frequency, and seasonal-adjustment metadata.
+- `GetEconomicIndicator` — observations for a FRED series (e.g. `DGS10`, `UNRATE`), with units, frequency, and seasonal-adjustment metadata; `transform` `yoy` adds each observation's change from a year earlier.
 - `GetLatestEconomicIndicators` — latest snapshot across the curated macro indicators.
 - `SearchEconomicIndicators` — punctuation-independent all-token search across tracked series IDs, titles, and categories with a sparse any-token fallback, plus standard aliases such as fed funds rate, jobless claims, payrolls, yield curve, and core CPI. Each result includes seasonal adjustment, latest observation date, and exact UTC series-sync time; an empty result says only that the curated tracked set has no match.
 - `GetEconomicCalendar` — scheduled and recent US and Canadian macro release dates (CPI, Employment Situation, GDP, …), narrowed by `country` and the FRED series each updates; defaults to the next 30 days.

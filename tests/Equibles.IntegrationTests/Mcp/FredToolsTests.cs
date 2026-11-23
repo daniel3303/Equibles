@@ -684,4 +684,110 @@ public class FredToolsTests : ParadeDbMcpTestBase
         capture.TotalInRange.Should().Be(5);
         capture.Notes.Should().Equal("Showing the newest 2 of 5 observations in the range.");
     }
+
+    // ── Change from a year earlier ─────────────────────────────────────
+
+    private async Task AddYearEarlier(FredSeries series, string date, decimal value)
+    {
+        DbContext
+            .Set<FredObservation>()
+            .Add(
+                new FredObservation
+                {
+                    FredSeriesId = series.Id,
+                    Date = DateOnly.Parse(date),
+                    Value = value,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+    }
+
+    // "How has inflation moved": CPI is an index, so its change from a year earlier is a percent change.
+    [Fact]
+    public async Task GetEconomicIndicator_YearOverYearOfAnIndex_PrintsThePercentChange()
+    {
+        await AddYearEarlier(_cpiSeries, "2024-03-01", 312.230m);
+        using var scope = McpResultCapture.Begin();
+
+        var result = await Sut()
+            .GetEconomicIndicator("CPIAUCSL", "2025-02-01", "2025-03-31", transform: "yoy");
+
+        result.Should().Contain("Change from a year earlier, in percent");
+        result.Should().Contain("| 2025-03-01 | 317 | 312.23 | 1.53 |");
+        result.Should().Contain("| 2025-02-01 | 316.2 | N/A | N/A |");
+        result
+            .Should()
+            .Contain("1 of these observations have no stored observation a year earlier");
+        // The year-earlier rows are bases, not part of the range or its cut.
+        result.Should().NotContain("Showing the newest");
+        var capture = scope.Get<EconomicIndicatorCapture>();
+        capture.TotalInRange.Should().Be(2);
+        capture.YearAgoChanges.Should().Equal(null, 1.53m);
+        capture.ChangeInPoints.Should().BeFalse();
+    }
+
+    // A rate is already in percent: its change from a year earlier is in percentage points.
+    [Fact]
+    public async Task GetEconomicIndicator_YearOverYearOfARate_PrintsPercentagePoints()
+    {
+        await AddYearEarlier(_fedFundsSeries, "2024-09-01", 5.13m);
+        using var scope = McpResultCapture.Begin();
+
+        var result = await Sut()
+            .GetEconomicIndicator("FEDFUNDS", "2025-09-01", "2025-09-30", transform: "yoy");
+
+        result.Should().Contain("Change from a year earlier, in percentage points");
+        result.Should().Contain("| 2025-09-01 | 4 | 5.13 | -1.13 |");
+        scope.Get<EconomicIndicatorCapture>().ChangeInPoints.Should().BeTrue();
+    }
+
+    // A weekly series compares the same weekday 52 weeks back (364 days), a day after the same date a year earlier;
+    // the newest week must still find its base.
+    [Fact]
+    public async Task GetEconomicIndicator_YearOverYearOfAWeeklySeries_FindsTheNewestWeeksBase()
+    {
+        var mortgage = new FredSeries
+        {
+            SeriesId = "MORTGAGE30US",
+            Title = "30-Year Fixed Rate Mortgage Average in the United States",
+            Category = FredSeriesCategory.InterestRates,
+            Frequency = "W",
+            Units = "Percent",
+            SeasonalAdjustment = "Not Seasonally Adjusted",
+        };
+        DbContext.Set<FredSeries>().Add(mortgage);
+        await DbContext.SaveChangesAsync();
+        await AddYearEarlier(mortgage, "2024-11-14", 6.78m);
+        await AddYearEarlier(mortgage, "2024-11-21", 6.84m);
+        await AddYearEarlier(mortgage, "2025-11-13", 6.24m);
+        await AddYearEarlier(mortgage, "2025-11-20", 6.26m);
+        using var scope = McpResultCapture.Begin();
+
+        var result = await Sut()
+            .GetEconomicIndicator("MORTGAGE30US", "2025-11-13", "2025-11-20", transform: "yoy");
+
+        result.Should().Contain("| 2025-11-20 | 6.26 | 6.84 | -0.58 |");
+        result.Should().Contain("| 2025-11-13 | 6.24 | 6.78 | -0.54 |");
+        result.Should().NotContain("no stored observation a year earlier");
+        scope.Get<EconomicIndicatorCapture>().YearAgoChanges.Should().Equal(-0.54m, -0.58m);
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_YearOverYearOfASeriesAlreadyAChange_IsRefused()
+    {
+        _gdpSeries.Units = "Percent Change from Preceding Period";
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetEconomicIndicator("GDP", transform: "yoy");
+
+        result.Should().Contain("is already stated as a change");
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_UnknownTransform_NamesTheArgument()
+    {
+        var result = await Sut().GetEconomicIndicator("CPIAUCSL", transform: "mom");
+
+        result.Should().Contain("transform");
+    }
 }

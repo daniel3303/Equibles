@@ -281,4 +281,86 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         first.Should().NotContain("$350,000,000,000");
         second.Should().Be(first, "the pick is deterministic across calls");
     }
+
+    // ── Calendar basis ─────────────────────────────────────────────────
+
+    private void AddFiscalYear(
+        EquityIssuer stock,
+        int stamp,
+        string start,
+        string end,
+        decimal value
+    ) =>
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    Id = Guid.NewGuid(),
+                    EquityIssuerId = stock.Id,
+                    FinancialConceptId = RevenueConcept().Id,
+                    Unit = "USD",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = DateOnly.Parse(start),
+                    PeriodEnd = DateOnly.Parse(end),
+                    Value = value,
+                    FiscalYear = stamp,
+                    FiscalPeriod = SecFiscalPeriod.FullYear,
+                    Form = DocumentType.TenK,
+                    FiledDate = DateOnly.Parse(end).AddDays(40),
+                    AccessionNumber = Guid.NewGuid().ToString("N")[..20],
+                }
+            );
+
+    // "Compare Nvidia, AMD and Microsoft revenue for 2025": NVDA's fiscal 2025 is mostly calendar 2024, so the
+    // calendar row is its fiscal 2026; MSFT's June year end splits about evenly and says so. Periods as filed.
+    [Fact]
+    public async Task CompareFinancialFact_CalendarBasis_TakesEachCompanysYearFallingMostlyInTheYear()
+    {
+        var nvda = AddStock("NVDA", "NVIDIA Corp");
+        var amd = AddStock("AMD", "Advanced Micro Devices");
+        var msft = AddStock("MSFT", "Microsoft Corp");
+        AddFiscalYear(nvda, 2025, "2024-01-29", "2025-01-26", 130_497_000_000m);
+        AddFiscalYear(nvda, 2026, "2025-01-27", "2026-01-25", 215_938_000_000m);
+        AddFiscalYear(amd, 2025, "2024-12-29", "2025-12-27", 34_639_000_000m);
+        AddFiscalYear(msft, 2025, "2024-07-01", "2025-06-30", 281_724_000_000m);
+        AddFiscalYear(msft, 2026, "2025-07-01", "2026-06-30", 318_000_000_000m);
+        await DbContext.SaveChangesAsync();
+        using var scope = McpResultCapture.Begin();
+
+        var result = await Sut()
+            .CompareFinancialFact("NVDA,AMD,MSFT", "revenue", 2025, "FY", "calendar");
+
+        result.Should().Contain("calendar 2025 peer comparison");
+        result.Should().Contain("| FY2026 | 2025-01-27 to 2026-01-25 |");
+        result.Should().Contain("| FY2025 | 2024-12-29 to 2025-12-27 |");
+        result.Should().Contain("| FY2026 † | 2025-07-01 to 2026-06-30 |");
+        result.Should().Contain("† This fiscal year splits about evenly");
+        result.Should().NotContain("2024-01-29");
+        var capture = scope.Get<FinancialFactComparisonCapture>();
+        capture.Calendar.Should().BeTrue();
+        capture.Rows.Select(row => row.Fact.FiscalYear).Should().Equal(2026, 2025, 2026);
+    }
+
+    [Fact]
+    public async Task CompareFinancialFact_CalendarBasisYearNotYetFiled_ListsTheCompanyAsSkipped()
+    {
+        var nvda = AddStock("NVDA", "NVIDIA Corp");
+        AddFiscalYear(nvda, 2025, "2024-01-29", "2025-01-26", 130_497_000_000m);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().CompareFinancialFact("NVDA", "revenue", 2025, "FY", "calendar");
+
+        result.Should().NotContain("2025-01-26");
+        result.Should().Contain("Skipped: NVDA");
+    }
+
+    [Fact]
+    public async Task CompareFinancialFact_CalendarBasisForAQuarter_IsRefused()
+    {
+        var result = await Sut()
+            .CompareFinancialFact("NVDA,AMD", "revenue", 2025, "Q2", "calendar");
+
+        result.Should().Contain("whole fiscal years only");
+    }
 }

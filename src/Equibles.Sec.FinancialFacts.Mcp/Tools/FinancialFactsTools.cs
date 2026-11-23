@@ -388,9 +388,11 @@ public class FinancialFactsTools
         "Compare one financial concept across several companies for the same fiscal "
             + "period — peer comparison. Returns one row per ticker with the "
             + "latest-restated value; tickers with no data for the period are listed "
-            + "separately. Fiscal year/period follow each company's OWN fiscal calendar "
+            + "separately. By default fiscal year/period follow each company's OWN fiscal calendar "
             + "(e.g. NVDA's fiscal 2025 ended January 2025), so peer rows can cover very "
-            + "different calendar months — check the Period End column."
+            + "different calendar months — check the Period End column. For a calendar year "
+            + "('2025 revenue of NVDA, AMD and INTC'), pass basis 'calendar': each company's "
+            + "fiscal year holding most of its days in that year."
     )]
     public Task<string> CompareFinancialFact(
         [Description(
@@ -403,12 +405,19 @@ public class FinancialFactsTools
         )]
             string concept,
         [Description(
-            "Fiscal year as the calendar year each company's period ends in, e.g. 2025, so every "
-                + "row covers the same months; a company that names that year for the year it "
-                + "starts in (most January year-end retailers) is labelled with its own name"
+            "The year compared, e.g. 2025. With basis 'fiscal': each company's period ending in that "
+                + "calendar year, so a January year end covers mostly the year before (NVDA's fiscal "
+                + "2025 ended January 2025); a company that names that year for the year it starts in "
+                + "(most January year-end retailers) is labelled with its own name. With basis "
+                + "'calendar': each company's fiscal year holding most of its days in that year."
         )]
             int fiscalYear,
-        [Description("Fiscal period: 'FY' (default) or 'Q1'..'Q4'")] string fiscalPeriod = "FY"
+        [Description("Fiscal period: 'FY' (default) or 'Q1'..'Q4'")] string fiscalPeriod = "FY",
+        [Description(
+            "'fiscal' (default): periods by each company's fiscal calendar. 'calendar': fiscal years "
+                + "lined up by the calendar year holding most of their days; FY only."
+        )]
+            string basis = null
     )
     {
         return _runner.Execute(
@@ -422,6 +431,16 @@ public class FinancialFactsTools
 
                 if (!FactArgs.TryParsePeriod(fiscalPeriod, out var period))
                     return $"Unknown period '{fiscalPeriod}'. Use 'FY' or 'Q1'..'Q4'.";
+
+                var basisName = string.IsNullOrWhiteSpace(basis)
+                    ? "fiscal"
+                    : basis.Trim().ToLowerInvariant();
+                if (basisName is not ("fiscal" or "calendar"))
+                    return McpOutput.InvalidArgument("basis", basis, "'fiscal' or 'calendar'");
+                var calendar = basisName == "calendar";
+                // Calendar quarters would place discrete quarters, which many filers never report for Q4.
+                if (calendar && period != SecFiscalPeriod.FullYear)
+                    return "basis 'calendar' lines up whole fiscal years only; use fiscalPeriod 'FY'.";
 
                 var (requested, tickerError) = ParseComparisonTickers(tickers);
                 if (tickerError != null)
@@ -477,41 +496,27 @@ public class FinancialFactsTools
                 var grossProfitComponents = GrossProfitMistag.IsGrossProfit(conceptRefs)
                     ? await ResolveGrossProfitComponents()
                     : [];
-                var loadedConceptIds = conceptPriority
-                    .Keys.Concat(bankComponentIds.NetInterestIncome)
-                    .Concat(bankComponentIds.NoninterestIncome)
-                    .Concat(bankComponentIds.InterestExpense)
-                    .Concat(operatingCosts.Ids)
-                    .Concat(grossProfitComponents.SelectMany(c => c.Ids))
-                    .ToList();
-                // A Q4 request must also load the year's fp=FY rows: filers whose
-                // Company Facts carry Q4 frames report the discrete fourth quarter
-                // under the FullYear stamp (see ReportedQuarterPromotion).
-                var includeFullYearForQ4 = period == SecFiscalPeriod.Q4;
-                var facts = await _financialFactRepository
-                    .GetConsolidatedByIssuerIds(stockIds)
-                    .Where(f =>
-                        f.FiscalYear == fiscalYear
-                        && (
-                            f.FiscalPeriod == period
-                            || (includeFullYearForQ4 && f.FiscalPeriod == SecFiscalPeriod.FullYear)
-                        )
-                        && loadedConceptIds.Contains(f.FinancialConceptId)
-                    )
-                    .ToListAsync();
-                // Depreciation and amortization is judged on each issuer's whole history, so the
-                // period compared shows the figure GetFinancialFact shows (DepreciationTotal).
-                if (DepreciationTotal.IsFamily(conceptRefs))
+                // One fiscal year's pick per company, and the companies whose gross profit that pick proves
+                // mis-tagged. A calendar comparison runs it for the two years that can hold the calendar year.
+                async Task<(Dictionary<Guid, FinancialFact> Best, HashSet<Guid> Mistagged)> Slice(
+                    int year
+                )
                 {
-                    var depreciation = await DepreciationTotalFacts.Load(
-                        _financialFactRepository,
-                        _financialConceptRepository,
-                        stockIds
-                    );
-                    conceptPriority = depreciation.Priority;
-                    facts = depreciation
-                        .Facts.Where(f =>
-                            f.FiscalYear == fiscalYear
+                    var loadedConceptIds = conceptPriority
+                        .Keys.Concat(bankComponentIds.NetInterestIncome)
+                        .Concat(bankComponentIds.NoninterestIncome)
+                        .Concat(bankComponentIds.InterestExpense)
+                        .Concat(operatingCosts.Ids)
+                        .Concat(grossProfitComponents.SelectMany(c => c.Ids))
+                        .ToList();
+                    // A Q4 request must also load the year's fp=FY rows: filers whose
+                    // Company Facts carry Q4 frames report the discrete fourth quarter
+                    // under the FullYear stamp (see ReportedQuarterPromotion).
+                    var includeFullYearForQ4 = period == SecFiscalPeriod.Q4;
+                    var facts = await _financialFactRepository
+                        .GetConsolidatedByIssuerIds(stockIds)
+                        .Where(f =>
+                            f.FiscalYear == year
                             && (
                                 f.FiscalPeriod == period
                                 || (
@@ -519,105 +524,163 @@ public class FinancialFactsTools
                                     && f.FiscalPeriod == SecFiscalPeriod.FullYear
                                 )
                             )
+                            && loadedConceptIds.Contains(f.FinancialConceptId)
                         )
-                        .ToList();
-                }
-
-                if (includeFullYearForQ4)
-                {
-                    // Promote per company: only a quarter-span row ending exactly
-                    // where the company's own year does is that year's fourth
-                    // quarter — comparative re-filings in the slice end earlier
-                    // and belong to the prior year. The remaining fp=FY rows
-                    // (the annual totals) are dropped, never compared as Q4.
-                    facts = facts
-                        .Where(f => f.FiscalPeriod == SecFiscalPeriod.Q4)
-                        .Concat(
-                            facts
-                                .GroupBy(f => f.EquityIssuerId)
-                                .SelectMany(
-                                    ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice
-                                )
-                        )
-                        .ToList();
-                }
-
-                // Same deterministic pick as GetFinancialFact: canonical periodic
-                // sources win before the alias's primary tag, then latest filing and
-                // accession provide stable amendment ordering (Postgres has no
-                // implicit row order).
-                var bestByStock = facts
-                    .GroupBy(f => f.EquityIssuerId)
-                    .Select(g =>
+                        .ToListAsync();
+                    // Depreciation and amortization is judged on each issuer's whole history, so the
+                    // period compared shows the figure GetFinancialFact shows (DepreciationTotal).
+                    if (DepreciationTotal.IsFamily(conceptRefs))
                     {
-                        var (candidates, priority) = BankTopLine.Fold(
-                            g.Where(f => conceptPriority.ContainsKey(f.FinancialConceptId))
-                                .ToList(),
-                            g.Where(f =>
-                                    bankComponentIds.NetInterestIncome.Contains(
-                                        f.FinancialConceptId
+                        var depreciation = await DepreciationTotalFacts.Load(
+                            _financialFactRepository,
+                            _financialConceptRepository,
+                            stockIds
+                        );
+                        conceptPriority = depreciation.Priority;
+                        facts = depreciation
+                            .Facts.Where(f =>
+                                f.FiscalYear == year
+                                && (
+                                    f.FiscalPeriod == period
+                                    || (
+                                        includeFullYearForQ4
+                                        && f.FiscalPeriod == SecFiscalPeriod.FullYear
                                     )
                                 )
-                                .ToList(),
-                            g.Where(f =>
-                                    bankComponentIds.NoninterestIncome.Contains(
-                                        f.FinancialConceptId
+                            )
+                            .ToList();
+                    }
+
+                    if (includeFullYearForQ4)
+                    {
+                        // Promote per company: only a quarter-span row ending exactly
+                        // where the company's own year does is that year's fourth
+                        // quarter — comparative re-filings in the slice end earlier
+                        // and belong to the prior year. The remaining fp=FY rows
+                        // (the annual totals) are dropped, never compared as Q4.
+                        facts = facts
+                            .Where(f => f.FiscalPeriod == SecFiscalPeriod.Q4)
+                            .Concat(
+                                facts
+                                    .GroupBy(f => f.EquityIssuerId)
+                                    .SelectMany(
+                                        ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice
                                     )
-                                )
-                                .ToList(),
-                            conceptPriority,
-                            // One period shows none of the filer's history, so its interest
-                            // expense is what proves revenue before interest expense.
-                            g.Where(f =>
-                                    bankComponentIds.InterestExpense.Contains(f.FinancialConceptId)
-                                )
-                                .ToList()
-                        );
-                        (candidates, priority) = OperatingCostsContinuation.Fold(
-                            claimableAlias,
-                            operatingCosts.ClaimedStockIds.Contains(g.Key) ? claimableAlias : null,
-                            candidates,
-                            priority,
-                            g.Where(f => operatingCosts.Ids.Contains(f.FinancialConceptId)).ToList()
-                        );
-                        return (
-                            StockId: g.Key,
-                            Fact: FinancialFactSeriesShaper.PickBestFact(candidates, priority)
-                        );
-                    })
-                    .Where(item => item.Fact != null)
-                    .ToDictionary(item => item.StockId, item => item.Fact);
-                var mistaggedStockIds =
-                    grossProfitComponents.Count == 0
-                        ? []
-                        : bestByStock
-                            .Where(entry =>
-                            {
-                                var stockFacts = facts
-                                    .Where(f => f.EquityIssuerId == entry.Key)
-                                    .ToList();
-                                var picks = grossProfitComponents
-                                    .Select(c =>
-                                        FinancialFactSeriesShaper.PickBestFact(
-                                            stockFacts.Where(f =>
-                                                c.Ids.Contains(f.FinancialConceptId)
-                                            ),
-                                            c.Priority
+                            )
+                            .ToList();
+                    }
+
+                    // Same deterministic pick as GetFinancialFact: canonical periodic
+                    // sources win before the alias's primary tag, then latest filing and
+                    // accession provide stable amendment ordering (Postgres has no
+                    // implicit row order).
+                    var best = facts
+                        .GroupBy(f => f.EquityIssuerId)
+                        .Select(g =>
+                        {
+                            var (candidates, priority) = BankTopLine.Fold(
+                                g.Where(f => conceptPriority.ContainsKey(f.FinancialConceptId))
+                                    .ToList(),
+                                g.Where(f =>
+                                        bankComponentIds.NetInterestIncome.Contains(
+                                            f.FinancialConceptId
                                         )
                                     )
-                                    .ToList();
-                                return picks.All(pick => pick != null)
-                                    && GrossProfitMistag
-                                        .MistaggedRows(
-                                            [entry.Value],
-                                            [picks[0]],
-                                            [picks[1]],
-                                            [picks[2]]
+                                    .ToList(),
+                                g.Where(f =>
+                                        bankComponentIds.NoninterestIncome.Contains(
+                                            f.FinancialConceptId
                                         )
-                                        .Count > 0;
-                            })
-                            .Select(entry => entry.Key)
-                            .ToHashSet();
+                                    )
+                                    .ToList(),
+                                conceptPriority,
+                                // One period shows none of the filer's history, so its interest
+                                // expense is what proves revenue before interest expense.
+                                g.Where(f =>
+                                        bankComponentIds.InterestExpense.Contains(
+                                            f.FinancialConceptId
+                                        )
+                                    )
+                                    .ToList()
+                            );
+                            (candidates, priority) = OperatingCostsContinuation.Fold(
+                                claimableAlias,
+                                operatingCosts.ClaimedStockIds.Contains(g.Key)
+                                    ? claimableAlias
+                                    : null,
+                                candidates,
+                                priority,
+                                g.Where(f => operatingCosts.Ids.Contains(f.FinancialConceptId))
+                                    .ToList()
+                            );
+                            return (
+                                StockId: g.Key,
+                                Fact: FinancialFactSeriesShaper.PickBestFact(candidates, priority)
+                            );
+                        })
+                        .Where(item => item.Fact != null)
+                        .ToDictionary(item => item.StockId, item => item.Fact);
+                    var mistagged =
+                        grossProfitComponents.Count == 0
+                            ? []
+                            : best.Where(entry =>
+                                {
+                                    var stockFacts = facts
+                                        .Where(f => f.EquityIssuerId == entry.Key)
+                                        .ToList();
+                                    var picks = grossProfitComponents
+                                        .Select(c =>
+                                            FinancialFactSeriesShaper.PickBestFact(
+                                                stockFacts.Where(f =>
+                                                    c.Ids.Contains(f.FinancialConceptId)
+                                                ),
+                                                c.Priority
+                                            )
+                                        )
+                                        .ToList();
+                                    return picks.All(pick => pick != null)
+                                        && GrossProfitMistag
+                                            .MistaggedRows(
+                                                [entry.Value],
+                                                [picks[0]],
+                                                [picks[1]],
+                                                [picks[2]]
+                                            )
+                                            .Count > 0;
+                                })
+                                .Select(entry => entry.Key)
+                                .ToHashSet();
+                    return (best, mistagged);
+                }
+
+                Dictionary<Guid, FinancialFact> bestByStock;
+                HashSet<Guid> mistaggedStockIds;
+                if (!calendar)
+                {
+                    (bestByStock, mistaggedStockIds) = await Slice(fiscalYear);
+                }
+                else
+                {
+                    var endingInYear = await Slice(fiscalYear);
+                    var endingNextYear = await Slice(fiscalYear + 1);
+                    var chosen = CalendarYearAlignment.Choose(
+                        fiscalYear,
+                        endingInYear.Best,
+                        endingNextYear.Best
+                    );
+                    bestByStock = chosen.ToDictionary(
+                        entry => entry.Key,
+                        entry => entry.Value.Fact
+                    );
+                    mistaggedStockIds = chosen
+                        .Where(entry =>
+                            (
+                                entry.Value.Stamp == fiscalYear ? endingInYear : endingNextYear
+                            ).Mistagged.Contains(entry.Key)
+                        )
+                        .Select(entry => entry.Key)
+                        .ToHashSet();
+                }
 
                 var (rows, skipped) = BuildComparisonRows(requested, stockByTicker, bestByStock);
                 var splitAdjustedStockIds = rows.Where(row =>
@@ -652,7 +715,10 @@ public class FinancialFactsTools
                         stock => stock.Presentation.EquityListingId
                     ),
                     conceptsById,
-                    stocks.ToDictionary(stock => stock.Id, EquityListingSymbol.Display)
+                    stocks.ToDictionary(stock => stock.Id, EquityListingSymbol.Display),
+                    calendar
+                        ? stocks.GroupBy(stock => stock.Id).ToDictionary(g => g.Key, g => g.First())
+                        : null
                 );
                 var mistaggedTickers = rows.Where(row =>
                         mistaggedStockIds.Contains(row.Fact.EquityIssuerId)
@@ -665,7 +731,8 @@ public class FinancialFactsTools
                     table += SumFootnote;
                     notes.Add(SumFootnoteCardText);
                 }
-                var ownNaming = OwnNamingFootnote(rows, stocks);
+                // A calendar table prints each company's own year label in its Fiscal Year column.
+                var ownNaming = calendar ? "" : OwnNamingFootnote(rows, stocks);
                 table += ownNaming;
                 if (ownNaming.Length > 0)
                     notes.Add(ownNaming.Trim().Trim('_'));
@@ -685,7 +752,7 @@ public class FinancialFactsTools
             },
             "CompareFinancialFact",
             $"tickers: {FactMarkdown.Clean(string.Join(",", tickers ?? []))}, concept: {FactMarkdown.Clean(concept)}, "
-                + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}"
+                + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}, basis: {FactMarkdown.Clean(basis)}"
         );
     }
 
@@ -693,7 +760,8 @@ public class FinancialFactsTools
         string tickers,
         string concept,
         int fiscalYear,
-        string fiscalPeriod = "FY"
+        string fiscalPeriod = "FY",
+        string basis = null
     ) =>
         CompareFinancialFact(
             // Empty segments are kept, never dropped: a batch like "AAPL,,MSFT" is
@@ -703,7 +771,8 @@ public class FinancialFactsTools
             tickers?.Split(',', StringSplitOptions.TrimEntries),
             concept,
             fiscalYear,
-            fiscalPeriod
+            fiscalPeriod,
+            basis
         );
 
     // The year compared is the calendar year each period ends in; a company that names that year
@@ -1068,16 +1137,25 @@ public class FinancialFactsTools
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
         IReadOnlyDictionary<Guid, Guid> listingIdsByStock,
         IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById,
-        IReadOnlyDictionary<Guid, string> symbolsByStock
+        IReadOnlyDictionary<Guid, string> symbolsByStock,
+        IReadOnlyDictionary<Guid, EquityIssuer> calendarIssuers = null
     )
     {
+        var calendar = calendarIssuers != null;
         var captured = new List<FinancialFactComparisonRow>();
         var notes = new List<string>();
-        var result = MarkdownTable.Start(
-            $"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:",
-            "| Ticker | Company | Value | Unit | Period End | Form | Filed |",
-            "|--------|---------|------:|------|-----------|------|-------|"
-        );
+        var result = calendar
+            ? MarkdownTable.Start(
+                $"{concept} — calendar {fiscalYear} peer comparison (each company's fiscal year holding most of its days in {fiscalYear}):",
+                "| Ticker | Company | Value | Unit | Fiscal Year | Period | Form | Filed |",
+                "|--------|---------|------:|------|-------------|--------|------|-------|"
+            )
+            : MarkdownTable.Start(
+                $"{concept} — {fiscalYear} {period.NameForHumans()} peer comparison:",
+                "| Ticker | Company | Value | Unit | Period End | Form | Filed |",
+                "|--------|---------|------:|------|-----------|------|-------|"
+            );
+        var evenSplit = false;
         var splitAdjusted = false;
         var unresolvedBasis = false;
         result.AppendRows(
@@ -1095,18 +1173,40 @@ public class FinancialFactsTools
                 var unresolved = restated.Unresolved;
                 unresolvedBasis |= unresolved;
                 splitAdjusted |= restated.Adjusted;
+                var ownYear =
+                    calendar && calendarIssuers.TryGetValue(r.Fact.EquityIssuerId, out var issuer)
+                        ? FiscalYearLabel.For(r.Fact.FiscalYear, issuer)
+                        : r.Fact.FiscalYear;
+                var even =
+                    calendar
+                    && CalendarYearAlignment.ShareIn(r.Fact, fiscalYear)
+                        < CalendarYearAlignment.EvenSplitShare;
+                evenSplit |= even;
                 captured.Add(
                     new FinancialFactComparisonRow(
                         r.Ticker,
                         r.Name,
-                        CaptureRow(r.Fact, r.Fact.FiscalYear, value, unresolved),
-                        symbolsByStock.GetValueOrDefault(r.Fact.EquityIssuerId)
+                        CaptureRow(r.Fact, ownYear, value, unresolved),
+                        symbolsByStock.GetValueOrDefault(r.Fact.EquityIssuerId),
+                        even
                     )
                 );
+                var periodCells = $"{r.Fact.PeriodEnd:yyyy-MM-dd} | ";
+                if (calendar)
+                {
+                    periodCells =
+                        $"FY{ownYear}{(even ? " †" : "")} | "
+                        + (
+                            r.Fact.PeriodStart == r.Fact.PeriodEnd
+                                ? $"at {r.Fact.PeriodEnd:yyyy-MM-dd}"
+                                : $"{r.Fact.PeriodStart:yyyy-MM-dd} to {r.Fact.PeriodEnd:yyyy-MM-dd}"
+                        )
+                        + " | ";
+                }
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
                     + $"{FactMarkdown.Value(value, r.Fact.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(r.Fact)} | "
                     + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
-                    + $"{r.Fact.PeriodEnd:yyyy-MM-dd} | "
+                    + periodCells
                     + $"{FactMarkdown.Cell(r.Fact.Form?.DisplayName)} | "
                     + $"{r.Fact.FiledDate:yyyy-MM-dd} |";
             }
@@ -1128,12 +1228,20 @@ public class FinancialFactsTools
 
         if (rows.Count == 0)
         {
-            var none =
-                $"No company reported '{concept}' for {fiscalYear} {period.NameForHumans()}.";
+            var none = calendar
+                ? $"No company reported '{concept}' for a fiscal year falling mostly in {fiscalYear}."
+                : $"No company reported '{concept}' for {fiscalYear} {period.NameForHumans()}.";
             Note(none, none);
         }
 
-        if (rows.Count > 1)
+        if (evenSplit)
+            Note(
+                "† This fiscal year splits about evenly between two calendar years; it is listed under the one holding more of its days.",
+                "† splits about evenly between two calendar years; listed under the one holding more of its days."
+            );
+
+        // A calendar table lines periods up on purpose, so its period ends always span about a year.
+        if (rows.Count > 1 && !calendar)
         {
             var earliest = rows.Min(r => r.Fact.PeriodEnd);
             var latest = rows.Max(r => r.Fact.PeriodEnd);
@@ -1166,7 +1274,14 @@ public class FinancialFactsTools
 
         return (
             result.ToString(),
-            new FinancialFactComparisonCapture(concept, fiscalYear, period, captured, notes)
+            new FinancialFactComparisonCapture(
+                concept,
+                fiscalYear,
+                period,
+                captured,
+                notes,
+                calendar
+            )
         );
     }
 
