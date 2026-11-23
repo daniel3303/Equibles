@@ -16,8 +16,6 @@ internal sealed class FreshFilingPreemption
     private readonly CancellationToken _cancellationToken;
     private readonly HashSet<Guid> _processed = [];
     private readonly List<EquityIssuer> _awaitingFullPass = [];
-    private Guid? _fullPassInFlight;
-    private bool _flaggedDuringFullPass;
     private bool _freshPassInFlight;
 
     /// <param name="processFresh">Reads only recent filings; true when it left older filings unread.</param>
@@ -40,20 +38,7 @@ internal sealed class FreshFilingPreemption
     {
         _processed.Add(company.Id);
         _awaitingFullPass.RemoveAll(c => c.Id == company.Id);
-        _fullPassInFlight = company.Id;
-        _flaggedDuringFullPass = false;
-        try
-        {
-            await _processFull(company);
-        }
-        finally
-        {
-            _fullPassInFlight = null;
-        }
-
-        // Its enumeration was read before this flag, so the flagged filing is not in it.
-        if (_flaggedDuringFullPass && !_cancellationToken.IsCancellationRequested)
-            await ProcessFresh(company);
+        await _processFull(company);
     }
 
     public async Task ProcessFresh(EquityIssuer company)
@@ -76,8 +61,9 @@ internal sealed class FreshFilingPreemption
     }
 
     /// <summary>
-    /// Gives every company the feed flags now a fresh pass. Inside a fresh pass it does nothing, so a flagged
-    /// filing never waits behind another company's reading.
+    /// Gives every company the feed flags now a fresh pass, the company whose full pass is running included: its
+    /// enumeration predates the flag, and its own backlog must not hold its new filing. Inside a fresh pass it
+    /// does nothing, so passes nest one level at most.
     /// </summary>
     public async Task RunFresh()
     {
@@ -100,11 +86,6 @@ internal sealed class FreshFilingPreemption
         {
             if (_cancellationToken.IsCancellationRequested)
                 return;
-            if (company.Id == _fullPassInFlight)
-            {
-                _flaggedDuringFullPass = true;
-                continue;
-            }
             await ProcessFresh(company);
         }
     }

@@ -105,9 +105,10 @@ public class FreshFilingPreemptionTests
         preemption.WasProcessed(second).Should().BeTrue();
     }
 
-    // Its enumeration was read before the flag, so the new filing needs a fresh pass after it, never a nested one.
+    // A fund trust filing during its own hour-long sweep: its enumeration predates the flag, and the new filing must
+    // not wait for the rest of that backlog.
     [Fact]
-    public async Task RunFresh_CompanyFlaggedDuringItsOwnFullPass_GetsAFreshPassAfterIt()
+    public async Task RunFresh_CompanyFlaggedDuringItsOwnFullPass_GetsAFreshPassRightAway()
     {
         var trust = Company("trust");
         var passes = new List<string>();
@@ -130,7 +131,7 @@ public class FreshFilingPreemptionTests
 
         await preemption.Process(trust);
 
-        passes.Should().Equal("full start", "full end", "fresh");
+        passes.Should().Equal("full start", "fresh", "full end");
     }
 
     // A deploy stopping the worker mid-poll must not skip the rest of the sweep's filings.
