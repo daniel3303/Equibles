@@ -146,7 +146,8 @@ public sealed record HoldingsComparisonStatus(
         }
     }
 
-    private string Reason(Guid holderId)
+    // Why a filer is missing from the comparison, as the note words it.
+    public string Reason(Guid holderId)
     {
         if (Successions.Any(group => !group.Comparable && group.Contains(holderId)))
             return "CIK change, books not comparable";

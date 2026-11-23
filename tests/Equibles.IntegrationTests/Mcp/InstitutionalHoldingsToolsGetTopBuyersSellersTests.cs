@@ -4,9 +4,11 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Mcp.Captures;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -88,7 +90,31 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
+        using var scope = McpResultCapture.Begin();
         var output = await sut.GetTopInstitutionalBuyersSellers("AAPL");
+
+        // The counts cover every compared filer, and a card gets the rows as printed.
+        output
+            .Should()
+            .Contain(
+                "Among the filers compared, 2 added shares (1 new position) and 2 cut (1 sold out)."
+            );
+        var capture = scope.Get<InstitutionalActivityCapture>();
+        (capture.ReportDate, capture.PreviousReportDate).Should().Be((latest, prior));
+        capture.Counts.Should().Be(new InstitutionalActivityCounts(2, 1, 2, 1));
+        capture
+            .Buyers.Select(row =>
+                (row.Name, row.Cik, row.PreviousShares, row.CurrentShares, row.DeltaShares)
+            )
+            .Should()
+            .Equal(
+                ("Newcomer Partners", "4", 0L, 2_000L, 2_000L),
+                ("Increaser Inc.", "1", 1_000L, 1_500L, 500L)
+            );
+        capture
+            .Sellers.Select(row => (row.Name, row.CurrentShares, row.DeltaShares))
+            .Should()
+            .Equal(("Sold-Out Capital", 0L, -1_000L), ("Reducer LLC", 800L, -200L));
 
         // Headline + sections
         output.Should().Contain("Top buyers and sellers of Apple Inc. (AAPL) as of 2024-12-31");
@@ -251,9 +277,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
+        using var scope = McpResultCapture.Begin();
         var output = await sut.GetTopInstitutionalBuyersSellers("NVDA");
 
-        // No buyers and no sellers — early-return message, not the per-section tables.
+        // No buyers and no sellers — early-return message, not the per-section tables, and no card.
+        scope.Get<InstitutionalActivityCapture>().Should().BeNull();
         output.Should().Contain("No comparable quarter-over-quarter movement found");
         output.Should().NotContain("## Top Buyers");
         output.Should().NotContain("## Top Sellers");
@@ -336,6 +364,132 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         output.Should().Contain("as of 2024-12-31");
         output.Should().Contain("vs prior quarter 2024-09-30");
         output.Should().Contain("+400");
+    }
+
+    [Fact]
+    public async Task GetTopInstitutionalBuyersSellers_ReverseSplitBetweenQuarters_LeavesOutTheCounts()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "RVSP",
+            Name: "Reverse Split Corp.",
+            Cik: "0001999001"
+        );
+        var buyer = new InstitutionalHolder { Cik = "61", Name = "Real Buyer LP" };
+        var passive = new InstitutionalHolder { Cik = "62", Name = "Passive Index Trust" };
+        var prior = new DateOnly(2024, 9, 30);
+        var latest = new DateOnly(2024, 12, 31);
+        DbContext.AddRange(
+            stock,
+            buyer,
+            passive,
+            MakeHolding(stock, buyer, prior, shares: 10_000),
+            MakeHolding(stock, buyer, latest, shares: 5_000),
+            // 1,005 shares become 100.5 in a 1-for-10 reverse split: the filer reports 100 after
+            // cash in lieu, while the restated prior count rounds to 101.
+            MakeHolding(stock, passive, prior, shares: 1_005),
+            MakeHolding(stock, passive, latest, shares: 100),
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                EffectiveDate = new DateOnly(2024, 11, 1),
+                Numerator = 1,
+                Denominator = 10,
+                PriceSeriesTicker = "RVSP",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new EquityIssuerRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        using var scope = McpResultCapture.Begin();
+        var output = await sut.GetTopInstitutionalBuyersSellers("RVSP");
+
+        // The ranking still lists the real buyer first; a count of "cutting" holders would
+        // report the passive holder's rounded share as a sale.
+        output.Should().Contain("Real Buyer LP");
+        output.Should().NotContain("Among the filers compared");
+        var capture = scope.Get<InstitutionalActivityCapture>();
+        capture.Counts.Should().BeNull();
+        capture.Buyers.Should().ContainSingle().Which.DeltaShares.Should().Be(4_000);
+    }
+
+    [Fact]
+    public async Task GetTopInstitutionalBuyersSellers_FractionalSplitThenALaterWholeOne_StillLeavesOutTheCounts()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "FRSP",
+            Name: "Fractional Split Corp.",
+            Cik: "0001999002"
+        );
+        var buyer = new InstitutionalHolder { Cik = "71", Name = "Real Buyer LP" };
+        var passive = new InstitutionalHolder { Cik = "72", Name = "Passive Index Trust" };
+        var prior = new DateOnly(2024, 9, 30);
+        var latest = new DateOnly(2024, 12, 31);
+        DbContext.AddRange(
+            stock,
+            buyer,
+            passive,
+            MakeHolding(stock, buyer, prior, shares: 1_000),
+            MakeHolding(stock, buyer, latest, shares: 3_000),
+            // 1,001 shares become 1,501.5 in the 3-for-2 split and the filer reports 1,501. The
+            // later 2-for-1 makes the earlier quarter's factor a whole 3, yet 3,003 against 3,002
+            // still reads as a one-share sale.
+            MakeHolding(stock, passive, prior, shares: 1_001),
+            MakeHolding(stock, passive, latest, shares: 1_501),
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                EffectiveDate = new DateOnly(2024, 11, 1),
+                Numerator = 3,
+                Denominator = 2,
+                PriceSeriesTicker = "FRSP",
+            },
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                EffectiveDate = new DateOnly(2025, 6, 2),
+                Numerator = 2,
+                Denominator = 1,
+                PriceSeriesTicker = "FRSP",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new EquityIssuerRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        using var scope = McpResultCapture.Begin();
+        var output = await sut.GetTopInstitutionalBuyersSellers("FRSP");
+
+        output.Should().NotContain("Among the filers compared");
+        var capture = scope.Get<InstitutionalActivityCapture>();
+        capture.Counts.Should().BeNull();
+        capture.Buyers.Should().ContainSingle().Which.DeltaShares.Should().Be(3_000);
     }
 
     [Fact]
