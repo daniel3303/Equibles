@@ -75,6 +75,25 @@ public class IsinShareClassAnswerTests
         answer.QuotedOverTheCounter.Should().BeFalse();
     }
 
+    // A second US line whose ticker cannot be read is still a line the over-the-counter venue does not quote.
+    [Fact]
+    public void ASecondUsLineWithAnUnreadableTicker_IsNotQuotedOverTheCounter()
+    {
+        var composite = JArray.Parse(AirbusComposite);
+        var second = (JObject)composite[0].DeepClone();
+        second["ticker"] = "EAD F";
+        composite.Add(second);
+
+        var answer = IsinShareClassAnswer.Read(
+            "NL0000235190",
+            composite,
+            JArray.Parse(AirbusOverTheCounter)
+        );
+
+        answer.UsTickers.Should().Equal("EADSF");
+        answer.QuotedOverTheCounter.Should().BeFalse();
+    }
+
     // A quote under another share class is another security's line.
     [Fact]
     public void AQuoteUnderAnotherShareClass_DoesNotCount()

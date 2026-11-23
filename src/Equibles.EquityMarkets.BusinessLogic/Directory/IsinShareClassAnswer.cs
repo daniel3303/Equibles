@@ -24,8 +24,9 @@ public sealed record IsinShareClassAnswer(
     {
         var lines = Lines(composite, UsComposite);
         var quoted = Lines(overTheCounter, UsOverTheCounter);
-        var tickers = lines
-            .Select(Ticker)
+        // A line whose ticker cannot be read is still a US line: it is never dropped from the over-the-counter test.
+        var stated = lines.Select(Ticker).ToList();
+        var tickers = stated
             .Where(ticker => ticker != null)
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -39,7 +40,8 @@ public sealed record IsinShareClassAnswer(
             shareClass,
             tickers,
             Single(lines, "securityType2"),
-            tickers.Count > 0 && tickers.All(quotedTickers.Contains),
+            stated.Count > 0
+                && stated.All(ticker => ticker != null && quotedTickers.Contains(ticker)),
             new JObject
             {
                 ["isin"] = isin,
