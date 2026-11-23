@@ -230,7 +230,8 @@ public class EsefReportImportService(
                 issuer.Cik,
                 Presented = issuer.Presentation.Listing.MarketCountryCode,
                 PresentedOnVenue = issuer.Presentation.Listing.MarketIdentifierCode != null,
-                // A CIK holder presents its US line, which no European index files under.
+                // A CIK holder presents its US line, which no European index files under; an issuer without a CIK
+                // keeps the country it presents, so the filing it already stored stays the one picked.
                 Venue = issuer
                     .Securities.SelectMany(security => security.Listings)
                     .Where(listing => listing.Active && listing.MarketIdentifierCode != null)
@@ -247,7 +248,7 @@ public class EsefReportImportService(
             issuers[row.LegalEntityIdentifier] = new EsefCandidateIssuer(
                 row.Id,
                 row.LegalEntityIdentifier,
-                row.PresentedOnVenue ? row.Presented : row.Venue ?? row.Presented
+                row.Cik == null || row.PresentedOnVenue ? row.Presented : row.Venue ?? row.Presented
             );
         }
         return issuers;
