@@ -2005,23 +2005,24 @@ public class InstitutionalHoldingsTools
                         row.DeltaShares,
                         row.DeltaValue
                     );
-                // A ranked mover implies a prior quarter and its comparison.
-                McpResultCapture.Record(
-                    new InstitutionalActivityCapture(
-                        stock,
-                        listedTicker,
-                        exactListingScope,
-                        targetDate,
-                        previousDate.Value,
-                        reportDates,
-                        maxResults,
-                        windowOpen,
-                        counts,
-                        buyerRows.Select(row => Captured(row, buyer: true)).ToList(),
-                        sellerRows.Select(row => Captured(row, buyer: false)).ToList(),
-                        comparison
-                    )
-                );
+                // A ranked mover implies a comparison, which carries the prior quarter.
+                if (comparison != null)
+                    McpResultCapture.Record(
+                        new InstitutionalActivityCapture(
+                            stock,
+                            listedTicker,
+                            exactListingScope,
+                            targetDate,
+                            comparison.PreviousReportDate,
+                            reportDates,
+                            maxResults,
+                            windowOpen,
+                            counts,
+                            buyerRows.Select(row => Captured(row, buyer: true)).ToList(),
+                            sellerRows.Select(row => Captured(row, buyer: false)).ToList(),
+                            comparison
+                        )
+                    );
 
                 var comparisonNote =
                     windowOpen
