@@ -162,6 +162,14 @@ public class EquityIssuerMergeManager
             );
         }
 
+        foreach (var form in request.WithdrawnFactForms.Distinct(StringComparer.Ordinal))
+        {
+            report.WithdrawnFacts += await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"FinancialFact\" WHERE \"EquityIssuerId\" = {retiredId} AND \"Form\" = {form}",
+                cancellationToken
+            );
+        }
+
         // Checked after the withdrawals: figures left on both sides are two governing sources, which refuse.
         var figuresFollow =
             request.SuccessorFold
@@ -468,6 +476,8 @@ public class EquityIssuerMergeManager
             || string.IsNullOrWhiteSpace(request.MergedBy)
         )
             refusals.Add("A merge records its evidence kind and operator.");
+        if (request.WithdrawnFactForms.Any(string.IsNullOrWhiteSpace))
+            refusals.Add("A withdrawn fact form must name a report form.");
         if (request.WithdrawnFactPrefixes.Any(string.IsNullOrWhiteSpace))
             refusals.Add(
                 "A withdrawn fact prefix must name a source; a blank one matches every fact."
