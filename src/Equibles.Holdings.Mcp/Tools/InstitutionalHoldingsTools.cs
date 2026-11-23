@@ -1969,9 +1969,13 @@ public class InstitutionalHoldingsTools
                     .Select(row => row.ListedTicker)
                     .Distinct()
                     .All(series =>
-                        ShareFactor(targetDate, series) % 1m == 0m
-                        && ShareFactor(previousDate ?? targetDate, series) % 1m == 0m
-                    );
+                    {
+                        // Whole to today, and whole between the quarters: a later split can make
+                        // the earlier quarter's factor whole again without undoing its rounding.
+                        var current = ShareFactor(targetDate, series);
+                        var previous = ShareFactor(previousDate ?? targetDate, series);
+                        return current % 1m == 0m && previous / current % 1m == 0m;
+                    });
                 var counts = restatesExactly
                     ? new InstitutionalActivityCounts(
                         movers.Count(m => m.DeltaShares > 0),

@@ -427,6 +427,72 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     }
 
     [Fact]
+    public async Task GetTopInstitutionalBuyersSellers_FractionalSplitThenALaterWholeOne_StillLeavesOutTheCounts()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "FRSP",
+            Name: "Fractional Split Corp.",
+            Cik: "0001999002"
+        );
+        var buyer = new InstitutionalHolder { Cik = "71", Name = "Real Buyer LP" };
+        var passive = new InstitutionalHolder { Cik = "72", Name = "Passive Index Trust" };
+        var prior = new DateOnly(2024, 9, 30);
+        var latest = new DateOnly(2024, 12, 31);
+        DbContext.AddRange(
+            stock,
+            buyer,
+            passive,
+            MakeHolding(stock, buyer, prior, shares: 1_000),
+            MakeHolding(stock, buyer, latest, shares: 3_000),
+            // 1,001 shares become 1,501.5 in the 3-for-2 split and the filer reports 1,501. The
+            // later 2-for-1 makes the earlier quarter's factor a whole 3, yet 3,003 against 3,002
+            // still reads as a one-share sale.
+            MakeHolding(stock, passive, prior, shares: 1_001),
+            MakeHolding(stock, passive, latest, shares: 1_501),
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                EffectiveDate = new DateOnly(2024, 11, 1),
+                Numerator = 3,
+                Denominator = 2,
+                PriceSeriesTicker = "FRSP",
+            },
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                EffectiveDate = new DateOnly(2025, 6, 2),
+                Numerator = 2,
+                Denominator = 1,
+                PriceSeriesTicker = "FRSP",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new EquityIssuerRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        using var scope = McpResultCapture.Begin();
+        var output = await sut.GetTopInstitutionalBuyersSellers("FRSP");
+
+        output.Should().NotContain("Among the filers compared");
+        var capture = scope.Get<InstitutionalActivityCapture>();
+        capture.Counts.Should().BeNull();
+        capture.Buyers.Should().ContainSingle().Which.DeltaShares.Should().Be(3_000);
+    }
+
+    [Fact]
     public async Task GetTopInstitutionalBuyersSellers_PrimaryRowsIgnoreSiblingListingSplits()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
