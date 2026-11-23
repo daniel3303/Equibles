@@ -4,9 +4,11 @@ using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Mcp.Captures;
 using Equibles.Holdings.Mcp.Tools;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -88,7 +90,33 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
+        using var scope = McpResultCapture.Begin();
         var output = await sut.GetTopInstitutionalBuyersSellers("AAPL");
+
+        // The counts cover every compared filer, and a card gets the rows as printed.
+        output
+            .Should()
+            .Contain(
+                "Among the filers compared, 2 added shares (1 new position) and 2 cut (1 sold out)."
+            );
+        var capture = scope.Get<InstitutionalActivityCapture>();
+        (capture.ReportDate, capture.PreviousReportDate).Should().Be((latest, prior));
+        (capture.Adding, capture.NewPositions, capture.Cutting, capture.SoldOut)
+            .Should()
+            .Be((2, 1, 2, 1));
+        capture
+            .Buyers.Select(row =>
+                (row.Name, row.Cik, row.PreviousShares, row.CurrentShares, row.DeltaShares)
+            )
+            .Should()
+            .Equal(
+                ("Newcomer Partners", "4", 0L, 2_000L, 2_000L),
+                ("Increaser Inc.", "1", 1_000L, 1_500L, 500L)
+            );
+        capture
+            .Sellers.Select(row => (row.Name, row.CurrentShares, row.DeltaShares))
+            .Should()
+            .Equal(("Sold-Out Capital", 0L, -1_000L), ("Reducer LLC", 800L, -200L));
 
         // Headline + sections
         output.Should().Contain("Top buyers and sellers of Apple Inc. (AAPL) as of 2024-12-31");
@@ -251,9 +279,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
+        using var scope = McpResultCapture.Begin();
         var output = await sut.GetTopInstitutionalBuyersSellers("NVDA");
 
-        // No buyers and no sellers — early-return message, not the per-section tables.
+        // No buyers and no sellers — early-return message, not the per-section tables, and no card.
+        scope.Get<InstitutionalActivityCapture>().Should().BeNull();
         output.Should().Contain("No comparable quarter-over-quarter movement found");
         output.Should().NotContain("## Top Buyers");
         output.Should().NotContain("## Top Sellers");

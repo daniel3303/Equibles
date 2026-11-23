@@ -1878,13 +1878,18 @@ public class InstitutionalHoldingsTools
                     )
                     .Distinct()
                     .ToList();
-                var holderNames = await _holderRepository
+                var holders = await _holderRepository
                     .GetAll()
                     .Where(h => topHolderIds.Contains(h.Id))
-                    .Select(h => new { h.Id, h.Name })
-                    .ToDictionaryAsync(h => h.Id, h => h.Name);
+                    .Select(h => new
+                    {
+                        h.Id,
+                        h.Name,
+                        h.Cik,
+                    })
+                    .ToDictionaryAsync(h => h.Id);
                 string HolderName(Guid id) =>
-                    holderNames.TryGetValue(id, out var name) ? name : "Unknown";
+                    holders.TryGetValue(id, out var holder) ? holder.Name : "Unknown";
                 if (comparison != null)
                     comparison = comparison with
                     {
@@ -1892,7 +1897,7 @@ public class InstitutionalHoldingsTools
                             .ExcludedFilers.Select(f =>
                                 f with
                                 {
-                                    Name = holderNames.GetValueOrDefault(f.InstitutionalHolderId),
+                                    Name = holders.GetValueOrDefault(f.InstitutionalHolderId)?.Name,
                                 }
                             )
                             .ToList(),
@@ -1922,17 +1927,19 @@ public class InstitutionalHoldingsTools
                 }
 
                 // A successor compared with the filers it continues is named with them.
-                string RowName(Guid id) =>
-                    comparison?.ContinuedFrom(id) is { } predecessors
-                        ? $"{HolderName(id)} (continues {predecessors})"
+                string Remark(Guid id, bool buyer) =>
+                    comparison?.ContinuedFrom(id) is { } predecessors ? $"continues {predecessors}"
+                    : buyer && firstTimeFilerIds.Contains(id) ? "first 13F this quarter"
+                    : null;
+                string RowName(Guid id, bool buyer) =>
+                    Remark(id, buyer) is { } remark
+                        ? $"{HolderName(id)} ({remark})"
                         : HolderName(id);
                 var buyerRows = topBuyers
                     .Select(m =>
                         (
-                            comparison?.ContinuedFrom(m.Id) == null
-                            && firstTimeFilerIds.Contains(m.Id)
-                                ? $"{HolderName(m.Id)} (first 13F this quarter)"
-                                : RowName(m.Id),
+                            m.Id,
+                            Name: RowName(m.Id, buyer: true),
                             m.CurrentShares,
                             m.PreviousShares,
                             m.DeltaShares,
@@ -1943,7 +1950,8 @@ public class InstitutionalHoldingsTools
                 var sellerRows = topSellers
                     .Select(m =>
                         (
-                            RowName(m.Id),
+                            m.Id,
+                            Name: RowName(m.Id, buyer: false),
                             m.CurrentShares,
                             m.PreviousShares,
                             m.DeltaShares,
@@ -1951,6 +1959,53 @@ public class InstitutionalHoldingsTools
                         )
                     )
                     .ToList();
+
+                // Over every filer the ranking draws from, so the counts stand beside the same exclusions.
+                var adding = movers.Count(m => m.DeltaShares > 0);
+                var newPositions = movers.Count(m => m.DeltaShares > 0 && m.PreviousShares == 0);
+                var cutting = movers.Count(m => m.DeltaShares < 0);
+                var soldOut = movers.Count(m => m.DeltaShares < 0 && m.CurrentShares == 0);
+                InstitutionalActivityCaptureRow Captured(
+                    (
+                        Guid Id,
+                        string Name,
+                        long CurrentShares,
+                        long PreviousShares,
+                        long DeltaShares,
+                        long DeltaValue
+                    ) row,
+                    bool buyer
+                ) =>
+                    new(
+                        row.Id,
+                        HolderName(row.Id),
+                        Remark(row.Id, buyer),
+                        holders.GetValueOrDefault(row.Id)?.Cik,
+                        row.PreviousShares,
+                        row.CurrentShares,
+                        row.DeltaShares,
+                        row.DeltaValue
+                    );
+                // A ranked mover implies a prior quarter and its comparison.
+                McpResultCapture.Record(
+                    new InstitutionalActivityCapture(
+                        stock,
+                        listedTicker,
+                        exactListingScope,
+                        targetDate,
+                        previousDate.Value,
+                        reportDates,
+                        maxResults,
+                        windowOpen,
+                        adding,
+                        newPositions,
+                        cutting,
+                        soldOut,
+                        buyerRows.Select(row => Captured(row, buyer: true)).ToList(),
+                        sellerRows.Select(row => Captured(row, buyer: false)).ToList(),
+                        comparison
+                    )
+                );
 
                 var comparisonNote =
                     windowOpen
@@ -1966,9 +2021,33 @@ public class InstitutionalHoldingsTools
                     ticker,
                     targetDate,
                     previousDate,
-                    buyerRows,
-                    sellerRows,
-                    JoinNotes(JoinNotes(dateNote, comparisonNote), comparison?.Note)
+                    buyerRows
+                        .Select(row =>
+                            (
+                                row.Name,
+                                row.CurrentShares,
+                                row.PreviousShares,
+                                row.DeltaShares,
+                                row.DeltaValue
+                            )
+                        )
+                        .ToList(),
+                    sellerRows
+                        .Select(row =>
+                            (
+                                row.Name,
+                                row.CurrentShares,
+                                row.PreviousShares,
+                                row.DeltaShares,
+                                row.DeltaValue
+                            )
+                        )
+                        .ToList(),
+                    JoinNotes(
+                        JoinNotes(dateNote, comparisonNote),
+                        comparison?.Note,
+                        $"Among the filers compared, {McpFormat.WholeNumber(adding)} added shares ({McpFormat.WholeNumber(newPositions)} new {(newPositions == 1 ? "position" : "positions")}) and {McpFormat.WholeNumber(cutting)} cut ({McpFormat.WholeNumber(soldOut)} sold out)."
+                    )
                 );
             },
             "GetTopInstitutionalBuyersSellers",
