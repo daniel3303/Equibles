@@ -47,6 +47,9 @@ public class DocumentScraper : IDocumentScraper
     // seconds — an unthrottled sync would re-fetch company_tickers each time.
     private static DateTime _lastCompanySyncAtUtc;
 
+    // Event-driven cycles only; legacy full sweeps have no feed to poll.
+    private FreshFilingPreemption _preemption;
+
     public DocumentScraper(
         IServiceScopeFactory serviceScopeFactory,
         ICompanySyncService companySyncService,
@@ -89,15 +92,19 @@ public class DocumentScraper : IDocumentScraper
                     companiesUntracked,
                     cancellationToken
                 );
-                await ProcessPreemptingReconciliation(
-                    discovered,
-                    reconciliation,
+                _preemption = new FreshFilingPreemption(
                     () =>
                         _filingDiscoveryService.DiscoverCompaniesFromRecentFeed(
                             companiesUntracked,
                             cancellationToken
                         ),
                     company => ProcessTarget(company, stampSyncState: true, result),
+                    cancellationToken
+                );
+                await ProcessPreemptingReconciliation(
+                    discovered,
+                    reconciliation,
+                    _preemption,
                     cancellationToken
                 );
             }
@@ -216,32 +223,23 @@ public class DocumentScraper : IDocumentScraper
     internal static async Task ProcessPreemptingReconciliation(
         IEnumerable<EquityIssuer> discovered,
         IEnumerable<EquityIssuer> reconciliation,
-        Func<Task<List<EquityIssuer>>> pollFresh,
-        Func<EquityIssuer, Task> process,
+        FreshFilingPreemption preemption,
         CancellationToken cancellationToken
     )
     {
-        var processed = new HashSet<Guid>();
-
-        async Task Run(IEnumerable<EquityIssuer> companies)
+        foreach (var company in discovered)
         {
-            foreach (var company in companies)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    return;
-                processed.Add(company.Id);
-                await process(company);
-            }
+            if (cancellationToken.IsCancellationRequested)
+                return;
+            await preemption.Process(company);
         }
-
-        await Run(discovered);
         foreach (var company in reconciliation)
         {
             if (cancellationToken.IsCancellationRequested)
                 return;
-            await Run(await pollFresh());
-            if (!processed.Contains(company.Id))
-                await Run([company]);
+            await preemption.RunFresh();
+            if (!preemption.WasProcessed(company))
+                await preemption.Process(company);
         }
     }
 
@@ -677,6 +675,8 @@ public class DocumentScraper : IDocumentScraper
 
             foreach (var filing in newFilings)
             {
+                if (_preemption != null)
+                    await _preemption.RunFresh();
                 await ProcessFiling(company, filing, documentType, result, persistenceService);
             }
         }

@@ -25,12 +25,15 @@ public class DocumentScraperReconciliationPreemptionTests
         await DocumentScraper.ProcessPreemptingReconciliation(
             [discovered],
             [first, second],
-            () => Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []),
-            company =>
-            {
-                order.Add(company.Name);
-                return Task.CompletedTask;
-            },
+            new FreshFilingPreemption(
+                () => Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []),
+                company =>
+                {
+                    order.Add(company.Name);
+                    return Task.CompletedTask;
+                },
+                CancellationToken.None
+            ),
             CancellationToken.None
         );
 
@@ -47,12 +50,15 @@ public class DocumentScraperReconciliationPreemptionTests
         await DocumentScraper.ProcessPreemptingReconciliation(
             [both],
             [both],
-            () => Task.FromResult(new List<EquityIssuer>()),
-            company =>
-            {
-                order.Add(company.Name);
-                return Task.CompletedTask;
-            },
+            new FreshFilingPreemption(
+                () => Task.FromResult(new List<EquityIssuer>()),
+                company =>
+                {
+                    order.Add(company.Name);
+                    return Task.CompletedTask;
+                },
+                CancellationToken.None
+            ),
             CancellationToken.None
         );
 
