@@ -42,11 +42,11 @@
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.13" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="10.0.14" />
     <!-- Entity Framework Core -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Proxies" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Proxies" Version="10.0.15" />
     <!-- Npgsql only floors Relational at 10.0.4; pinned so hosts run it at the EF Core patch level. -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Equibles.ParadeDB.EntityFrameworkCore" Version="2.1.0" />
     <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
@@ -90,7 +90,7 @@
     <!-- Resilience -->
     <PackageVersion Include="Polly" Version="8.7.0" />
     <!-- Testing -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.15" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
