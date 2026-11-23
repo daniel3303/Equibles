@@ -7,6 +7,9 @@ using Equibles.Integrations.XbrlFilings;
 using Equibles.Media.Data;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.HostedService.Services;
@@ -238,16 +241,58 @@ public class EsefReportImportServiceTests
     }
 
     [Fact]
-    public async Task Import_AnIssuerThatAlsoFilesWithTheSec_IsLeftToThatLane()
+    public async Task Import_AnIssuerWhoseCikSuppliedFigures_IsLeftToThatLane()
     {
         var issuer = Issuer("FR");
         issuer.Cik = "0000320193";
         var harness = await Harness.Create(issuer);
+        harness.Context.Add(Fact(issuer.Id, DocumentType.TwentyF));
+        await harness.Context.SaveChangesAsync();
 
         await harness.Service.Import(CancellationToken.None);
 
         harness.Saved.Should().BeEmpty();
     }
+
+    // An over-the-counter line gives the company a CIK that never filed statements, so its European reports stay
+    // its one source, earlier ones included.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Import_AnIssuerWhoseCikSuppliedNoFigures_KeepsItsEuropeanReports(
+        bool holdsEarlierReportFigures
+    )
+    {
+        var issuer = Issuer("FR");
+        issuer.Cik = "0001378580";
+        var harness = await Harness.Create(issuer);
+        if (holdsEarlierReportFigures)
+        {
+            harness.Context.Add(Fact(issuer.Id, DocumentType.EsefAnnualReport));
+            await harness.Context.SaveChangesAsync();
+        }
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().NotBeEmpty();
+    }
+
+    private static FinancialFact Fact(Guid issuer, DocumentType form) =>
+        new()
+        {
+            EquityIssuerId = issuer,
+            FinancialConceptId = Guid.NewGuid(),
+            Unit = "EUR",
+            Value = 1m,
+            PeriodStart = new DateOnly(2024, 1, 1),
+            PeriodEnd = new DateOnly(2024, 12, 31),
+            FiscalYear = 2024,
+            FiscalPeriod = SecFiscalPeriod.FullYear,
+            Form = form,
+            FiledDate = new DateOnly(2025, 3, 1),
+            AccessionNumber = Guid.NewGuid().ToString("N"),
+            DimensionsKey = "",
+        };
 
     [Fact]
     public async Task Import_RecordsTheFiscalYearEndTheReportsOwnPeriodStates()
@@ -1184,6 +1229,7 @@ public class EsefReportImportServiceTests
             harness.Service = new EsefReportImportService(
                 client,
                 issuers,
+                new FinancialFactRepository(context),
                 new DocumentRepository(context),
                 new EsefOversizedReportRepository(context),
                 persistence,
@@ -1239,6 +1285,7 @@ public class EsefReportImportServiceTests
                 new CommonStocksModuleConfiguration(),
                 new MediaModuleConfiguration(),
                 new DocumentsOnlySecModule(),
+                new Equibles.Sec.FinancialFacts.Data.FinancialFactsModuleConfiguration(),
             }
         );
         context.Database.EnsureCreated();

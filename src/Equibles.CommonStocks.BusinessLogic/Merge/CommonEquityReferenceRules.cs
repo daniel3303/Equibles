@@ -68,7 +68,8 @@ public static class CommonEquityReferenceRules
 
     public static IReadOnlyList<EquityReferenceRule> All { get; } =
     [
-        // Facts left after the withdrawn sources belong to a governing source the survivor lacks.
+        // Facts left after the withdrawn sources are a second governing source beside the survivor's own; the
+        // merge manager drops this rule when the survivor holds none, so the retired issuer's follow it.
         new("FinancialFact") { RefuseAnyRow = true },
         // Issuer-scoped observations of another venue would join the survivor's price series.
         new("UnattributedDailyStockPrice") { RefuseAnyRow = true },
