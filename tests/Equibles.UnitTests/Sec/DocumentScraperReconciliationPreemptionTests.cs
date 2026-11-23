@@ -9,6 +9,26 @@ public class DocumentScraperReconciliationPreemptionTests
 {
     private static EquityIssuer Company(string name) => new() { Id = Guid.NewGuid(), Name = name };
 
+    private static FreshFilingPreemption Recording(
+        List<string> order,
+        Queue<List<EquityIssuer>> polls,
+        params EquityIssuer[] withBacklog
+    ) =>
+        new(
+            () => Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []),
+            company =>
+            {
+                order.Add($"{company.Name} full");
+                return Task.CompletedTask;
+            },
+            company =>
+            {
+                order.Add($"{company.Name} recent");
+                return Task.FromResult(withBacklog.Contains(company));
+            },
+            CancellationToken.None
+        );
+
     [Fact]
     public async Task ProcessPreemptingReconciliation_FreshFilingMidBatch_RunsBeforeTheNextReSweep()
     {
@@ -16,28 +36,29 @@ public class DocumentScraperReconciliationPreemptionTests
         var first = Company("first re-sweep");
         var second = Company("second re-sweep");
         var fresh = Company("fresh");
-        var polls = new Queue<List<EquityIssuer>>([
-            [],
-            [fresh],
-        ]);
         var order = new List<string>();
 
         await DocumentScraper.ProcessPreemptingReconciliation(
             [discovered],
             [first, second],
-            new FreshFilingPreemption(
-                () => Task.FromResult(polls.Count > 0 ? polls.Dequeue() : []),
-                company =>
-                {
-                    order.Add(company.Name);
-                    return Task.CompletedTask;
-                },
-                CancellationToken.None
+            Recording(
+                order,
+                new Queue<List<EquityIssuer>>([
+                    [],
+                    [fresh],
+                ])
             ),
             CancellationToken.None
         );
 
-        order.Should().Equal("discovered", "first re-sweep", "fresh", "second re-sweep");
+        order
+            .Should()
+            .Equal(
+                "discovered recent",
+                "first re-sweep full",
+                "fresh recent",
+                "second re-sweep full"
+            );
     }
 
     // A company the feed already brought in this cycle was just enumerated in full; re-sweeping it is waste.
@@ -50,18 +71,29 @@ public class DocumentScraperReconciliationPreemptionTests
         await DocumentScraper.ProcessPreemptingReconciliation(
             [both],
             [both],
-            new FreshFilingPreemption(
-                () => Task.FromResult(new List<EquityIssuer>()),
-                company =>
-                {
-                    order.Add(company.Name);
-                    return Task.CompletedTask;
-                },
-                CancellationToken.None
-            ),
+            Recording(order, new Queue<List<EquityIssuer>>()),
             CancellationToken.None
         );
 
-        order.Should().Equal("discovered and due");
+        order.Should().Equal("discovered and due recent");
+    }
+
+    // Every discovered company's recent filings come before any discovered company's backlog.
+    [Fact]
+    public async Task ProcessPreemptingReconciliation_DiscoveredCompanyWithABacklog_ReadsItAfterEveryRecentFiling()
+    {
+        var trust = Company("trust");
+        var nvidia = Company("nvidia");
+        var due = Company("due");
+        var order = new List<string>();
+
+        await DocumentScraper.ProcessPreemptingReconciliation(
+            [trust, nvidia],
+            [due],
+            Recording(order, new Queue<List<EquityIssuer>>(), trust),
+            CancellationToken.None
+        );
+
+        order.Should().Equal("trust recent", "nvidia recent", "trust full", "due full");
     }
 }
