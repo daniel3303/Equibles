@@ -632,6 +632,80 @@ public class DocumentScraperTests
             );
     }
 
+    // A fund trust's first sweep read its reports for over an hour while a CEO change 8-K filed meanwhile
+    // waited, because the feed was polled only between companies.
+    [Fact]
+    public async Task ScrapeDocuments_FilingFlaggedMidSweep_IsStoredBeforeTheSweepsNextFiling()
+    {
+        DocumentScraper.ResetCompanySyncThrottleForTests();
+        var harness = new Harness();
+        await using var dbContext = harness.CreateDbContext();
+        SeedCompany(dbContext, ticker: "TRST", cik: "0000111111");
+        EquityIssuer nvda = SeedCompany(dbContext, ticker: "NVDA", cik: "0000222222");
+        dbContext
+            .Set<CompanyFilingSyncState>()
+            .Add(
+                new CompanyFilingSyncState
+                {
+                    EquityIssuerId = nvda.Id,
+                    LastSyncedAt = DateTime.UtcNow,
+                }
+            );
+        dbContext.SaveChanges();
+
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000111111", "10-K", null)
+            .Returns([
+                BuildFiling("0000111111", "TRUST-1", "10-K"),
+                BuildFiling("0000111111", "TRUST-2", "10-K"),
+            ]);
+        harness
+            .SecEdgarClient.GetCompanyFilings("0000222222", "10-K", null)
+            .Returns([BuildFiling("0000222222", "NVDA-1", "10-K")]);
+        var stored = new List<string>();
+        harness
+            .SecEdgarClient.GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(call =>
+            {
+                stored.Add(call.Arg<FilingData>().AccessionNumber);
+                return "<html>filing</html>";
+            });
+        harness.Normalizer.Normalize(Arg.Any<string>()).Returns(call => call.Arg<string>());
+        harness.Converter.Convert(Arg.Any<string>()).Returns("# Document");
+        harness
+            .Discovery.DiscoverCompaniesWithNewFilings(default, default)
+            .ReturnsForAnyArgs(new List<EquityIssuer>());
+        // Before the sweep, before its first filing, then the 8-K arrives before its second.
+        var polls = new Queue<List<EquityIssuer>>([
+            [],
+            [],
+            [nvda],
+        ]);
+        harness
+            .Discovery.DiscoverCompaniesFromRecentFeed(default, default)
+            .ReturnsForAnyArgs(_ => polls.Count > 0 ? polls.Dequeue() : []);
+
+        try
+        {
+            await harness
+                .BuildScraper(
+                    dbContext,
+                    new DocumentScraperOptions
+                    {
+                        UseEventDrivenDiscovery = true,
+                        DocumentTypesToSync = [DocumentType.TenK],
+                    }
+                )
+                .ScrapeDocuments();
+        }
+        finally
+        {
+            DocumentScraper.ResetCompanySyncThrottleForTests();
+        }
+
+        stored.Should().Equal("TRUST-1", "NVDA-1", "TRUST-2");
+    }
+
     [Fact]
     public async Task ScrapeDocuments_FilingHasUnknownFormType_SkipsWithoutPersisting()
     {
