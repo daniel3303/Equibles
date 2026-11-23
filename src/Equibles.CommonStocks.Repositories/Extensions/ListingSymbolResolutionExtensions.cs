@@ -184,6 +184,7 @@ public static class ListingSymbolResolutionExtensions
         codes = EquityMarketCatalog
             .All.Where(market =>
                 string.Equals(market.YahooSuffix, suffix, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(market.CallerSuffix, suffix, StringComparison.OrdinalIgnoreCase)
             )
             .SelectMany(market => market.MarketIdentifierCodes)
             .Distinct(StringComparer.Ordinal)
