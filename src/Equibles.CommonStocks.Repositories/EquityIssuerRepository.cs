@@ -774,7 +774,8 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
 
     /// <summary>
     /// The trading symbols each issuer stated on its filings' cover pages, one row per symbol and
-    /// filing. Two symbols stated on one filing are two of its securities, never a ticker change.
+    /// filing. A filing around a ticker change can state the old and the new symbol of one security,
+    /// so two symbols on one filing are not proof of two securities.
     /// </summary>
     public IQueryable<EquityIssuerTickerEvidence> GetTickerEvidence()
     {
