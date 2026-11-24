@@ -772,6 +772,15 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
         return DbContext.Set<EquityIssuerTickerAlias>().AsQueryable();
     }
 
+    /// <summary>
+    /// The trading symbols each issuer stated on its filings' cover pages, one row per symbol and
+    /// filing. Two symbols stated on one filing are two of its securities, never a ticker change.
+    /// </summary>
+    public IQueryable<EquityIssuerTickerEvidence> GetTickerEvidence()
+    {
+        return DbContext.Set<EquityIssuerTickerEvidence>().AsQueryable();
+    }
+
     public EquityIssuerTickerAlias AddTickerAlias(EquityIssuerTickerAlias alias)
     {
         DbContext.Set<EquityIssuerTickerAlias>().Add(alias);
