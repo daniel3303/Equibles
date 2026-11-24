@@ -27,25 +27,27 @@ public class ChunkingStrategy
             return [];
         }
 
-        var tokenIds = _tokenizer.EncodeToIds(text);
+        // One encode places every token in the text, so a boundary is a lookup. Decoding the
+        // tokens before each boundary instead made a filing's cost grow with the square of its
+        // length, and copied the text read so far for every chunk.
+        var tokens = _tokenizer.EncodeToTokens(text, out _);
         var chunks = new List<ChunkInfo>();
         var tokenOffset = 0;
+        var startLineNumber = 1;
+        var linesCountedTo = 0;
 
-        while (tokenOffset < tokenIds.Count)
+        while (tokenOffset < tokens.Count)
         {
-            var windowEnd = Math.Min(tokenOffset + ChunkTokenSize, tokenIds.Count);
-            var windowIds = tokenIds.Skip(tokenOffset).Take(windowEnd - tokenOffset).ToArray();
-            var chunkText = _tokenizer.Decode(windowIds);
-
-            // Find character positions in the original text
-            var startPosition = FindCharPosition(text, tokenIds, tokenOffset);
-            var endPosition = FindCharPosition(text, tokenIds, windowEnd);
+            var windowEnd = Math.Min(tokenOffset + ChunkTokenSize, tokens.Count);
+            var startPosition = FindCharPosition(text, tokens, tokenOffset);
+            var endPosition = FindCharPosition(text, tokens, windowEnd);
+            var chunkText = text.Substring(startPosition, endPosition - startPosition);
 
             // Try to break at a sentence boundary within the overlap zone
-            if (windowEnd < tokenIds.Count)
+            if (windowEnd < tokens.Count)
             {
                 var overlapStart = Math.Max(0, windowEnd - OverlapTokenSize);
-                var overlapStartChar = FindCharPosition(text, tokenIds, overlapStart);
+                var overlapStartChar = FindCharPosition(text, tokens, overlapStart);
                 var bestBreak = FindLastSentenceEnd(
                     chunkText,
                     overlapStartChar - startPosition,
@@ -59,7 +61,9 @@ public class ChunkingStrategy
                 }
             }
 
-            var startLineNumber = text.Substring(0, startPosition).Count(c => c == '\n') + 1;
+            startLineNumber += text.AsSpan(linesCountedTo, startPosition - linesCountedTo)
+                .Count('\n');
+            linesCountedTo = startPosition;
 
             chunks.Add(
                 new ChunkInfo(startPosition, endPosition, startLineNumber, CleanText(chunkText))
@@ -112,17 +116,13 @@ public class ChunkingStrategy
         return text.Trim();
     }
 
-    private int FindCharPosition(string text, IReadOnlyList<int> allTokenIds, int tokenIndex)
-    {
-        if (tokenIndex >= allTokenIds.Count)
-            return text.Length;
-        if (tokenIndex <= 0)
-            return 0;
-
-        var precedingIds = allTokenIds.Take(tokenIndex).ToArray();
-        var decoded = _tokenizer.Decode(precedingIds);
-        return Math.Min(decoded.Length, text.Length);
-    }
+    // Where a token starts in the text. The tokenizer never starts one inside a character, so a
+    // chunk cut here holds whole characters only.
+    private static int FindCharPosition(
+        string text,
+        IReadOnlyList<EncodedToken> tokens,
+        int tokenIndex
+    ) => tokenIndex >= tokens.Count ? text.Length : tokens[tokenIndex].Offset.Start.Value;
 
     private int FindLastSentenceEnd(string text, int start, int end)
     {
