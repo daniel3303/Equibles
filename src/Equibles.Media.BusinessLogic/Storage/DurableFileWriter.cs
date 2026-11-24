@@ -15,6 +15,7 @@ public static class DurableFileWriter
 {
     private const int BufferSize = 1 << 16;
 
+    /// <summary>Writes the content at its path unless the path already holds it.</summary>
     /// <param name="storeRoot">
     /// The store's root, the highest directory a writer of this path ever changes; an existing
     /// match flushes the directories up to it. Null flushes every ancestor.
