@@ -11,7 +11,8 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 /// heuristic, which the data-accuracy rules forbid.
 ///
 /// <para>
-/// Three ordered rules, each matching whole words only:
+/// Three ordered rules, matching whole words except "preferred", which filers run
+/// into the word beside it:
 /// <list type="number">
 /// <item>Rider clauses are stripped first — parenthetical segments, trailing
 /// "associated …" language ("Common Stock (and associated Preferred Share
@@ -24,7 +25,8 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 /// so that wrapper wins. The phrase requires the wrapper immediately after
 /// "purchase": "Warrants to purchase Common Units" does not fire it.</item>
 /// <item>Otherwise the kind whose keyword appears EARLIEST in the remaining
-/// title wins — titles lead with the security's own noun and then describe
+/// title (in the whole title for a depositary share whose remainder names none)
+/// wins — titles lead with the security's own noun and then describe
 /// what they bundle ("Units, each consisting of one share of Class A Common
 /// Stock and one Warrant") or convert into ("Warrants to purchase Common
 /// Units").</item>
@@ -48,9 +50,20 @@ public static class ListedSecurityClassifier
         (Pattern("warrants?"), ListedSecurityType.Warrants),
         (Pattern("rights?"), ListedSecurityType.Rights),
         (Pattern("units?"), ListedSecurityType.Units),
-        (Pattern("preferred|preference"), ListedSecurityType.PreferredShares),
+        // Filers run "preferred" into its neighbours ("PerpetualPreferred Stock", "PreferredShares")
+        // and abbreviate it; "TruPS" are trust preferred securities.
+        (
+            new Regex(
+                @"preferred|\b(?:preference|prefs?|pfds?|trups)\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled
+            ),
+            ListedSecurityType.PreferredShares
+        ),
         // "ETN" is the exchange-traded note's own abbreviation, which issuers file as the title's head noun.
-        (Pattern("notes?|debentures?|bonds?|etns?"), ListedSecurityType.DebtSecurities),
+        (
+            Pattern("notes?|debentures?|bonds?|etns?|(?:debt|subordinated|capital) securities"),
+            ListedSecurityType.DebtSecurities
+        ),
         (
             Pattern(
                 "common (stock|shares?)|ordinary shares?|american depositary (shares?|receipts?)|shares? of beneficial interest"
@@ -59,9 +72,17 @@ public static class ListedSecurityClassifier
         ),
     ];
 
+    // A depositary share of the issuer's own security says what it represents, often only inside the
+    // parenthetical that Classify strips; an American or global one is the listed form of ordinary
+    // shares.
+    private static readonly Regex OwnDepositary = new(
+        @"(?<!\b(?:american|global)\s+)\bdeposit[ao]ry\s+(?:shares?|shrs?)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled
+    );
+
     // Rider language: a parenthetical segment, or a clause from "associated"
     // (optionally led by ", and" / "together with") to the end of the title.
-    // Both always describe something attached to the listed security.
+    // Both describe something attached to the listed security, except what OwnDepositary reads back.
     private static readonly Regex Parenthetical = new(
         @"\([^)]*\)",
         RegexOptions.CultureInvariant | RegexOptions.Compiled
@@ -147,6 +168,14 @@ public static class ListedSecurityClassifier
                 return type;
         }
 
+        var kind = EarliestKind(title);
+        return kind == ListedSecurityType.Other && OwnDepositary.IsMatch(title)
+            ? EarliestKind(securityTitle)
+            : kind;
+    }
+
+    private static ListedSecurityType EarliestKind(string title)
+    {
         var best = ListedSecurityType.Other;
         var bestIndex = int.MaxValue;
         foreach (var (pattern, type) in Kinds)

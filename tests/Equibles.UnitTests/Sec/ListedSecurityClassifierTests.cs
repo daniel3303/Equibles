@@ -44,6 +44,60 @@ public class ListedSecurityClassifierTests
         "Depositary Shares, each representing a 1/1,000th interest in a share of Series A Preferred Stock",
         ListedSecurityType.PreferredShares
     )]
+    // Preferred named only inside the parenthetical (US Bancorp, Huntington), run into the word
+    // beside it (Customers Bancorp, M&T), or abbreviated (Public Storage, Citigroup, KeyCorp).
+    [InlineData(
+        "Depositary Shares (each representing 1/1,000th interest in a share of Series B Non-Cumulative Perpetual Preferred Stock, par value $1.00)",
+        ListedSecurityType.PreferredShares
+    )]
+    [InlineData(
+        "Fixed-to-Floating Rate Non-Cumulative PerpetualPreferred Stock, Series C, par value $1.00 per share",
+        ListedSecurityType.PreferredShares
+    )]
+    [InlineData(
+        "8.00% Series B Cumulative Redeemable PreferredShares of Beneficial Interest, $0.01 Par Value",
+        ListedSecurityType.PreferredShares
+    )]
+    [InlineData(
+        "Depositary Shares Each Representing 1/1,000 of a 3.875% Cum Pref Share, Series N, $0.01 par value",
+        ListedSecurityType.PreferredShares
+    )]
+    [InlineData(
+        "6.5% Series C Fixed-to-Floating Rate Cum Redeem Pfd Stk",
+        ListedSecurityType.PreferredShares
+    )]
+    [InlineData(
+        "7.625% TRUPs of Cap III (and registrant’s guaranty)",
+        ListedSecurityType.PreferredShares
+    )]
+    // A depositary share that names nothing stays unplaced, as does an American or global one
+    // whose kind only its parenthetical names; a rider in a parenthetical never names the security.
+    [InlineData("Depositary Shares", ListedSecurityType.Other)]
+    [InlineData(
+        "Global Depositary Shares (each representing one preferred share)",
+        ListedSecurityType.Other
+    )]
+    [InlineData(
+        "Class A Shares (and associated Preferred Share Purchase Rights)",
+        ListedSecurityType.Other
+    )]
+    [InlineData(
+        "American Depository Shares (each representing one preferred share)",
+        ListedSecurityType.Other
+    )]
+    // Debt that names itself as securities rather than notes (Lloyds, Santander, Vodafone).
+    [InlineData(
+        "$1,000,000,000 4.500% Subordinated Securities due 2024",
+        ListedSecurityType.DebtSecurities
+    )]
+    [InlineData(
+        "3.500% Second Ranking Senior Debt Securities due 2022",
+        ListedSecurityType.DebtSecurities
+    )]
+    [InlineData("NC10 Capital Securities due 2081", ListedSecurityType.DebtSecurities)]
+    // Near misses: a fund whose name mentions debt, and letters inside a word.
+    [InlineData("Debt Strategies Fund Common Stock", ListedSecurityType.CommonShares)]
+    [InlineData("Prefab Holdings Capital Stock", ListedSecurityType.Other)]
     // Exchange-traded debt — the QVC baby-bond shape.
     [InlineData("6.875% Senior Secured Notes due 2068", ListedSecurityType.DebtSecurities)]
     [InlineData("8.00% Subordinated Debentures due 2032", ListedSecurityType.DebtSecurities)]
