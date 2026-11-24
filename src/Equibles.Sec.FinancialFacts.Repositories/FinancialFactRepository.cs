@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -11,14 +12,14 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
         : base(dbContext) { }
 
     /// <summary>
-    /// Every stored fact except those read from a filing's statement table
-    /// (<see cref="FinancialFactSource.ReportedStatement"/>). Such a figure fills a gap only for
-    /// the statement and fact readers, which take <see cref="StatementFactRepository"/>; everything
-    /// that computes from facts sees the structured figures alone.
+    /// Every stored fact except those read from a filing's statement table, which only the
+    /// statement and fact readers list (<see cref="StatementFactRepository"/>). Told apart by form,
+    /// never by source: the covering index carries the form, so the read stays index-only.
     /// </summary>
     public override IQueryable<FinancialFact> GetAll()
     {
-        return base.GetAll().Where(f => f.Source != FinancialFactSource.ReportedStatement);
+        return base.GetAll()
+            .Where(f => f.Form != StatementTableForms.SixK && f.Form != StatementTableForms.SixKa);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -67,9 +68,13 @@ public class StatementQuarterDerivationTests
     {
         var firstQuarter = Fact("2026-01-01", "2026-03-31", 30m, SecFiscalPeriod.Q1, "q1");
         var firstHalf = Fact("2026-01-01", "2026-06-30", 70m, SecFiscalPeriod.Q2, "h1");
-        firstHalf.Source = FinancialFactSource.ReportedStatement;
-        if (firstQuarterFromATable)
-            firstQuarter.Source = FinancialFactSource.ReportedStatement;
+        foreach (
+            var read in firstQuarterFromATable ? [firstQuarter, firstHalf] : new[] { firstHalf }
+        )
+        {
+            read.Source = FinancialFactSource.ReportedStatement;
+            read.Form = StatementTableForms.SixK;
+        }
 
         StatementQuarterDerivation
             .AppendDerived([firstQuarter, firstHalf])

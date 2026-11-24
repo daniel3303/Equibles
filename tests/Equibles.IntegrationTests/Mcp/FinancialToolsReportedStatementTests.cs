@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
@@ -62,8 +63,11 @@ public class FinancialToolsReportedStatementTests(ParadeDbFixture fixture)
         );
 
         var result = await sut.GetFinancialFact("FRGN", "revenue");
+        var filtered = await sut.GetFinancialFact("FRGN", "revenue", form: "6-K");
 
         result.Should().Contain("120,000,000").And.Contain("400,000,000").And.Contain("6-K");
+        result.Should().NotContain("SixKTable");
+        filtered.Should().Contain("120,000,000").And.NotContain("400,000,000");
     }
 
     [Fact]
@@ -149,7 +153,7 @@ public class FinancialToolsReportedStatementTests(ParadeDbFixture fixture)
             Value = value,
             FiscalYear = 2026,
             FiscalPeriod = SecFiscalPeriod.Q1,
-            Form = DocumentType.SixK,
+            Form = StatementTableForms.SixK,
             FiledDate = new DateOnly(2026, 5, 12),
             AccessionNumber = "0001999998-26-000007",
             Source = FinancialFactSource.ReportedStatement,

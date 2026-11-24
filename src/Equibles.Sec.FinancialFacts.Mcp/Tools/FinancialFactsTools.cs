@@ -382,7 +382,7 @@ public class FinancialFactsTools
         FinancialFactSeriesShaper.DedupeByReportingSpan(
             ReportedQuarterPromotion
                 .WithPromotedFourthQuarters(facts)
-                .Where(f => formFilter == null || f.Form == formFilter)
+                .Where(f => formFilter == null || StatementTableForms.Filed(f.Form) == formFilter)
                 .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
                 .Select(g =>
                     FinancialFactSeriesShaper.PickBestFact(
@@ -431,7 +431,7 @@ public class FinancialFactsTools
         DocumentType formFilter
     ) =>
         FinancialFactSeriesShaper.PickPerDate(
-            facts.Where(f => formFilter == null || f.Form == formFilter),
+            facts.Where(f => formFilter == null || StatementTableForms.Filed(f.Form) == formFilter),
             conceptPriority,
             asOriginallyReported
         );
