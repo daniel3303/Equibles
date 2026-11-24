@@ -54,6 +54,11 @@ public class InlineXbrlProseStyleTests
     [InlineData("<style type='application/unknown'>p{display:none}</style>")]
     [InlineData("<style>p::before{content:'No longer applicable: '}</style>")]
     [InlineData("<style>p::first-line{color:transparent}</style>")]
+    // A converted report's stylesheet whose licence comment lost its delimiters: the parser reads no
+    // selector for the rules it runs into, and a hiding rule that may match anything blocks a join.
+    [InlineData(
+        "<style> * https://github.com/coolwanglu/pdf2htmlEX/blob/master/share/LICENSE\n #sidebar{position:absolute;top:0;left:0;bottom:0;width:250px;overflow:auto}::selection{background:rgba(127,255,255,0.4)}</style>"
+    )]
     public void UnknownOrConditionalStylesPreserveBoundaries(string head)
     {
         Convert(

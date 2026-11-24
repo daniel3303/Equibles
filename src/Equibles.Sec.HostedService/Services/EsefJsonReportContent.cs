@@ -81,6 +81,18 @@ public static class EsefJsonReportContent
             var disclosure = Encoding.UTF8.GetString(text);
             if (string.IsNullOrWhiteSpace(disclosure) && pastLimit)
                 return [];
+            // An issuer can tag an element holding no visible text, such as an empty paragraph, and
+            // that note has nothing to publish. Any other note that converts to nothing is a fault,
+            // so the report fails and recovery retries it.
+            if (
+                string.IsNullOrWhiteSpace(disclosure)
+                && EsefStreamedText.Read(
+                    AsDocument(fragment),
+                    EsefReportContent.MaxRetrievalHtmlChars
+                )
+                    is { Length: 0 }
+            )
+                continue;
             if (string.IsNullOrWhiteSpace(disclosure))
                 throw new InvalidDataException(
                     "An eligible tagged report disclosure produced no readable text."

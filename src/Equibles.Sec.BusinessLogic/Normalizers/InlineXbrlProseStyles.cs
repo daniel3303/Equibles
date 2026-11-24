@@ -68,7 +68,9 @@ internal sealed class InlineXbrlProseStyles
                 // Any potentially hiding rule blocks a join even when another rule overrides it.
                 if (result.Unsafe(style.Style))
                 {
-                    if (style.SelectorText.Contains(':'))
+                    // The parser reads no selector for a rule it cannot parse, and such a rule may
+                    // match anything.
+                    if (style.SelectorText is null || style.SelectorText.Contains(':'))
                         return null;
                     result._unsafeSelectors.Add(style.SelectorText);
                 }
