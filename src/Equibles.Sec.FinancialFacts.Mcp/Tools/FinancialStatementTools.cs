@@ -356,6 +356,28 @@ public class FinancialStatementTools
                 facts,
                 selectedYear
             );
+        // A foreign filer's owners' profit tagged with the opposite sign reads the sign its filing
+        // proves, before a quarter is derived from it (OwnersProfitSign).
+        var ownersProfitSign = OwnersProfitSign.Unchanged(facts);
+        var netIncomeLine = statementLines.FirstOrDefault(line =>
+            OwnersProfitSign.IsNetIncome(line.Concepts)
+        );
+        if (netIncomeLine != null)
+        {
+            ownersProfitSign = await OwnersProfitSignFacts.Read(
+                _financialFactRepository,
+                _financialConceptRepository,
+                [stock.Id],
+                facts,
+                netIncomeLine
+                    .Concepts.Where(concept =>
+                        conceptIdByKey.ContainsKey((concept.Taxonomy, concept.Tag))
+                    )
+                    .Select(concept => conceptIdByKey[(concept.Taxonomy, concept.Tag)])
+                    .ToHashSet()
+            );
+            facts = ownersProfitSign.Facts;
+        }
 
         if (statementType != FinancialStatementType.BalanceSheet)
         {
@@ -486,7 +508,8 @@ public class FinancialStatementTools
             latestByConcept,
             splits,
             operatingCostsClaimant,
-            derivedOperatingIncomeRounding
+            derivedOperatingIncomeRounding,
+            ownersProfitSign
         );
         return (
             table,
@@ -562,7 +585,8 @@ public class FinancialStatementTools
         Dictionary<Guid, FinancialFact> latestByConcept,
         IReadOnlyList<StockSplit> splits,
         string operatingCostsClaimant,
-        decimal derivedOperatingIncomeRounding
+        decimal derivedOperatingIncomeRounding,
+        OwnersProfitSign.Reading ownersProfitSign = null
     )
     {
         var result = MarkdownTable.Start(
@@ -581,6 +605,8 @@ public class FinancialStatementTools
         var unresolvedBasis = false;
         var grossProfitReplaced = false;
         var depreciationSummed = false;
+        var netIncomeNegated = false;
+        var netIncomeWithheld = false;
         DateOnly? earliestFiled = null;
         DateOnly? latestFiled = null;
         foreach (var line in statementLines)
@@ -598,6 +624,14 @@ public class FinancialStatementTools
                 // REIT top lines) most filers never report — dash-only rows
                 // are noise, so unreported lines are omitted and counted.
                 omitted++;
+                netIncomeWithheld |=
+                    line.Alias == NetIncomeAlias
+                    && ownersProfitSign != null
+                    && ownersProfitSign.WithheldPeriods.Any(period =>
+                        latestByConcept.Values.Any(shown =>
+                            shown.PeriodStart == period.Start && shown.PeriodEnd == period.End
+                        )
+                    );
                 continue;
             }
 
@@ -620,6 +654,17 @@ public class FinancialStatementTools
             grossProfitReplaced |= replaced;
             var summed = DepreciationTotal.IsSum(fact);
             depreciationSummed |= summed;
+            // A quarter derived from a negated cumulative figure carries the proven sign too.
+            netIncomeNegated |=
+                line.Alias == NetIncomeAlias
+                && ownersProfitSign != null
+                && (
+                    ownersProfitSign.Negated.Contains(fact)
+                    || StatementQuarterDerivation.IsDerived(fact)
+                        && ownersProfitSign.Negated.Any(n =>
+                            n.FiscalYear == fact.FiscalYear && n.Unit == fact.Unit
+                        )
+                );
             var basis =
                 replaced ? "Derived"
                 : summed ? "Sum of reported parts"
@@ -691,6 +736,16 @@ public class FinancialStatementTools
             Note(
                 DepreciationTotal.SumNote,
                 "Depreciation & amortization adds the reported parts where no total is tagged."
+            );
+        if (netIncomeNegated)
+            Note(
+                OwnersProfitSign.NegatedNote,
+                "Net income takes the sign the filing's own totals prove."
+            );
+        if (netIncomeWithheld)
+            Note(
+                OwnersProfitSign.WithheldNote,
+                "Net income is left out: this filing cannot check its sign, which others prove wrong."
             );
         if (FiscalYearLabel.Note(stock) is { } namingNote)
             Note(namingNote, "Fiscal years are named for the calendar year they start in.");

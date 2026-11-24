@@ -210,6 +210,20 @@ public class FinancialFactsTools
                     foreach (var (conceptId, conceptRef) in operatingCosts.ConceptsById)
                         conceptsById.TryAdd(conceptId, conceptRef);
                 }
+                // A foreign filer's owners' profit tagged with the opposite sign reads the sign its
+                // filing proves; the as-originally-reported reading keeps the tag (OwnersProfitSign).
+                IReadOnlySet<FinancialFact> ownersProfitNegated = new HashSet<FinancialFact>();
+                if (OwnersProfitSign.IsNetIncome(conceptRefs) && !asOriginallyReported)
+                {
+                    var ownersReading = await OwnersProfitSignFacts.Read(
+                        _financialFactRepository,
+                        _financialConceptRepository,
+                        [stock.Id],
+                        facts,
+                        conceptPriority.Keys.ToHashSet()
+                    );
+                    (facts, ownersProfitNegated) = (ownersReading.Facts, ownersReading.Negated);
+                }
                 var companyLatestPeriodEnd = await _financialFactRepository
                     .GetConsolidatedByIssuerId(stock.Id)
                     .MaxAsync(f => (DateOnly?)f.PeriodEnd);
@@ -329,6 +343,20 @@ public class FinancialFactsTools
                     table += SumFootnote;
                     notes.Add(SumFootnoteCardText);
                 }
+                // A quarter derived from a negated cumulative figure carries the proven sign too.
+                if (
+                    shown.Any(f =>
+                        ownersProfitNegated.Contains(f)
+                        || derived.Contains(f)
+                            && ownersProfitNegated.Any(n =>
+                                n.FiscalYear == f.FiscalYear && n.Unit == f.Unit
+                            )
+                    )
+                )
+                {
+                    table += $"\n_{OwnersProfitSign.NegatedNote}_\n";
+                    notes.Add(OwnersProfitSignCardNote);
+                }
                 if (shown.Any(derived.Contains))
                 {
                     table += DerivedFootnote;
@@ -369,6 +397,9 @@ public class FinancialFactsTools
                 + $"fiscalPeriod: {FactMarkdown.Clean(fiscalPeriod)}"
         );
     }
+
+    private const string OwnersProfitSignCardNote =
+        "Net income takes the sign the filing's own totals prove.";
 
     // A flow is one row per fiscal period. Reported discrete fourth quarters hide under fp=FY, so
     // they are promoted first; the alias's full history is the transition-stub corroboration context.
@@ -607,6 +638,19 @@ public class FinancialFactsTools
                             )
                             .ToList();
                     }
+
+                    // A foreign filer's owners' profit reads the sign its filing proves, as
+                    // GetFinancialFact reads it (OwnersProfitSign).
+                    if (OwnersProfitSign.IsNetIncome(conceptRefs))
+                        facts = (
+                            await OwnersProfitSignFacts.Read(
+                                _financialFactRepository,
+                                _financialConceptRepository,
+                                stockIds,
+                                facts,
+                                conceptPriority.Keys.ToHashSet()
+                            )
+                        ).Facts;
 
                     if (includeFullYearForQ4)
                     {
