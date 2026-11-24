@@ -269,6 +269,40 @@ public class EsefRetrievalStylesTests
             .BeEmpty();
     }
 
+    // Envelopes as filed open with a byte-order mark and an XML declaration, and UTF-8 decoding keeps
+    // the mark. One report compacts under the limit; the other stays over it, so its text is streamed.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_EnvelopeOpeningWithAByteOrderMark_ReadsAsWithoutIt(bool staysOverTheLimit)
+    {
+        var body = staysOverTheLimit
+            ? string.Concat(
+                Enumerable.Repeat(
+                    "<span>w </span>",
+                    EsefReportContent.MaxRetrievalHtmlChars / "<span>w </span>".Length + 1
+                )
+            )
+            : "<p>Complete text</p>";
+        var source = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" + LargeReport(body);
+        var withoutMark = EsefReportContent.Build(
+            source,
+            new SecDocumentHtmlNormalizer(),
+            new SecDocumentHtmlToMarkdownConverter(),
+            out var pastLimit
+        );
+
+        var withMark = EsefReportContent.Build(
+            "\uFEFF" + source,
+            new SecDocumentHtmlNormalizer(),
+            new SecDocumentHtmlToMarkdownConverter()
+        );
+
+        pastLimit.Should().Be(staysOverTheLimit);
+        Encoding.UTF8.GetString(withMark).Should().Contain("End 202");
+        withMark.Should().Equal(withoutMark);
+    }
+
     private static string LargeReport(string body) =>
         $"<html xmlns=\"{Namespace}\"><body><div style=\"font-size:{new string('0', EsefReportContent.MaxRetrievalHtmlChars)}px\">Start 101</div>{body}<p id=\"last\">End 202</p></body></html>";
 }

@@ -128,9 +128,10 @@ public class Document
     public const int EsefContentBuilderVersion = 6;
 
     // A report stored with no text below this generation is built again, inline or JSON: from 7 a
-    // report past the conversion limit has its text written as its markup is read. A report with
-    // text is never replayed for it, so this may run ahead of the generation above.
-    public const int EsefEmptyContentRecoveryVersion = 7;
+    // report past the conversion limit has its text written as its markup is read, and from 8 one
+    // whose envelope opens with a byte-order mark too. A report with text is never replayed for it,
+    // so this may run ahead of the generation above.
+    public const int EsefEmptyContentRecoveryVersion = 8;
 
     // What a build stamps: the latest ESEF generation, so a report built again is settled for both.
     public static int ContentBuilderVersion(DocumentType documentType) =>
