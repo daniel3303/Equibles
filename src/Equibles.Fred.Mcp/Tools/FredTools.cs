@@ -180,7 +180,7 @@ public class FredTools
                     : 0;
                 var baseNote =
                     withoutBase > 0
-                        ? $"{withoutBase} of these observations have no stored observation a year earlier, so their change reads N/A."
+                        ? $"{withoutBase} of these observations {(withoutBase == 1 ? "has" : "have")} no stored observation a year earlier, so their change reads N/A."
                         : "";
                 if (baseNote.Length > 0)
                     table += Environment.NewLine + $"_{baseNote}_" + Environment.NewLine;
