@@ -14,16 +14,17 @@ public static class EsefReportContent
     private const string Encoded = ";base64,";
 
     /// <summary>
-    /// How much of a report is turned into retrieval text. Parsing costs about twenty times the input in
+    /// How much of a report the document conversion takes. Parsing costs about twenty times the input in
     /// live memory and sixty-seven times it in total allocation, both measured, so a report whose readable
-    /// half runs past this is stored with an empty body rather than parsed. It still keeps its envelope and
-    /// still yields facts; only the text a reader would search is left out.
+    /// half runs past this is never parsed: its text is written as its markup is read
+    /// (<see cref="EsefStreamedText"/>), and a report that reader cannot take is stored with an empty body.
+    /// It still keeps its envelope and still yields facts.
     /// </summary>
     public const int MaxRetrievalHtmlChars = 16 * 1024 * 1024;
 
     /// <summary>
-    /// True when the report's text is past <see cref="MaxRetrievalHtmlChars"/>, the one case in which
-    /// <see cref="Build"/> returns no body by design rather than because nothing was readable.
+    /// True when the report's markup is past <see cref="MaxRetrievalHtmlChars"/>, the one case in which
+    /// <see cref="Build"/> may return no body by design rather than because nothing was readable.
     /// </summary>
     public static bool ExceedsRetrievalLimit(string html) =>
         PrepareRetrievalMarkup(html)?.Length > MaxRetrievalHtmlChars;
@@ -89,13 +90,29 @@ public static class EsefReportContent
         string html,
         ISecDocumentHtmlNormalizer normalizer,
         ISecDocumentHtmlToMarkdownConverter converter
+    ) => Build(html, normalizer, converter, out _);
+
+    /// <summary>As <see cref="Build(string, ISecDocumentHtmlNormalizer, ISecDocumentHtmlToMarkdownConverter)"/>, saying whether the markup was past the conversion limit.</summary>
+    public static byte[] Build(
+        string html,
+        ISecDocumentHtmlNormalizer normalizer,
+        ISecDocumentHtmlToMarkdownConverter converter,
+        out bool pastConversionLimit
     )
     {
+        pastConversionLimit = false;
         ArgumentNullException.ThrowIfNull(normalizer);
         ArgumentNullException.ThrowIfNull(converter);
         var stripped = PrepareRetrievalMarkup(html);
-        if (string.IsNullOrEmpty(stripped) || stripped.Length > MaxRetrievalHtmlChars)
+        if (string.IsNullOrEmpty(stripped))
             return [];
+        if (stripped.Length > MaxRetrievalHtmlChars)
+        {
+            pastConversionLimit = true;
+            return Encoding.UTF8.GetBytes(
+                EsefStreamedText.Read(stripped, MaxRetrievalHtmlChars) ?? string.Empty
+            );
+        }
         var normalized = normalizer.NormalizeFragment(
             XhtmlCompatibility.ExpandEmptyElements(stripped)
         );

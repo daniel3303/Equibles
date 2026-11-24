@@ -184,14 +184,40 @@ public class EsefJsonReportContentTests
             .Where(exception => exception is JsonException || exception is InvalidDataException);
     }
 
+    // Each note converts on its own, so notes past the conversion limit together, or one note past
+    // it alone, are published whole: the large note's text is written as its markup is read.
     [Fact]
-    public void Build_CombinedMarkupExceedsLimit_DoesNotPublishATruncatedSubset()
+    public void Build_NotePastTheConversionLimit_IsPublishedWholeBesideTheOthers()
     {
         var report = Report();
         var notes = (JObject)report["facts"];
-        notes[NoteId]["value"] =
-            "<p>" + new string('x', EsefReportContent.MaxRetrievalHtmlChars / 2) + "</p>";
-        notes["second-note"] = notes[NoteId].DeepClone();
+        notes["large-note"] = notes[NoteId].DeepClone();
+        var words = EsefReportContent.MaxRetrievalHtmlChars / "<span>w </span>".Length + 1;
+        notes["large-note"]["value"] =
+            "<p>Opening "
+            + string.Concat(Enumerable.Repeat("<span>w </span>", words))
+            + "closing</p>";
+
+        var text = Build(report.ToString());
+
+        text.Should().Contain("total committed club facility of 319 mEUR");
+        text.Should().Contain("Opening w w w").And.Contain("w w closing");
+        text.Length.Should().BeGreaterThan(words * 2);
+    }
+
+    // A note past the limit whose markup the streamed reader refuses would leave the report without
+    // part of its text, so none is published and the report settles empty by design.
+    [Fact]
+    public void Build_NotePastTheLimitTheReaderRefuses_LeavesTheWholeReportEmpty()
+    {
+        var report = Report();
+        var notes = (JObject)report["facts"];
+        notes["large-note"] = notes[NoteId].DeepClone();
+        var words = EsefReportContent.MaxRetrievalHtmlChars / "<span>w&nbsp;</span>".Length + 1;
+        notes["large-note"]["value"] =
+            "<p>Opening "
+            + string.Concat(Enumerable.Repeat("<span>w&nbsp;</span>", words))
+            + "</p>";
 
         Build(report.ToString()).Should().BeEmpty();
     }

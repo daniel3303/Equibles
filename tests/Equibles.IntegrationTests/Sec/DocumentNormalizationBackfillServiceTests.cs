@@ -344,7 +344,8 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(
                 Arg.Is<Document>(d =>
                     d.Id == document.Id
-                    && d.NormalizedContentVersion == Document.EsefContentBuilderVersion
+                    && d.NormalizedContentVersion
+                        == Document.ContentBuilderVersion(DocumentType.EsefAnnualReport)
                 ),
                 Arg.Is<byte[]>(b => Encoding.UTF8.GetString(b).Contains("Retained annual report")),
                 Arg.Any<CancellationToken>()
@@ -379,7 +380,8 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(
                 Arg.Is<Document>(d =>
                     d.Id == document.Id
-                    && d.NormalizedContentVersion == Document.EsefContentBuilderVersion
+                    && d.NormalizedContentVersion
+                        == Document.ContentBuilderVersion(DocumentType.EsefAnnualReport)
                     && d.NormalizedContentAttempts == 0
                 ),
                 Arg.Is<byte[]>(b => b.Length == 0),
@@ -450,7 +452,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         result.Failed.Should().Be(failed ? 1 : 0);
         document
             .NormalizedContentVersion.Should()
-            .Be(failed ? 4 : Document.EsefContentBuilderVersion);
+            .Be(failed ? 4 : Document.ContentBuilderVersion(DocumentType.EsefAnnualReport));
         document.NormalizedContentAttempts.Should().Be(failed ? 1 : 0);
         document.XbrlContentId.Should().Be(originalId);
         document.XbrlContent.FileContent.Bytes.Should().Equal(original);
@@ -519,7 +521,11 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData("EsefAnnualReport", 20, 4, true)]
     [InlineData("EsefAnnualReport", 0, 5, true)]
     [InlineData("EsefAnnualReport", 20, 5, true)]
-    [InlineData("EsefAnnualReport", 0, 6, false)]
+    // An empty report below generation 7 is built again: its text is now written past the
+    // conversion limit. A readable one at 6 stays settled.
+    [InlineData("EsefAnnualReport", 0, 6, true)]
+    [InlineData("EsefAnnualReport", 0, 7, false)]
+    [InlineData("EsefAnnualReport", 20, 6, false)]
     [InlineData("EsefReport", 20, 6, false)]
     [InlineData("TenK", 0, 1, false)]
     public void Pending_InlineEsefReplay_ReopensStaleTextButKeepsCurrentDocumentsSettled(
@@ -565,7 +571,9 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
 
         result.Replaced.Should().Be(1);
         result.Failed.Should().Be(0);
-        document.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
+        document
+            .NormalizedContentVersion.Should()
+            .Be(Document.ContentBuilderVersion(DocumentType.EsefAnnualReport));
         await _secEdgarClient
             .DidNotReceiveWithAnyArgs()
             .GetDocumentContent(default, default, default);
@@ -616,7 +624,10 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData(1, 20, false)]
     [InlineData(4, 20, false)]
     [InlineData(4, 0, true)]
-    [InlineData(5, 0, false)]
+    [InlineData(5, 0, true)]
+    [InlineData(6, 0, true)]
+    [InlineData(7, 0, false)]
+    [InlineData(6, 20, false)]
     public void Pending_JsonRecovery_RemainsLimitedToPriorEmptyReports(
         int version,
         long size,
@@ -658,7 +669,9 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         result.Failed.Should().Be(0);
         _dbContext.ChangeTracker.Clear();
         var saved = _dbContext.Set<Document>().Single(row => row.Id == document.Id);
-        saved.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
+        saved
+            .NormalizedContentVersion.Should()
+            .Be(Document.ContentBuilderVersion(DocumentType.EsefAnnualReport));
         saved.NormalizedContentAttempts.Should().Be(0);
         saved.ChunkedAt.Should().Be(chunkedAt);
         saved.ChunkAttempts.Should().Be(2);
@@ -833,6 +846,57 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             await _persistenceService
                 .DidNotReceiveWithAnyArgs()
                 .ReplaceContent(default, default, default);
+    }
+
+    // An original whose envelope is past the limit cannot be proven again, so the envelope proven
+    // and stored at import is read instead, and the report reaches the current generation.
+    [Fact]
+    public async Task Backfill_RetainedOriginalPastTheEnvelopeLimit_ReadsTheEnvelopeStoredAtImport()
+    {
+        var document = SeedEsef();
+        document.NormalizedContentVersion = 1;
+        var prose = new StringBuilder("<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>");
+        while (prose.Length <= EsefReportEnvelope.MaximumEnvelopeBytes)
+            prose.Append("<p class=\"").Append('a', 200).Append("\">Unproven original</p>");
+        var original = Encoding.UTF8.GetBytes(prose.Append("</body></html>").ToString());
+        var compressed = GzipCompressor.Compress(original);
+        var file = new Equibles.Media.Data.Models.File
+        {
+            Name = "original",
+            Extension = "gz",
+            ContentType = "application/gzip",
+            Size = compressed.Length,
+            ContentHash = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(compressed)),
+            FileContent = new Equibles.Media.Data.Models.FileContent { Bytes = compressed },
+        };
+        document.AsFiledHtmlContent = file;
+        document.AsFiledHtmlUncompressedSize = original.Length;
+        _dbContext.Add(file);
+        _dbContext.SaveChanges();
+        _fileManager.OpenRead(file).Returns(_ => new MemoryStream(compressed, writable: false));
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(
+                document.XbrlContent.FileContent.Bytes,
+                writable: false
+            ));
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Failed.Should().Be(0);
+        result.Replaced.Should().Be(1);
+        document
+            .NormalizedContentVersion.Should()
+            .Be(Document.ContentBuilderVersion(DocumentType.EsefAnnualReport));
+        await _persistenceService
+            .Received(1)
+            .ReplaceContent(
+                document,
+                Arg.Is<byte[]>(bytes =>
+                    Encoding.UTF8.GetString(bytes).Contains("Retained annual report")
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     private Document SeedEsef()

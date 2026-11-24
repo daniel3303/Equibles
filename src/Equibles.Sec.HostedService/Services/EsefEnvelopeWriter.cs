@@ -247,9 +247,7 @@ internal sealed class EsefEnvelopeWriter(XmlReader reader, XmlWriter writer, boo
         private void Check(int count)
         {
             if (Length + count > maximumBytes)
-                throw new InvalidDataException(
-                    "Issuer report exceeds the extraction envelope limit."
-                );
+                throw EsefReportEnvelope.PastEnvelopeLimit();
         }
     }
 }

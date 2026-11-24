@@ -293,7 +293,9 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         else
             text.Should().Contain("Retained annual report");
         saved.ChunkedAt.Should().BeNull();
-        saved.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
+        saved
+            .NormalizedContentVersion.Should()
+            .Be(Document.ContentBuilderVersion(DocumentType.EsefAnnualReport));
         (await sut.Backfill(1)).Processed.Should().Be(0);
         await client.DidNotReceiveWithAnyArgs().GetDocumentContent(default, default, default);
     }
@@ -354,7 +356,9 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         saved.ContentId.Should().Be(contentId);
         saved.ChunkedAt.Should().BeCloseTo(chunkedAt.Value, TimeSpan.FromMilliseconds(1));
         saved.ChunkAttempts.Should().Be(2);
-        saved.NormalizedContentVersion.Should().Be(Document.EsefContentBuilderVersion);
+        saved
+            .NormalizedContentVersion.Should()
+            .Be(Document.ContentBuilderVersion(DocumentType.EsefAnnualReport));
         saved.NormalizedContentAttempts.Should().Be(0);
         (await verify.Set<Chunk>().SingleAsync(row => row.DocumentId == document.Id))
             .Id.Should()
