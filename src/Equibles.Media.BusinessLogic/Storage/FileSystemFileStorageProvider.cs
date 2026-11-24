@@ -41,7 +41,7 @@ public class FileSystemFileStorageProvider : IFileStorageProvider, IDisposable
     {
         var stored = Encode(file, content);
         var fullPath = StampAndResolve(file, stored, tier);
-        await DurableFileWriter.WriteIfMissing(fullPath, stored);
+        await DurableFileWriter.WriteIfMissing(fullPath, stored, RequireRoot());
     }
 
     /// <summary>

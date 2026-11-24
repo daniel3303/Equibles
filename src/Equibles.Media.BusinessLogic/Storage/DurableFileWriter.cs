@@ -15,14 +15,23 @@ public static class DurableFileWriter
 {
     private const int BufferSize = 1 << 16;
 
-    public static async Task WriteIfMissing(string fullPath, byte[] content)
+    /// <summary>Writes the content at its path unless the path already holds it.</summary>
+    /// <param name="storeRoot">
+    /// The store's root, the highest directory a writer of this path ever changes; an existing
+    /// match flushes the directories up to it. Null flushes every ancestor.
+    /// </param>
+    public static async Task WriteIfMissing(
+        string fullPath,
+        byte[] content,
+        string storeRoot = null
+    )
     {
         if (await HoldsContent(fullPath, content))
         {
             // The writer that stored this file may not have flushed its directory entries yet, and
             // older or killed writers can leave bytes a failed writeback kept only in the page
             // cache, so the match is flushed before a caller commits a row that points here.
-            FlushExisting(fullPath);
+            FlushExisting(fullPath, storeRoot);
             return;
         }
 
@@ -148,7 +157,7 @@ public static class DurableFileWriter
 
     // An fsync through a new descriptor reports the file's writeback errors that no one has
     // seen yet, so bytes a failed flush left only in the page cache are refused here.
-    private static void FlushExisting(string fullPath)
+    private static void FlushExisting(string fullPath, string storeRoot)
     {
         if (
             !RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
@@ -180,13 +189,23 @@ public static class DurableFileWriter
             close(fd);
         }
 
+        // A writer creates at most the shard directories and their tier under the root, so no
+        // directory above the root can hold an entry it has not flushed.
+        var root =
+            storeRoot == null
+                ? null
+                : Path.TrimEndingDirectorySeparator(Path.GetFullPath(storeRoot));
         for (
-            var directory = Path.GetDirectoryName(fullPath);
+            var directory = Path.GetDirectoryName(Path.GetFullPath(fullPath));
             directory != null;
             directory = Path.GetDirectoryName(directory)
         )
         {
             FsyncDirectory(directory);
+            if (root != null && string.Equals(directory, root, StringComparison.Ordinal))
+            {
+                break;
+            }
         }
     }
 
