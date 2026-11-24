@@ -521,11 +521,13 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData("EsefAnnualReport", 20, 4, true)]
     [InlineData("EsefAnnualReport", 0, 5, true)]
     [InlineData("EsefAnnualReport", 20, 5, true)]
-    // An empty report below generation 7 is built again: its text is now written past the
-    // conversion limit. A readable one at 6 stays settled.
+    // An empty report below generation 8 is built again: its text is now written past the
+    // conversion limit, a byte-order mark or not. A readable one at 6 or 7 stays settled.
     [InlineData("EsefAnnualReport", 0, 6, true)]
-    [InlineData("EsefAnnualReport", 0, 7, false)]
+    [InlineData("EsefAnnualReport", 0, 7, true)]
+    [InlineData("EsefAnnualReport", 0, 8, false)]
     [InlineData("EsefAnnualReport", 20, 6, false)]
+    [InlineData("EsefAnnualReport", 20, 7, false)]
     [InlineData("EsefReport", 20, 6, false)]
     [InlineData("TenK", 0, 1, false)]
     public void Pending_InlineEsefReplay_ReopensStaleTextButKeepsCurrentDocumentsSettled(
@@ -626,8 +628,10 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData(4, 0, true)]
     [InlineData(5, 0, true)]
     [InlineData(6, 0, true)]
-    [InlineData(7, 0, false)]
+    [InlineData(7, 0, true)]
+    [InlineData(8, 0, false)]
     [InlineData(6, 20, false)]
+    [InlineData(7, 20, false)]
     public void Pending_JsonRecovery_RemainsLimitedToPriorEmptyReports(
         int version,
         long size,
