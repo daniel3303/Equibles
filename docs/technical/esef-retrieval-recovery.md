@@ -2,6 +2,7 @@
 
 - Keep original XHTML and XBRL envelopes unchanged; compaction applies only to the retrieval copy.
 - Before the existing 16 Mi-character conversion limit, oversized valid XHTML may shed a fixed set of layout declarations unused by normalization.
+- Drop a leading byte-order mark before preparing the retrieval copy: UTF-8 decoding keeps it, and an XML reader refuses text that opens with one, so compaction and the streamed reader both refused such a report.
 - Omit XHTML scripts only when directly inside the root XHTML head or body; viewer payloads are already excluded from Markdown.
 - Refuse compaction when an XHTML script has another parent or contains child elements; financial facts, contexts and continuations may depend on that markup.
 - Preserve all other text, elements, namespaces, table spans, all other attributes except the layout metadata below, and all remaining styles, including emphasis, alignment, visibility, color and text decoration.
@@ -17,7 +18,7 @@
 - Convert the complete selected markup within the existing limit; valid reports without eligible notes settle empty, while malformed envelopes and failed conversions retain retries.
 - Root-level note headings never replace the HTML or body container; preserve the sibling prose and table structure.
 - Generation 6 replays captured inline ESEF documents below that generation, including readable reports, through the existing bounded normalization worker.
-- Generation 7 rebuilds every empty ESEF report below it, inline or JSON, for the streamed text; readable reports at 6 are not replayed for it. Current SEC documents stay settled.
+- Generation 7 rebuilds every empty ESEF report below it, inline or JSON, for the streamed text, and generation 8 for reports opening with a byte-order mark; readable reports are not replayed for either. Current SEC documents stay settled.
 - Each JSON note converts on its own, a note past the limit streamed, so the notes together have no combined cap; a note past the limit that gives no text leaves the whole report empty by design, never part of its notes. A note holding no visible text at all (an empty paragraph the issuer tagged) is skipped; any other note that converts to nothing fails the report.
 - Both cohorts require a retained envelope and fewer than five failed attempts; parked attempts remain visible and are not silently reset. Migrations `EsefEmptyReportAttemptsReset` and `EsefRebuildFailuresAttemptsReset` each gave reports below generation 7 their attempts back once, since their failures (the heading step's memory on nested spans, readable reports rebuilt empty) are fixed there.
 - Annual inline reports prefer their retained original over older extraction copies that may omit stylesheets; general inline and JSON reports use their retained extraction envelope.
@@ -28,8 +29,8 @@
 - Source selection changes only derived text; original pointers, files and tagged facts remain unchanged.
 - Replay replaces only changed derived text and clears its stale chunks transactionally; unchanged readable ESEF text keeps its chunks and only advances the normalization stamp.
 - Never replace an already-normalized readable report with an empty body; retain its text and record the failed attempt even for a conversion-size refusal.
-- Empty reports settle empty only when the streamed reader gives no text either; successful replays and new ESEF writers stamp generation 7 (`Document.ContentBuilderVersion`).
-- Retire the finite selection exceptions only after the eligible cohort below is empty, current writers stamp generation 7, and no older writers remain deployed.
+- Empty reports settle empty only when the streamed reader gives no text either; successful replays and new ESEF writers stamp the current generation (`Document.ContentBuilderVersion`).
+- Retire the finite selection exceptions only after the eligible cohort below is empty, current writers stamp the current generation, and no older writers remain deployed.
 - An empty cohort proves the conversion was retried; it does not prove every report became readable or any downstream extraction completed.
 
 ```sql
