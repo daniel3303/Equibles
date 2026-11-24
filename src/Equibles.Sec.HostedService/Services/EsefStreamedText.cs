@@ -306,17 +306,19 @@ internal static class EsefStreamedText
             var collapsed = new StringBuilder(text.Length);
             var space = false;
             foreach (var chunk in text.GetChunks())
-            foreach (var character in chunk.Span)
             {
-                if (char.IsWhiteSpace(character))
+                foreach (var character in chunk.Span)
                 {
-                    space = collapsed.Length > 0;
-                    continue;
+                    if (char.IsWhiteSpace(character))
+                    {
+                        space = collapsed.Length > 0;
+                        continue;
+                    }
+                    if (space)
+                        collapsed.Append(' ');
+                    space = false;
+                    collapsed.Append(character);
                 }
-                if (space)
-                    collapsed.Append(' ');
-                space = false;
-                collapsed.Append(character);
             }
             return collapsed.ToString();
         }
