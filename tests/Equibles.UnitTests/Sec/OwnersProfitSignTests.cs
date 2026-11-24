@@ -684,6 +684,57 @@ public class OwnersProfitSignTests
     }
 
     [Fact]
+    public void Read_WithheldPeriod_LeavesWithItsDimensionalFigures()
+    {
+        // A statement that also loads dimensional facts: a segment's owners' profit keeps no period,
+        // and neither it nor an equity column's total profit stands in for the left-out figure.
+        var concepts = new Dictionary<(FactTaxonomy, string), Guid>();
+        const string accession = "0001213900-26-093207";
+        DateOnly filed = new(2026, 8, 25);
+        DateOnly start2026 = new(2026, 1, 1),
+            half2026 = new(2026, 6, 30),
+            start2025 = new(2025, 1, 1),
+            half2025 = new(2025, 6, 30);
+        List<FinancialFact> evidence =
+        [
+            .. Facts(
+                concepts,
+                accession,
+                start2026,
+                half2026,
+                filed,
+                [
+                    (Ifrs, "ProfitLoss", "BRL", 420_765_000m),
+                    (Ifrs, "ProfitLossAttributableToNoncontrollingInterests", "BRL", -851_000m),
+                ]
+            ),
+        ];
+        var halfYear = Owners(accession, start2026, half2026, filed, "BRL", -421_616_000m);
+        var comparative = Owners(accession, start2025, half2025, filed, "BRL", -179_062_000m);
+        var segment = Owners(accession, start2025, half2025, filed, "BRL", -150_000_000m);
+        segment.DimensionsKey = "ifrs-full:SegmentsAxis=bank";
+        var equityColumn = Facts(
+            concepts,
+            accession,
+            start2025,
+            half2025,
+            filed,
+            [(Ifrs, "ProfitLoss", "BRL", 179_062_000m)]
+        )[0];
+        equityColumn.DimensionsKey = "ifrs-full:ComponentsOfEquityAxis=retained";
+
+        var reading = OwnersProfitSign.Read(
+            [halfYear, comparative, segment, equityColumn],
+            OwnersIds,
+            evidence,
+            ById(concepts)
+        );
+
+        reading.Facts.Select(fact => fact.Value).Should().Equal(421_616_000m);
+        reading.WithheldPeriods.Should().Equal((start2025, half2025, "BRL"));
+    }
+
+    [Fact]
     public void Read_FactsOfOtherConceptsInACheckedPeriod_StayAsTheyAre()
     {
         var (evidence, concepts) = Facts(

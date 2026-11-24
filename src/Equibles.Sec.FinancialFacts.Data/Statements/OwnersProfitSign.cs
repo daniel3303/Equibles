@@ -142,19 +142,15 @@ public static class OwnersProfitSign
             return unchanged;
         var filings = evidence
             .Where(IsConsolidatedSpanOfAFiling)
-            .Select(fact =>
-                (
-                    Fact: fact,
-                    Kind: evidenceConcepts.TryGetValue(fact.FinancialConceptId, out var concept)
-                    && KindByConcept.TryGetValue(concept, out var kind)
-                        ? kind
-                        : (Kind?)null
-                )
+            .SelectMany(fact =>
+                evidenceConcepts.TryGetValue(fact.FinancialConceptId, out var concept)
+                && KindByConcept.TryGetValue(concept, out var kind)
+                    ? new[] { (Fact: fact, Kind: kind) }
+                    : []
             )
-            .Where(item => item.Kind != null)
             .ToLookup(
                 item => (item.Fact.AccessionNumber, item.Fact.PeriodStart, item.Fact.PeriodEnd),
-                item => (item.Fact, item.Kind.Value)
+                item => (item.Fact, item.Kind)
             );
         if (filings.Count == 0)
             return unchanged;
@@ -182,8 +178,8 @@ public static class OwnersProfitSign
         if (misSignedUnits.Count == 0)
             return unchanged;
         // An unchecked figure in a mis-signed unit leaves with its filing's total profit for that
-        // period; the period leaves the line when no figure its own filing proves is left for it,
-        // so no other measure stands in.
+        // period; the period leaves the line when no consolidated figure is left for it, its
+        // dimensional figures (a segment, an equity column) included, so no other measure stands in.
         var dropped = new HashSet<FinancialFact>(
             ownersFacts.Where(fact =>
                 signs[fact] == null
@@ -193,7 +189,7 @@ public static class OwnersProfitSign
             ReferenceEqualityComparer.Instance
         );
         var kept = ownersFacts
-            .Where(fact => !dropped.Contains(fact))
+            .Where(fact => !dropped.Contains(fact) && fact.DimensionsKey == "")
             .Select(fact => (fact.PeriodStart, fact.PeriodEnd, fact.Unit))
             .ToHashSet();
         var withheld = dropped
@@ -208,7 +204,7 @@ public static class OwnersProfitSign
             .Where(fact =>
                 !dropped.Contains(fact)
                 && !(
-                    IsConsolidatedSpanOfAFiling(fact)
+                    IsSpan(fact)
                     && (
                         withheld.Contains((fact.PeriodStart, fact.PeriodEnd, fact.Unit))
                         || droppedFilings.Contains(
@@ -311,6 +307,9 @@ public static class OwnersProfitSign
                 : null;
         }
     }
+
+    private static bool IsSpan(FinancialFact fact) =>
+        fact.PeriodType == FactPeriodType.Duration && fact.PeriodStart < fact.PeriodEnd;
 
     private static bool IsConsolidatedSpanOfAFiling(FinancialFact fact) =>
         fact.PeriodType == FactPeriodType.Duration
