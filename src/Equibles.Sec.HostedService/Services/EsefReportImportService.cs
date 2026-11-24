@@ -36,6 +36,7 @@ public class EsefReportImportService(
     EquityIdentityManager identityManager,
     ISecDocumentHtmlNormalizer normalizer,
     ISecDocumentHtmlToMarkdownConverter converter,
+    EsefVisualReportText visualReports,
     IOptions<EsefReportScraperOptions> options,
     ILogger<EsefReportImportService> logger
 ) : IImporter
@@ -444,6 +445,35 @@ public class EsefReportImportService(
                 normalizer,
                 converter
             );
+            // Reports before 2022 tag no notes, so their prose is only in the visual report this JSON
+            // was taken in place of.
+            if (
+                content.Length == 0
+                && filing.ReportUrl != null
+                && filing.ReportUrl != captureAddress
+            )
+            {
+                try
+                {
+                    content = await visualReports.FromReportAddress(
+                        candidate.LegalEntityIdentifier,
+                        periodEnd,
+                        filing.ReportUrl,
+                        cancellationToken
+                    );
+                }
+                // A visual report naming another issuer or period does not unmake the JSON's facts, so
+                // the report is still stored; a transient failure leaves the filing for the next pass.
+                catch (InvalidDataException exception)
+                {
+                    logger.LogWarning(
+                        exception,
+                        "The European ESEF report {Reference} is stored without text: its visual report "
+                            + "does not match it.",
+                        reference
+                    );
+                }
+            }
         }
         else
         {

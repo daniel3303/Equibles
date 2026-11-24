@@ -53,6 +53,33 @@ public class XbrlFilingsClient(HttpClient httpClient)
             $"/api/filings?include=entity&page%5Bsize%5D={pageSize}&page%5Bnumber%5D={pageNumber}"
         );
 
+    // One issuer's filings, every period and language, found by the LEI the index records for the entity.
+    public static Uri EntityIndexUrl(string legalEntityIdentifier, int pageNumber, int pageSize) =>
+        new(
+            Origin,
+            "/api/filings?include=entity&filter%5Bentity.identifier%5D="
+                + Uri.EscapeDataString(legalEntityIdentifier)
+                + $"&page%5Bsize%5D={pageSize}&page%5Bnumber%5D={pageNumber}"
+        );
+
+    public async Task<XbrlFilingPage> GetFilingsOf(
+        string legalEntityIdentifier,
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(legalEntityIdentifier))
+            throw new ArgumentException("An LEI is required.", nameof(legalEntityIdentifier));
+        var json = await ReadText(
+            EntityIndexUrl(legalEntityIdentifier, pageNumber, pageSize),
+            MaxIndexBytes,
+            IndexAccept,
+            cancellationToken
+        );
+        return XbrlFilingsParser.Read(json, Origin);
+    }
+
     public async Task<XbrlFilingPage> GetFilings(
         string countryCode,
         int pageNumber,

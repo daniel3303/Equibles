@@ -419,6 +419,7 @@ public class EquityIssuerMergeTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             null,
             null,
             null,
+            null,
             null
         ).LoadCandidateIssuers(CancellationToken.None);
 
