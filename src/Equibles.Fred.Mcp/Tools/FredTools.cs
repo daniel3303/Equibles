@@ -80,7 +80,8 @@ public class FredTools
                 if (yearOverYear && YearOverYear.AlreadyAChange(series.Units))
                     return $"{series.SeriesId} is already stated as a change ({series.Units}); read its levels, or pick the underlying level series with SearchEconomicIndicators.";
 
-                var end = DateOnly.FromDateTime(DateTime.UtcNow);
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var end = today;
                 if (!string.IsNullOrWhiteSpace(endDate))
                 {
                     if (!McpOutput.TryParseDate(endDate, out var parsedEnd))
@@ -184,6 +185,16 @@ public class FredTools
                 if (baseNote.Length > 0)
                     table += Environment.NewLine + $"_{baseNote}_" + Environment.NewLine;
 
+                // A series such as potential GDP is published years ahead; nothing can be measured
+                // after today, so a row dated later is the publisher's projection.
+                var projected = observations.Count(o => o.Date > today);
+                var projectionNote =
+                    projected > 0
+                        ? $"{projected} of these rows are dated after {today:yyyy-MM-dd}: the publisher's projections, not observations."
+                        : "";
+                if (projectionNote.Length > 0)
+                    table += Environment.NewLine + $"_{projectionNote}_" + Environment.NewLine;
+
                 // The kept rows are the NEWEST maxResults of the range (rendered
                 // ascending), so the shared "first N" truncation note would mislabel
                 // them — spell the newest-kept semantics out instead. Without a note a
@@ -209,6 +220,8 @@ public class FredTools
                         notes.Add(coverageNote.Trim().Trim('_'));
                     if (baseNote.Length > 0)
                         notes.Add(baseNote);
+                    if (projectionNote.Length > 0)
+                        notes.Add(projectionNote);
                     var kept = observations.OrderBy(o => o.Date).ToList();
                     McpResultCapture.Record(
                         new EconomicIndicatorCapture(

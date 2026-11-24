@@ -48,12 +48,13 @@ public class StockCombinedQuarterService
         CancellationToken cancellationToken = default
     )
     {
-        var dates = (
-            await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(
+        var dates = UpToDelisting(
                 stock,
-                cancellationToken
+                await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(
+                    stock,
+                    cancellationToken
+                )
             )
-        )
             .Take(2)
             .ToList();
         if (dates.Count == 0)
@@ -66,6 +67,31 @@ public class StockCombinedQuarterService
             FilingWindowOpen = CombinedQuarterHelper.IsFilingWindowOpen(dates[0], today),
         };
     }
+
+    /// <summary>
+    /// The report dates a stock's current quarter is chosen from, in their order. Filers keep
+    /// reporting a company after its US delisting, so a company that no longer trades keeps only
+    /// the quarters on or before its delisting; with none, every date stays.
+    /// </summary>
+    public static IEnumerable<DateOnly> UpToDelisting(
+        EquityIssuer stock,
+        IReadOnlyList<DateOnly> reportDates
+    )
+    {
+        if (
+            UsDelistingDate(stock) is not { } delistedOn
+            || !reportDates.Any(date => date <= delistedOn)
+        )
+            return reportDates;
+        return reportDates.Where(date => date <= delistedOn);
+    }
+
+    /// <summary>The day a company that no longer trades left its US listing; null while it trades.</summary>
+    public static DateOnly? UsDelistingDate(EquityIssuer stock) =>
+        stock.Presentation?.Listing
+            is { MarketCountryCode: "US", Active: false, DelistedOn: { } on }
+            ? on
+            : null;
 
     /// <summary>
     /// The positions to present for the anchored quarter: the combined view while the filing

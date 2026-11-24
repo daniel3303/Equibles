@@ -106,9 +106,10 @@ public class FinancialFactsTools
         )]
             bool asOriginallyReported = false,
         [Description(
-            "Optional fiscal-period filter: 'FY' (annual only) or 'Q1'..'Q4'. Note that "
-                + "discrete Q4 rows exist only where the filer reported a discrete fourth "
-                + "quarter (most large filers stopped after ~2021)."
+            "Optional fiscal-period filter: 'FY' (annual only) or 'Q1'..'Q4'. A fourth quarter "
+                + "the filer never reported on its own is the year less its first three quarters, "
+                + "marked (derived), for income and cash-flow lines; other lines have Q4 rows only "
+                + "where the filer reported one."
         )]
             string fiscalPeriod = null
     )
@@ -220,11 +221,34 @@ public class FinancialFactsTools
                     companyLatestPeriodEnd
                 );
 
-                var perPeriod = (
-                    FinancialConceptAliases.IsInstant(concept)
-                        ? PickInstantRows(facts, conceptPriority, asOriginallyReported, formFilter)
-                        : PickFlowRows(facts, conceptPriority, asOriginallyReported, formFilter)
+                // A quarter the filer reports only inside a cumulative figure (six or nine months, or
+                // the year) is worked out from that fiscal year's own figures and marked; a form filter
+                // or the as-originally-reported reading asks for filed figures only.
+                var derived = new HashSet<FinancialFact>(ReferenceEqualityComparer.Instance);
+                List<FinancialFact> picked;
+                if (FinancialConceptAliases.IsInstant(concept))
+                    picked = PickInstantRows(
+                        facts,
+                        conceptPriority,
+                        asOriginallyReported,
+                        formFilter
+                    );
+                else if (
+                    formFilter == null
+                    && !asOriginallyReported
+                    && FinancialConceptAliases.IsAdditiveFlow(concept)
                 )
+                    picked = PickFlowRowsWithDerivedQuarters(
+                        facts,
+                        conceptPriority,
+                        StatementQuarterDerivation.IsNonNegative(
+                            FinancialConceptAliases.Canonical(concept)
+                        ),
+                        derived
+                    );
+                else
+                    picked = PickFlowRows(facts, conceptPriority, asOriginallyReported, formFilter);
+                var perPeriod = picked
                     .Where(f =>
                         (fromBound == null || f.PeriodEnd >= fromBound.Value)
                         && (toBound == null || f.PeriodEnd <= toBound.Value)
@@ -296,13 +320,19 @@ public class FinancialFactsTools
                     perPeriod.Count,
                     coverageNote,
                     splits,
-                    conceptsById
+                    conceptsById,
+                    derived
                 );
                 var notes = capture.Notes.ToList();
                 if (shown.Any(DepreciationTotal.IsSum))
                 {
                     table += SumFootnote;
                     notes.Add(SumFootnoteCardText);
+                }
+                if (shown.Any(derived.Contains))
+                {
+                    table += DerivedFootnote;
+                    notes.Add(DerivedFootnoteCardText);
                 }
                 // The rows keep the filer's tagged figure; a gross profit that is the period's
                 // operating income is named, and the statement shows the derived figure.
@@ -364,6 +394,33 @@ public class FinancialFactsTools
                 )
                 .Where(f => f != null)
         );
+
+    // The flow rows plus the quarters they leave out: a second or third quarter as the cumulative
+    // figure less the one before it, then a fourth as the shown year less its shown three quarters.
+    // Each added row lands in derived. A fiscal year derives from its own filings only, as the
+    // statement does: a later year's restated comparative would not match the quarter shown.
+    private static List<FinancialFact> PickFlowRowsWithDerivedQuarters(
+        List<FinancialFact> facts,
+        IReadOnlyDictionary<Guid, int> conceptPriority,
+        bool nonNegative,
+        HashSet<FinancialFact> derived
+    )
+    {
+        var filed = new HashSet<FinancialFact>(facts, ReferenceEqualityComparer.Instance);
+        var rejectNegative = nonNegative ? conceptPriority.Keys.ToHashSet() : null;
+        var withQuarters = facts
+            .GroupBy(f => f.FiscalYear)
+            .SelectMany(year =>
+                StatementQuarterDerivation.AppendDerived(year.ToList(), rejectNegative)
+            )
+            .ToList();
+        derived.UnionWith(withQuarters.Where(f => !filed.Contains(f)));
+        var picked = PickFlowRows(withQuarters, conceptPriority, false, null);
+        var shown = new HashSet<FinancialFact>(picked, ReferenceEqualityComparer.Instance);
+        var withFourth = DerivedFourthQuarter.Append(picked, nonNegative, withQuarters);
+        derived.UnionWith(withFourth.Where(f => !shown.Contains(f)));
+        return withFourth;
+    }
 
     // A balance or share count is one row per as-of date, so a cover-page count and the quarter-end
     // balance-sheet count both publish. The date and fiscal-period filters then apply to the rows.
@@ -808,6 +865,19 @@ public class FinancialFactsTools
         DepreciationTotal.SumMarker
         + " marks depreciation & amortization added up from its reported parts.";
 
+    private const string DerivedMarker = "(derived)";
+
+    private const string DerivedFootnote =
+        "\n_"
+        + DerivedMarker
+        + ": a quarter the filer reports only inside a cumulative figure, worked out from that fiscal "
+        + "year's own figures: a second or third quarter as the cumulative figure less the one before "
+        + "it, a fourth as the year row less the three quarter rows shown. It has no filing of its own; "
+        + "Filed is the latest filing among the figures it comes from._\n";
+
+    private const string DerivedFootnoteCardText =
+        "A quarter with no form is worked out from its fiscal year's cumulative figures.";
+
     private static string RenderFactHistoryTable(
         string concept,
         EquityIssuer stock,
@@ -838,7 +908,8 @@ public class FinancialFactsTools
         int totalPeriods,
         string coverageNote,
         IReadOnlyList<StockSplit> splits,
-        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
+        IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById,
+        IReadOnlySet<FinancialFact> derived = null
     )
     {
         var rows = new List<FinancialFactCaptureRow>();
@@ -865,12 +936,19 @@ public class FinancialFactsTools
                 var unresolved = restated.Unresolved;
                 unresolvedBasis |= unresolved;
                 splitAdjusted |= restated.Adjusted;
+                var isDerived = derived?.Contains(f) == true;
                 rows.Add(
-                    CaptureRow(f, FiscalYearLabel.For(f.FiscalYear, stock), value, unresolved)
+                    CaptureRow(
+                        f,
+                        FiscalYearLabel.For(f.FiscalYear, stock),
+                        value,
+                        unresolved,
+                        isDerived
+                    )
                 );
                 return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {FiscalYearLabel.For(f.FiscalYear, stock)} | "
                     + $"{f.FiscalPeriod.NameForHumans()} | "
-                    + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(f)} | "
+                    + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")}{SumMark(f)}{(isDerived ? " " + DerivedMarker : "")} | "
                     + $"{FactMarkdown.Cell(f.Unit)} | "
                     + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
                     + $"{f.FiledDate:yyyy-MM-dd} | "
@@ -937,7 +1015,8 @@ public class FinancialFactsTools
         FinancialFact fact,
         int fiscalYear,
         decimal value,
-        bool asFiled
+        bool asFiled,
+        bool derived = false
     ) =>
         new(
             fiscalYear,
@@ -949,7 +1028,8 @@ public class FinancialFactsTools
             asFiled,
             DepreciationTotal.IsSum(fact),
             fact.Form?.DisplayName,
-            fact.FiledDate
+            fact.FiledDate,
+            derived
         );
 
     internal static string BuildCoverageNote(

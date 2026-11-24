@@ -223,6 +223,32 @@ public static class CommonStockRepositoryExtensions
         return (null, NotFound(ticker));
     }
 
+    /// <summary>
+    /// <see cref="ResolveByTicker"/>, plus a company that left the US market read under its own main
+    /// line, with the ticker a listing-scoped read takes. Any other retired ticker stays not found: a
+    /// retired sibling (a warrant, a unit, a closed fund series) and a former ticker of a company that
+    /// still trades look the same once retired, and a retired fund line no longer keeps its read to
+    /// that one series, so either would answer with another security's data.
+    /// </summary>
+    public static async Task<(
+        EquityIssuer Stock,
+        string ReadTicker,
+        string Error
+    )> ResolveByTickerForHistory(this EquityIssuerRepository repository, string ticker)
+    {
+        var (stock, error) = await repository.ResolveByTicker(ticker);
+        if (stock != null)
+            return (stock, ticker, null);
+        var (former, formerError) = await repository.ResolveByTickerIncludingDelisted(ticker);
+        if (former == null)
+            return (null, null, formerError ?? error);
+        var main = former.Presentation?.Listing;
+        var delistedMainLine =
+            main is { MarketCountryCode: "US", Active: false, WasReferenceListed: false }
+            && SecondaryTickerPolicy.ResolveListedTicker(former, ticker) == main.Ticker;
+        return delistedMainLine ? (former, main.Ticker, null) : (null, null, error);
+    }
+
     internal static string NotFound(string ticker) => $"Stock '{ticker}' not found.";
 
     private static string Ambiguous(string ticker) => $"Listed security '{ticker}' is ambiguous.";

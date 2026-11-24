@@ -312,6 +312,107 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveByTickerForHistory_DelistedCompanyReadsUnderItsOwnTicker()
+    {
+        _dbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "GONE",
+                Active: false,
+                Name: "Delisted Co",
+                Cik: "4601"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, readTicker, error) = await _repository.ResolveByTickerForHistory("gone");
+
+        stock!.Name.Should().Be("Delisted Co");
+        SecondaryTickerPolicy.ResolveListedTicker(stock, readTicker).Should().Be("GONE");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerForHistory_RetiredLineOfACompanyThatStillTradesStaysNotFound()
+    {
+        // A former main ticker and a retired warrant look the same once retired, so neither answers.
+        EquityIssuer trading = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NEWT",
+            Name: "Still trades",
+            Cik: "4701"
+        );
+        UsEquityDirectory.GetOrAddListing(trading, "OLDT").Active = false;
+        UsEquityDirectory.GetOrAddListing(trading, "NEWT-WT").Active = false;
+        _dbContext.Add(trading);
+        await _dbContext.SaveChangesAsync();
+
+        var (former, _, formerError) = await _repository.ResolveByTickerForHistory("OLDT");
+        var (warrant, _, warrantError) = await _repository.ResolveByTickerForHistory("NEWT-WT");
+
+        former.Should().BeNull();
+        formerError.Should().Be("Stock 'OLDT' not found.");
+        warrant.Should().BeNull();
+        warrantError.Should().Be("Stock 'NEWT-WT' not found.");
+    }
+
+    [Fact]
+    public async Task ResolveByTickerForHistory_DelistedCompanysOtherLinesAndDelistedFundsStayNotFound()
+    {
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GONE",
+            Active: false,
+            Name: "Delisted Co",
+            Cik: "4711"
+        );
+        UsEquityDirectory.GetOrAddListing(company, "GONE-WT").Active = false;
+        EquityIssuer fund = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "SHUT",
+            Active: false,
+            Name: "Closed Fund Trust",
+            Cik: "4712"
+        );
+        fund.Presentation.Listing.WasReferenceListed = true;
+        _dbContext.AddRange(company, fund);
+        await _dbContext.SaveChangesAsync();
+
+        var (warrant, _, _) = await _repository.ResolveByTickerForHistory("GONE-WT");
+        var (closedFund, _, _) = await _repository.ResolveByTickerForHistory("SHUT");
+
+        warrant.Should().BeNull();
+        closedFund.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerForHistory_TradedTickerKeepsTheRequestAndItsCurrentOwner()
+    {
+        _dbContext.AddRange(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "REUSE",
+                Active: false,
+                Name: "Former owner",
+                Cik: "4801"
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "REUSE",
+                Name: "Current owner",
+                Cik: "4802"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, readTicker, error) = await _repository.ResolveByTickerForHistory("REUSE");
+
+        stock!.Name.Should().Be("Current owner");
+        readTicker.Should().Be("REUSE");
+        error.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetByCikTolerant_UnpaddedInputResolvesPaddedPrimaryCik()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(

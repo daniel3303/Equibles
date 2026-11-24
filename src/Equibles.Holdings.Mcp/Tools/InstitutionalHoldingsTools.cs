@@ -175,7 +175,7 @@ public class InstitutionalHoldingsTools
     public Task<string> GetTopHolders(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
         [Description(
-            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available; an off-quarter date snaps to the nearest report on or before it)"
+            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available, or for a delisted company its last quarter on or before the delisting; an off-quarter date snaps to the nearest report on or before it)"
         )]
             string reportDate = null,
         [Description("Maximum number of holding rows to return (default: 20, clamped to 1-500)")]
@@ -198,11 +198,12 @@ public class InstitutionalHoldingsTools
                 if (styleFilterError != null)
                     return styleFilterError;
 
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
 
-                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, readTicker);
                 var exactListingScope = SecondaryTickerPolicy.RequiresExactListingScope(
                     stock,
                     listedTicker
@@ -217,10 +218,9 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
 
-                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
-                    reportDate,
-                    reportDates
-                );
+                var (targetDate, dateNote, dateError) = string.IsNullOrWhiteSpace(reportDate)
+                    ? CurrentReportDate(stock, reportDates)
+                    : ResolveReportDateStrict(reportDate, reportDates);
                 if (dateError != null)
                     return dateError;
 
@@ -565,6 +565,24 @@ public class InstitutionalHoldingsTools
         + $"after quarter end, or the next business day). Combined view: funds that have not "
         + $"filed yet carry their {FormatDate(carriedFrom)} positions.";
 
+    // With no date asked, the stock's current quarter answers: a delisted company's is its last
+    // quarter before the delisting, not a later filing from a filer still reporting it.
+    private static (DateOnly Date, string Note, string Error) CurrentReportDate(
+        EquityIssuer stock,
+        IReadOnlyList<DateOnly> reportDates
+    )
+    {
+        var date = StockCombinedQuarterService.UpToDelisting(stock, reportDates).Max();
+        return (date, DelistedNote(stock, date), null);
+    }
+
+    private static string DelistedNote(EquityIssuer stock, DateOnly targetDate) =>
+        StockCombinedQuarterService.UsDelistingDate(stock) is { } on
+            ? $"Note: {stock.Presentation.Listing.Ticker} was delisted on {FormatDate(on)}; showing "
+                + $"{FormatDate(targetDate)}{(targetDate <= on ? ", its last 13F quarter before the delisting" : "")}. "
+                + "Pass reportDate to read another quarter."
+            : null;
+
     private static DateOnly RequirePreviousReportDate(StockQuarterAnchor anchor) =>
         anchor.PreviousReportDate
         ?? throw new InvalidOperationException(
@@ -779,11 +797,12 @@ public class InstitutionalHoldingsTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
 
-                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, readTicker);
                 var exactListingScope = SecondaryTickerPolicy.RequiresExactListingScope(
                     stock,
                     listedTicker
@@ -990,17 +1009,22 @@ public class InstitutionalHoldingsTools
                     return dimensionError;
                 var mixDimension = parsed ?? HolderMixDimension.EntityType;
 
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
                 if (fundType)
                 {
                     if (_fundOwnershipReader == null)
                         return "Registered-fund ownership by fund type is not available on this server.";
-                    var funds = await _fundOwnershipReader.ReadRecent(stock, ticker, maxPeriods);
+                    var funds = await _fundOwnershipReader.ReadRecent(
+                        stock,
+                        readTicker,
+                        maxPeriods
+                    );
                     return funds.Unavailable ?? RenderFundOwnership(stock, ticker, funds);
                 }
-                var history = await _holderMixReader.ReadRecent(stock, ticker, maxPeriods);
+                var history = await _holderMixReader.ReadRecent(stock, readTicker, maxPeriods);
                 return history.Unavailable ?? RenderHolderMix(stock, ticker, mixDimension, history);
             },
             "GetHolderMix",
@@ -1703,7 +1727,7 @@ public class InstitutionalHoldingsTools
     public Task<string> GetTopInstitutionalBuyersSellers(
         [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
         [Description(
-            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available; an off-quarter date snaps to the nearest report on or before it)"
+            "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available, or for a delisted company its last quarter on or before the delisting; an off-quarter date snaps to the nearest report on or before it)"
         )]
             string reportDate = null,
         [Description(
@@ -1717,11 +1741,12 @@ public class InstitutionalHoldingsTools
             {
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
 
-                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, readTicker);
                 var exactListingScope = SecondaryTickerPolicy.RequiresExactListingScope(
                     stock,
                     listedTicker
@@ -1736,10 +1761,9 @@ public class InstitutionalHoldingsTools
                 if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
 
-                var (targetDate, dateNote, dateError) = ResolveReportDateStrict(
-                    reportDate,
-                    reportDates
-                );
+                var (targetDate, dateNote, dateError) = string.IsNullOrWhiteSpace(reportDate)
+                    ? CurrentReportDate(stock, reportDates)
+                    : ResolveReportDateStrict(reportDate, reportDates);
                 if (dateError != null)
                     return dateError;
 

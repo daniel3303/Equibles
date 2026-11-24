@@ -306,11 +306,16 @@ public class StockOwnershipReader
     {
         if (!exactListing)
             return await _combinedQuarterService.Resolve(stock, today, cancellationToken);
-        var dates = await _holdingRepository.Get13FReportDatesByListingSnapshotBacked(
-            stock,
-            listedTicker,
-            cancellationToken
-        );
+        var dates = StockCombinedQuarterService
+            .UpToDelisting(
+                stock,
+                await _holdingRepository.Get13FReportDatesByListingSnapshotBacked(
+                    stock,
+                    listedTicker,
+                    cancellationToken
+                )
+            )
+            .ToList();
         return dates.Count == 0
             ? null
             : new StockQuarterAnchor

@@ -65,6 +65,10 @@ public static class StatementQuarterDerivation
         return result;
     }
 
+    /// <summary>Whether a derived quarter of the canonical alias is dropped when it comes out negative.</summary>
+    public static bool IsNonNegative(string canonicalAlias) =>
+        NonNegativeAliases.Contains(canonicalAlias);
+
     public static bool IsDerived(FinancialFact fact) =>
         fact.Form == null && string.IsNullOrEmpty(fact.AccessionNumber);
 

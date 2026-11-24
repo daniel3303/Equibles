@@ -1,7 +1,9 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
+using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Mcp.Tools;
@@ -259,6 +261,76 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         output.Should().Contain("\u2020 Withheld under confidential treatment");
         output.Should().NotContain("Carried, not yet filed", "it filed, and withheld the book");
     }
+
+    [Fact]
+    public async Task GetTopHolders_DelistedCompany_AnswersItsLastQuarterBeforeTheDelisting()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Active: false,
+            DelistedOn: new DateOnly(2025, 8, 29),
+            Name: "Taken Private Co",
+            Cik: "0000000300"
+        );
+        var anchorHolder = new InstitutionalHolder { Cik = "301", Name = "Anchor Fund" };
+        var smallHolder = new InstitutionalHolder { Cik = "302", Name = "Small Fund" };
+        var straggler = new InstitutionalHolder { Cik = "303", Name = "Straggler Fund" };
+        DbContext.AddRange(stock, anchorHolder, smallHolder, straggler);
+        DbContext.Add(MakeHolding(stock, anchorHolder, new DateOnly(2025, 6, 30), shares: 9_000));
+        DbContext.Add(MakeHolding(stock, smallHolder, new DateOnly(2025, 6, 30), shares: 1_000));
+        // A filer still reporting the company a quarter after it stopped trading.
+        DbContext.Add(MakeHolding(stock, straggler, new DateOnly(2025, 9, 30), shares: 50));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = CreateTools(verify);
+
+        var latest = await sut.GetTopHolders("GONE");
+        var later = await sut.GetTopHolders("GONE", reportDate: "2025-09-30");
+
+        latest.Should().Contain("Anchor Fund").And.Contain("Small Fund");
+        latest.Should().NotContain("Straggler Fund");
+        latest.Should().Contain("GONE was delisted on 2025-08-29; showing 2025-06-30");
+        later.Should().Contain("Straggler Fund");
+    }
+
+    [Fact]
+    public async Task GetTopHolders_RetiredWarrantOfACompanyThatTrades_NeverAnswersWithTheCompanysHolders()
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MAIN",
+            Name: "Main Co",
+            Cik: "0000000400"
+        );
+        UsEquityDirectory.GetOrAddListing(stock, "MAIN-WT").Active = false;
+        var holder = new InstitutionalHolder { Cik = "401", Name = "Loyal Fund" };
+        DbContext.AddRange(stock, holder);
+        DbContext.Add(MakeHolding(stock, holder, new DateOnly(2024, 12, 31), shares: 700));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+
+        var output = await CreateTools(verify).GetTopHolders("MAIN-WT");
+
+        output.Should().StartWith("Stock 'MAIN-WT' not found.");
+        output.Should().NotContain("Loyal Fund");
+    }
+
+    private InstitutionalHoldingsTools CreateTools(EquiblesFinancialDbContext db) =>
+        new(
+            new InstitutionalHoldingRepository(db),
+            new InstitutionalHolderRepository(db),
+            new EquityIssuerRepository(db),
+            new StockSplitRepository(db),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(db),
+                new StockSplitRepository(db)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
 
     private static InstitutionalHolding MakeHolding(
         EquityIssuer stock,
