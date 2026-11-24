@@ -41,4 +41,50 @@ public class HeadingConversionStepExecuteNestedHeadingTests
 
         doc.Body!.InnerHtml.Should().Be("<h3>Group results 2025</h3><h3>Outlook</h3>");
     }
+
+    // Judging a block reads all it holds, so blocks past the depth bound are never judged: a chain
+    // of spans each holding the rest would otherwise be read once per link.
+    [Fact]
+    public void Execute_BoldBlockNestedPastTheDepthBound_IsLeftAsText()
+    {
+        var deep = string.Concat(Enumerable.Repeat("<div>", 70));
+        var doc = _parser.ParseDocument(
+            "<html><body>"
+                + deep
+                + "<p><span style=\"font-weight:bold\">Outlook</span></p>"
+                + string.Concat(Enumerable.Repeat("</div>", 70))
+                + "<div><p><span style=\"font-weight:bold\">Risks</span></p></div></body></html>"
+        );
+
+        _step.Execute(doc);
+
+        doc.QuerySelectorAll("h3").Select(heading => heading.TextContent).Should().Equal("Risks");
+        doc.Body!.TextContent.Should().Contain("Outlook");
+    }
+
+    // A block's spans are each read when it is judged, so a block holding more than the span bound
+    // is never judged: spans nested in one another would be read once per span they hold.
+    [Fact]
+    public void Execute_BoldBlockPastTheSpanBound_IsLeftAsText()
+    {
+        static string Bold(int count) =>
+            string.Concat(
+                Enumerable.Repeat("<span style=\"font-weight:bold\">Word </span>", count)
+            );
+        var doc = _parser.ParseDocument(
+            "<html><body><div><p>"
+                + Bold(300)
+                + "</p></div><div><p>"
+                + Bold(10)
+                + "</p></div></body></html>"
+        );
+
+        _step.Execute(doc);
+
+        doc.QuerySelectorAll("h3")
+            .Select(heading => heading.TextContent)
+            .Should()
+            .Equal(string.Join(" ", Enumerable.Repeat("Word", 10)));
+        doc.QuerySelectorAll("p").Should().ContainSingle();
+    }
 }

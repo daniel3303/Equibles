@@ -20,6 +20,12 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     // keyword + digit but runs on much longer, so only a short candidate qualifies as a heading.
     private const int MaxItemHeadingWords = 12;
 
+    // A block deeper than this, or holding more spans, is never judged a heading. In 45 real
+    // filings and European reports the deepest block judged sat 14 elements deep, and the largest
+    // heading held 52 spans.
+    private const int MaxJudgedDepth = 64;
+    private const int MaxJudgedSpans = 256;
+
     private static readonly System.Buffers.SearchValues<char> WhiteSpace =
         System.Buffers.SearchValues.Create(
             Enumerable
@@ -50,8 +56,8 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     private void Run(IHtmlDocument doc)
     {
         // Select spans that are NOT descendants of table elements
-        var inTable = new Dictionary<IElement, bool>();
-        var spans = doc.QuerySelectorAll("span").Where(s => !InTable(s, inTable)).ToList();
+        var places = new Dictionary<IElement, (int Depth, bool InTable)>();
+        var spans = doc.QuerySelectorAll("span").Where(s => !Place(s, places).InTable).ToList();
         if (spans.Count == 0)
             return;
 
@@ -65,11 +71,18 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
 
         foreach (var span in spans)
         {
-            if (replaced.Contains(span) || !HasText(span))
-                continue;
-
             var parent = span.ParentElement;
-            if (parent == null || processedParents.Contains(parent) || notHeadings.Contains(parent))
+            // Judging a block reads what each of its spans holds, so a chain of spans each holding
+            // the rest is read once per link. The two bounds cap the blocks judged and the spans
+            // read in each, which keeps the step linear in the document whatever its shape.
+            if (
+                parent == null
+                || Place(parent, places).Depth > MaxJudgedDepth
+                || replaced.Contains(span)
+                || !HasText(span)
+            )
+                continue;
+            if (processedParents.Contains(parent) || notHeadings.Contains(parent))
                 continue;
             // A root-level note heading cannot replace the document container or its other content.
             if (ReferenceEquals(parent, doc.Body) || ReferenceEquals(parent, doc.DocumentElement))
@@ -78,6 +91,11 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             // Read lazily, in document order as the selector lists them: each check stops at the
             // first span that settles it, so a block of nested spans is not walked through each time.
             var siblingSpans = Spans(parent);
+            if (siblingSpans.Skip(MaxJudgedSpans).Any())
+            {
+                notHeadings.Add(parent);
+                continue;
+            }
 
             var (hasText, combinedText) = CombineText(siblingSpans);
             var headingTag = hasText ? ClassifyHeadingTag(combinedText, siblingSpans) : null;
@@ -101,25 +119,27 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         }
     }
 
-    // Element.Closest("table") != null, each element's answer kept so a deep block is climbed once.
-    private static bool InTable(IElement element, Dictionary<IElement, bool> known)
+    // How many elements hold an element, and whether a table is among them (Closest("table")),
+    // each element's answer kept so a deep block is climbed once.
+    private static (int Depth, bool InTable) Place(
+        IElement element,
+        Dictionary<IElement, (int Depth, bool InTable)> known
+    )
     {
         var climbed = new List<IElement>();
-        var answer = false;
+        (int Depth, bool InTable) above = (0, false);
         for (var current = element; current != null; current = current.ParentElement)
         {
-            if (known.TryGetValue(current, out answer))
+            if (known.TryGetValue(current, out above))
                 break;
-            if (IsNamed(current, "table"))
-            {
-                answer = true;
-                break;
-            }
             climbed.Add(current);
         }
-        foreach (var visited in climbed)
-            known[visited] = answer;
-        return answer;
+        for (var index = climbed.Count - 1; index >= 0; index--)
+        {
+            above = (above.Depth + 1, above.InTable || IsNamed(climbed[index], "table"));
+            known[climbed[index]] = above;
+        }
+        return known[element];
     }
 
     private static bool IsNamed(IElement element, string name) =>
@@ -159,15 +179,17 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         var words = 0;
         var inWord = false;
         foreach (var text in span.GetDescendants().OfType<IText>())
-        foreach (var character in text.Data)
         {
-            if (char.IsWhiteSpace(character))
-                inWord = false;
-            else if (!inWord)
+            foreach (var character in text.Data)
             {
-                inWord = true;
-                if (++words >= limit)
-                    return words;
+                if (char.IsWhiteSpace(character))
+                    inWord = false;
+                else if (!inWord)
+                {
+                    inWord = true;
+                    if (++words >= limit)
+                        return words;
+                }
             }
         }
         return words;
@@ -221,19 +243,21 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         var pendingSpace = false;
         var letterOrDigit = false;
         foreach (var text in span.GetDescendants().OfType<IText>())
-        foreach (var character in text.Data)
         {
-            if (char.IsWhiteSpace(character))
+            foreach (var character in text.Data)
             {
-                pendingSpace = characters > 0;
-                continue;
+                if (char.IsWhiteSpace(character))
+                {
+                    pendingSpace = characters > 0;
+                    continue;
+                }
+                spaceBetween |= pendingSpace;
+                pendingSpace = false;
+                characters++;
+                letterOrDigit |= char.IsLetterOrDigit(character);
+                if (characters >= 3 && letterOrDigit)
+                    return true;
             }
-            spaceBetween |= pendingSpace;
-            pendingSpace = false;
-            characters++;
-            letterOrDigit |= char.IsLetterOrDigit(character);
-            if (characters >= 3 && letterOrDigit)
-                return true;
         }
         // Two characters reach three with a space between them.
         return letterOrDigit && (characters >= 3 || (characters == 2 && spaceBetween));
@@ -263,9 +287,13 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     private static char? FirstNonWhiteSpace(IElement node)
     {
         foreach (var text in node.GetDescendants().OfType<IText>())
-        foreach (var character in text.Data)
-            if (!char.IsWhiteSpace(character))
-                return character;
+        {
+            foreach (var character in text.Data)
+            {
+                if (!char.IsWhiteSpace(character))
+                    return character;
+            }
+        }
         return null;
     }
 
@@ -274,13 +302,15 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     {
         var anyLetter = false;
         foreach (var text in node.GetDescendants().OfType<IText>())
-        foreach (var character in text.Data)
         {
-            if (!char.IsLetter(character))
-                continue;
-            if (!char.IsUpper(character))
-                return false;
-            anyLetter = true;
+            foreach (var character in text.Data)
+            {
+                if (!char.IsLetter(character))
+                    continue;
+                if (!char.IsUpper(character))
+                    return false;
+                anyLetter = true;
+            }
         }
         return anyLetter;
     }
