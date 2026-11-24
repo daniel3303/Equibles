@@ -137,6 +137,7 @@ public static class StatementQuarterDerivation
                 s.Identity.FiscalYear == current.Identity.FiscalYear
                 && s.Identity.FiscalPeriod == priorPeriod
                 && s.Fact.PeriodStart == current.Fact.PeriodStart
+                && OneBasis(s.Fact, current.Fact)
                 && HasExpectedPriorSpan(s, priorPeriod.Value)
                 && IsQuarterRemainder(s.Fact.PeriodEnd, current.Fact.PeriodEnd)
             )
@@ -186,7 +187,17 @@ public static class StatementQuarterDerivation
                     ? current.Fact.FiledDate
                     : prior.Fact.FiledDate,
             DimensionsKey = current.Fact.DimensionsKey,
+            Source = current.Fact.Source,
         };
+
+    /// <summary>
+    /// Whether two figures may be subtracted: an interim statement table can follow other accounting
+    /// standards than the tagged annual report (TSMC's 6-K and 20-F), so a figure read from one never
+    /// combines with a tagged figure.
+    /// </summary>
+    public static bool OneBasis(FinancialFact left, FinancialFact right) =>
+        (left.Source == FinancialFactSource.ReportedStatement)
+        == (right.Source == FinancialFactSource.ReportedStatement);
 
     private static bool IsQuarterSpan(FinancialFact fact) =>
         Span(fact) is >= MinQuarterDays and <= MaxQuarterDays;

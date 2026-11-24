@@ -38,7 +38,7 @@ public class FinancialFactsTools
     private const int MaxTickers = 25;
     private const int MaxUnmarkedSeriesLagDays = 550;
 
-    private readonly FinancialFactRepository _financialFactRepository;
+    private readonly StatementFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
@@ -49,7 +49,7 @@ public class FinancialFactsTools
     // The document repository is optional: a host without the filings module has no stored
     // earnings release to point at.
     public FinancialFactsTools(
-        FinancialFactRepository financialFactRepository,
+        StatementFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
         EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,

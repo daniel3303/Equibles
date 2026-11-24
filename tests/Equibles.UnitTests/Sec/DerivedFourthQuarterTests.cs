@@ -58,6 +58,7 @@ public class DerivedFourthQuarterTests
 
     [Theory]
     [InlineData("reported-fourth")]
+    [InlineData("statement-table-quarters")]
     [InlineData("reported-fourth-other-tag")]
     [InlineData("missing-second")]
     [InlineData("other-unit")]
@@ -80,6 +81,10 @@ public class DerivedFourthQuarterTests
                 break;
             case "missing-second":
                 rows.RemoveAll(f => f.FiscalPeriod == SecFiscalPeriod.Q2);
+                break;
+            case "statement-table-quarters":
+                foreach (var quarter in rows.Where(f => f.FiscalPeriod != SecFiscalPeriod.FullYear))
+                    quarter.Source = FinancialFactSource.ReportedStatement;
                 break;
             case "other-unit":
                 rows.Single(f => f.FiscalPeriod == SecFiscalPeriod.Q3).Unit = "EUR";

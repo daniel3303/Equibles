@@ -55,6 +55,30 @@ public class StatementQuarterDerivationTests
         derived.PeriodEnd.Should().Be(new DateOnly(2026, 8, 15));
     }
 
+    // A 6-K's statement table can follow other accounting standards than the tagged figures, so the
+    // two never subtract; a chain read from such tables alone does, and stays marked as read from them.
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public void AppendDerived_StatementTableHalfYear_ChainsOnlyWithItsOwnKind(
+        bool firstQuarterFromATable,
+        int derived
+    )
+    {
+        var firstQuarter = Fact("2026-01-01", "2026-03-31", 30m, SecFiscalPeriod.Q1, "q1");
+        var firstHalf = Fact("2026-01-01", "2026-06-30", 70m, SecFiscalPeriod.Q2, "h1");
+        firstHalf.Source = FinancialFactSource.ReportedStatement;
+        if (firstQuarterFromATable)
+            firstQuarter.Source = FinancialFactSource.ReportedStatement;
+
+        StatementQuarterDerivation
+            .AppendDerived([firstQuarter, firstHalf])
+            .Where(StatementQuarterDerivation.IsDerived)
+            .Should()
+            .HaveCount(derived)
+            .And.OnlyContain(f => f.Source == FinancialFactSource.ReportedStatement);
+    }
+
     // Interim reporters outside the US (CNINFO, ESEF) state cumulative spans in their own currency.
     [Theory]
     [InlineData("CNY")]

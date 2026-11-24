@@ -11,6 +11,17 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
         : base(dbContext) { }
 
     /// <summary>
+    /// Every stored fact except those read from a filing's statement table
+    /// (<see cref="FinancialFactSource.ReportedStatement"/>). Such a figure fills a gap only for
+    /// the statement and fact readers, which take <see cref="StatementFactRepository"/>; everything
+    /// that computes from facts sees the structured figures alone.
+    /// </summary>
+    public override IQueryable<FinancialFact> GetAll()
+    {
+        return base.GetAll().Where(f => f.Source != FinancialFactSource.ReportedStatement);
+    }
+
+    /// <summary>
     /// The (axis, member) pairs of every dimension set. A fact's pairs are the rows whose
     /// <see cref="FinancialDimensionSetMember.DimensionSetKey"/> equals its
     /// <see cref="FinancialFact.DimensionsKey"/>; a consolidated fact (empty key) has none.

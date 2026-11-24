@@ -30,7 +30,7 @@ namespace Equibles.Sec.FinancialFacts.Mcp.Tools;
 [McpServerToolType]
 public class FinancialStatementTools
 {
-    private readonly FinancialFactRepository _financialFactRepository;
+    private readonly StatementFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
@@ -41,7 +41,7 @@ public class FinancialStatementTools
     // The document repository is optional: a host without the filings module has no stored
     // earnings release to point at.
     public FinancialStatementTools(
-        FinancialFactRepository financialFactRepository,
+        StatementFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
         EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,

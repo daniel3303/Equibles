@@ -22,7 +22,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
 
     private FinancialFactsTools Sut() =>
         new(
-            new FinancialFactRepository(DbContext),
+            new StatementFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
