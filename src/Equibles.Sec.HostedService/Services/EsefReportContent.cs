@@ -30,8 +30,13 @@ public static class EsefReportContent
         PrepareRetrievalMarkup(html)?.Length > MaxRetrievalHtmlChars;
 
     // Small reports stay byte-identical; oversized XHTML sheds viewer scripts and unused layout metadata.
+    // UTF-8 byte decoders keep a byte-order mark, and an XML reader refuses text that opens with one, so
+    // an oversized report kept it and was neither compacted nor read.
     public static string PrepareRetrievalMarkup(string html) =>
-        EsefRetrievalMarkup.Compact(StripEmbeddedData(html), MaxRetrievalHtmlChars);
+        EsefRetrievalMarkup.Compact(
+            StripEmbeddedData(html?.StartsWith('\uFEFF') == true ? html[1..] : html),
+            MaxRetrievalHtmlChars
+        );
 
     /// <summary>
     /// Drops every encoded payload the report embeds in itself. A European report carries its figures and
