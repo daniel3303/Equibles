@@ -8,9 +8,9 @@ namespace Equibles.Benchmarks.Benchmarks;
 /// <summary>
 /// Token-window splitting cost for a normalized filing. <see cref="ChunkingStrategy.SplitIntoChunks"/>
 /// is the third per-document stage in the embedding pipeline — after normalization and
-/// Markdown conversion — and it pays an O(chunks) tokenizer Decode tax for every char-position
-/// boundary it resolves, plus a LINQ enumerator chain. The fixture is sized to span multiple
-/// 1024-token chunks with the 128-token overlap window, so the inner loop runs more than once.
+/// Markdown conversion — and it encodes the text once, then cleans each window. The fixture is
+/// sized to span multiple 1024-token chunks with the 128-token overlap window, so the inner
+/// loop runs more than once.
 /// </summary>
 [MemoryDiagnoser]
 public class ChunkingStrategyBenchmarks
