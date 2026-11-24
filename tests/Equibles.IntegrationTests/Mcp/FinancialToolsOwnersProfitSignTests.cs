@@ -62,7 +62,31 @@ public class FinancialToolsOwnersProfitSignTests : ParadeDbMcpTestBase
         int year,
         decimal value,
         string accession,
-        DateOnly filed
+        DateOnly filed,
+        DocumentType form = null
+    ) =>
+        AddSpan(
+            stock,
+            concept,
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            SecFiscalPeriod.FullYear,
+            value,
+            accession,
+            filed,
+            form ?? DocumentType.TwentyF
+        );
+
+    private void AddSpan(
+        EquityIssuer stock,
+        FinancialConcept concept,
+        DateOnly start,
+        DateOnly end,
+        SecFiscalPeriod period,
+        decimal value,
+        string accession,
+        DateOnly filed,
+        DocumentType form
     ) =>
         DbContext
             .Set<FinancialFact>()
@@ -74,23 +98,29 @@ public class FinancialToolsOwnersProfitSignTests : ParadeDbMcpTestBase
                     FinancialConceptId = concept.Id,
                     Unit = "BRL",
                     PeriodType = FactPeriodType.Duration,
-                    PeriodStart = new DateOnly(year, 1, 1),
-                    PeriodEnd = new DateOnly(year, 12, 31),
+                    PeriodStart = start,
+                    PeriodEnd = end,
                     Value = value,
-                    FiscalYear = year,
-                    FiscalPeriod = SecFiscalPeriod.FullYear,
-                    Form = DocumentType.TwentyF,
+                    FiscalYear = end.Year,
+                    FiscalPeriod = period,
+                    Form = form,
                     FiledDate = filed,
                     AccessionNumber = accession,
                 }
             );
 
+    private FinancialConcept _owners;
+    private FinancialConcept _total;
+    private FinancialConcept _minority;
+    private FinancialConcept _revenue;
+    private EquityIssuer _picpay;
+
     private async Task Seed()
     {
-        var owners = Concept("ProfitLossAttributableToOwnersOfParent");
-        var total = Concept("ProfitLoss");
-        var minority = Concept("ProfitLossAttributableToNoncontrollingInterests");
-        var revenue = Concept("Revenue");
+        var owners = _owners = Concept("ProfitLossAttributableToOwnersOfParent");
+        var total = _total = Concept("ProfitLoss");
+        var minority = _minority = Concept("ProfitLossAttributableToNoncontrollingInterests");
+        var revenue = _revenue = Concept("Revenue");
 
         var picpay = Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
@@ -99,6 +129,7 @@ public class FinancialToolsOwnersProfitSignTests : ParadeDbMcpTestBase
             Cik: "0002048566"
         );
         DbContext.Set<EquityIssuer>().Add(picpay);
+        _picpay = picpay;
         const string annual2025 = "0001213900-26-049950";
         DateOnly filed2025 = new(2026, 4, 30);
         AddYear(picpay, owners, 2025, -1_091_487_000m, annual2025, filed2025);
@@ -190,5 +221,139 @@ public class FinancialToolsOwnersProfitSignTests : ParadeDbMcpTestBase
         proven.Should().Contain(OwnersProfitSign.NegatedNote);
         unchecked2023.Should().Contain("5,000,000,000");
         unchecked2023.Should().NotContain("34,512,000");
+    }
+
+    [Fact]
+    public async Task GetFinancialStatement_YearFiledOnA10K_IsReadAsTheHistoryIsRead()
+    {
+        // A year the company filed on a 10-K, in the currency its 20-F proves mis-signed: whether
+        // the issuer is read is decided on its whole history, so the statement and the fact
+        // series both leave the unchecked year out.
+        await Seed();
+        const string annual2022 = "0001213900-23-020001";
+        DateOnly filed2022 = new(2023, 3, 30);
+        AddYear(_picpay, _owners, 2022, 12_345_000m, annual2022, filed2022, DocumentType.TenK);
+        AddYear(_picpay, _total, 2022, 12_345_000m, annual2022, filed2022, DocumentType.TenK);
+        AddYear(_picpay, _revenue, 2022, 4_000_000_000m, annual2022, filed2022, DocumentType.TenK);
+        await DbContext.SaveChangesAsync();
+
+        var statement = await StatementSut()
+            .GetFinancialStatement("PICS", statement: "income", year: 2022, period: "FY");
+        var series = await FactsSut().GetFinancialFact("PICS", "net-income");
+
+        statement.Should().Contain("4,000,000,000");
+        statement.Should().NotContain("12,345,000");
+        statement.Should().Contain(OwnersProfitSign.WithheldNote);
+        series.Should().NotContain("12,345,000");
+    }
+
+    [Fact]
+    public async Task GetFinancialStatement_QuarterDerivedFromNegatedFigures_CarriesTheProvenSign()
+    {
+        // The first quarter's and the half year's 6-Ks each prove their tag mis-signed; the second
+        // quarter is the half year less the first quarter, read after both are negated.
+        await Seed();
+        const string firstQuarter = "0001213900-26-060001";
+        const string halfYear = "0001213900-26-093207";
+        DateOnly start = new(2026, 1, 1),
+            march = new(2026, 3, 31),
+            june = new(2026, 6, 30);
+        DateOnly filedMay = new(2026, 5, 20),
+            filedAugust = new(2026, 8, 25);
+        AddSpan(
+            _picpay,
+            _owners,
+            start,
+            march,
+            SecFiscalPeriod.Q1,
+            -140_000_000m,
+            firstQuarter,
+            filedMay,
+            DocumentType.SixK
+        );
+        AddSpan(
+            _picpay,
+            _total,
+            start,
+            march,
+            SecFiscalPeriod.Q1,
+            150_000_000m,
+            firstQuarter,
+            filedMay,
+            DocumentType.SixK
+        );
+        AddSpan(
+            _picpay,
+            _minority,
+            start,
+            march,
+            SecFiscalPeriod.Q1,
+            10_000_000m,
+            firstQuarter,
+            filedMay,
+            DocumentType.SixK
+        );
+        AddSpan(
+            _picpay,
+            _revenue,
+            start,
+            march,
+            SecFiscalPeriod.Q1,
+            2_000_000_000m,
+            firstQuarter,
+            filedMay,
+            DocumentType.SixK
+        );
+        AddSpan(
+            _picpay,
+            _owners,
+            start,
+            june,
+            SecFiscalPeriod.Q2,
+            -421_616_000m,
+            halfYear,
+            filedAugust,
+            DocumentType.SixK
+        );
+        AddSpan(
+            _picpay,
+            _total,
+            start,
+            june,
+            SecFiscalPeriod.Q2,
+            420_765_000m,
+            halfYear,
+            filedAugust,
+            DocumentType.SixK
+        );
+        AddSpan(
+            _picpay,
+            _minority,
+            start,
+            june,
+            SecFiscalPeriod.Q2,
+            -851_000m,
+            halfYear,
+            filedAugust,
+            DocumentType.SixK
+        );
+        AddSpan(
+            _picpay,
+            _revenue,
+            start,
+            june,
+            SecFiscalPeriod.Q2,
+            4_500_000_000m,
+            halfYear,
+            filedAugust,
+            DocumentType.SixK
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await StatementSut()
+            .GetFinancialStatement("PICS", statement: "income", year: 2026, period: "Q2");
+
+        result.Should().Contain("| Net Income | 281,616,000 | BRL | Derived quarter |");
+        result.Should().Contain(OwnersProfitSign.NegatedNote);
     }
 }

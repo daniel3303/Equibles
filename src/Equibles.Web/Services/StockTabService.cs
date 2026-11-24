@@ -849,7 +849,7 @@ public class StockTabService
                 await OwnersProfitSignFacts.Read(
                     _financialFactRepository,
                     _financialConceptRepository,
-                    stock.Id,
+                    [stock.Id],
                     facts,
                     netIncomeLine
                         .Concepts.Where(concept =>

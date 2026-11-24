@@ -551,6 +551,81 @@ public class OwnersProfitSignTests
     }
 
     [Fact]
+    public void Read_PeriodAnotherFilingProves_KeepsTheProvenFigureAndItsTotal()
+    {
+        // The 2024 report states its year without a minority share; the 2025 report's comparative
+        // proves the same year as tagged, so only the unchecked figure leaves.
+        var concepts = new Dictionary<(FactTaxonomy, string), Guid>();
+        const string annual2025 = "0001213900-26-049950";
+        const string annual2024 = "0001213900-25-030001";
+        DateOnly start2024 = new(2024, 1, 1),
+            end2024 = new(2024, 12, 31);
+        List<FinancialFact> evidence =
+        [
+            .. Facts(
+                concepts,
+                annual2025,
+                YearStart,
+                YearEnd,
+                new(2026, 4, 30),
+                [
+                    (Ifrs, "ProfitLoss", "BRL", 1_141_606_000m),
+                    (Ifrs, "ProfitLossAttributableToNoncontrollingInterests", "BRL", 50_119_000m),
+                ]
+            ),
+            .. Facts(
+                concepts,
+                annual2025,
+                start2024,
+                end2024,
+                new(2026, 4, 30),
+                [
+                    (Ifrs, "ProfitLoss", "BRL", 251_788_000m),
+                    (Ifrs, "ProfitLossAttributableToNoncontrollingInterests", "BRL", 34_214_000m),
+                ]
+            ),
+            .. Facts(
+                concepts,
+                annual2024,
+                start2024,
+                end2024,
+                new(2025, 4, 30),
+                [(Ifrs, "ProfitLoss", "BRL", 251_788_000m)]
+            ),
+        ];
+        var flipped = Owners(
+            annual2025,
+            YearStart,
+            YearEnd,
+            new(2026, 4, 30),
+            "BRL",
+            -1_091_487_000m
+        );
+        var proven = Owners(annual2025, start2024, end2024, new(2026, 4, 30), "BRL", 217_574_000m);
+        var unchecked2024 = Owners(
+            annual2024,
+            start2024,
+            end2024,
+            new(2025, 4, 30),
+            "BRL",
+            217_574_000m
+        );
+        var total2024 = evidence[^1];
+
+        var reading = OwnersProfitSign.Read(
+            [flipped, proven, unchecked2024, total2024],
+            OwnersIds,
+            evidence,
+            ById(concepts)
+        );
+
+        reading.Facts.Should().HaveCount(3);
+        reading.Facts[1].Should().BeSameAs(proven);
+        reading.Facts[2].Should().BeSameAs(total2024);
+        reading.WithheldPeriods.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Read_FactsOfOtherConceptsInACheckedPeriod_StayAsTheyAre()
     {
         var (evidence, concepts) = Facts(

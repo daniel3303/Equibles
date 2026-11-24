@@ -22,6 +22,11 @@ public static class OwnersProfitSign
         "Net income is read with the sign the filing's own figures prove: its total profit equals "
         + "the owners' profit plus the non-controlling interests' share only with that sign.";
 
+    /// <summary>What a reading says where it left a period's net income out.</summary>
+    public const string WithheldNote =
+        "Net income is left out for this period: its filing's figures cannot check the sign of the "
+        + "owners' profit tag, which the company's other filings prove wrong.";
+
     private enum Kind
     {
         Total,
@@ -93,11 +98,10 @@ public static class OwnersProfitSign
         OwnersConcepts;
 
     /// <summary>
-    /// False when no fact is a foreign issuer's report: the reading changes nothing then, so a
-    /// caller can skip loading its evidence.
+    /// True for a foreign issuer's report form: the reading changes nothing for an issuer whose
+    /// owners' profit no such report states, so a caller can skip loading its evidence.
     /// </summary>
-    public static bool MayApply(IEnumerable<FinancialFact> lineFacts) =>
-        lineFacts.Any(fact => ForeignIssuerForms.Contains(fact.Form));
+    public static bool IsForeignIssuerForm(DocumentType form) => ForeignIssuerForms.Contains(form);
 
     /// <summary>True when <paramref name="concepts"/> is the net-income alias (or a synonym).</summary>
     public static bool IsNetIncome(IReadOnlyList<FinancialConceptAliases.ConceptRef> concepts) =>
@@ -123,11 +127,7 @@ public static class OwnersProfitSign
         IReadOnlyCollection<FinancialFact> ownersHistory = null
     )
     {
-        var unchanged = new Reading(
-            [.. lineFacts],
-            new HashSet<FinancialFact>(),
-            new HashSet<(DateOnly, DateOnly, string)>()
-        );
+        var unchanged = Unchanged(lineFacts);
         var ownersFacts = lineFacts
             .Where(fact => ownersConceptIds.Contains(fact.FinancialConceptId))
             .ToList();
@@ -181,21 +181,32 @@ public static class OwnersProfitSign
             .ToHashSet(StringComparer.Ordinal);
         if (misSignedUnits.Count == 0)
             return unchanged;
-        var withheld = signs
-            .Where(pair =>
-                pair.Value == null
-                && IsConsolidatedSpanOfAFiling(pair.Key)
-                && misSignedUnits.Contains(pair.Key.Unit)
-            )
-            .Select(pair => (pair.Key.PeriodStart, pair.Key.PeriodEnd, pair.Key.Unit))
+        // An unchecked figure in a mis-signed unit leaves; its period leaves the line when no figure
+        // its own filing proves is left for it, total profit included, so no other measure stands in.
+        var dropped = new HashSet<FinancialFact>(
+            ownersFacts.Where(fact =>
+                signs[fact] == null
+                && IsConsolidatedSpanOfAFiling(fact)
+                && misSignedUnits.Contains(fact.Unit)
+            ),
+            ReferenceEqualityComparer.Instance
+        );
+        var kept = ownersFacts
+            .Where(fact => !dropped.Contains(fact))
+            .Select(fact => (fact.PeriodStart, fact.PeriodEnd, fact.Unit))
+            .ToHashSet();
+        var withheld = dropped
+            .Select(fact => (fact.PeriodStart, fact.PeriodEnd, fact.Unit))
+            .Where(period => !kept.Contains(period))
             .ToHashSet();
         var negated = new HashSet<FinancialFact>(ReferenceEqualityComparer.Instance);
         var read = new List<FinancialFact>();
         foreach (var fact in lineFacts)
         {
             if (
-                IsConsolidatedSpanOfAFiling(fact)
-                && withheld.Contains((fact.PeriodStart, fact.PeriodEnd, fact.Unit))
+                dropped.Contains(fact)
+                || IsConsolidatedSpanOfAFiling(fact)
+                    && withheld.Contains((fact.PeriodStart, fact.PeriodEnd, fact.Unit))
             )
                 continue;
             if (!signs.TryGetValue(fact, out var sign) || sign != Sign.Opposite)
@@ -210,6 +221,10 @@ public static class OwnersProfitSign
         }
         return new Reading(read, negated, withheld);
     }
+
+    /// <summary>A reading that changed nothing.</summary>
+    public static Reading Unchanged(IReadOnlyCollection<FinancialFact> facts) =>
+        new([.. facts], new HashSet<FinancialFact>(), new HashSet<(DateOnly, DateOnly, string)>());
 
     /// <summary>
     /// The line's facts as read (<see cref="Read"/>), the negated copies among them and the

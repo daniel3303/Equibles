@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Sec.FinancialFacts.Repositories;
 
 /// <summary>
-/// An issuer's net income line read with the owners' profit sign its filings prove
+/// The net income line read with the owners' profit sign each issuer's filings prove
 /// (<see cref="OwnersProfitSign"/>). One loader for the fact tools, the statement tool and a
 /// host's own readers, so a period reads one sign on every surface.
 /// </summary>
@@ -13,26 +13,22 @@ public static class OwnersProfitSignFacts
 {
     /// <summary>
     /// <paramref name="facts"/> with the facts of <paramref name="lineConceptIds"/> (the net
-    /// income line) read by <see cref="OwnersProfitSign.Read"/> against the issuer's whole
-    /// history of evidence; every other fact passes through untouched. Evidence is loaded only
-    /// for a foreign issuer's line.
+    /// income line) read by <see cref="OwnersProfitSign.Read"/> against each issuer's whole
+    /// history; every other fact passes through untouched. Whether an issuer is read is decided
+    /// on its whole history, never on the slice asked for, so a one-year statement and the fact
+    /// series agree. Evidence is loaded only for an issuer with a foreign issuer's report.
     /// </summary>
     public static async Task<OwnersProfitSign.Reading> Read(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        Guid issuerId,
+        IReadOnlyCollection<Guid> issuerIds,
         IReadOnlyCollection<FinancialFact> facts,
         IReadOnlySet<Guid> lineConceptIds,
         CancellationToken cancellationToken = default
     )
     {
-        var line = facts.Where(f => lineConceptIds.Contains(f.FinancialConceptId)).ToList();
-        var unchanged = new OwnersProfitSign.Reading(
-            [.. facts],
-            new HashSet<FinancialFact>(),
-            new HashSet<(DateOnly, DateOnly, string)>()
-        );
-        if (!OwnersProfitSign.MayApply(line))
+        var unchanged = OwnersProfitSign.Unchanged(facts);
+        if (issuerIds.Count == 0 || !facts.Any(f => lineConceptIds.Contains(f.FinancialConceptId)))
             return unchanged;
 
         var pairs = OwnersProfitSign.EvidencePairs.Concat(OwnersProfitSign.OwnersPairs).ToHashSet();
@@ -54,36 +50,61 @@ public static class OwnersProfitSignFacts
         var ownersIds = concepts
             .Where(c => OwnersProfitSign.IsOwnersProfit(c.Taxonomy, c.Tag))
             .Select(c => c.Id)
-            .ToHashSet();
+            .ToList();
         var evidenceConcepts = concepts
             .Where(c => !OwnersProfitSign.IsOwnersProfit(c.Taxonomy, c.Tag))
             .ToDictionary(c => c.Id, c => (c.Taxonomy, c.Tag));
         if (ownersIds.Count == 0 || evidenceConcepts.Count == 0)
             return unchanged;
-        var evidenceIds = evidenceConcepts.Keys.ToList();
-        var loadedIds = evidenceIds.Concat(ownersIds).ToList();
-        var loaded = await financialFactRepository
-            .GetConsolidatedByIssuerId(issuerId)
-            .Where(f => loadedIds.Contains(f.FinancialConceptId))
+
+        var ownersForms = await financialFactRepository
+            .GetConsolidatedByIssuerIds(issuerIds)
+            .Where(f => ownersIds.Contains(f.FinancialConceptId))
+            .Select(f => new { f.EquityIssuerId, f.Form })
+            .Distinct()
             .ToListAsync(cancellationToken);
-        // The whole owners' history decides which units are proven mis-signed, so a read of one
-        // period withholds what the fact series withholds.
-        var reading = OwnersProfitSign.Read(
-            line,
-            ownersIds,
-            [.. loaded.Where(f => evidenceConcepts.ContainsKey(f.FinancialConceptId))],
-            evidenceConcepts,
-            [.. loaded.Where(f => ownersIds.Contains(f.FinancialConceptId))]
-        );
-        if (reading.Negated.Count == 0 && reading.WithheldPeriods.Count == 0)
+        var readIssuerIds = ownersForms
+            .GroupBy(f => f.EquityIssuerId)
+            .Where(issuer => issuer.Any(f => OwnersProfitSign.IsForeignIssuerForm(f.Form)))
+            .Select(issuer => issuer.Key)
+            .ToList();
+        if (readIssuerIds.Count == 0)
             return unchanged;
-        return reading with
+
+        var loadedIds = evidenceConcepts.Keys.Concat(ownersIds).ToList();
+        var history = (
+            await financialFactRepository
+                .GetConsolidatedByIssuerIds(readIssuerIds)
+                .Where(f => loadedIds.Contains(f.FinancialConceptId))
+                .ToListAsync(cancellationToken)
+        ).ToLookup(f => f.EquityIssuerId);
+        var ownersIdSet = ownersIds.ToHashSet();
+        var read = new List<FinancialFact>();
+        var negated = new HashSet<FinancialFact>(ReferenceEqualityComparer.Instance);
+        var withheld = new HashSet<(DateOnly, DateOnly, string)>();
+        foreach (var issuer in facts.GroupBy(f => f.EquityIssuerId))
         {
-            Facts =
-            [
-                .. facts.Where(f => !lineConceptIds.Contains(f.FinancialConceptId)),
-                .. reading.Facts,
-            ],
-        };
+            var line = issuer.Where(f => lineConceptIds.Contains(f.FinancialConceptId)).ToList();
+            read.AddRange(issuer.Where(f => !lineConceptIds.Contains(f.FinancialConceptId)));
+            if (!readIssuerIds.Contains(issuer.Key))
+            {
+                read.AddRange(line);
+                continue;
+            }
+            var issuerHistory = history[issuer.Key].ToList();
+            var reading = OwnersProfitSign.Read(
+                line,
+                ownersIdSet,
+                [.. issuerHistory.Where(f => evidenceConcepts.ContainsKey(f.FinancialConceptId))],
+                evidenceConcepts,
+                [.. issuerHistory.Where(f => ownersIdSet.Contains(f.FinancialConceptId))]
+            );
+            read.AddRange(reading.Facts);
+            negated.UnionWith(reading.Negated);
+            withheld.UnionWith(reading.WithheldPeriods);
+        }
+        return negated.Count == 0 && withheld.Count == 0
+            ? unchanged
+            : new OwnersProfitSign.Reading(read, negated, withheld);
     }
 }
