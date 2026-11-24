@@ -46,7 +46,7 @@ public class FinancialStatementToolsByNatureCostOfSalesTests(ParadeDbFixture fix
         await DbContext.SaveChangesAsync();
 
         var result = await new FinancialStatementTools(
-            new FinancialFactRepository(DbContext),
+            new StatementFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),

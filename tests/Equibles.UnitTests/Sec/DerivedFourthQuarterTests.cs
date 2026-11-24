@@ -1,4 +1,5 @@
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -58,6 +59,7 @@ public class DerivedFourthQuarterTests
 
     [Theory]
     [InlineData("reported-fourth")]
+    [InlineData("statement-table-quarters")]
     [InlineData("reported-fourth-other-tag")]
     [InlineData("missing-second")]
     [InlineData("other-unit")]
@@ -80,6 +82,13 @@ public class DerivedFourthQuarterTests
                 break;
             case "missing-second":
                 rows.RemoveAll(f => f.FiscalPeriod == SecFiscalPeriod.Q2);
+                break;
+            case "statement-table-quarters":
+                foreach (var quarter in rows.Where(f => f.FiscalPeriod != SecFiscalPeriod.FullYear))
+                {
+                    quarter.Source = FinancialFactSource.ReportedStatement;
+                    quarter.Form = StatementTableForms.SixK;
+                }
                 break;
             case "other-unit":
                 rows.Single(f => f.FiscalPeriod == SecFiscalPeriod.Q3).Unit = "EUR";

@@ -27,7 +27,7 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
 
     private FinancialFactsTools Facts() =>
         new(
-            new FinancialFactRepository(DbContext),
+            new StatementFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
@@ -38,7 +38,7 @@ public class FinancialToolsNewerEarningsReleaseTests : ParadeDbMcpTestBase
 
     private FinancialStatementTools Statements() =>
         new(
-            new FinancialFactRepository(DbContext),
+            new StatementFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),

@@ -22,7 +22,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
 
     private FinancialFactsTools Sut() =>
         new(
-            new FinancialFactRepository(DbContext),
+            new StatementFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
@@ -123,7 +123,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     public async Task CompareFinancialFact_InvalidBatchFailsBeforeRepositoryAccess(string tickers)
     {
         var sut = new FinancialFactsTools(
-            new FinancialFactRepository(null),
+            new StatementFactRepository(null),
             new FinancialConceptRepository(null),
             new EquityIssuerRepository(null),
             new StockSplitRepository(null),

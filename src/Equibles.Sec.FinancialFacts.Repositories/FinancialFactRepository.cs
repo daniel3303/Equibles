@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -9,6 +10,17 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
 {
     public FinancialFactRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
+
+    /// <summary>
+    /// Every stored fact except those read from a filing's statement table, which only the
+    /// statement and fact readers list (<see cref="StatementFactRepository"/>). Told apart by form,
+    /// never by source: the covering index carries the form, so the read stays index-only.
+    /// </summary>
+    public override IQueryable<FinancialFact> GetAll()
+    {
+        return base.GetAll()
+            .Where(f => f.Form != StatementTableForms.SixK && f.Form != StatementTableForms.SixKa);
+    }
 
     /// <summary>
     /// The (axis, member) pairs of every dimension set. A fact's pairs are the rows whose

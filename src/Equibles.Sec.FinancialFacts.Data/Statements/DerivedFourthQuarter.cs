@@ -43,6 +43,7 @@ public static class DerivedFourthQuarter
                 || rows[2].PeriodEnd >= year.PeriodEnd
                 || rows.Select(f => f.FinancialConceptId).Distinct().Count() != 1
                 || !StatesTheYear(rows[0].FinancialConceptId, year, stated)
+                || !rows.All(f => StatementQuarterDerivation.OneBasis(f, year))
                 || !Chains(year, rows)
             )
                 continue;
