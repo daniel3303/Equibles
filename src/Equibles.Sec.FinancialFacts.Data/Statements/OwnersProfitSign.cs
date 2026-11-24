@@ -217,10 +217,13 @@ public static class OwnersProfitSign
         return new Reading(read, negated, withheld);
     }
 
-    // A negated copy of `fact`, recorded in `negated`; the stored fact is never rewritten.
+    // A negated copy of `fact`, recorded in `negated`; the stored fact is never rewritten. The copy
+    // keeps the fact's id and concept, so a reader that matches facts by either still finds it.
     private static FinancialFact Negated(FinancialFact fact, HashSet<FinancialFact> negated)
     {
         var copy = fact.Restamped(fact.FiscalYear, fact.FiscalPeriod);
+        copy.Id = fact.Id;
+        copy.FinancialConcept = fact.FinancialConcept;
         copy.Value = -fact.Value;
         negated.Add(copy);
         return copy;

@@ -94,6 +94,7 @@ public class OwnersProfitSignTests
             .Should()
             .Be((tagged.FinancialConceptId, tagged.PeriodStart, tagged.PeriodEnd, accession));
         reading.Negated.Should().ContainSingle().Which.Should().BeSameAs(read);
+        read.Id.Should().Be(tagged.Id);
         tagged.Value.Should().Be(owners, "the stored fact is never rewritten");
     }
 
@@ -719,6 +720,7 @@ public class OwnersProfitSignTests
     ) =>
         new()
         {
+            Id = Guid.NewGuid(),
             FinancialConceptId = OwnersConceptId,
             Unit = unit,
             PeriodType = FactPeriodType.Duration,
