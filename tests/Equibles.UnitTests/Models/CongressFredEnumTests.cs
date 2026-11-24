@@ -44,6 +44,7 @@ public class CongressFredEnumTests
     [InlineData(FredSeriesCategory.Housing, "Housing")]
     [InlineData(FredSeriesCategory.ExchangeRates, "Exchange Rates")]
     [InlineData(FredSeriesCategory.Market, "Market")]
+    [InlineData(FredSeriesCategory.GovernmentFinance, "Government Finance")]
     public void FredSeriesCategory_NameForHumans_Returns_DisplayName(
         FredSeriesCategory category,
         string expected
@@ -57,7 +58,7 @@ public class CongressFredEnumTests
     {
         var values = Enum.GetValues<FredSeriesCategory>();
 
-        values.Should().HaveCount(11);
+        values.Should().HaveCount(12);
 
         foreach (var value in values)
         {

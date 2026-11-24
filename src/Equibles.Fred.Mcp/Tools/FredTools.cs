@@ -250,11 +250,11 @@ public class FredTools
         ReadOnly = true
     )]
     [Description(
-        "Get the latest values for key economic indicators across categories: interest rates, yield spreads, inflation, employment, GDP, money supply, sentiment, housing, exchange rates, and market indicators. Each row shows a series' latest stored observation with its date, plus the previous observation and the change between them for direction — check the Latest Date column for freshness. Returns a snapshot of current macro conditions for one country: the United States by default, or Canada with country=CA."
+        "Get the latest values for key economic indicators across categories: interest rates, yield spreads, inflation, employment, GDP, money supply, sentiment, housing, exchange rates, market indicators, and government debt and deficits. Each row shows a series' latest stored observation with its date, plus the previous observation and the change between them for direction — check the Latest Date column for freshness. Returns a snapshot of current macro conditions for one country: the United States by default, or Canada with country=CA."
     )]
     public Task<string> GetLatestEconomicIndicators(
         [Description(
-            "Category filter: InterestRates, YieldSpreads, CorporateBondSpreads, Inflation, Employment, GdpAndOutput, MoneySupply, Sentiment, Housing, ExchangeRates, Market (defaults to all)"
+            "Category filter: InterestRates, YieldSpreads, CorporateBondSpreads, Inflation, Employment, GdpAndOutput, MoneySupply, Sentiment, Housing, ExchangeRates, Market, GovernmentFinance (defaults to all)"
         )]
             string category = null,
         [Description(

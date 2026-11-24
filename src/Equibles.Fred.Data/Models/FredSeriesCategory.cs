@@ -36,4 +36,8 @@ public enum FredSeriesCategory
 
     [Display(Name = "Market")]
     Market,
+
+    // Stored as its number, so a new category goes last.
+    [Display(Name = "Government Finance")]
+    GovernmentFinance,
 }

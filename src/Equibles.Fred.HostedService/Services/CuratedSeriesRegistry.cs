@@ -8,12 +8,12 @@ namespace Equibles.Fred.HostedService.Services;
 // Curated rather than swept: FRED publishes around 800,000 series and almost all of them are a
 // county-level or vintage-specific slice nobody asks for. The list below is the set a reader
 // (or a model answering about the US economy) actually names, chosen against FRED's own
-// popularity score with a floor of 50, plus official series consumed by a product calculation,
-// and it deliberately fills out the families already here
-// rather than opening new ones. Two series that cleared the floor are excluded on purpose:
-// USSLIND stopped updating in April 2020, and FPCPITOTLZGUSA is an annual World Bank restatement
-// of CPI that lags the series we already carry. A frozen series is worse than a missing one; it
-// renders a current-looking page over a stale number, which is the same trap STLFSI2 sprang.
+// popularity score with a floor of 50, plus official series consumed by a product calculation.
+// It fills out the families already here before opening new ones. Two series that cleared the
+// floor are excluded on purpose: USSLIND stopped updating in April 2020, and FPCPITOTLZGUSA is an
+// annual World Bank restatement of CPI that lags the series we already carry. A frozen series is
+// worse than a missing one; it renders a current-looking page over a stale number, which is the
+// same trap STLFSI2 sprang.
 public static class CuratedSeriesRegistry
 {
     public static readonly IReadOnlyList<CuratedSeries> Series =
@@ -170,6 +170,14 @@ public static class CuratedSeriesRegistry
         new("DJIA", FredSeriesCategory.Market),
         new("NASDAQ100", FredSeriesCategory.Market),
         new("ANFCI", FredSeriesCategory.Market),
+        // Federal debt and deficits: the debt stock, its share of GDP, the part held outside the
+        // government, and the deficit by year, as a share of GDP and by month.
+        new("GFDEBTN", FredSeriesCategory.GovernmentFinance),
+        new("GFDEGDQ188S", FredSeriesCategory.GovernmentFinance),
+        new("FYGFDPUN", FredSeriesCategory.GovernmentFinance),
+        new("FYFSD", FredSeriesCategory.GovernmentFinance),
+        new("FYFSGDA188S", FredSeriesCategory.GovernmentFinance),
+        new("MTSDS133FMS", FredSeriesCategory.GovernmentFinance),
         // Canada. FRED's own Canadian CPI and policy-rate series stopped updating (2025 and 2023),
         // so those come from Statistics Canada and the Bank of Canada; FRED keeps the two Canadian
         // series it still carries current.
