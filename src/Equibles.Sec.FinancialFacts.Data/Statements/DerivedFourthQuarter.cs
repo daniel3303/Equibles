@@ -24,7 +24,6 @@ public static class DerivedFourthQuarter
                 .Where(f =>
                     f != year
                     && f.PeriodType == FactPeriodType.Duration
-                    && f.FinancialConceptId == year.FinancialConceptId
                     && f.Unit == year.Unit
                     && f.PeriodStart >= year.PeriodStart
                     && f.PeriodEnd <= year.PeriodEnd
@@ -32,8 +31,14 @@ public static class DerivedFourthQuarter
                 )
                 .OrderBy(f => f.PeriodStart)
                 .ToList();
-            // A quarter already ending with the year is a reported fourth quarter.
-            if (rows.Count != 3 || rows[2].PeriodEnd >= year.PeriodEnd || !Chains(year, rows))
+            // A quarter already ending with the year, under any tag, is a reported fourth quarter;
+            // only the three quarters subtracted must carry the year's own tag.
+            if (
+                rows.Count != 3
+                || rows[2].PeriodEnd >= year.PeriodEnd
+                || rows.Any(f => f.FinancialConceptId != year.FinancialConceptId)
+                || !Chains(year, rows)
+            )
                 continue;
 
             var start = rows[2].PeriodEnd.AddDays(1);

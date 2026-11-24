@@ -149,6 +149,7 @@ public class FinancialFactsToolsDerivedQuartersTests : ParadeDbMcpTestBase
         result
             .Should()
             .Contain("| 2026-04-01 | 2026-06-30 | 2026 | Q2 | $40,000,000 (derived) | USD |");
+        result.Should().NotContain("$28,000,000");
     }
 
     [Fact]

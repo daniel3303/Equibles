@@ -30,6 +30,7 @@ public class DerivedFourthQuarterTests
 
     [Theory]
     [InlineData("reported-fourth")]
+    [InlineData("reported-fourth-other-tag")]
     [InlineData("missing-second")]
     [InlineData("other-unit")]
     [InlineData("other-concept")]
@@ -43,6 +44,11 @@ public class DerivedFourthQuarterTests
         {
             case "reported-fourth":
                 rows.Add(Fact("2025-10-01", "2025-12-31", 35m, SecFiscalPeriod.Q4, "USD"));
+                break;
+            case "reported-fourth-other-tag":
+                var fourth = Fact("2025-10-01", "2025-12-31", 35m, SecFiscalPeriod.Q4, "USD");
+                fourth.FinancialConceptId = Guid.NewGuid();
+                rows.Add(fourth);
                 break;
             case "missing-second":
                 rows.RemoveAll(f => f.FiscalPeriod == SecFiscalPeriod.Q2);
