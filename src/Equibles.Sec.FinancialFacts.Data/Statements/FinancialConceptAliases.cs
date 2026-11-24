@@ -501,7 +501,53 @@ public static class FinancialConceptAliases
         "nav-per-share",
     ];
 
+    // Flows whose discrete quarters add up to the fiscal year, so a quarter a filer reports only
+    // inside a cumulative figure can be worked out from that year's own figures. Per-share values,
+    // share counts, balances and lines that mix several measures never add up that way.
+    private static readonly HashSet<string> AdditiveFlowAliases =
+    [
+        "revenue",
+        "net-interest-income",
+        "noninterest-income",
+        "cost-of-revenue",
+        "gross-profit",
+        "operating-income",
+        "net-income",
+        "research-and-development",
+        "selling-general-and-administrative",
+        "interest-expense",
+        "pretax-income",
+        "income-tax",
+        "depreciation-and-amortization",
+        "share-based-compensation",
+        "deferred-income-taxes",
+        "operating-cash-flow",
+        "capital-expenditures",
+        "acquisitions",
+        "investing-cash-flow",
+        "share-repurchases",
+        "dividends-paid",
+        "debt-issued",
+        "debt-repaid",
+        "stock-issued",
+        "financing-cash-flow",
+        "fx-effect-on-cash",
+        "net-change-in-cash",
+    ];
+
     public static IReadOnlyCollection<string> SupportedAliases => Map.Keys;
+
+    /// <summary>The alias's canonical name, its synonyms resolved; null for an unknown alias.</summary>
+    public static string Canonical(string alias)
+    {
+        var key = Normalize(alias);
+        key = Synonyms.GetValueOrDefault(key, key);
+        return Map.ContainsKey(key) ? key : null;
+    }
+
+    /// <summary>Whether the alias's discrete quarters add up to its fiscal year.</summary>
+    public static bool IsAdditiveFlow(string alias) =>
+        Canonical(alias) is { } key && AdditiveFlowAliases.Contains(key);
 
     /// <summary>Whether the alias names a value as of a date rather than a flow over a period.</summary>
     public static bool IsInstant(string alias)

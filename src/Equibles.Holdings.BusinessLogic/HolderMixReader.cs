@@ -76,7 +76,7 @@ public class HolderMixReader
                 Unavailable = $"No institutional holdings data available for {requestedTicker}.",
             };
 
-        var newest = reportDates.Max();
+        var newest = StockCombinedQuarterService.UpToDelisting(stock, reportDates).Max();
         var dates = new List<DateOnly> { newest };
         while (
             dates.Count <= Math.Clamp(periods, 1, MaxPeriods)

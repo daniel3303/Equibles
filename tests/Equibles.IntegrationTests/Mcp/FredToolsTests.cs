@@ -196,6 +196,34 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetEconomicIndicator_RowsDatedAfterToday_AreNamedAsProjections()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DbContext
+            .Set<FredObservation>()
+            .Add(
+                new FredObservation
+                {
+                    FredSeriesId = _gdpSeries.Id,
+                    Date = today.AddYears(2),
+                    Value = 31000.0m,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var ahead = await Sut()
+            .GetEconomicIndicator("GDP", "2025-01-01", $"{today.AddYears(3):yyyy-MM-dd}");
+        var measured = await Sut().GetEconomicIndicator("GDP", "2025-01-01", "2025-12-31");
+
+        ahead
+            .Should()
+            .Contain(
+                $"1 of these rows are dated after {today:yyyy-MM-dd}: the publisher's projections"
+            );
+        measured.Should().NotContain("projections");
+    }
+
+    [Fact]
     public async Task GetEconomicIndicator_MaxResultsLimit_ReturnsOnlyRequestedCount()
     {
         var result = await Sut()

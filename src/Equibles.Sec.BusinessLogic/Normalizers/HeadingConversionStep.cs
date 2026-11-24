@@ -34,12 +34,14 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     [ThreadStatic]
     private static Dictionary<(IElement Element, string Text), bool> _markup;
 
-    public void Execute(IHtmlDocument doc)
+    public void Execute(IHtmlDocument doc) => WithMarkupMemo(() => Run(doc));
+
+    private static void WithMarkupMemo(Action run)
     {
         _markup = [];
         try
         {
-            Run(doc);
+            run();
         }
         finally
         {
@@ -63,11 +65,9 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         // Spans a heading replaced are out of the document: nothing done under them shows.
         var replaced = new HashSet<IElement>();
 
-        foreach (var span in spans)
+        // Read as the loop reaches each span: a heading made earlier replaces spans after it.
+        foreach (var span in spans.Where(span => !replaced.Contains(span) && HasText(span)))
         {
-            if (replaced.Contains(span) || !HasText(span))
-                continue;
-
             var parent = span.ParentElement;
             if (parent == null || processedParents.Contains(parent) || notHeadings.Contains(parent))
                 continue;
@@ -203,10 +203,8 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     {
         // The first span that fails the condition settles it, before the text of the rest is read.
         var anyMeaningful = false;
-        foreach (var span in spans)
+        foreach (var span in spans.Where(IsMeaningful))
         {
-            if (!IsMeaningful(span))
-                continue;
             anyMeaningful = true;
             if (!condition(span))
                 return false;
@@ -283,10 +281,8 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         var anyLetter = false;
         foreach (var text in node.GetDescendants().OfType<IText>())
         {
-            foreach (var character in text.Data)
+            foreach (var character in text.Data.Where(char.IsLetter))
             {
-                if (!char.IsLetter(character))
-                    continue;
                 if (!char.IsUpper(character))
                     return false;
                 anyLetter = true;
@@ -363,9 +359,10 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             if (!childrenDone)
             {
                 pending.Push((current, true));
-                foreach (var child in current.Children)
-                    if (!known.ContainsKey((child, text)))
-                        pending.Push((child, false));
+                foreach (
+                    var child in current.Children.Where(child => !known.ContainsKey((child, text)))
+                )
+                    pending.Push((child, false));
                 continue;
             }
             known[(current, text)] = OwnMarkupContains(current, text, known);
