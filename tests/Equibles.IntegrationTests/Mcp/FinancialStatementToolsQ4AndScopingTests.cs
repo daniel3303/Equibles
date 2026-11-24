@@ -27,7 +27,7 @@ public class FinancialStatementToolsQ4AndScopingTests : ParadeDbMcpTestBase
 
     private FinancialStatementTools Sut() =>
         new(
-            new FinancialFactRepository(DbContext),
+            new StatementFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),

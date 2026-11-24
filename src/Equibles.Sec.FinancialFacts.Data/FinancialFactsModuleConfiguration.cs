@@ -25,7 +25,8 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
                 .WithMany()
                 .HasForeignKey(row => row.EquityIssuerId)
                 .OnDelete(DeleteBehavior.Restrict);
-            b.Property(e => e.Form).HasConversion(docTypeConversion);
+            b.Property(e => e.Form)
+                .HasConversion(v => v.Value, v => StatementTableForms.FromStored(v));
             // Issuer-and-concept fact reads (valuation universe, statements, ratio inputs) select
             // these columns, so carrying them serves those reads index-only instead of fetching a
             // heap page of a table far larger than memory for every fact.
