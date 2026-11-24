@@ -549,4 +549,85 @@ public class StocksControllerFinancialsTabTests : IDisposable
         line.Derived.Should().BeFalse();
         tab.Lines.Where(l => l != line).Should().OnlyContain(l => !l.Summed);
     }
+
+    [Fact]
+    public async Task Financials_OwnersProfitTaggedWithTheOppositeSign_NetIncomeReadsTheProvenSign()
+    {
+        // PicPay's 2025 20-F tags its profit as a loss: total profit equals the owners' figure plus
+        // the minority share only once the owners' figure is negated.
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "PICS",
+            Name: "PicPay Holdings",
+            Cik: "0002048566"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        foreach (
+            var (tag, value) in new[]
+            {
+                ("ProfitLossAttributableToOwnersOfParent", -1_091_487_000m),
+                ("ProfitLoss", 1_141_606_000m),
+                ("ProfitLossAttributableToNoncontrollingInterests", 50_119_000m),
+            }
+        )
+        {
+            var concept = new FinancialConcept
+            {
+                Id = Guid.NewGuid(),
+                Taxonomy = FactTaxonomy.IfrsFull,
+                Tag = tag,
+                Label = tag,
+            };
+            _dbContext.Set<FinancialConcept>().Add(concept);
+            _dbContext
+                .Set<FinancialFact>()
+                .Add(
+                    new FinancialFact
+                    {
+                        EquityIssuerId = stock.Id,
+                        FinancialConceptId = concept.Id,
+                        Unit = "BRL",
+                        PeriodType = FactPeriodType.Duration,
+                        PeriodStart = new DateOnly(2025, 1, 1),
+                        PeriodEnd = new DateOnly(2025, 12, 31),
+                        Value = value,
+                        FiscalYear = 2025,
+                        FiscalPeriod = SecFiscalPeriod.FullYear,
+                        Form = DocumentType.TwentyF,
+                        FiledDate = new DateOnly(2026, 4, 30),
+                        AccessionNumber = "0001213900-26-049950",
+                        DimensionsKey = "",
+                    }
+                );
+        }
+        await _dbContext.SaveChangesAsync();
+
+        var stockTabService = new StockTabService(
+            new InstitutionalHoldingRepository(_dbContext),
+            new InstitutionalHolderRepository(_dbContext),
+            new DailyShortVolumeRepository(_dbContext),
+            new ShortInterestRepository(_dbContext),
+            new FailToDeliverRepository(_dbContext),
+            new DocumentRepository(_dbContext),
+            new InsiderTransactionRepository(_dbContext),
+            new Form144FilingRepository(_dbContext),
+            new FormDFilingRepository(_dbContext),
+            new NCenFilingRepository(_dbContext),
+            new NportFilingRepository(_dbContext),
+            new CongressionalTradeRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext)
+        );
+
+        var tab = await stockTabService.LoadFinancialsTab(
+            stock,
+            FinancialStatementType.IncomeStatement,
+            year: 2025,
+            period: SecFiscalPeriod.FullYear
+        );
+
+        tab.Lines.Single(l => l.Label == "Net Income").Value.Should().Be(1_091_487_000m);
+    }
 }
