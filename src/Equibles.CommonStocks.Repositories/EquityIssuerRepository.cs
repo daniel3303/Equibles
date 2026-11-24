@@ -363,7 +363,19 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
                 || c.NameAliases.Any(name =>
                     EF.Functions.ILike(name, pattern, LikePattern.EscapeChar)
                 )
-                || EF.Functions.ILike(c.Description, pattern, LikePattern.EscapeChar)
+                // Every symbol a US directory states for the company finds it (a class ticker such
+                // as BAC-PB), not only its main listing; the description is the company's own text.
+                || c.Securities.Any(security =>
+                    security.Listings.Any(listing =>
+                        listing.MarketCountryCode == "US"
+                        && (
+                            includeInactive
+                            || listing.IsDirectoryListed
+                            || listing.IsReferenceListed
+                        )
+                        && EF.Functions.ILike(listing.Ticker, pattern, LikePattern.EscapeChar)
+                    )
+                )
                 || EF.Functions.ILike(c.Industry.Name, pattern, LikePattern.EscapeChar)
             );
         }

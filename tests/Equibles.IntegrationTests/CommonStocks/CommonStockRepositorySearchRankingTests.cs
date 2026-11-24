@@ -36,6 +36,22 @@ public class CommonStockRepositorySearchRankingTests : ParadeDbMcpTestBase
         Assert.Empty(repository.Search("100__official"));
     }
 
+    // BAC-PB is a Bank of America preferred line; search found it only through a ticker list stored
+    // as the company's description, which also kept symbols the company no longer trades under.
+    [Fact]
+    public async Task Search_EverySymbolTheDirectoryStates_FindsTheCompany_AndAFormerSymbolDoesNot()
+    {
+        var stock = Stock("BAC", "Bank of America Corp");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["BAC-PB"]);
+        Equibles.CommonStocks.Data.Helpers.UsEquityDirectory.GetOrAddListing(stock, "BACOLD");
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        var repository = new EquityIssuerRepository(DbContext);
+
+        Assert.Equal(stock.Id, Assert.Single(repository.Search("BAC-PB")).Id);
+        Assert.Empty(repository.Search("BACOLD"));
+    }
+
     [Fact]
     public async Task Search_ExactTickerMatch_RanksFirstEvenWhenAlphabeticallyLast()
     {
