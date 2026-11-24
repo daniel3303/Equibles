@@ -40,8 +40,11 @@ public static class EsefJsonReportContent
         };
         var root = JObject.Load(reader);
         var namespaces = (JObject)root["documentInfo"]["namespaces"];
+        // Each note is converted on its own, and one past the conversion limit has its text written as
+        // its markup is read, so the notes together are bounded only by the report's own size. A note
+        // past the limit that gives no text leaves the report without part of its text, so none of it
+        // is published, as when the notes shared one cap.
         var fragments = new List<string>();
-        long totalCharacters = 0;
         foreach (var property in ((JObject)root["facts"]).Properties())
         {
             var fact = (JObject)property.Value;
@@ -63,17 +66,21 @@ public static class EsefJsonReportContent
             var markup = EsefReportContent.PrepareRetrievalMarkup((string)fact["value"]);
             if (string.IsNullOrWhiteSpace(markup))
                 continue;
-            totalCharacters += markup.Length;
-            if (totalCharacters > EsefReportContent.MaxRetrievalHtmlChars)
-                return [];
             fragments.Add(markup);
         }
 
         var output = new StringBuilder();
         foreach (var fragment in fragments)
         {
-            var text = EsefReportContent.Build(fragment, normalizer, converter);
+            var text = EsefReportContent.Build(
+                AsDocument(fragment),
+                normalizer,
+                converter,
+                out var pastLimit
+            );
             var disclosure = Encoding.UTF8.GetString(text);
+            if (string.IsNullOrWhiteSpace(disclosure) && pastLimit)
+                return [];
             if (string.IsNullOrWhiteSpace(disclosure))
                 throw new InvalidDataException(
                     "An eligible tagged report disclosure produced no readable text."
@@ -84,6 +91,16 @@ public static class EsefJsonReportContent
         }
         return Encoding.UTF8.GetBytes(output.ToString());
     }
+
+    /// <summary>
+    /// A note's value is a piece of the report's XHTML with no root of its own, and the conversion
+    /// keeps XML empty elements only for a document that says it is XHTML. Left as a piece, each
+    /// <c>&lt;span/&gt;</c> a converted report puts between syllables opens under HTML rules and
+    /// never closes, so a note of ten thousand of them reaches the conversion as one chain of spans
+    /// each holding all the rest.
+    /// </summary>
+    internal static string AsDocument(string fragment) =>
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>" + fragment + "</body></html>";
 
     private static bool MatchesIssuer(JObject dimensions, JObject namespaces, string issuerLei)
     {

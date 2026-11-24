@@ -10,6 +10,19 @@ public static class EsefReportEnvelope
     public const int MaximumSourceBytes = 300 * 1024 * 1024;
     public const int MaximumEnvelopeBytes = 50 * 1024 * 1024;
 
+    private const string PastLimitMark = "esef-envelope-limit";
+
+    // A report past the envelope limit is refused for its size, a property of the report; every
+    // other refusal is a fault in it. The type stays the one callers already catch.
+    internal static InvalidDataException PastEnvelopeLimit() =>
+        new("Issuer report exceeds the extraction envelope limit.")
+        {
+            Data = { [PastLimitMark] = true },
+        };
+
+    public static bool IsPastEnvelopeLimit(InvalidDataException exception) =>
+        exception.Data.Contains(PastLimitMark);
+
     // Validate identity with Discover first; rendering must keep source names for CSS selectors.
     public static byte[] ForRetrieval(byte[] source) =>
         EsefEnvelopeWriter.Compact(source, requireEsef: true, canonicalize: false);

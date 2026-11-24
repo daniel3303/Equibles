@@ -257,17 +257,31 @@ public class DocumentNormalizationBackfillService
             && captured.AsFiledHtmlContentId != null
         )
         {
-            var envelope = await EsefRetainedOriginal.ReadEnvelope(
-                captured,
-                _fileManager,
-                cancellationToken
-            );
-            var originalHtml = Encoding.UTF8.GetString(envelope);
-            var originalContent = EsefReportContent.Build(originalHtml, _normalizer, _converter);
-            return (
-                originalContent,
-                originalContent.Length == 0 && EsefReportContent.ExceedsRetrievalLimit(originalHtml)
-            );
+            byte[] envelope = null;
+            try
+            {
+                envelope = await EsefRetainedOriginal.ReadEnvelope(
+                    captured,
+                    _fileManager,
+                    cancellationToken
+                );
+            }
+            catch (InvalidDataException exception)
+                when (EsefReportEnvelope.IsPastEnvelopeLimit(exception))
+            {
+                // An original whose envelope is past the limit cannot be proven again, so the
+                // envelope proven and stored at import is read instead, below.
+            }
+            if (envelope != null)
+            {
+                var originalContent = EsefReportContent.Build(
+                    Encoding.UTF8.GetString(envelope),
+                    _normalizer,
+                    _converter,
+                    out var originalPastLimit
+                );
+                return (originalContent, originalContent.Length == 0 && originalPastLimit);
+            }
         }
 
         const int maxEnvelopeBytes = EsefReportEnvelope.MaximumEnvelopeBytes;
@@ -304,8 +318,8 @@ public class DocumentNormalizationBackfillService
             );
             return (notes, notes.Length == 0);
         }
-        var content = EsefReportContent.Build(html, _normalizer, _converter);
-        return (content, content.Length == 0 && EsefReportContent.ExceedsRetrievalLimit(html));
+        var content = EsefReportContent.Build(html, _normalizer, _converter, out var pastLimit);
+        return (content, content.Length == 0 && pastLimit);
     }
 
     private async Task<bool> ContentMatches(Document document, byte[] normalizedContent)

@@ -5,17 +5,21 @@
 - Omit XHTML scripts only when directly inside the root XHTML head or body; viewer payloads are already excluded from Markdown.
 - Refuse compaction when an XHTML script has another parent or contains child elements; financial facts, contexts and continuations may depend on that markup.
 - Preserve all other text, elements, namespaces, table spans, all other attributes except the layout metadata below, and all remaining styles, including emphasis, alignment, visibility, color and text decoration.
-- Flat numeric `rgb(...)` and `rgba(...)` values permit declaration splitting; preserve all other complex CSS attributes in full; invalid XML and output still exceeding the limit retain the existing empty-by-design result.
+- Flat numeric `rgb(...)` and `rgba(...)` values permit declaration splitting; preserve all other complex CSS attributes in full.
+- Markup still past the limit never reaches the document conversion: `EsefStreamedText` writes its text while reading it forward, holding only the current line or table row, so memory does not grow with the report. It writes lines, headings, table captions and rows, and a drawing's words, skips the head, scripts and styles (a drawing's too), hidden elements and `ix:header`, and gives no text for markup an XML reader refuses or for text past the same limit; those stay empty by design.
+- A retained original whose envelope is past the 50 MiB limit cannot be proven again, so the backfill reads the envelope proven and stored at import instead; the envelope limit stays.
 - On `span` and `div`, unused nonempty class values become one neutral class; spans with such classes may clear their redundant id value. Preserve class-driven lists, math, footnotes, line blocks and code-language conventions.
 - Keep nonempty class metadata: the Markdown reader uses its presence to preserve paragraph boundaries. Preserve anchor ids, classless-span ids, namespaced attributes and all other elements.
-- Never return a text prefix or raise the conversion or retained-envelope limits.
+- Never return a text prefix or raise the conversion or retained-envelope limits; past them, stream instead.
 - Retained JSON contributes only unqualified IFRS explanatory notes with matching issuer and report-period contexts; validate the envelope with the existing financial parser first.
 - JSON notes are excerpts, never a reconstruction of the full visual report; context dates filter notes but never become invented source wording.
+- Convert each JSON note as an XHTML document, never as a bare piece: only a document keeps its XML empty elements empty, and an unclosed `<span/>` nests everything after it.
 - Convert the complete selected markup within the existing limit; valid reports without eligible notes settle empty, while malformed envelopes and failed conversions retain retries.
 - Root-level note headings never replace the HTML or body container; preserve the sibling prose and table structure.
 - Generation 6 replays captured inline ESEF documents below that generation, including readable reports, through the existing bounded normalization worker.
-- JSON recovery remains limited to empty reports below generation 5; current SEC documents stay settled.
-- Both cohorts require a retained envelope and fewer than five failed attempts; parked attempts remain visible and are not silently reset.
+- Generation 7 rebuilds every empty ESEF report below it, inline or JSON, for the streamed text; readable reports at 6 are not replayed for it. Current SEC documents stay settled.
+- Each JSON note converts on its own, a note past the limit streamed, so the notes together have no combined cap; a note past the limit that gives no text leaves the whole report empty by design, never part of its notes.
+- Both cohorts require a retained envelope and fewer than five failed attempts; parked attempts remain visible and are not silently reset. Migration `EsefEmptyReportAttemptsReset` gave reports below generation 7 their attempts back once, since their failures (the heading step's memory on nested spans, readable reports rebuilt empty) are fixed there.
 - Annual inline reports prefer their retained original over older extraction copies that may omit stylesheets; general inline and JSON reports use their retained extraction envelope.
 - Recheck original gzip bytes against the stored hash, physical length and expanded length; reject invalid originals instead of falling back to a lower-fidelity copy.
 - Original annual reports must prove the stored LEI, annual period and publication cutoff through the shared envelope parser; preserve the existing 300 MiB original and 50 MiB compacted-envelope limits.
@@ -24,8 +28,8 @@
 - Source selection changes only derived text; original pointers, files and tagged facts remain unchanged.
 - Replay replaces only changed derived text and clears its stale chunks transactionally; unchanged readable ESEF text keeps its chunks and only advances the normalization stamp.
 - Never replace an already-normalized readable report with an empty body; retain its text and record the failed attempt even for a conversion-size refusal.
-- Empty reports may settle empty when conversion remains too large; successful replays and new ESEF writers stamp generation 6.
-- Retire the finite selection exceptions only after the eligible cohort below is empty, current writers stamp generation 6, and no older writers remain deployed.
+- Empty reports settle empty only when the streamed reader gives no text either; successful replays and new ESEF writers stamp generation 7 (`Document.ContentBuilderVersion`).
+- Retire the finite selection exceptions only after the eligible cohort below is empty, current writers stamp generation 7, and no older writers remain deployed.
 - An empty cohort proves the conversion was retried; it does not prove every report became readable or any downstream extraction completed.
 
 ```sql

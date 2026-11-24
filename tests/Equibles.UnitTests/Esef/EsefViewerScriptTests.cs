@@ -56,14 +56,15 @@ public class EsefViewerScriptTests
     }
 
     [Fact]
-    public void Prepare_ScriptContainingXml_PreservesTheSizeRefusal()
+    public void Prepare_ScriptContainingXml_StaysInTheMarkupAndOutOfTheText()
     {
         var source = LargeReport(
             "<script><value xmlns=\"urn:financial\">123</value></script><p>After 456</p>"
         );
         EsefReportContent.PrepareRetrievalMarkup(source).Should().Be(source);
         EsefReportContent.ExceedsRetrievalLimit(source).Should().BeTrue();
-        Build(source).Should().BeEmpty();
+        // Past the conversion limit the text is written as the markup is read, scripts left out.
+        Build(source).Should().Be("After 456");
     }
 
     [Fact]
@@ -76,24 +77,31 @@ public class EsefViewerScriptTests
 
     [Theory]
     [InlineData(
-        "<ix:nonFraction xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\" name=\"Assets\" contextRef=\"C1\" unitRef=\"USD\">1<script>9</script>3</ix:nonFraction>"
+        "<ix:nonFraction xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\" name=\"Assets\" contextRef=\"C1\" unitRef=\"USD\">1<script>9</script>3</ix:nonFraction>",
+        "13"
     )]
     [InlineData(
-        "<ix:continuation xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\" id=\"continued\">1<script>9</script>3</ix:continuation>"
+        "<ix:continuation xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\" id=\"continued\">1<script>9</script>3</ix:continuation>",
+        "13"
     )]
     [InlineData(
-        "<context xmlns=\"http://www.xbrl.org/2003/instance\" id=\"C1\"><entity><identifier scheme=\"urn:lei\">1<script xmlns=\"http://www.w3.org/1999/xhtml\">9</script>3</identifier></entity></context>"
+        "<context xmlns=\"http://www.xbrl.org/2003/instance\" id=\"C1\"><entity><identifier scheme=\"urn:lei\">1<script xmlns=\"http://www.w3.org/1999/xhtml\">9</script>3</identifier></entity></context>",
+        "13"
     )]
     [InlineData(
-        "<value xmlns=\"urn:financial\">1<script xmlns=\"http://www.w3.org/1999/xhtml\">9</script>3</value>"
+        "<value xmlns=\"urn:financial\">1<script xmlns=\"http://www.w3.org/1999/xhtml\">9</script>3</value>",
+        "13"
     )]
-    [InlineData("<div>1<script>9</script>3</div>")]
-    [InlineData("<div><body><script>9</script></body></div>")]
-    public void Prepare_ScriptInAnotherScope_PreservesTheOriginalSizeRefusal(string body)
+    [InlineData("<div>1<script>9</script>3</div>", "13")]
+    [InlineData("<div><body><script>9</script></body></div>", "")]
+    public void Prepare_ScriptInAnotherScope_StaysInTheMarkupAndOutOfTheText(
+        string body,
+        string text
+    )
     {
         var source = LargeReport(body);
         EsefReportContent.PrepareRetrievalMarkup(source).Should().Be(source);
-        Build(source).Should().BeEmpty();
+        Build(source).Should().Be(text);
     }
 
     [Fact]
@@ -152,7 +160,7 @@ public class EsefViewerScriptTests
         else
         {
             prepared.Should().Be(source);
-            Build(source).Should().BeEmpty();
+            Build(source).Should().NotContain("987");
         }
     }
 
