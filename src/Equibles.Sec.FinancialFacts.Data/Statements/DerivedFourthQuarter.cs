@@ -6,15 +6,21 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// <summary>
 /// The fourth quarter of a series that shows a fiscal year and its first three quarters but no
 /// fourth: the year less those three rows. It is worked out from the rows the series shows, so the
-/// four quarters always add up to the year beside them. All four rows must carry one concept: an
-/// alias's tags can be different measures (a total and a slice of it).
+/// four quarters always add up to the year beside them. The three quarters carry one concept, which
+/// must state that year at the shown value: an alias's tags can be different measures (a total and a
+/// slice of it), while after a tag switch the year shows under the new tag and its quarters only
+/// under the old one.
 /// </summary>
 public static class DerivedFourthQuarter
 {
-    /// <summary>The picked rows plus each fourth quarter they imply.</summary>
+    /// <summary>
+    /// The picked rows plus each fourth quarter they imply; <paramref name="stated"/> is every fact
+    /// the rows were picked from.
+    /// </summary>
     public static List<FinancialFact> Append(
         IReadOnlyCollection<FinancialFact> picked,
-        bool rejectNegative
+        bool rejectNegative,
+        IReadOnlyCollection<FinancialFact> stated = null
     )
     {
         var result = picked.ToList();
@@ -31,12 +37,12 @@ public static class DerivedFourthQuarter
                 )
                 .OrderBy(f => f.PeriodStart)
                 .ToList();
-            // A quarter already ending with the year, under any tag, is a reported fourth quarter;
-            // only the three quarters subtracted must carry the year's own tag.
+            // A quarter already ending with the year, under any tag, is a reported fourth quarter.
             if (
                 rows.Count != 3
                 || rows[2].PeriodEnd >= year.PeriodEnd
-                || rows.Any(f => f.FinancialConceptId != year.FinancialConceptId)
+                || rows.Select(f => f.FinancialConceptId).Distinct().Count() != 1
+                || !StatesTheYear(rows[0].FinancialConceptId, year, stated)
                 || !Chains(year, rows)
             )
                 continue;
@@ -71,6 +77,21 @@ public static class DerivedFourthQuarter
         }
         return result;
     }
+
+    private static bool StatesTheYear(
+        Guid concept,
+        FinancialFact year,
+        IReadOnlyCollection<FinancialFact> stated
+    ) =>
+        concept == year.FinancialConceptId
+        || stated?.Any(f =>
+            f.FinancialConceptId == concept
+            && f.PeriodType == FactPeriodType.Duration
+            && f.Unit == year.Unit
+            && f.PeriodStart == year.PeriodStart
+            && f.PeriodEnd == year.PeriodEnd
+            && f.Value == year.Value
+        ) == true;
 
     private static bool IsYear(FinancialFact fact) =>
         fact.FiscalPeriod == SecFiscalPeriod.FullYear

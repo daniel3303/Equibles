@@ -420,7 +420,7 @@ public class FinancialFactsTools
         derived.UnionWith(withQuarters.Where(f => !filed.Contains(f)));
         var picked = PickFlowRows(withQuarters, conceptPriority, false, null);
         var shown = new HashSet<FinancialFact>(picked, ReferenceEqualityComparer.Instance);
-        var withFourth = DerivedFourthQuarter.Append(picked, nonNegative);
+        var withFourth = DerivedFourthQuarter.Append(picked, nonNegative, withQuarters);
         derived.UnionWith(withFourth.Where(f => !shown.Contains(f)));
         return withFourth;
     }

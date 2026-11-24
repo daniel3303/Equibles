@@ -28,6 +28,34 @@ public class DerivedFourthQuarterTests
         fourth.Form.Should().BeNull();
     }
 
+    // After a tag switch the year shows under the new tag and its quarters only under the old one,
+    // which states the same year; another tag's quarters that state no year add nothing.
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public void Append_QuartersUnderAnotherTag_AddTheFourthOnlyWhenTheirTagStatesTheYear(
+        bool oldTagStatesTheYear,
+        int added
+    )
+    {
+        var rows = Calendar(120m);
+        var oldTag = Guid.NewGuid();
+        foreach (var quarter in rows.Where(f => f.FiscalPeriod != SecFiscalPeriod.FullYear))
+            quarter.FinancialConceptId = oldTag;
+        var stated = rows.ToList();
+        if (oldTagStatesTheYear)
+        {
+            var oldYear = Fact("2025-01-01", "2025-12-31", 120m, SecFiscalPeriod.FullYear, "USD");
+            oldYear.FinancialConceptId = oldTag;
+            stated.Add(oldYear);
+        }
+
+        DerivedFourthQuarter
+            .Append(rows, rejectNegative: false, stated)
+            .Should()
+            .HaveCount(rows.Count + added);
+    }
+
     [Theory]
     [InlineData("reported-fourth")]
     [InlineData("reported-fourth-other-tag")]
