@@ -839,6 +839,26 @@ public class StockTabService
                 facts,
                 fiscalYear
             );
+        // A foreign filer's owners' profit tagged with the opposite sign reads the sign its filing
+        // proves, as the MCP statement tool reads it (OwnersProfitSign).
+        if (
+            statementLines.FirstOrDefault(line => OwnersProfitSign.IsNetIncome(line.Concepts)) is
+            { } netIncomeLine
+        )
+            facts = (
+                await OwnersProfitSignFacts.Read(
+                    _financialFactRepository,
+                    _financialConceptRepository,
+                    stock.Id,
+                    facts,
+                    netIncomeLine
+                        .Concepts.Where(concept =>
+                            conceptIdByKey.ContainsKey((concept.Taxonomy, concept.Tag))
+                        )
+                        .Select(concept => conceptIdByKey[(concept.Taxonomy, concept.Tag)])
+                        .ToHashSet()
+                )
+            ).Facts;
 
         if (statementType != FinancialStatementType.BalanceSheet)
         {
