@@ -552,10 +552,11 @@ public class OwnersProfitSignTests
     }
 
     [Fact]
-    public void Read_PeriodAnotherFilingProves_KeepsTheProvenFigureAndItsTotal()
+    public void Read_PeriodAnotherFilingProves_KeepsTheProvenFigure()
     {
         // The 2024 report states its year without a minority share; the 2025 report's comparative
-        // proves the same year as tagged, so only the unchecked figure leaves.
+        // proves the same year as tagged, so only the unchecked figure leaves, with its report's
+        // total profit.
         var concepts = new Dictionary<(FactTaxonomy, string), Guid>();
         const string annual2025 = "0001213900-26-049950";
         const string annual2024 = "0001213900-25-030001";
@@ -620,9 +621,65 @@ public class OwnersProfitSignTests
             ById(concepts)
         );
 
-        reading.Facts.Should().HaveCount(3);
+        reading.Facts.Should().HaveCount(2);
         reading.Facts[1].Should().BeSameAs(proven);
-        reading.Facts[2].Should().BeSameAs(total2024);
+        reading.Facts.Should().NotContain(total2024);
+        reading.WithheldPeriods.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Read_UncheckedFigure_LeavesWithItsFilingsTotal()
+    {
+        // The 20-F states the year with no minority share; a 6-K of annual results proves the same
+        // year mis-signed. The 20-F's total would outrank the 6-K's owners' figure if it stayed.
+        var concepts = new Dictionary<(FactTaxonomy, string), Guid>();
+        const string annual = "0001213900-26-049950";
+        const string results = "0001213900-26-030001";
+        List<FinancialFact> evidence =
+        [
+            .. Facts(
+                concepts,
+                annual,
+                YearStart,
+                YearEnd,
+                new(2026, 4, 30),
+                [(Ifrs, "ProfitLoss", "BRL", 1_141_606_000m)]
+            ),
+            .. Facts(
+                concepts,
+                results,
+                YearStart,
+                YearEnd,
+                new(2026, 3, 10),
+                [
+                    (Ifrs, "ProfitLoss", "BRL", 1_141_606_000m),
+                    (Ifrs, "ProfitLossAttributableToNoncontrollingInterests", "BRL", 50_119_000m),
+                ]
+            ),
+        ];
+        var unchecked2025 = Owners(
+            annual,
+            YearStart,
+            YearEnd,
+            new(2026, 4, 30),
+            "BRL",
+            -1_091_487_000m
+        );
+        var proven = Owners(results, YearStart, YearEnd, new(2026, 3, 10), "BRL", -1_091_487_000m);
+        var annualTotal = evidence[0];
+        var resultsTotal = evidence[1];
+
+        var reading = OwnersProfitSign.Read(
+            [unchecked2025, annualTotal, proven, resultsTotal],
+            OwnersIds,
+            evidence,
+            ById(concepts)
+        );
+
+        reading
+            .Facts.Select(fact => (fact.AccessionNumber, fact.Value))
+            .Should()
+            .Equal((results, 1_091_487_000m), (results, 1_141_606_000m));
         reading.WithheldPeriods.Should().BeEmpty();
     }
 

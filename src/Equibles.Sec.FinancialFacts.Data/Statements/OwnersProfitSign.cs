@@ -181,8 +181,9 @@ public static class OwnersProfitSign
             .ToHashSet(StringComparer.Ordinal);
         if (misSignedUnits.Count == 0)
             return unchanged;
-        // An unchecked figure in a mis-signed unit leaves; its period leaves the line when no figure
-        // its own filing proves is left for it, total profit included, so no other measure stands in.
+        // An unchecked figure in a mis-signed unit leaves with its filing's total profit for that
+        // period; the period leaves the line when no figure its own filing proves is left for it,
+        // so no other measure stands in.
         var dropped = new HashSet<FinancialFact>(
             ownersFacts.Where(fact =>
                 signs[fact] == null
@@ -199,13 +200,21 @@ public static class OwnersProfitSign
             .Select(fact => (fact.PeriodStart, fact.PeriodEnd, fact.Unit))
             .Where(period => !kept.Contains(period))
             .ToHashSet();
+        var droppedFilings = dropped
+            .Select(fact => (fact.AccessionNumber, fact.PeriodStart, fact.PeriodEnd, fact.Unit))
+            .ToHashSet();
         var negated = new HashSet<FinancialFact>(ReferenceEqualityComparer.Instance);
         var read = lineFacts
             .Where(fact =>
                 !dropped.Contains(fact)
                 && !(
                     IsConsolidatedSpanOfAFiling(fact)
-                    && withheld.Contains((fact.PeriodStart, fact.PeriodEnd, fact.Unit))
+                    && (
+                        withheld.Contains((fact.PeriodStart, fact.PeriodEnd, fact.Unit))
+                        || droppedFilings.Contains(
+                            (fact.AccessionNumber, fact.PeriodStart, fact.PeriodEnd, fact.Unit)
+                        )
+                    )
                 )
             )
             .Select(fact =>

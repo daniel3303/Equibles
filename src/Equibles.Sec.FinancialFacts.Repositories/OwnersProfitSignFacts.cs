@@ -103,8 +103,8 @@ public static class OwnersProfitSignFacts
             negated.UnionWith(reading.Negated);
             withheld.UnionWith(reading.WithheldPeriods);
         }
-        return negated.Count == 0 && withheld.Count == 0
-            ? unchanged
-            : new OwnersProfitSign.Reading(read, negated, withheld);
+        // A slice can lose an unchecked figure while negating and withholding nothing (the proof
+        // sits in another year), so the reading is returned whatever it changed.
+        return new OwnersProfitSign.Reading(read, negated, withheld);
     }
 }

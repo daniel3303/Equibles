@@ -356,4 +356,30 @@ public class FinancialToolsOwnersProfitSignTests : ParadeDbMcpTestBase
         result.Should().Contain("| Net Income | 281,616,000 | BRL | Derived quarter |");
         result.Should().Contain(OwnersProfitSign.NegatedNote);
     }
+
+    [Fact]
+    public async Task OneYearReads_YearAnotherFilingRestatesUnchecked_ReadTheProvenFigure()
+    {
+        // The 2026 20-F restates 2024 as a third-year column, tagged negative with no minority
+        // share. Nothing checks it, so a one-year statement and compare read the 2025 report's
+        // proven comparative, as the fact series does.
+        await Seed();
+        const string annual2026 = "0001213900-27-040001";
+        DateOnly filed2026 = new(2027, 4, 30);
+        AddYear(_picpay, _owners, 2024, -217_574_000m, annual2026, filed2026);
+        AddYear(_picpay, _total, 2024, 251_788_000m, annual2026, filed2026);
+        await DbContext.SaveChangesAsync();
+
+        var statement = await StatementSut()
+            .GetFinancialStatement("PICS", statement: "income", year: 2024, period: "FY");
+        var compare = await FactsSut()
+            .CompareFinancialFact(["PICS"], "net-income", fiscalYear: 2024, fiscalPeriod: "FY");
+        var series = await FactsSut().GetFinancialFact("PICS", "net-income");
+
+        statement.Should().Contain("| Net Income | 217,574,000 | BRL | Reported |");
+        statement.Should().NotContain("-217,574,000");
+        compare.Should().Contain("217,574,000 |");
+        compare.Should().NotContain("-217,574,000");
+        series.Should().Contain("| 2024-01-01 | 2024-12-31 | 2024 | FY | 217,574,000 | BRL |");
+    }
 }
