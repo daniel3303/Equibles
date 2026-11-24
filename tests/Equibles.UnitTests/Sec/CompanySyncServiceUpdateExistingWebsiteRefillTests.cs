@@ -265,31 +265,51 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
         updated.Website.Should().Be("https://www.apple.com");
     }
 
-    // KINGSWAY: created as KFS, renamed KWY, and still described as "Company with tickers: KFS"
-    // because nothing else in the directory changed afterwards.
+    // Apple's profile read "Company with tickers: AAPL" as the company's description; KINGSWAY's still named
+    // its retired symbol KFS. A registrant SEC no longer lists is never visited again, so it is cleared too.
     [Theory]
-    [InlineData("Company with tickers: KFS", "Company with tickers: EXM")]
-    [InlineData("Company with tickers: EXM", "Company with tickers: EXM")]
+    [InlineData("Company with tickers: KFS", false, null)]
+    [InlineData("Company with tickers: KFS", true, null)]
     [InlineData(
         "Example Corp designs and sells widgets.",
+        false,
         "Example Corp designs and sells widgets."
     )]
-    public async Task TickerPlaceholder_FollowsTheCurrentSecTickers_AndARealDescriptionStays(
+    public async Task TickerPlaceholder_IsCleared_AndARealDescriptionStays(
         string stored,
+        bool departed,
         string expected
     )
     {
         var (db, stock) = await SeedStock("https://www.already-set.com", stored);
         using var _ = db;
-        var edgar = Substitute.For<ISecEdgarClient>();
+        var state = BuildState(db, stock);
+        var stateType = state.GetType();
+        stateType
+            .GetProperty("ExistingStocks")
+            .SetValue(
+                state,
+                departed ? new List<EquityIssuer>() : new List<EquityIssuer> { stock }
+            );
+        stateType
+            .GetProperty("DepartedRegistrants")
+            .SetValue(
+                state,
+                departed ? new List<EquityIssuer> { stock } : new List<EquityIssuer>()
+            );
 
-        await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
+        await (Task)
+            typeof(CompanySyncService)
+                .GetMethod(
+                    "ClearTickerPlaceholders",
+                    BindingFlags.NonPublic | BindingFlags.Instance
+                )
+                .Invoke(BuildSut(Substitute.For<ISecEdgarClient>()), [state]);
 
         db.ChangeTracker.Clear();
         EquityIssuer updated = await new EquityIssuerRepository(db)
             .GetAll()
             .FirstAsync(s => s.Cik == _cik);
         updated.Description.Should().Be(expected);
-        updated.Presentation.Listing.Ticker.Should().Be("EXM");
     }
 }

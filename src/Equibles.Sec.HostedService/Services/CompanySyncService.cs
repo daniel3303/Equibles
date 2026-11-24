@@ -90,6 +90,7 @@ public class CompanySyncService : ICompanySyncService
             using var scope = _serviceScopeFactory.CreateScope();
             var state = await BuildSyncState(secCompanies, scope);
             await DropFilingSuffixesFromDepartedRegistrants(state);
+            await ClearTickerPlaceholders(state);
 
             foreach (var secCompany in secCompanies)
             {
@@ -280,6 +281,32 @@ public class CompanySyncService : ICompanySyncService
         _logger.LogInformation(
             "Dropped SEC filing suffixes from {Count} registrants SEC no longer lists",
             renamed
+        );
+    }
+
+    // Older rows hold their SEC tickers as the description, which every profile showed as the company's own text. The
+    // SEC tickers file has no description and issuer search matches every directory symbol, so each sync clears them,
+    // a departed registrant's and one an older release wrote included.
+    private async Task ClearTickerPlaceholders(StockSyncState state)
+    {
+        var placeholders = state
+            .ExistingStocks.Concat(state.DepartedRegistrants)
+            .Where(stock =>
+                stock.Description?.StartsWith(TickerPlaceholderPrefix, StringComparison.Ordinal)
+                == true
+            )
+            .ToList();
+        foreach (var stock in placeholders)
+        {
+            stock.Description = null;
+        }
+        var cleared = placeholders.Count;
+        if (cleared == 0)
+            return;
+        await state.CommonStockRepository.SaveChanges();
+        _logger.LogInformation(
+            "Cleared the SEC ticker placeholder from {Count} issuer descriptions",
+            cleared
         );
     }
 
@@ -519,8 +546,7 @@ public class CompanySyncService : ICompanySyncService
                 .ToHashSet(StringComparer.Ordinal)
                 .SetEquals(combinedSecondaryTickers);
 
-        var staleDescription = HasStaleTickerPlaceholder(existingStock.Description, secCompany);
-        if (!directoryChanged && !missingWebsite && !staleDescription)
+        if (!directoryChanged && !missingWebsite)
             return;
 
         // Ask EDGAR BEFORE taking the directory-write lock: the call can stall for minutes
@@ -528,12 +554,7 @@ public class CompanySyncService : ICompanySyncService
         var fetchedWebsite = missingWebsite ? await FetchWebsite(secCompany.Cik) : null;
         // A refill that answered nothing for a row already holding null is a no-op; do not
         // take the lock for it.
-        if (
-            !directoryChanged
-            && !staleDescription
-            && fetchedWebsite == null
-            && existingStock.Website == null
-        )
+        if (!directoryChanged && fetchedWebsite == null && existingStock.Website == null)
             return;
 
         if (!await TryClearPrimaryTickerCollision(secCompany, existingStock, primaryTicker, state))
@@ -583,13 +604,9 @@ public class CompanySyncService : ICompanySyncService
             .ToList()
             .ToList();
         var oldWebsite = existingStock.Website;
-        var oldDescription = existingStock.Description;
 
         try
         {
-            if (HasStaleTickerPlaceholder(existingStock.Description, secCompany))
-                existingStock.Description = TickerPlaceholder(secCompany);
-
             if (
                 missingWebsite
                 && (
@@ -641,7 +658,6 @@ public class CompanySyncService : ICompanySyncService
                             .ToList()
                     )
                 && existingStock.Website == oldWebsite
-                && existingStock.Description == oldDescription
             )
                 return;
 
@@ -1370,17 +1386,6 @@ public class CompanySyncService : ICompanySyncService
 
     private const string TickerPlaceholderPrefix = "Company with tickers: ";
 
-    // Until a real description arrives the issuer carries its SEC tickers as one, and issuer search
-    // matches it (a class ticker such as BAC-PB has no listing of its own). A ticker change must
-    // refresh it, or the profile keeps naming the retired symbol.
-    internal static string TickerPlaceholder(CompanyInfo secCompany) =>
-        TickerPlaceholderPrefix + string.Join(", ", secCompany.Tickers);
-
-    internal static bool HasStaleTickerPlaceholder(string description, CompanyInfo secCompany) =>
-        description != null
-        && description.StartsWith(TickerPlaceholderPrefix, StringComparison.Ordinal)
-        && description != TickerPlaceholder(secCompany);
-
     private static Task<EquityIssuer> CreateCommonStock(
         CompanyInfo secCompany,
         string primaryTicker,
@@ -1393,7 +1398,6 @@ public class CompanySyncService : ICompanySyncService
         {
             Name = NormalizeCompanyName(secCompany.Name),
             Cik = secCompany.Cik,
-            Description = TickerPlaceholder(secCompany),
             Website = website,
         };
         UsEquityDirectory.ReplaceDirectorySymbols(
