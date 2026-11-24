@@ -400,7 +400,8 @@ public class FinancialFactsTools
 
     // The flow rows plus the quarters they leave out: a second or third quarter as the cumulative
     // figure less the one before it, then a fourth as the shown year less its shown three quarters.
-    // Each added row lands in derived.
+    // Each added row lands in derived. A fiscal year derives from its own filings only, as the
+    // statement does: a later year's restated comparative would not match the quarter shown.
     private static List<FinancialFact> PickFlowRowsWithDerivedQuarters(
         List<FinancialFact> facts,
         IReadOnlyDictionary<Guid, int> conceptPriority,
@@ -409,8 +410,12 @@ public class FinancialFactsTools
     )
     {
         var filed = new HashSet<FinancialFact>(facts, ReferenceEqualityComparer.Instance);
-        var withQuarters = StatementQuarterDerivation
-            .AppendDerived(facts, nonNegative ? conceptPriority.Keys.ToHashSet() : null)
+        var rejectNegative = nonNegative ? conceptPriority.Keys.ToHashSet() : null;
+        var withQuarters = facts
+            .GroupBy(f => f.FiscalYear)
+            .SelectMany(year =>
+                StatementQuarterDerivation.AppendDerived(year.ToList(), rejectNegative)
+            )
             .ToList();
         derived.UnionWith(withQuarters.Where(f => !filed.Contains(f)));
         var picked = PickFlowRows(withQuarters, conceptPriority, false, null);

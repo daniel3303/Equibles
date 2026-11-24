@@ -6,7 +6,8 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// <summary>
 /// The fourth quarter of a series that shows a fiscal year and its first three quarters but no
 /// fourth: the year less those three rows. It is worked out from the rows the series shows, so the
-/// four quarters always add up to the year beside them.
+/// four quarters always add up to the year beside them. All four rows must carry one concept: an
+/// alias's tags can be different measures (a total and a slice of it).
 /// </summary>
 public static class DerivedFourthQuarter
 {
@@ -23,6 +24,7 @@ public static class DerivedFourthQuarter
                 .Where(f =>
                     f != year
                     && f.PeriodType == FactPeriodType.Duration
+                    && f.FinancialConceptId == year.FinancialConceptId
                     && f.Unit == year.Unit
                     && f.PeriodStart >= year.PeriodStart
                     && f.PeriodEnd <= year.PeriodEnd

@@ -83,6 +83,74 @@ public class FinancialFactsToolsDerivedQuartersTests : ParadeDbMcpTestBase
             .Contain("| 2025-10-01 | 2025-12-31 | 2025 | Q4 | $35,000,000 (derived) | USD |");
     }
 
+    // The next year's quarterly reports restate the 2025 comparatives (first quarter 33, half-year
+    // 61); 2025's own quarters still derive from 2025's own filings, as the first quarter shown does.
+    [Fact]
+    public async Task GetFinancialFact_LaterYearRestatesTheComparatives_DerivesFromTheYearsOwnFilings()
+    {
+        await Seed();
+        var issuer = DbContext.Set<EquityIssuer>().Local.Single();
+        var revenue = DbContext.Set<FinancialConcept>().Local.Single(c => c.Tag == "Revenues");
+        Add(
+            issuer,
+            revenue,
+            "2025-03-31",
+            33m,
+            SecFiscalPeriod.Q1,
+            DocumentType.TenQ,
+            2026,
+            "2026-05-10"
+        );
+        Add(
+            issuer,
+            revenue,
+            "2025-06-30",
+            61m,
+            SecFiscalPeriod.Q2,
+            DocumentType.TenQ,
+            2026,
+            "2026-08-10"
+        );
+        Add(
+            issuer,
+            revenue,
+            "2026-03-31",
+            40m,
+            SecFiscalPeriod.Q1,
+            DocumentType.TenQ,
+            2026,
+            "2026-05-10",
+            start: "2026-01-01"
+        );
+        Add(
+            issuer,
+            revenue,
+            "2026-06-30",
+            80m,
+            SecFiscalPeriod.Q2,
+            DocumentType.TenQ,
+            2026,
+            "2026-08-10",
+            start: "2026-01-01"
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialFact("HALF", "revenue");
+
+        result
+            .Should()
+            .Contain("| 2025-04-01 | 2025-06-30 | 2025 | Q2 | $25,000,000 (derived) | USD |");
+        result
+            .Should()
+            .Contain("| 2025-07-01 | 2025-09-30 | 2025 | Q3 | $30,000,000 (derived) | USD |");
+        result
+            .Should()
+            .Contain("| 2025-10-01 | 2025-12-31 | 2025 | Q4 | $35,000,000 (derived) | USD |");
+        result
+            .Should()
+            .Contain("| 2026-04-01 | 2026-06-30 | 2026 | Q2 | $40,000,000 (derived) | USD |");
+    }
+
     [Fact]
     public async Task GetFinancialFact_FiledFiguresOrANonAdditiveLine_DerivesNothing()
     {
@@ -118,7 +186,10 @@ public class FinancialFactsToolsDerivedQuartersTests : ParadeDbMcpTestBase
         string end,
         decimal millions,
         SecFiscalPeriod period,
-        DocumentType form
+        DocumentType form,
+        int fiscalYear = 2025,
+        string filed = null,
+        string start = "2025-01-01"
     )
     {
         var periodEnd = DateOnly.Parse(end);
@@ -132,14 +203,14 @@ public class FinancialFactsToolsDerivedQuartersTests : ParadeDbMcpTestBase
                     FinancialConceptId = concept.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
-                    PeriodStart = new DateOnly(2025, 1, 1),
+                    PeriodStart = DateOnly.Parse(start),
                     PeriodEnd = periodEnd,
                     Value = millions * 1_000_000m,
-                    FiscalYear = 2025,
+                    FiscalYear = fiscalYear,
                     FiscalPeriod = period,
                     Form = form,
-                    FiledDate = periodEnd.AddDays(40),
-                    AccessionNumber = $"0000999001-25-{period}",
+                    FiledDate = filed == null ? periodEnd.AddDays(40) : DateOnly.Parse(filed),
+                    AccessionNumber = $"0000999001-{fiscalYear % 100}-{period}-{periodEnd:yyMMdd}",
                 }
             );
     }

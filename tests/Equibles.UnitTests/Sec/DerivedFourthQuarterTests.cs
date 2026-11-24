@@ -32,6 +32,7 @@ public class DerivedFourthQuarterTests
     [InlineData("reported-fourth")]
     [InlineData("missing-second")]
     [InlineData("other-unit")]
+    [InlineData("other-concept")]
     [InlineData("negative")]
     public void Append_WithoutExactlyTheThreeQuartersOrBesideAReportedFourth_AddsNothing(
         string shape
@@ -48,6 +49,10 @@ public class DerivedFourthQuarterTests
                 break;
             case "other-unit":
                 rows.Single(f => f.FiscalPeriod == SecFiscalPeriod.Q3).Unit = "EUR";
+                break;
+            case "other-concept":
+                rows.Single(f => f.FiscalPeriod == SecFiscalPeriod.Q2).FinancialConceptId =
+                    Guid.NewGuid();
                 break;
         }
 
