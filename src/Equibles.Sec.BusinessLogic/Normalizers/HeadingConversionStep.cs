@@ -1,3 +1,4 @@
+using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 
@@ -19,10 +20,38 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     // keyword + digit but runs on much longer, so only a short candidate qualifies as a heading.
     private const int MaxItemHeadingWords = 12;
 
+    private static readonly System.Buffers.SearchValues<char> WhiteSpace =
+        System.Buffers.SearchValues.Create(
+            Enumerable
+                .Range(0, char.MaxValue + 1)
+                .Select(c => (char)c)
+                .Where(char.IsWhiteSpace)
+                .ToArray()
+        );
+
+    // Whether an element's inner markup holds a declaration, per element, for the length of one
+    // Execute: a block of nested spans asks it of each span inside the one before.
+    [ThreadStatic]
+    private static Dictionary<(IElement Element, string Text), bool> _markup;
+
     public void Execute(IHtmlDocument doc)
     {
+        _markup = [];
+        try
+        {
+            Run(doc);
+        }
+        finally
+        {
+            _markup = null;
+        }
+    }
+
+    private void Run(IHtmlDocument doc)
+    {
         // Select spans that are NOT descendants of table elements
-        var spans = doc.QuerySelectorAll("span").Where(s => s.Closest("table") == null).ToList();
+        var inTable = new Dictionary<IElement, bool>();
+        var spans = doc.QuerySelectorAll("span").Where(s => !InTable(s, inTable)).ToList();
         if (spans.Count == 0)
             return;
 
@@ -31,11 +60,12 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         // once and not once per span it holds: a converted report puts every word of a page in its
         // own span, and judging the page again for each took time and memory with the square of them.
         var notHeadings = new HashSet<IElement>();
+        // Spans a heading replaced are out of the document: nothing done under them shows.
+        var replaced = new HashSet<IElement>();
 
         foreach (var span in spans)
         {
-            var spanText = span.TextContent.Trim();
-            if (string.IsNullOrEmpty(spanText))
+            if (replaced.Contains(span) || !HasText(span))
                 continue;
 
             var parent = span.ParentElement;
@@ -45,9 +75,9 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             if (ReferenceEquals(parent, doc.Body) || ReferenceEquals(parent, doc.DocumentElement))
                 continue;
 
-            var siblingSpans = parent.QuerySelectorAll("span").ToList();
-            if (siblingSpans.Count == 0)
-                continue;
+            // Read lazily, in document order as the selector lists them: each check stops at the
+            // first span that settles it, so a block of nested spans is not walked through each time.
+            var siblingSpans = Spans(parent);
 
             var (hasText, combinedText) = CombineText(siblingSpans);
             var headingTag = hasText ? ClassifyHeadingTag(combinedText, siblingSpans) : null;
@@ -60,32 +90,90 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             // The heading takes spans away from every element above it, which may make one of
             // those a heading in turn.
             foreach (var ancestor in parent.GetAncestors().OfType<IElement>())
+            {
                 notHeadings.Remove(ancestor);
+                foreach (var declaration in Declarations)
+                    _markup.Remove((ancestor, declaration));
+            }
             ReplaceNodeWithHeading(parent, headingTag, doc);
             processedParents.Add(parent);
+            replaced.UnionWith(siblingSpans);
         }
     }
+
+    // Element.Closest("table") != null, each element's answer kept so a deep block is climbed once.
+    private static bool InTable(IElement element, Dictionary<IElement, bool> known)
+    {
+        var climbed = new List<IElement>();
+        var answer = false;
+        for (var current = element; current != null; current = current.ParentElement)
+        {
+            if (known.TryGetValue(current, out answer))
+                break;
+            if (IsNamed(current, "table"))
+            {
+                answer = true;
+                break;
+            }
+            climbed.Add(current);
+        }
+        foreach (var visited in climbed)
+            known[visited] = answer;
+        return answer;
+    }
+
+    private static bool IsNamed(IElement element, string name) =>
+        element.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase);
+
+    private static IEnumerable<IElement> Spans(IElement parent) =>
+        parent.GetDescendants().OfType<IElement>().Where(element => IsNamed(element, "span"));
+
+    // Whether the span's text holds anything but white space, read only as far as the first such
+    // character: a span nested in others holds all their text.
+    private static bool HasText(IElement span) =>
+        span.GetDescendants()
+            .OfType<IText>()
+            .Any(text => text.Data.AsSpan().ContainsAnyExcept(WhiteSpace));
 
     // The spans' text as one line, or no line once it runs past the words a Part or Item heading
     // may have: only those two rules read it, and spans nested in one another repeat their text
     // at every level, which a line of all of them would hold many times over.
-    private static (bool HasText, string Text) CombineText(List<IElement> spans)
+    private static (bool HasText, string Text) CombineText(IEnumerable<IElement> spans)
     {
-        var texts = new List<string>(spans.Count);
+        var limit = Math.Max(MaxPartHeadingWords, MaxItemHeadingWords);
         var words = 0;
         foreach (var span in spans)
         {
-            var text = span.TextContent.Trim();
-            texts.Add(text);
-            words += SecHeadingKeyword.WordCount(text);
-            if (words > Math.Max(MaxPartHeadingWords, MaxItemHeadingWords))
+            words += Words(span, limit - words + 1);
+            if (words > limit)
                 return (true, null);
         }
-        var combined = string.Join(" ", texts).Trim();
+        var combined = string.Join(" ", spans.Select(span => span.TextContent.Trim())).Trim();
         return (combined.Length > 0, combined);
     }
 
-    private string ClassifyHeadingTag(string combinedText, List<IElement> siblingSpans)
+    // The words of the span's text as SecHeadingKeyword.WordCount counts them, counted only up to
+    // the limit, so a span holding a whole page is not read through.
+    private static int Words(IElement span, int limit)
+    {
+        var words = 0;
+        var inWord = false;
+        foreach (var text in span.GetDescendants().OfType<IText>())
+        foreach (var character in text.Data)
+        {
+            if (char.IsWhiteSpace(character))
+                inWord = false;
+            else if (!inWord)
+            {
+                inWord = true;
+                if (++words >= limit)
+                    return words;
+            }
+        }
+        return words;
+    }
+
+    private string ClassifyHeadingTag(string combinedText, IEnumerable<IElement> siblingSpans)
     {
         if (
             IsPartHeading(combinedText)
@@ -109,27 +197,46 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         return null;
     }
 
-    private bool AllSiblingsMatch(List<IElement> spans, Func<IElement, bool> condition)
+    private bool AllSiblingsMatch(IEnumerable<IElement> spans, Func<IElement, bool> condition)
     {
-        if (spans.Count == 0)
-            return false;
-
         // The first span that fails the condition settles it, before the text of the rest is read.
         var anyMeaningful = false;
         foreach (var span in spans)
         {
-            var text = span.TextContent.Trim();
-            if (
-                string.IsNullOrWhiteSpace(text)
-                || text.Length <= 2
-                || !text.Any(char.IsLetterOrDigit)
-            )
+            if (!IsMeaningful(span))
                 continue;
             anyMeaningful = true;
             if (!condition(span))
                 return false;
         }
         return anyMeaningful;
+    }
+
+    // Whether the span's trimmed text is longer than two characters and holds a letter or digit,
+    // read only as far as it takes to know.
+    private static bool IsMeaningful(IElement span)
+    {
+        var characters = 0;
+        var spaceBetween = false;
+        var pendingSpace = false;
+        var letterOrDigit = false;
+        foreach (var text in span.GetDescendants().OfType<IText>())
+        foreach (var character in text.Data)
+        {
+            if (char.IsWhiteSpace(character))
+            {
+                pendingSpace = characters > 0;
+                continue;
+            }
+            spaceBetween |= pendingSpace;
+            pendingSpace = false;
+            characters++;
+            letterOrDigit |= char.IsLetterOrDigit(character);
+            if (characters >= 3 && letterOrDigit)
+                return true;
+        }
+        // Two characters reach three with a space between them.
+        return letterOrDigit && (characters >= 3 || (characters == 2 && spaceBetween));
     }
 
     private bool IsCenterAligned(IElement node)
@@ -143,16 +250,39 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
 
     private bool IsApart(IElement node)
     {
-        return node.TextContent.Trim().StartsWith("(") && node.TextContent.Trim().EndsWith(")");
+        // A text opening with a letter or digit cannot start with "(" under any comparison, and it is
+        // known from the first character; anything else takes the full comparison.
+        var first = FirstNonWhiteSpace(node);
+        if (first is null || char.IsLetterOrDigit(first.Value))
+            return false;
+        return Trimmed(node).StartsWith("(") && Trimmed(node).EndsWith(")");
     }
 
+    private static string Trimmed(IElement node) => node.TextContent.Trim();
+
+    private static char? FirstNonWhiteSpace(IElement node)
+    {
+        foreach (var text in node.GetDescendants().OfType<IText>())
+        foreach (var character in text.Data)
+            if (!char.IsWhiteSpace(character))
+                return character;
+        return null;
+    }
+
+    // Read up to the first lower-case letter, which settles it.
     private bool IsAllUppercase(IElement node)
     {
-        if (string.IsNullOrWhiteSpace(node.TextContent))
-            return false;
-
-        var letters = node.TextContent.Trim().Where(char.IsLetter).ToList();
-        return letters.Count > 0 && letters.All(char.IsUpper);
+        var anyLetter = false;
+        foreach (var text in node.GetDescendants().OfType<IText>())
+        foreach (var character in text.Data)
+        {
+            if (!char.IsLetter(character))
+                continue;
+            if (!char.IsUpper(character))
+                return false;
+            anyLetter = true;
+        }
+        return anyLetter;
     }
 
     // A real Part identifier is a Roman numeral (Part I–IV); prose beginning "Part of …"
@@ -191,6 +321,83 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
     {
         var style = span.GetAttribute("style") ?? "";
         return SecInlineCss.ContainsDeclaration(style, property, value)
-            || SecInlineCss.ContainsDeclaration(span.InnerHtml, property, value);
+            || InnerMarkupContains(span, $"{property}:{value}")
+            || InnerMarkupContains(span, $"{property}: {value}");
     }
+
+    private static readonly string[] Declarations =
+    [
+        "font-weight:bold",
+        "font-weight: bold",
+        "font-style:italic",
+        "font-style: italic",
+    ];
+
+    // Whether span.InnerHtml holds the text, without writing it out. The text is a declaration's
+    // letters, hyphens, colon and space, none of which the writer escapes, and the tags it writes
+    // break any run, so it can only lie within one child's tag name, one attribute name or value,
+    // one comment, or a run of adjacent text; a child element answers for its own inner markup.
+    private static bool InnerMarkupContains(IElement element, string text)
+    {
+        var known = _markup ?? [];
+        if (known.TryGetValue((element, text), out var answer))
+            return answer;
+        // Children first, without recursion: a block can nest spans thousands deep.
+        var pending = new Stack<(IElement Element, bool ChildrenDone)>();
+        pending.Push((element, false));
+        while (pending.Count > 0)
+        {
+            var (current, childrenDone) = pending.Pop();
+            if (known.ContainsKey((current, text)))
+                continue;
+            if (!childrenDone)
+            {
+                pending.Push((current, true));
+                foreach (var child in current.Children)
+                    if (!known.ContainsKey((child, text)))
+                        pending.Push((child, false));
+                continue;
+            }
+            known[(current, text)] = OwnMarkupContains(current, text, known);
+        }
+        return known[(element, text)];
+    }
+
+    private static bool OwnMarkupContains(
+        IElement element,
+        string text,
+        Dictionary<(IElement Element, string Text), bool> known
+    )
+    {
+        var run = new StringBuilder();
+        foreach (var node in element.ChildNodes)
+        {
+            if (node is IText adjacent)
+            {
+                run.Append(adjacent.Data);
+                continue;
+            }
+            if (Holds(run, text))
+                return true;
+            run.Clear();
+            if (node is IComment comment && comment.Data.Contains(text, StringComparison.Ordinal))
+                return true;
+            if (node is not IElement child)
+                continue;
+            if (
+                child.LocalName.Contains(text, StringComparison.Ordinal)
+                || (child.Prefix + ":" + child.LocalName).Contains(text, StringComparison.Ordinal)
+                || child.Attributes.Any(attribute =>
+                    attribute.Name.Contains(text, StringComparison.Ordinal)
+                    || attribute.Value.Contains(text, StringComparison.Ordinal)
+                )
+                || known[(child, text)]
+            )
+                return true;
+        }
+        return Holds(run, text);
+    }
+
+    private static bool Holds(StringBuilder run, string text) =>
+        run.Length >= text.Length && run.ToString().Contains(text, StringComparison.Ordinal);
 }

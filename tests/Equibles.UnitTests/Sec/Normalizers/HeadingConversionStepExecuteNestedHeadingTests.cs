@@ -26,4 +26,19 @@ public class HeadingConversionStepExecuteNestedHeadingTests
         doc.Body!.InnerHtml.Should()
             .Be("<section><h3>Segment resultsUnaudited figuresEurope and Asia</h3></section>");
     }
+
+    // Spans inside a block a heading replaced are out of the document and are skipped; the spans
+    // after it are still judged.
+    [Fact]
+    public void Execute_NestedSpansUnderAHeading_AreSkippedAndLaterBlocksStillJudged()
+    {
+        var doc = _parser.ParseDocument(
+            "<html><body><div><span>Group <span>results <span style=\"font-weight:bold\">2025</span></span></span></div>"
+                + "<p><span style=\"font-weight:bold\">Outlook</span></p></body></html>"
+        );
+
+        _step.Execute(doc);
+
+        doc.Body!.InnerHtml.Should().Be("<h3>Group results 2025</h3><h3>Outlook</h3>");
+    }
 }
