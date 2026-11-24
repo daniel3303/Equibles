@@ -289,17 +289,18 @@ public class CompanySyncService : ICompanySyncService
     // a departed registrant's and one an older release wrote included.
     private async Task ClearTickerPlaceholders(StockSyncState state)
     {
-        var cleared = 0;
-        foreach (var stock in state.ExistingStocks.Concat(state.DepartedRegistrants))
-        {
-            if (
+        var placeholders = state
+            .ExistingStocks.Concat(state.DepartedRegistrants)
+            .Where(stock =>
                 stock.Description?.StartsWith(TickerPlaceholderPrefix, StringComparison.Ordinal)
-                != true
+                == true
             )
-                continue;
+            .ToList();
+        foreach (var stock in placeholders)
+        {
             stock.Description = null;
-            cleared++;
         }
+        var cleared = placeholders.Count;
         if (cleared == 0)
             return;
         await state.CommonStockRepository.SaveChanges();
