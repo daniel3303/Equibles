@@ -43,6 +43,32 @@ public class EsefAnnualPeriodTests
         EsefAnnualPeriod.IsProven(facts, Lei, End).Should().BeFalse();
     }
 
+    // The report binds a second prefix (xbrl) to the instance namespace and uses it only in
+    // measure text, which resolves through declared namespaces.
+    [Fact]
+    public void Parse_RecordedReportDeclaringAnInstanceAlias_ReadsItsFacts()
+    {
+        var html = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Esef",
+                "airtel-africa-2026-annual-excerpt.xhtml"
+            )
+        );
+
+        var facts = EsefInlineXbrlParser.Parse(html);
+
+        facts.Should().HaveCount(4);
+        facts.Single(f => f.Tag == "Revenue").Value.Should().Be(6_415_000_000m);
+        facts.Single(f => f.Tag == "NumberOfSharesOutstanding").Unit.Should().Be("shares");
+        facts.Single(f => f.Tag == "BasicEarningsLossPerShare").Unit.Should().Be("USD/shares");
+        EsefAnnualPeriod
+            .IsProvenInline(html, "254900ZNZDQL6OWQH623", new DateOnly(2026, 3, 31))
+            .Should()
+            .BeTrue();
+    }
+
     [Theory]
     [InlineData(349, false)]
     [InlineData(350, true)]
@@ -118,6 +144,9 @@ public class EsefAnnualPeriodTests
     [InlineData("case-collision", false)]
     [InlineData("aliased-scenario", false)]
     [InlineData("aliased-segment", false)]
+    [InlineData("root-alias-unused", true)]
+    [InlineData("root-alias-segment", false)]
+    [InlineData("root-alias-unit", true)]
     [InlineData("default-scenario", false)]
     [InlineData("unrelated-default", true)]
     [InlineData("default-inline-text", true)]
@@ -160,6 +189,13 @@ public class EsefAnnualPeriodTests
                 "</xbrli:entity>",
                 "<q:segment xmlns:q=\"http://www.xbrl.org/2003/instance\"><qualifier xmlns=\"https://example.org/qualifier\">segment</qualifier></q:segment></xbrli:entity>"
             ),
+            "root-alias-unused" => WithRootAliases(html),
+            "root-alias-segment" => WithRootAliases(html)
+                .Replace(
+                    "</xbrli:entity>",
+                    "<xbrl:segment><qualifier xmlns=\"https://example.org/qualifier\">segment</qualifier></xbrl:segment></xbrli:entity>"
+                ),
+            "root-alias-unit" => WithRootAliases(html).Replace("iso4217:DKK", "cur:DKK"),
             "default-scenario" => html.Replace(
                 "</xbrli:context>",
                 "<scenario xmlns=\"http://www.xbrl.org/2003/instance\"><qualifier xmlns=\"https://example.org/qualifier\">segment</qualifier></scenario></xbrli:context>"
@@ -325,6 +361,44 @@ public class EsefAnnualPeriodTests
             <ix:nonFraction name="ifrs-full:Assets" contextRef="point" unitRef="dkk" decimals="0">200</ix:nonFraction></div>
             </body></html>
             """;
+
+    // A prefix declared once at the root but never used on an element changes nothing the parser
+    // reads; an element reached through it would be invisible to the parser's literal names.
+    [Theory]
+    [InlineData("", true)]
+    [InlineData(
+        "<xbrli:segment><xbrldi:explicitMember dimension=\"ifrs-full:SegmentsAxis\">ifrs-full:ReportableSegmentsMember</xbrldi:explicitMember></xbrli:segment>",
+        true
+    )]
+    [InlineData(
+        "<xbrli:segment><dim:explicitMember dimension=\"ifrs-full:SegmentsAxis\">ifrs-full:ReportableSegmentsMember</dim:explicitMember></xbrli:segment>",
+        false
+    )]
+    [InlineData(
+        "<xbrl:scenario><qualifier xmlns=\"https://example.org/qualifier\">segment</qualifier></xbrl:scenario>",
+        false
+    )]
+    public void TryParse_RefusesOnlyElementsReachedThroughAnAlias(string qualifier, bool expected)
+    {
+        var html = WithRootAliases(AnnualInline())
+            .Replace("xmlns:ix=", "xmlns:xbrldi=\"http://xbrl.org/2006/xbrldi\" xmlns:ix=")
+            .Replace(
+                "</ix:resources>",
+                $"""
+                <xbrli:context id="qualified"><xbrli:entity><xbrli:identifier scheme="http://standards.iso.org/iso/17442">{Lei}</xbrli:identifier>{qualifier}</xbrli:entity>
+                  <xbrli:period><xbrli:instant>2025-12-31</xbrli:instant></xbrli:period></xbrli:context>
+                </ix:resources>
+                """
+            );
+
+        EsefInlineXbrlParser.TryParse(html, out _).Should().Be(expected);
+    }
+
+    private static string WithRootAliases(string html) =>
+        html.Replace(
+            "xmlns:ix=",
+            "xmlns:xbrl=\"http://www.xbrl.org/2003/instance\" xmlns:dim=\"http://xbrl.org/2006/xbrldi\" xmlns:cur=\"http://www.xbrl.org/2003/iso4217\" xmlns:ix="
+        );
 
     private static ParsedXbrlFact Fact(
         bool instant,
