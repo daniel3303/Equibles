@@ -27,6 +27,10 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             return;
 
         var processedParents = new HashSet<IElement>();
+        // A parent that is no heading stays none until something under it changes, so each is judged
+        // once and not once per span it holds: a converted report puts every word of a page in its
+        // own span, and judging the page again for each took time and memory with the square of them.
+        var notHeadings = new HashSet<IElement>();
 
         foreach (var span in spans)
         {
@@ -35,7 +39,7 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
                 continue;
 
             var parent = span.ParentElement;
-            if (parent == null || processedParents.Contains(parent))
+            if (parent == null || processedParents.Contains(parent) || notHeadings.Contains(parent))
                 continue;
             // A root-level note heading cannot replace the document container or its other content.
             if (ReferenceEquals(parent, doc.Body) || ReferenceEquals(parent, doc.DocumentElement))
@@ -45,18 +49,40 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
             if (siblingSpans.Count == 0)
                 continue;
 
-            var combinedText = string.Join(" ", siblingSpans.Select(s => s.TextContent.Trim()))
-                .Trim();
-            if (string.IsNullOrEmpty(combinedText))
-                continue;
-
-            var headingTag = ClassifyHeadingTag(combinedText, siblingSpans);
+            var (hasText, combinedText) = CombineText(siblingSpans);
+            var headingTag = hasText ? ClassifyHeadingTag(combinedText, siblingSpans) : null;
             if (headingTag == null)
+            {
+                notHeadings.Add(parent);
                 continue;
+            }
 
+            // The heading takes spans away from every element above it, which may make one of
+            // those a heading in turn.
+            foreach (var ancestor in parent.GetAncestors().OfType<IElement>())
+                notHeadings.Remove(ancestor);
             ReplaceNodeWithHeading(parent, headingTag, doc);
             processedParents.Add(parent);
         }
+    }
+
+    // The spans' text as one line, or no line once it runs past the words a Part or Item heading
+    // may have: only those two rules read it, and spans nested in one another repeat their text
+    // at every level, which a line of all of them would hold many times over.
+    private static (bool HasText, string Text) CombineText(List<IElement> spans)
+    {
+        var texts = new List<string>(spans.Count);
+        var words = 0;
+        foreach (var span in spans)
+        {
+            var text = span.TextContent.Trim();
+            texts.Add(text);
+            words += SecHeadingKeyword.WordCount(text);
+            if (words > Math.Max(MaxPartHeadingWords, MaxItemHeadingWords))
+                return (true, null);
+        }
+        var combined = string.Join(" ", texts).Trim();
+        return (combined.Length > 0, combined);
     }
 
     private string ClassifyHeadingTag(string combinedText, List<IElement> siblingSpans)
@@ -88,20 +114,22 @@ internal class HeadingConversionStep : IHtmlNormalizationStep
         if (spans.Count == 0)
             return false;
 
-        var meaningfulSpans = spans
-            .Where(s =>
-            {
-                var text = s.TextContent.Trim();
-                return !string.IsNullOrWhiteSpace(text)
-                    && text.Length > 2
-                    && text.Any(char.IsLetterOrDigit);
-            })
-            .ToList();
-
-        if (meaningfulSpans.Count == 0)
-            return false;
-
-        return meaningfulSpans.All(condition);
+        // The first span that fails the condition settles it, before the text of the rest is read.
+        var anyMeaningful = false;
+        foreach (var span in spans)
+        {
+            var text = span.TextContent.Trim();
+            if (
+                string.IsNullOrWhiteSpace(text)
+                || text.Length <= 2
+                || !text.Any(char.IsLetterOrDigit)
+            )
+                continue;
+            anyMeaningful = true;
+            if (!condition(span))
+                return false;
+        }
+        return anyMeaningful;
     }
 
     private bool IsCenterAligned(IElement node)

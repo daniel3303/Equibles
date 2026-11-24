@@ -72,7 +72,7 @@ public static class EsefJsonReportContent
         var output = new StringBuilder();
         foreach (var fragment in fragments)
         {
-            var text = EsefReportContent.Build(fragment, normalizer, converter);
+            var text = EsefReportContent.Build(AsDocument(fragment), normalizer, converter);
             var disclosure = Encoding.UTF8.GetString(text);
             if (string.IsNullOrWhiteSpace(disclosure))
                 throw new InvalidDataException(
@@ -84,6 +84,16 @@ public static class EsefJsonReportContent
         }
         return Encoding.UTF8.GetBytes(output.ToString());
     }
+
+    /// <summary>
+    /// A note's value is a piece of the report's XHTML with no root of its own, and the conversion
+    /// keeps XML empty elements only for a document that says it is XHTML. Left as a piece, each
+    /// <c>&lt;span/&gt;</c> a converted report puts between syllables opens under HTML rules and
+    /// never closes, so a note of ten thousand of them reaches the conversion as one chain of spans
+    /// each holding all the rest.
+    /// </summary>
+    internal static string AsDocument(string fragment) =>
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>" + fragment + "</body></html>";
 
     private static bool MatchesIssuer(JObject dimensions, JObject namespaces, string issuerLei)
     {

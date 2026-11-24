@@ -80,6 +80,36 @@ public class EsefJsonReportContentTests
         Build(report.ToString()).Should().BeEmpty();
     }
 
+    // A converted report puts an empty span between syllables. Under HTML rules each one opens
+    // and never closes, and the note reached the conversion as one chain of spans, each holding
+    // all the rest: three captured reports of 2 to 5 MB ran out of 2 GB of memory there (2026-11-24).
+    [Fact]
+    public void Build_NoteWithEmptySpansBetweenSyllables_ReachesTheConversionWithEachSpanClosed()
+    {
+        var report = Report();
+        report["facts"][NoteId]["value"] =
+            "1 Bas<span class=\"_ _0\"/>is of p<span class=\"_ _0\"/>re<span class=\"_ _0\"/>paration";
+        var normalizer = Substitute.For<ISecDocumentHtmlNormalizer>();
+        string received = null;
+        normalizer
+            .NormalizeFragment(Arg.Do<string>(html => received = html))
+            .Returns(call => new SecDocumentHtmlNormalizer().NormalizeFragment(call.Arg<string>()));
+
+        var text = Encoding.UTF8.GetString(
+            EsefJsonReportContent.Build(
+                report.ToString(),
+                Lei,
+                new DateOnly(2025, 12, 31),
+                normalizer,
+                new SecDocumentHtmlToMarkdownConverter()
+            )
+        );
+
+        received.Should().Contain("Bas<span class=\"_ _0\"></span>is of p");
+        received.Should().NotContain("/>");
+        text.Should().Be("1 Basis of preparation");
+    }
+
     [Theory]
     [InlineData("concept", "ifrs-full", "DisclosureOfBorrowingsExplanatory")]
     [InlineData("entity", "scheme", Lei)]

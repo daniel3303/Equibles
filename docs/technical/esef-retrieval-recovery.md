@@ -11,6 +11,7 @@
 - Never return a text prefix or raise the conversion or retained-envelope limits.
 - Retained JSON contributes only unqualified IFRS explanatory notes with matching issuer and report-period contexts; validate the envelope with the existing financial parser first.
 - JSON notes are excerpts, never a reconstruction of the full visual report; context dates filter notes but never become invented source wording.
+- Convert each JSON note as an XHTML document, never as a bare piece: only a document keeps its XML empty elements empty, and an unclosed `<span/>` nests everything after it.
 - Convert the complete selected markup within the existing limit; valid reports without eligible notes settle empty, while malformed envelopes and failed conversions retain retries.
 - Root-level note headings never replace the HTML or body container; preserve the sibling prose and table structure.
 - Generation 6 replays captured inline ESEF documents below that generation, including readable reports, through the existing bounded normalization worker.
