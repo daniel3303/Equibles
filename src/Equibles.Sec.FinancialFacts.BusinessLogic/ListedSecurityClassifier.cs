@@ -25,8 +25,8 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 /// so that wrapper wins. The phrase requires the wrapper immediately after
 /// "purchase": "Warrants to purchase Common Units" does not fire it.</item>
 /// <item>Otherwise the kind whose keyword appears EARLIEST in the remaining
-/// title (in the whole title for a depositary share whose remainder names none)
-/// wins — titles lead with the security's own noun and then describe
+/// title wins (and a depositary share whose remainder names none is preferred when
+/// the parenthetical right after it represents preferred shares) — titles lead with the security's own noun and then describe
 /// what they bundle ("Units, each consisting of one share of Class A Common
 /// Stock and one Warrant") or convert into ("Warrants to purchase Common
 /// Units").</item>
@@ -72,17 +72,17 @@ public static class ListedSecurityClassifier
         ),
     ];
 
-    // A depositary share of the issuer's own security says what it represents, often only inside the
-    // parenthetical that Classify strips; an American or global one is the listed form of ordinary
-    // shares.
+    // A depositary share of the issuer's own security can say what it represents only in the
+    // parenthetical right after it, which Classify strips; an American or global one is the listed
+    // form of ordinary shares.
     private static readonly Regex OwnDepositary = new(
-        @"(?<!\b(?:american|global)\s+)\bdeposit[ao]ry\s+(?:shares?|shrs?)\b",
+        @"(?<!\b(?:american|global)\s+)\bdeposit[ao]ry\s+(?:shares?|shrs?)\s*\((?<represented>[^)]*)\)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled
     );
 
     // Rider language: a parenthetical segment, or a clause from "associated"
     // (optionally led by ", and" / "together with") to the end of the title.
-    // Both describe something attached to the listed security, except what OwnDepositary reads back.
+    // Both describe something attached to the listed security, except the parenthetical OwnDepositary reads.
     private static readonly Regex Parenthetical = new(
         @"\([^)]*\)",
         RegexOptions.CultureInvariant | RegexOptions.Compiled
@@ -155,10 +155,7 @@ public static class ListedSecurityClassifier
         if (string.IsNullOrWhiteSpace(securityTitle))
             return ListedSecurityType.Unknown;
 
-        var title = IncludedRightsTail.Replace(
-            AssociatedTail.Replace(Parenthetical.Replace(securityTitle, " "), " "),
-            " "
-        );
+        var title = WithoutRiderTails(Parenthetical.Replace(securityTitle, " "));
         if (string.IsNullOrWhiteSpace(title))
             return ListedSecurityType.Other;
 
@@ -168,17 +165,41 @@ public static class ListedSecurityClassifier
                 return type;
         }
 
-        var kind = EarliestKind(title);
-        return kind == ListedSecurityType.Other && OwnDepositary.IsMatch(title)
-            ? EarliestKind(securityTitle)
+        var kind = EarliestKind(title, Kinds);
+        return kind == ListedSecurityType.Other && RepresentsPreferred(securityTitle)
+            ? ListedSecurityType.PreferredShares
             : kind;
     }
 
-    private static ListedSecurityType EarliestKind(string title)
+    // Only shares can be represented, so "the right to receive one preferred share" is a preferred,
+    // and a purchase right beside an unnamed share says nothing about that share.
+    private static bool RepresentsPreferred(string securityTitle)
+    {
+        var represented = WithoutRiderTails(
+            OwnDepositary.Match(securityTitle).Groups["represented"].Value
+        );
+        return !PurchaseWrappers.Any(wrapper => wrapper.Pattern.IsMatch(represented))
+            && EarliestKind(
+                represented,
+                Kinds.Where(kind =>
+                    kind.Type
+                        is ListedSecurityType.PreferredShares
+                            or ListedSecurityType.CommonShares
+                )
+            ) == ListedSecurityType.PreferredShares;
+    }
+
+    private static string WithoutRiderTails(string title) =>
+        IncludedRightsTail.Replace(AssociatedTail.Replace(title, " "), " ");
+
+    private static ListedSecurityType EarliestKind(
+        string title,
+        IEnumerable<(Regex Pattern, ListedSecurityType Type)> kinds
+    )
     {
         var best = ListedSecurityType.Other;
         var bestIndex = int.MaxValue;
-        foreach (var (pattern, type) in Kinds)
+        foreach (var (pattern, type) in kinds)
         {
             var match = pattern.Match(title);
             // Strict '<': on the (unobserved) chance two kinds match at the same

@@ -70,8 +70,36 @@ public class ListedSecurityClassifierTests
         "7.625% TRUPs of Cap III (and registrant’s guaranty)",
         ListedSecurityType.PreferredShares
     )]
-    // A depositary share that names nothing stays unplaced, as does an American or global one
-    // whose kind only its parenthetical names; a rider in a parenthetical never names the security.
+    [InlineData(
+        "Depositary Shares (each representing the right to receive one preferred share)",
+        ListedSecurityType.PreferredShares
+    )]
+    // A depositary share that names nothing stays unplaced, as does one over ordinary shares and an
+    // American or global one whose kind only its parenthetical names; a rider never names the security.
+    [InlineData(
+        "Depositary Shares (each representing the right to receive one ordinary share)",
+        ListedSecurityType.Other
+    )]
+    [InlineData(
+        "Depositary Shares (each representing one ordinary share convertible into preferred shares)",
+        ListedSecurityType.Other
+    )]
+    [InlineData(
+        "Depositary Shares, each representing one Class A Share (and associated Preferred Share Purchase Rights)",
+        ListedSecurityType.Other
+    )]
+    [InlineData(
+        "Depositary Shares, each representing one Class A Share (convertible into preferred shares)",
+        ListedSecurityType.Other
+    )]
+    [InlineData(
+        "Depositary Shares (each representing one Class A Share, and associated preferred shares)",
+        ListedSecurityType.Other
+    )]
+    [InlineData(
+        "Depositary Shares (with Preferred Share Purchase Rights)",
+        ListedSecurityType.Other
+    )]
     [InlineData("Depositary Shares", ListedSecurityType.Other)]
     [InlineData(
         "Global Depositary Shares (each representing one preferred share)",
