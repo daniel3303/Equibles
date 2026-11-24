@@ -222,6 +222,23 @@ public class EsefJsonReportContentTests
         Build(report.ToString()).Should().BeEmpty();
     }
 
+    // Issuers tag elements that hold no visible text (an empty paragraph, a lone line break); such a
+    // note has nothing to publish, so the report keeps its other notes instead of failing.
+    [Theory]
+    [InlineData(
+        "<div class=\"Normal\" style=\"min-height: 1.51vw; \"><p id=\"p_1295787\"></p></div>"
+    )]
+    [InlineData("<div class=\"t m0\" style=\"left: 408px;\">  </div><div class=\"t\"><br/></div>")]
+    public void Build_NoteHoldingNoVisibleText_IsSkippedAndTheOthersPublished(string markup)
+    {
+        var report = Report();
+        var notes = (JObject)report["facts"];
+        notes["empty-note"] = notes[NoteId].DeepClone();
+        notes["empty-note"]["value"] = markup;
+
+        Build(report.ToString()).Should().Contain("total committed club facility of 319 mEUR");
+    }
+
     [Fact]
     public void Build_ConverterProducesNothing_FailsSoRecoveryCanRetry()
     {
