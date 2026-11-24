@@ -296,14 +296,14 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetTopHolders_FormerTickerOfARenamedCompany_ReadsTheCompanyUnderItsCurrentLine()
+    public async Task GetTopHolders_RetiredWarrantOfACompanyThatTrades_NeverAnswersWithTheCompanysHolders()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
-            Ticker: "NEWT",
-            Name: "Renamed Co",
+            Ticker: "MAIN",
+            Name: "Main Co",
             Cik: "0000000400"
         );
-        UsEquityDirectory.GetOrAddListing(stock, "OLDT").Active = false;
+        UsEquityDirectory.GetOrAddListing(stock, "MAIN-WT").Active = false;
         var holder = new InstitutionalHolder { Cik = "401", Name = "Loyal Fund" };
         DbContext.AddRange(stock, holder);
         DbContext.Add(MakeHolding(stock, holder, new DateOnly(2024, 12, 31), shares: 700));
@@ -312,9 +312,10 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
 
         await using var verify = Fixture.CreateDbContext();
 
-        var output = await CreateTools(verify).GetTopHolders("OLDT");
+        var output = await CreateTools(verify).GetTopHolders("MAIN-WT");
 
-        output.Should().Contain("Loyal Fund");
+        output.Should().StartWith("Stock 'MAIN-WT' not found.");
+        output.Should().NotContain("Loyal Fund");
     }
 
     private InstitutionalHoldingsTools CreateTools(EquiblesFinancialDbContext db) =>

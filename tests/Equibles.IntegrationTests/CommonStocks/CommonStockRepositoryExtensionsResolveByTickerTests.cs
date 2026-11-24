@@ -333,23 +333,56 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     }
 
     [Fact]
-    public async Task ResolveByTickerForHistory_RenamedCompanyReadsUnderItsCurrentTicker()
+    public async Task ResolveByTickerForHistory_RetiredLineOfACompanyThatStillTradesStaysNotFound()
     {
-        EquityIssuer renamed = Equibles.TestSupport.EquityIssuerSeed.Create(
+        // A former main ticker and a retired warrant look the same once retired, so neither answers.
+        EquityIssuer trading = Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
             Ticker: "NEWT",
-            Name: "Renamed Co",
+            Name: "Still trades",
             Cik: "4701"
         );
-        UsEquityDirectory.GetOrAddListing(renamed, "OLDT").Active = false;
-        _dbContext.Add(renamed);
+        UsEquityDirectory.GetOrAddListing(trading, "OLDT").Active = false;
+        UsEquityDirectory.GetOrAddListing(trading, "NEWT-WT").Active = false;
+        _dbContext.Add(trading);
         await _dbContext.SaveChangesAsync();
 
-        var (stock, readTicker, error) = await _repository.ResolveByTickerForHistory("OLDT");
+        var (former, _, formerError) = await _repository.ResolveByTickerForHistory("OLDT");
+        var (warrant, _, warrantError) = await _repository.ResolveByTickerForHistory("NEWT-WT");
 
-        stock!.Name.Should().Be("Renamed Co");
-        readTicker.Should().Be("NEWT");
-        error.Should().BeNull();
+        former.Should().BeNull();
+        formerError.Should().Be("Stock 'OLDT' not found.");
+        warrant.Should().BeNull();
+        warrantError.Should().Be("Stock 'NEWT-WT' not found.");
+    }
+
+    [Fact]
+    public async Task ResolveByTickerForHistory_DelistedCompanysOtherLinesAndDelistedFundsStayNotFound()
+    {
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GONE",
+            Active: false,
+            Name: "Delisted Co",
+            Cik: "4711"
+        );
+        UsEquityDirectory.GetOrAddListing(company, "GONE-WT").Active = false;
+        EquityIssuer fund = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "SHUT",
+            Active: false,
+            Name: "Closed Fund Trust",
+            Cik: "4712"
+        );
+        fund.Presentation.Listing.WasReferenceListed = true;
+        _dbContext.AddRange(company, fund);
+        await _dbContext.SaveChangesAsync();
+
+        var (warrant, _, _) = await _repository.ResolveByTickerForHistory("GONE-WT");
+        var (closedFund, _, _) = await _repository.ResolveByTickerForHistory("SHUT");
+
+        warrant.Should().BeNull();
+        closedFund.Should().BeNull();
     }
 
     [Fact]
