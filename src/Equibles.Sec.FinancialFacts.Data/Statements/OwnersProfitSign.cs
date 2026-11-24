@@ -200,26 +200,30 @@ public static class OwnersProfitSign
             .Where(period => !kept.Contains(period))
             .ToHashSet();
         var negated = new HashSet<FinancialFact>(ReferenceEqualityComparer.Instance);
-        var read = new List<FinancialFact>();
-        foreach (var fact in lineFacts)
-        {
-            if (
-                dropped.Contains(fact)
-                || IsConsolidatedSpanOfAFiling(fact)
+        var read = lineFacts
+            .Where(fact =>
+                !dropped.Contains(fact)
+                && !(
+                    IsConsolidatedSpanOfAFiling(fact)
                     && withheld.Contains((fact.PeriodStart, fact.PeriodEnd, fact.Unit))
+                )
             )
-                continue;
-            if (!signs.TryGetValue(fact, out var sign) || sign != Sign.Opposite)
-            {
-                read.Add(fact);
-                continue;
-            }
-            var copy = fact.Restamped(fact.FiscalYear, fact.FiscalPeriod);
-            copy.Value = -fact.Value;
-            negated.Add(copy);
-            read.Add(copy);
-        }
+            .Select(fact =>
+                signs.TryGetValue(fact, out var sign) && sign == Sign.Opposite
+                    ? Negated(fact, negated)
+                    : fact
+            )
+            .ToList();
         return new Reading(read, negated, withheld);
+    }
+
+    // A negated copy of `fact`, recorded in `negated`; the stored fact is never rewritten.
+    private static FinancialFact Negated(FinancialFact fact, HashSet<FinancialFact> negated)
+    {
+        var copy = fact.Restamped(fact.FiscalYear, fact.FiscalPeriod);
+        copy.Value = -fact.Value;
+        negated.Add(copy);
+        return copy;
     }
 
     /// <summary>A reading that changed nothing.</summary>
