@@ -17,4 +17,11 @@ public enum FinancialFactSource
 
     [Display(Name = "Exchange disclosure")]
     ExchangeDisclosure = 2,
+
+    /// <summary>
+    /// A figure a host read from a filing's own statement table, which carries no XBRL for it;
+    /// it fills only lines and periods no structured source states.
+    /// </summary>
+    [Display(Name = "Filing statement")]
+    ReportedStatement = 3,
 }
