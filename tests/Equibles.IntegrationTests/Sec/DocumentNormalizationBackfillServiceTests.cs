@@ -22,6 +22,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ISecEdgarClient _secEdgarClient = Substitute.For<ISecEdgarClient>();
     private readonly IFileManager _fileManager = Substitute.For<IFileManager>();
+    private readonly EsefVisualReportTestHandler _visualReports = new();
     private readonly IDocumentPersistenceService _persistenceService =
         Substitute.For<IDocumentPersistenceService>();
     private readonly EquityIssuer _company;
@@ -408,6 +409,81 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(default, default, default);
     }
 
+    // Reports before 2022 tag no notes, so a JSON report without them takes the text of the visual report
+    // the index states beside its JSON address.
+    [Fact]
+    public async Task Backfill_JsonWithoutNotes_TakesItsVisualReportText()
+    {
+        var document = SeedJsonWithoutNotes("2549001EPXH6NK7I2R78");
+        _visualReports.StateFiling(
+            "2549001EPXH6NK7I2R78",
+            "2025-12-31",
+            "/2549001EPXH6NK7I2R78/2025-12-31/ESEF/BE/0/report.json",
+            "/2549001EPXH6NK7I2R78/2025-12-31/ESEF/BE/0/report/reports/report.xhtml",
+            EsefVisualReportTestHandler.Report(
+                "2549001EPXH6NK7I2R78",
+                "2025-12-31",
+                "Margins widened in 2025."
+            )
+        );
+        byte[] stored = null;
+        await _persistenceService.ReplaceContent(
+            document,
+            Arg.Do<byte[]>(content => stored = content),
+            Arg.Any<CancellationToken>()
+        );
+
+        var result = await BuildSut().Backfill(1);
+
+        result.Replaced.Should().Be(1);
+        Encoding.UTF8.GetString(stored).Should().Contain("Margins widened in 2025.");
+        document
+            .NormalizedContentVersion.Should()
+            .Be(Document.ContentBuilderVersion(DocumentType.EsefAnnualReport));
+    }
+
+    // Each visual report is a large download over the server's one link, so a batch takes only a few.
+    [Fact]
+    public async Task Backfill_ManyJsonReportsWithoutNotes_TakesOnlyTheVisualReportsABatchAllows()
+    {
+        for (
+            var index = 0;
+            index < DocumentNormalizationBackfillService.MaxVisualReportsPerBatch + 2;
+            index++
+        )
+            SeedJsonWithoutNotes("2549001EPXH6NK7I2R78");
+
+        var result = await BuildSut().Backfill(16);
+
+        result.Processed.Should().Be(DocumentNormalizationBackfillService.MaxVisualReportsPerBatch);
+    }
+
+    private Document SeedJsonWithoutNotes(string lei)
+    {
+        var document = SeedEsef();
+        document.XbrlType = XbrlType.JsonXbrl;
+        document.NormalizedContentVersion = 8;
+        document.Content.Size = 0;
+        document.SourceUrl = $"https://filings.xbrl.org/{lei}/2025-12-31/ESEF/BE/0/report.json";
+        document.ReportingForDate = new DateOnly(2025, 12, 31);
+        _company.LegalEntityIdentifier = lei;
+        var json =
+            "{\"documentInfo\":{\"documentType\":\"https://xbrl.org/2021/xbrl-json\",\"namespaces\":{"
+            + "\"ifrs-full\":\"https://xbrl.ifrs.org/taxonomy/2024-03-27/ifrs-full\","
+            + "\"scheme\":\"http://standards.iso.org/iso/17442\",\"iso4217\":\"http://www.xbrl.org/2003/iso4217\"},"
+            + "\"taxonomy\":[\"https://example.test/taxonomy.xsd\"]},\"facts\":{\"assets\":{\"value\":\"100\","
+            + $"\"dimensions\":{{\"concept\":\"ifrs-full:Assets\",\"entity\":\"scheme:{lei}\","
+            + "\"period\":\"2026-01-01T00:00:00\",\"unit\":\"iso4217:EUR\"}}}}";
+        var original = GzipCompressor.Compress(Encoding.UTF8.GetBytes(json));
+        document.XbrlContent.FileContent.Bytes = original;
+        _dbContext.SaveChanges();
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(original, writable: false));
+        _fileManager.GetContent(document.Content).Returns(Array.Empty<byte>());
+        return document;
+    }
+
     [Theory]
     [InlineData("no-notes", false)]
     [InlineData("malformed", true)]
@@ -521,13 +597,13 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData("EsefAnnualReport", 20, 4, true)]
     [InlineData("EsefAnnualReport", 0, 5, true)]
     [InlineData("EsefAnnualReport", 20, 5, true)]
-    // An empty report below generation 8 is built again: its text is now written past the
-    // conversion limit, a byte-order mark or not. A readable one at 6 or 7 stays settled.
+    // An empty report below generation 9 is built again: its text is now written past the conversion
+    // limit, a byte-order mark or not, and a JSON one reads its visual report. A readable one stays settled.
     [InlineData("EsefAnnualReport", 0, 6, true)]
-    [InlineData("EsefAnnualReport", 0, 7, true)]
-    [InlineData("EsefAnnualReport", 0, 8, false)]
+    [InlineData("EsefAnnualReport", 0, 8, true)]
+    [InlineData("EsefAnnualReport", 0, 9, false)]
     [InlineData("EsefAnnualReport", 20, 6, false)]
-    [InlineData("EsefAnnualReport", 20, 7, false)]
+    [InlineData("EsefAnnualReport", 20, 8, false)]
     [InlineData("EsefReport", 20, 6, false)]
     [InlineData("TenK", 0, 1, false)]
     public void Pending_InlineEsefReplay_ReopensStaleTextButKeepsCurrentDocumentsSettled(
@@ -628,10 +704,10 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     [InlineData(4, 0, true)]
     [InlineData(5, 0, true)]
     [InlineData(6, 0, true)]
-    [InlineData(7, 0, true)]
-    [InlineData(8, 0, false)]
+    [InlineData(8, 0, true)]
+    [InlineData(9, 0, false)]
     [InlineData(6, 20, false)]
-    [InlineData(7, 20, false)]
+    [InlineData(8, 20, false)]
     public void Pending_JsonRecovery_RemainsLimitedToPriorEmptyReports(
         int version,
         long size,
@@ -939,6 +1015,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             new SecDocumentHtmlToMarkdownConverter(),
             _fileManager,
             _persistenceService,
+            _visualReports.Service(),
             Substitute.For<ILogger<DocumentNormalizationBackfillService>>()
         );
 
