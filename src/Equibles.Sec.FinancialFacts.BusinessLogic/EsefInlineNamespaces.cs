@@ -41,8 +41,6 @@ internal static class EsefInlineNamespaces
                         continue;
                     var prefix = reader.Prefix == "xmlns" ? reader.LocalName : "";
                     var value = reader.Value;
-                    if (!HasSupportedPrefix(prefix, value))
-                        return false;
                     if (prefix.Length == 0)
                         continue;
                     if (
@@ -53,6 +51,8 @@ internal static class EsefInlineNamespaces
                     bindings[prefix] = value;
                 }
                 reader.MoveToElement();
+                if (!HasSupportedPrefix(reader.Prefix, reader.NamespaceURI))
+                    return false;
                 // The shared parser matches element names in any case.
                 if (
                     reader.NamespaceURI == "http://www.xbrl.org/2003/instance"
@@ -154,9 +154,11 @@ internal static class EsefInlineNamespaces
         || (name.Length == 3 && name.All(char.IsAsciiLetterUpper))
         || CurrencyCodes.Contains(name);
 
-    // The HTML parser identifies these elements by their literal prefixes. An alias
-    // could hide a segment/scenario qualifier and turn it into consolidated evidence.
-    // A default inline binding only wraps text blocks: unprefixed numeric facts are refused.
+    // The HTML parser identifies these elements by their literal prefixes, so an element
+    // reached through an alias could hide a segment/scenario qualifier and turn it into
+    // consolidated evidence. An alias that no element uses is harmless: measure text resolves
+    // through declared namespaces. A default inline binding only wraps text blocks:
+    // unprefixed numeric facts are refused.
     private static bool HasSupportedPrefix(string prefix, string value)
     {
         var expected = value switch

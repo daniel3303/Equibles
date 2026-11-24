@@ -191,6 +191,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Read spelled-out ADS ratios above twenty ("sixty", "thirty-five", "one hundred and twenty") when restating a per-ADS price on an ordinary-share Form 4 row; a multi-word number is no longer read as its leading word. Insider parser version 11 re-derives stored rows from cached filings.
 - Recover issuer-owned, current-period IFRS note excerpts from retained ESEF JSON reports without changing original envelopes or structured facts; excerpt text does not represent the complete visual report.
 - Recover searchable text from oversized ESEF reports by removing unused layout styles from the retrieval copy while preserving complete text and original reports. Retry previously empty retained reports through the existing normalization backfill.
+- Read an ESEF report that declares a second prefix for a structural XBRL namespace. `EsefInlineNamespaces` refused any report declaring, say, `xmlns:xbrl` beside `xmlns:xbrli` for the instance namespace, even when no element used it, so a UK annual report whose only use of the alias is `xbrl:shares` measure text published no facts. An alias now refuses the report only when an element is reached through it, the case where the parser's literal names would miss a segment, scenario or dimension member; measure text already resolves through declared namespaces.
 
 ### Added
 
