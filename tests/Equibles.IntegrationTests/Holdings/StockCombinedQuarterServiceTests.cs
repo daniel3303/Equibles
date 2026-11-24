@@ -193,4 +193,36 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
+
+    [Theory]
+    [InlineData("2026-05-15", "2026-03-31")]
+    [InlineData("2026-01-15", "2026-06-30")]
+    public async Task Resolve_DelistedCompany_AnchorsAtItsLastQuarterBeforeTheDelisting(
+        string delistedOn,
+        string expectedAnchor
+    )
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Active: false,
+            DelistedOn: DateOnly.Parse(delistedOn),
+            Name: "Delisted Co"
+        );
+        var early = new InstitutionalHolder { Cik = "11", Name = "Early Fund" };
+        var straggler = new InstitutionalHolder { Cik = "12", Name = "Straggler Fund" };
+        DbContext.AddRange(stock, early, straggler);
+        DbContext.Add(MakeHolding(stock, early, Previous, shares: 100, value: 1_000));
+        DbContext.Add(MakeHolding(stock, straggler, Current, shares: 5, value: 50));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var service = new StockCombinedQuarterService(
+            new InstitutionalHoldingRepository(DbContext),
+            new StockSplitRepository(DbContext)
+        );
+
+        // With no quarter on or before the delisting (the second case), the newest stays.
+        var anchor = await service.Resolve(stock, AfterWindow);
+
+        anchor.ReportDate.Should().Be(DateOnly.Parse(expectedAnchor));
+    }
 }

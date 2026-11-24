@@ -312,6 +312,74 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveByTickerForHistory_DelistedCompanyReadsUnderItsOwnTicker()
+    {
+        _dbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "GONE",
+                Active: false,
+                Name: "Delisted Co",
+                Cik: "4601"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, readTicker, error) = await _repository.ResolveByTickerForHistory("gone");
+
+        stock!.Name.Should().Be("Delisted Co");
+        SecondaryTickerPolicy.ResolveListedTicker(stock, readTicker).Should().Be("GONE");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerForHistory_RenamedCompanyReadsUnderItsCurrentTicker()
+    {
+        EquityIssuer renamed = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NEWT",
+            Name: "Renamed Co",
+            Cik: "4701"
+        );
+        UsEquityDirectory.GetOrAddListing(renamed, "OLDT").Active = false;
+        _dbContext.Add(renamed);
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, readTicker, error) = await _repository.ResolveByTickerForHistory("OLDT");
+
+        stock!.Name.Should().Be("Renamed Co");
+        readTicker.Should().Be("NEWT");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveByTickerForHistory_TradedTickerKeepsTheRequestAndItsCurrentOwner()
+    {
+        _dbContext.AddRange(
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "REUSE",
+                Active: false,
+                Name: "Former owner",
+                Cik: "4801"
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "REUSE",
+                Name: "Current owner",
+                Cik: "4802"
+            )
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var (stock, readTicker, error) = await _repository.ResolveByTickerForHistory("REUSE");
+
+        stock!.Name.Should().Be("Current owner");
+        readTicker.Should().Be("REUSE");
+        error.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetByCikTolerant_UnpaddedInputResolvesPaddedPrimaryCik()
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(

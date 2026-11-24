@@ -223,6 +223,27 @@ public static class CommonStockRepositoryExtensions
         return (null, NotFound(ticker));
     }
 
+    /// <summary>
+    /// <see cref="ResolveByTickerIncludingDelisted"/> plus the ticker a listing-scoped read takes: the
+    /// request for a ticker that trades or a delisted company's own ticker, and the company's current
+    /// ticker after a ticker change, so a renamed company reads its current line rather than none.
+    /// </summary>
+    public static async Task<(
+        EquityIssuer Stock,
+        string ReadTicker,
+        string Error
+    )> ResolveByTickerForHistory(this EquityIssuerRepository repository, string ticker)
+    {
+        var (stock, error) = await repository.ResolveByTicker(ticker);
+        if (stock != null)
+            return (stock, ticker, null);
+        var (former, formerError) = await repository.ResolveByTickerIncludingDelisted(ticker);
+        if (former == null)
+            return (null, null, formerError ?? error);
+        var renamed = former.Presentation?.Listing is { MarketCountryCode: "US", Active: true };
+        return (former, renamed ? former.Presentation.Listing.Ticker : ticker, null);
+    }
+
     internal static string NotFound(string ticker) => $"Stock '{ticker}' not found.";
 
     private static string Ambiguous(string ticker) => $"Listed security '{ticker}' is ambiguous.";

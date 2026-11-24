@@ -67,10 +67,11 @@ public class HolderSignalsTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
-                var view = await _signalsReader.Read(stock, ticker, maxHolders);
+                var view = await _signalsReader.Read(stock, readTicker, maxHolders);
                 var label = Label(stock, view.ListedTicker);
                 return view.Unavailable != null
                     ? $"{label}: {view.Unavailable}"
@@ -101,18 +102,19 @@ public class HolderSignalsTools
                 var normalized = (sort ?? "peervalue").Trim().ToLowerInvariant();
                 if (!TargetSorts.Contains(normalized))
                     return McpOutput.InvalidArgument("sort", sort, "peerValue, peerWeight");
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
                 var targets = await _targetsReader.Read(
                     stock,
-                    ticker,
+                    readTicker,
                     normalized == "peerweight"
                         ? StockHolderTargetSort.PeerWeight
                         : StockHolderTargetSort.PeerValue,
                     McpLimit.Clamp(maxResults)
                 );
-                var label = Label(stock, HolderSignalsReader.SignalsListing(stock, ticker));
+                var label = Label(stock, HolderSignalsReader.SignalsListing(stock, readTicker));
                 return targets.Unavailable != null
                     ? $"{label}: {targets.Unavailable}"
                     : RenderTargets(label, targets);
