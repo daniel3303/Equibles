@@ -28,7 +28,12 @@ public class DocumentNormalizationBackfillService
     private readonly ISecDocumentHtmlToMarkdownConverter _converter;
     private readonly IFileManager _fileManager;
     private readonly IDocumentPersistenceService _persistenceService;
+    private readonly EsefVisualReportText _visualReports;
     private readonly ILogger<DocumentNormalizationBackfillService> _logger;
+
+    // A JSON report pending here has no text, so building it downloads its visual report, which runs to
+    // 160 MB from a public host over the server's one wireless link; a few a batch keeps that link usable.
+    internal const int MaxVisualReportsPerBatch = 4;
 
     public DocumentNormalizationBackfillService(
         DocumentRepository documentRepository,
@@ -37,6 +42,7 @@ public class DocumentNormalizationBackfillService
         ISecDocumentHtmlToMarkdownConverter converter,
         IFileManager fileManager,
         IDocumentPersistenceService persistenceService,
+        EsefVisualReportText visualReports,
         ILogger<DocumentNormalizationBackfillService> logger
     )
     {
@@ -46,6 +52,7 @@ public class DocumentNormalizationBackfillService
         _converter = converter;
         _fileManager = fileManager;
         _persistenceService = persistenceService;
+        _visualReports = visualReports;
         _logger = logger;
     }
 
@@ -96,12 +103,33 @@ public class DocumentNormalizationBackfillService
         var stagedIds = new List<Guid>();
         if (remaining > 0)
         {
-            stagedIds = await _documentRepository
+            var ordered = _documentRepository
                 .GetOrderedPendingNormalizedContent(includeAllDocumentTypes)
-                .Where(d => !priorityIds.Contains(d.Id))
-                .Take(remaining)
+                .Where(d => !priorityIds.Contains(d.Id));
+            stagedIds = await ordered
+                .Where(d =>
+                    d.XbrlType == XbrlType.JsonXbrl
+                    && (
+                        d.DocumentType == DocumentType.EsefAnnualReport
+                        || d.DocumentType == DocumentType.EsefReport
+                    )
+                )
+                .Take(Math.Min(remaining, MaxVisualReportsPerBatch))
                 .Select(d => d.Id)
                 .ToListAsync(cancellationToken);
+            stagedIds.AddRange(
+                await ordered
+                    .Where(d =>
+                        d.XbrlType != XbrlType.JsonXbrl
+                        || (
+                            d.DocumentType != DocumentType.EsefAnnualReport
+                            && d.DocumentType != DocumentType.EsefReport
+                        )
+                    )
+                    .Take(remaining - stagedIds.Count)
+                    .Select(d => d.Id)
+                    .ToListAsync(cancellationToken)
+            );
         }
 
         var batchIds = priorityIds.Concat(stagedIds);
@@ -316,7 +344,17 @@ public class DocumentNormalizationBackfillService
                 _normalizer,
                 _converter
             );
-            return (notes, notes.Length == 0);
+            if (notes.Length > 0)
+                return (notes, false);
+            return (
+                await _visualReports.FromJsonAddress(
+                    document.Issuer.LegalEntityIdentifier,
+                    document.ReportingForDate,
+                    document.SourceUrl,
+                    cancellationToken
+                ),
+                true
+            );
         }
         var content = EsefReportContent.Build(html, _normalizer, _converter, out var pastLimit);
         return (content, content.Length == 0 && pastLimit);

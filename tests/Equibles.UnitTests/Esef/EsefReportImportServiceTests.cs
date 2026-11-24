@@ -849,14 +849,35 @@ public class EsefReportImportServiceTests
         saved.Xbrl.Type.Should().Be(XbrlType.JsonXbrl);
         saved.Xbrl.RawBytes.Should().Equal(System.Text.Encoding.UTF8.GetBytes(json));
         saved.SourceUrl.Should().Be("https://filings.xbrl.org" + LatestFrenchJson);
+        // The JSON carries no notes, so its visual report is asked for its text; at 200 MB it is past
+        // that ceiling too, so the report is stored without text.
         saved.Content.Should().BeEmpty();
         saved.AccessionNumber.Should().Be("529900S21EQ1BO4ESM68-20251231-FR");
         harness
             .Handler.Requests.Select(uri => uri.AbsolutePath)
             .Should()
-            .Contain(LatestFrenchJson)
-            .And.NotContain(LatestFrenchReport);
+            .ContainInOrder(LatestFrenchJson, LatestFrenchReport);
         (await harness.Context.Set<EsefOversizedReport>().CountAsync()).Should().Be(0);
+    }
+
+    // Reports before 2022 tag no notes, so a JSON report refused as XHTML at the extraction ceiling takes its
+    // text from the visual report, which the text ceiling admits.
+    [Fact]
+    public async Task Import_JsonWithoutNotes_StoresItsVisualReportText()
+    {
+        var harness = await Harness.Create(Issuer("FR"), jsonReport: JsonReport());
+        harness.Handler.OverstatedContentLength = 60_000_000;
+        harness.Handler.OverstatedPaths.Add(LatestFrenchReport);
+        await harness.Service.Import(CancellationToken.None);
+        harness.Saved.Should().BeEmpty();
+        harness.Handler.OverstatedPaths.Clear();
+        harness.Handler.OverstatedContentLength = null;
+
+        await harness.Service.Import(CancellationToken.None);
+
+        var saved = harness.Saved.Should().ContainSingle().Subject;
+        saved.Xbrl.Type.Should().Be(XbrlType.JsonXbrl);
+        System.Text.Encoding.UTF8.GetString(saved.Content).Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -969,12 +990,17 @@ public class EsefReportImportServiceTests
         await harness.Service.Import(CancellationToken.None);
 
         harness.Saved.Should().ContainSingle().Which.SourceUrl.Should().EndWith(changedJson);
+        // The refused XHTML is not captured again; the JSON carries no notes, so it is read once afterwards,
+        // for its text alone.
         harness
             .Handler.Requests.Select(uri => uri.AbsolutePath)
             .Should()
-            .Contain(changedJson)
-            .And.NotContain(LatestFrenchReport)
+            .ContainInOrder(changedJson, LatestFrenchReport)
             .And.NotContain(LatestFrenchJson);
+        harness
+            .Handler.Requests.Count(uri => uri.AbsolutePath == LatestFrenchReport)
+            .Should()
+            .Be(1);
     }
 
     [Fact]
@@ -1236,6 +1262,12 @@ public class EsefReportImportServiceTests
                 new EquityIdentityManager(issuers, Substitute.For<IBus>()),
                 new SecDocumentHtmlNormalizer(),
                 new SecDocumentHtmlToMarkdownConverter(),
+                new EsefVisualReportText(
+                    client,
+                    new SecDocumentHtmlNormalizer(),
+                    new SecDocumentHtmlToMarkdownConverter(),
+                    NullLogger<EsefVisualReportText>.Instance
+                ),
                 Options.Create(
                     new EsefReportScraperOptions { MaxCapturesPerCycle = capturesPerCycle }
                 ),

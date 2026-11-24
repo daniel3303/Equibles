@@ -467,6 +467,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
             new SecDocumentHtmlToMarkdownConverter(),
             fileManager,
             persistenceService ?? CreatePersistence(fileManager),
+            new EsefVisualReportTestHandler().Service(),
             Substitute.For<ILogger<DocumentNormalizationBackfillService>>()
         );
     }
