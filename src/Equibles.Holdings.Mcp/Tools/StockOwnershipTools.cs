@@ -98,7 +98,8 @@ public class StockOwnershipTools
                 if (view == "ultimate" && (source != "all" || typeFilter != null))
                     return "view=ultimate groups every summed holder, so it takes no source or holderTypes filter.";
 
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
                 maxResults = McpLimit.Clamp(maxResults);
@@ -108,7 +109,7 @@ public class StockOwnershipTools
                     && source == "all"
                     && typeFilter == null
                     && offset + maxResults <= StockOwnershipReader.CachedDefaultRows;
-                var read = await _ownershipReader.Read(stock, ticker, complete: !cachedEnough);
+                var read = await _ownershipReader.Read(stock, readTicker, complete: !cachedEnough);
                 var label = ListingLabel(stock, read.ListedTicker);
                 if (
                     read.Summary.Institutional.Holders == 0
@@ -147,10 +148,15 @@ public class StockOwnershipTools
                 view = (view ?? "default").Trim().ToLowerInvariant();
                 if (!SummaryViews.Contains(view))
                     return McpOutput.InvalidArgument("view", view, string.Join(", ", SummaryViews));
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
-                var read = await _ownershipReader.Read(stock, ticker, complete: view == "ultimate");
+                var read = await _ownershipReader.Read(
+                    stock,
+                    readTicker,
+                    complete: view == "ultimate"
+                );
                 var label = ListingLabel(stock, read.ListedTicker);
                 if (read.Summary.Institutional.Holders == 0 && read.DefaultRowCount == 0)
                     return $"No holder disclosures (13F, 13D, 13G, Forms 3 to 5 or N-PORT) found for {label}.";
@@ -180,14 +186,15 @@ public class StockOwnershipTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                var (stock, readTicker, stockError) =
+                    await _commonStockRepository.ResolveByTickerForHistory(ticker);
                 if (stockError != null)
                     return stockError;
                 var listedTicker =
-                    SecondaryTickerPolicy.ResolveListedTicker(stock, ticker)
+                    SecondaryTickerPolicy.ResolveListedTicker(stock, readTicker)
                     ?? stock.Presentation.Listing.Ticker;
                 var label = ListingLabel(stock, listedTicker);
-                var blocks = await _beneficialOwnershipReader.Read(stock, ticker);
+                var blocks = await _beneficialOwnershipReader.Read(stock, readTicker);
                 if (blocks.Count == 0)
                     return $"No Schedule 13D or 13G filings found for {label}.";
                 maxResults = McpLimit.Clamp(maxResults);
