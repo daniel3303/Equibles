@@ -23,8 +23,9 @@ public static class ListingSymbolStartRule
     /// <summary>
     /// The first date of the run that follows the last earlier run another issuer's filings
     /// account for, or null when no earlier run is another issuer's. A run is another issuer's
-    /// only when that issuer stated the symbol within the run's dates and the listing's own issuer
-    /// stated it no earlier than the run's end; the run the listing trades in now is never one.
+    /// only when that issuer stated the symbol within the run's dates, stopped stating it before the
+    /// listing's current run began, and the listing's own issuer stated it no earlier than the run's
+    /// end; the run the listing trades in now is never one.
     /// </summary>
     /// <param name="dates">The listing's stored dates under its current symbol, ascending.</param>
     public static DateOnly? StartsOn(
@@ -41,7 +42,16 @@ public static class ListingSymbolStartRule
             .Where(claim => claim.EquityIssuerId == ownIssuerId)
             .Select(claim => (DateOnly?)claim.FirstFiled)
             .Min();
-        var others = claims.Where(claim => claim.EquityIssuerId != ownIssuerId).ToList();
+        // An issuer still stating the symbol after the listing's current run began holds a security
+        // trading today: a co-registrant of the same filing, or a line whose symbol drops to the same
+        // separator-free spelling (a preferred INN-PF beside an OTC INNPF); it never held it before.
+        var currentRun = runs[^1].Start.DayNumber;
+        var others = claims
+            .Where(claim =>
+                claim.EquityIssuerId != ownIssuerId
+                && claim.LastFiled.DayNumber - StatementSlackDays < currentRun
+            )
+            .ToList();
         // An earlier run is another issuer's when that issuer stated the symbol within the run's
         // dates and the listing's own issuer had not stated it by the run's end.
         var lastEarlierHolder = Enumerable
