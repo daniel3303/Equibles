@@ -54,7 +54,8 @@ public static class BankTopLine
     /// <paramref name="interestExpense"/>, which proves revenue before interest expense in the
     /// newest period alone. Each fiscal year keeps one
     /// measure, so a derived fourth quarter (the year less its first three quarters) never subtracts
-    /// one measure from the other.
+    /// one measure from the other. Revenue figures their own filing shows to be slices of the top
+    /// line drop first (<see cref="RevenueSlices"/>).
     /// </summary>
     public static (List<FinancialFact> Facts, Dictionary<Guid, int> Priority) Fold(
         IReadOnlyCollection<FinancialFact> revenue,
@@ -64,6 +65,8 @@ public static class BankTopLine
         IReadOnlyCollection<FinancialFact> interestExpense = null
     )
     {
+        // Every revenue read passes here, so a figure its own filing shows is a slice leaves first.
+        revenue = RevenueSlices.Without(revenue);
         var priority = new Dictionary<Guid, int>(revenuePriority);
         var sums = Sums(netInterestIncome, noninterestIncome);
         if (sums.Count == 0)
