@@ -127,4 +127,20 @@ public class ListingSymbolStartRuleTests
 
         start.Should().BeNull();
     }
+
+    [Fact]
+    public void StartsOn_ClaimFiledOnTheEarliestDate_IsReadWithoutOverflow()
+    {
+        // A filing stored with an unset date sits at the calendar's first day; the slack must not
+        // step past it.
+        var dates = Rows(Run("2020-01-02", "2020-07-02"), Run("2026-05-28", "2026-11-24"));
+
+        var start = StartsOn(
+            dates,
+            Own,
+            [new SymbolClaim(Earlier, DateOnly.MinValue, DateOnly.MinValue)]
+        );
+
+        start.Should().BeNull();
+    }
 }

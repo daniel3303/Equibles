@@ -49,8 +49,8 @@ public static class ListingSymbolStartRule
             .Where(index =>
                 !(ownFirst <= runs[index].End)
                 && others.Any(claim =>
-                    claim.FirstFiled.AddDays(-StatementSlackDays) <= runs[index].End
-                    && claim.LastFiled.AddDays(StatementSlackDays) >= runs[index].Start
+                    claim.FirstFiled.DayNumber - StatementSlackDays <= runs[index].End.DayNumber
+                    && claim.LastFiled.DayNumber + StatementSlackDays >= runs[index].Start.DayNumber
                 )
             )
             .DefaultIfEmpty(-1)

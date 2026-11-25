@@ -23,7 +23,7 @@ public class FinraScraperWorker : BaseScraperWorker
     private bool _pollWaitRequested;
 
     // The symbol starts follow SEC cover pages and the stored daily rows, both of which change at
-    // most daily; null until the first cycle of this process refreshes them.
+    // most daily; null until the first cycle of this process tries a refresh.
     private static readonly TimeSpan SymbolStartRefreshInterval = TimeSpan.FromHours(24);
     private DateTimeOffset? _symbolStartsRefreshedAt;
 
@@ -65,8 +65,6 @@ public class FinraScraperWorker : BaseScraperWorker
     {
         _pollWaitRequested = false;
 
-        await RefreshSymbolStarts(stoppingToken);
-
         // Short volume is always attempted first — its importer scans [floor, today] and
         // stores nothing for a day FINRA hasn't published, so an unpublished day leaves the
         // DB short of today's session and ShortVolumeOutstanding stays true.
@@ -104,11 +102,13 @@ public class FinraScraperWorker : BaseScraperWorker
             );
             _pollWaitRequested = true;
             RequestRetrySoon();
+            await RefreshSymbolStarts(stoppingToken);
             // Skip the slow-cadence import while minute-polling so we don't hammer it.
             return;
         }
 
         await RunOffExchangeVolumeImport(stoppingToken);
+        await RefreshSymbolStarts(stoppingToken);
     }
 
     // What the poll is still waiting on, for the log line. shortInterestOutstanding implies a
@@ -127,21 +127,21 @@ public class FinraScraperWorker : BaseScraperWorker
         return string.Join(" and ", pending);
     }
 
-    // Before the imports, so a symbol a new holder took since the last refresh is already bounded
-    // when its earlier holder's files are next read. A database failure keeps the recorded starts and
-    // never holds back the imports.
+    // After the imports, so no refresh failure holds one back; the next cycle's imports read the new
+    // starts. The attempt is stamped first, so a refresh that keeps failing retries daily, not every
+    // cycle, and a database failure keeps the recorded starts.
     private async Task RefreshSymbolStarts(CancellationToken stoppingToken)
     {
         var now = UtcNow();
         if (now - _symbolStartsRefreshedAt < SymbolStartRefreshInterval)
             return;
 
+        _symbolStartsRefreshedAt = now;
         try
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<ListingSymbolStartService>();
             var count = await service.Refresh(stoppingToken);
-            _symbolStartsRefreshedAt = now;
             Logger.LogInformation("{Count} listings carry a recorded symbol start", count);
         }
         catch (Exception ex)
