@@ -210,12 +210,19 @@ public static class RFileStatementParser
         }
 
         var columns = new List<ReportedStatementColumn>();
-        var dateRowCells = dateRow.QuerySelectorAll("th.th").ToList();
-        var periodCellIndexes = Enumerable
-            .Range(0, dateRowCells.Count)
-            .Where(i => !IsFootnoteCell(dateRowCells[i]))
-            .ToList();
-        var dateCells = periodCellIndexes.Select(i => dateRowCells[i]).ToList();
+        // A date cell's duration sits at its table column, which counts the colspan of the cells
+        // before it: a header without a footnote over footnoted values spans its td.fn column too.
+        var periodCells = new List<(IElement Cell, int Start)>();
+        var tableColumn = 0;
+        foreach (var cell in dateRow.QuerySelectorAll("th.th"))
+        {
+            if (!IsFootnoteCell(cell))
+            {
+                periodCells.Add((cell, tableColumn));
+            }
+            tableColumn += ParseSpan(cell.GetAttribute("colspan"));
+        }
+        var dateCells = periodCells.Select(period => period.Cell).ToList();
         var titleCurrencies = ParseCurrencies(scaleNote);
         var unambiguousStatementCurrency = titleCurrencies.Count == 1 ? titleCurrencies[0] : null;
         var titleSign =
@@ -253,8 +260,8 @@ public static class RFileStatementParser
                         ? null
                         : ParseColumnPerShareScale(header, unit, units, scaleNote),
                     Duration =
-                        periodCellIndexes[i] < durationByColumn.Count
-                            ? durationByColumn[periodCellIndexes[i]]
+                        periodCells[i].Start < durationByColumn.Count
+                            ? durationByColumn[periodCells[i].Start]
                             : null,
                     IsInstant = !hasDurations,
                 }
