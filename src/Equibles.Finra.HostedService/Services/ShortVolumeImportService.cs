@@ -133,10 +133,21 @@ public class ShortVolumeImportService
             scopeKey
         );
 
+        // The map holds today's symbols, but a recycled symbol named another security before its
+        // listing's recorded start; those dates skip it so the earlier holder's volume is never
+        // filed under the listing that holds the symbol now. Kept out of the scope hash: the
+        // starts change no listing identity, and the consumers rebuild the hash without them.
+        var symbolStarts = await _tickerMapService.LoadSymbolStarts(cancellationToken);
         foreach (var date in dates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ImportSingleDay(date, tickerMap, scopeKey, now.UtcDateTime, cancellationToken);
+            await ImportSingleDay(
+                date,
+                symbolStarts.Admitted(tickerMap, date),
+                scopeKey,
+                now.UtcDateTime,
+                cancellationToken
+            );
         }
     }
 

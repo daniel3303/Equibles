@@ -188,6 +188,19 @@ public class TickerMapService
     }
 
     /// <summary>
+    /// The recorded first dates each symbol names its listing; a map built from today's tickers
+    /// admits a listing on an earlier date only through <see cref="ListingSymbolStarts.Admitted"/>.
+    /// </summary>
+    public async Task<ListingSymbolStarts> LoadSymbolStarts(CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+        return new ListingSymbolStarts(
+            await repository.GetSymbolStarts().AsNoTracking().ToListAsync(cancellationToken)
+        );
+    }
+
+    /// <summary>
     /// The other directory-listed US lines of current filers, per
     /// <see cref="SecondaryListingClaims"/>; <paramref name="claimedTickers"/> are the keys the
     /// caller's map already holds.

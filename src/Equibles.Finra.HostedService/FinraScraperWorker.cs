@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Equibles.Core.Calendars;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -20,6 +21,11 @@ public class FinraScraperWorker : BaseScraperWorker
     // wait uses the short poll interval rather than the idle wait-until-next-window. Reset
     // at the top of every DoWork, mirroring the base class resetting its own retry flag.
     private bool _pollWaitRequested;
+
+    // The symbol starts follow SEC cover pages and the stored daily rows, both of which change at
+    // most daily; null until the first cycle of this process tries a refresh.
+    private static readonly TimeSpan SymbolStartRefreshInterval = TimeSpan.FromHours(24);
+    private DateTimeOffset? _symbolStartsRefreshedAt;
 
     protected override string WorkerName => "FINRA scraper";
     protected override TimeSpan SleepInterval { get; }
@@ -96,11 +102,13 @@ public class FinraScraperWorker : BaseScraperWorker
             );
             _pollWaitRequested = true;
             RequestRetrySoon();
+            await RefreshSymbolStarts(stoppingToken);
             // Skip the slow-cadence import while minute-polling so we don't hammer it.
             return;
         }
 
         await RunOffExchangeVolumeImport(stoppingToken);
+        await RefreshSymbolStarts(stoppingToken);
     }
 
     // What the poll is still waiting on, for the log line. shortInterestOutstanding implies a
@@ -117,6 +125,39 @@ public class FinraScraperWorker : BaseScraperWorker
         if (shortInterestOutstanding)
             pending.Add($"short interest settling {publishingCycle.SettlementDate:yyyy-MM-dd}");
         return string.Join(" and ", pending);
+    }
+
+    // After the imports, so no refresh failure holds one back; the next cycle's imports read the new
+    // starts. The attempt is stamped first, so a refresh that keeps failing retries daily, not every
+    // cycle, and a database failure keeps the recorded starts.
+    private async Task RefreshSymbolStarts(CancellationToken stoppingToken)
+    {
+        var now = UtcNow();
+        if (now - _symbolStartsRefreshedAt < SymbolStartRefreshInterval)
+            return;
+
+        _symbolStartsRefreshedAt = now;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var service = scope.ServiceProvider.GetRequiredService<ListingSymbolStartService>();
+            var count = await service.Refresh(stoppingToken);
+            Logger.LogInformation("{Count} listings carry a recorded symbol start", count);
+        }
+        catch (Exception ex)
+            when (ex
+                    is DbException
+                        or DbUpdateException
+                        or InvalidOperationException
+                        or TimeoutException
+            )
+        {
+            Logger.LogError(
+                ex,
+                "Refreshing listing symbol starts failed; keeping the recorded ones"
+            );
+            await ErrorReporter.Report(ErrorSource, "SymbolStarts.Refresh", ex);
+        }
     }
 
     private async Task RunShortVolumeImport(CancellationToken stoppingToken)
