@@ -143,4 +143,32 @@ public class ListingSymbolStartRuleTests
 
         start.Should().BeNull();
     }
+
+    [Fact]
+    public void StartsOn_CoRegistrantStillStatesTheSymbol_IsNull()
+    {
+        // A partnership and its parent file one cover page naming the partnership's units; the
+        // parent states the symbol for as long as the units trade, so it never held it before.
+        var dates = Rows(Run("2020-01-02", "2020-01-10"), Run("2020-02-21", "2026-11-24"));
+
+        var start = StartsOn(
+            dates,
+            Own,
+            [Claim(Earlier, "2020-02-19", "2026-11-02"), Claim(Own, "2020-02-19", "2026-11-09")]
+        );
+
+        start.Should().BeNull();
+    }
+
+    [Fact]
+    public void StartsOn_OtherLineWithTheSameSeparatorFreeSymbolStillTrades_IsNull()
+    {
+        // A REIT's preferred INN-PF reads as INNPF, the over-the-counter symbol of an unrelated
+        // company whose own thinly traded rows pause for more than a month.
+        var dates = Rows(Run("2025-01-02", "2026-08-14"), Run("2026-10-01", "2026-11-24"));
+
+        var start = StartsOn(dates, Own, [Claim(Earlier, "2021-11-03", "2026-11-03")]);
+
+        start.Should().BeNull();
+    }
 }
