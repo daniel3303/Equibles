@@ -210,7 +210,12 @@ public static class RFileStatementParser
         }
 
         var columns = new List<ReportedStatementColumn>();
-        var dateCells = dateRow.QuerySelectorAll("th.th").ToList();
+        var dateRowCells = dateRow.QuerySelectorAll("th.th").ToList();
+        var periodCellIndexes = Enumerable
+            .Range(0, dateRowCells.Count)
+            .Where(i => !IsFootnoteCell(dateRowCells[i]))
+            .ToList();
+        var dateCells = periodCellIndexes.Select(i => dateRowCells[i]).ToList();
         var titleCurrencies = ParseCurrencies(scaleNote);
         var unambiguousStatementCurrency = titleCurrencies.Count == 1 ? titleCurrencies[0] : null;
         var titleSign =
@@ -247,12 +252,33 @@ public static class RFileStatementParser
                     PerShareScale = ambiguousCurrency
                         ? null
                         : ParseColumnPerShareScale(header, unit, units, scaleNote),
-                    Duration = i < durationByColumn.Count ? durationByColumn[i] : null,
+                    Duration =
+                        periodCellIndexes[i] < durationByColumn.Count
+                            ? durationByColumn[periodCellIndexes[i]]
+                            : null,
                     IsInstant = !hasDurations,
                 }
             );
         }
         return columns;
+    }
+
+    // A column footnote ("[1]") is its own header cell, spanned by the duration header, and each
+    // row answers it with a td.fn cell ParseRows never reads; as a period column it would leave
+    // every row's values shorter than the columns.
+    private static bool IsFootnoteCell(IElement cell)
+    {
+        var footnotes = cell.QuerySelectorAll("sup");
+        if (footnotes.Length == 0 || IsDate(cell.TextContent))
+        {
+            return false;
+        }
+        var text = cell.TextContent;
+        foreach (var footnote in footnotes)
+        {
+            text = text.Replace(footnote.TextContent, string.Empty);
+        }
+        return string.IsNullOrWhiteSpace(Clean(text));
     }
 
     private static string ParseCurrencySign(string text, string currency) =>

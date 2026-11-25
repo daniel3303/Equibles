@@ -240,6 +240,27 @@ public class RFileStatementParserTests
     }
 
     [Fact]
+    public void Parse_ColumnFootnoteHeaderCells_AreNotPeriodColumns()
+    {
+        // Lloyds' FY2025 20-F (0001160106-26-000010) marks its 2024 and 2023 columns with footnote [1]: each mark is a
+        // header cell of its own under "12 Months Ended", answered by an empty td.fn cell on every row.
+        var statement = RFileStatementParser.Parse(Load("lyg-20f-income-R3.htm"));
+
+        var payload = statement.Payload;
+        payload
+            .Columns.Select(c => c.Label)
+            .Should()
+            .Equal("Dec. 31, 2025", "Dec. 31, 2024", "Dec. 31, 2023");
+        payload
+            .Columns.Should()
+            .OnlyContain(c => c.Duration == "12 Months Ended" && c.Currency == "GBP");
+        payload.Rows.Should().OnlyContain(r => r.Values.Count == 3);
+        Row(payload, "Interest income").Values.Should().Equal(30_749m, 31_288m, 28_051m);
+        Row(payload, "Profit for the year").Values.Should().Equal(4_757m, 4_477m, 5_518m);
+        statement.PrimaryPeriodEnd.Should().Be(new DateOnly(2025, 12, 31));
+    }
+
+    [Fact]
     public void Parse_PresentationMemberHeader_IsInheritedByOnlyItsFollowingRows()
     {
         const string html = """
