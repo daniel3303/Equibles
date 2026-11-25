@@ -93,13 +93,36 @@ public class ListingSymbolStartService
             );
 
         var derived = new Dictionary<(Guid, string), Derived>();
-        // A withdrawn start stays under re-check after its listing retires: lifting it would only
-        // have the whole market's files for its dates read again.
+        // A withdrawn start on a retired listing waits unchanged until the listing trades again:
+        // the imports map active listings only, so lifting it could never file its rows again.
+        foreach (
+            var start in usListings
+                .Where(listing => !listing.Active)
+                .Select(listing => recorded.GetValueOrDefault((listing.Id, listing.Ticker)))
+                .Where(start =>
+                    start
+                        is {
+                            WithdrawnFrom: not null,
+                            EarlierHolderFrom: not null,
+                            EarlierHolderThrough: not null,
+                        }
+                )
+        )
+        {
+            derived[(start.EquityListingId, start.Ticker)] = new Derived(
+                new ListingSymbolStartRule.Derivation(
+                    start.StartsOn,
+                    new ListingSymbolStartRule.RowRun(
+                        start.EarlierHolderFrom.Value,
+                        start.EarlierHolderThrough.Value
+                    )
+                ),
+                null
+            );
+        }
+
         var candidates = usListings
-            .Where(listing =>
-                listing.Active
-                || recorded.GetValueOrDefault((listing.Id, listing.Ticker))?.WithdrawnFrom != null
-            )
+            .Where(listing => listing.Active)
             .Select(listing =>
             {
                 var symbol = TickerNormalizer.NormalizeIdentity(listing.Ticker) ?? "";

@@ -305,4 +305,35 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
                 "the withdrawn dates' listing markers reopen; the retired scope and later dates stay"
             );
     }
+
+    [Fact]
+    public async Task Refresh_WithdrawnStartOnARetiredListingLosesItsEvidence_KeepsTheStart()
+    {
+        // The imports map active listings only, so a lift there could never file the rows again.
+        var listing = await SeedHandedOverSymbol("0000990009", "0000990010");
+        await Service().Refresh(CancellationToken.None);
+        await Service().Refresh(CancellationToken.None);
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<EquityListing>().SingleAsync(row => row.Id == listing.Id)).Active =
+            false;
+        DbContext.RemoveRange(
+            DbContext
+                .Set<EquityIssuerTickerEvidence>()
+                .Where(row => row.Ticker == "SYMS" && row.AccessionNumber.StartsWith("0000990010"))
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await Service().Refresh(CancellationToken.None);
+        DbContext.ChangeTracker.Clear();
+
+        (
+            await DbContext
+                .Set<EquityListingSymbolStart>()
+                .AsNoTracking()
+                .SingleAsync(row => row.EquityListingId == listing.Id)
+        )
+            .WithdrawnFrom.Should()
+            .Be(new DateOnly(2022, 1, 3));
+    }
 }
