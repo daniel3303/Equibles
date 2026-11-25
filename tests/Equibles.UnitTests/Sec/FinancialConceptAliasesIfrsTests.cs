@@ -73,4 +73,39 @@ public class FinancialConceptAliasesIfrsTests
             .Should()
             .Equal("DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid");
     }
+
+    [Fact]
+    public void DepreciationAndAmortization_ReadsTheIfrsTotalsBeforeItsParts()
+    {
+        FinancialConceptAliases
+            .TryResolve("depreciation-and-amortization", out var refs)
+            .Should()
+            .BeTrue();
+
+        refs.Where(reference => reference.Taxonomy == FactTaxonomy.IfrsFull)
+            .Select(reference => reference.Tag)
+            .Should()
+            .Equal(
+                "DepreciationAndAmortisationExpense",
+                "AdjustmentsForDepreciationAndAmortisationExpense",
+                "DepreciationExpense",
+                "AdjustmentsForDepreciationExpense",
+                "AdjustmentsForAmortisationExpense",
+                "AdjustmentsForAmortizationExpense"
+            );
+    }
+
+    [Fact]
+    public void CapitalExpenditures_ReadsTheCombinedIfrsLineOnlyAfterThePropertyLine()
+    {
+        FinancialConceptAliases.TryResolve("capital-expenditures", out var refs).Should().BeTrue();
+
+        refs.Where(reference => reference.Taxonomy == FactTaxonomy.IfrsFull)
+            .Select(reference => reference.Tag)
+            .Should()
+            .Equal(
+                "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
+                "PurchaseOfPropertyPlantAndEquipmentIntangibleAssetsOtherThanGoodwillInvestmentPropertyAndOtherNoncurrentAssets"
+            );
+    }
 }

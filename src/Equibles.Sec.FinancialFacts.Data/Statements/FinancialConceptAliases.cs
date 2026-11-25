@@ -329,6 +329,9 @@ public static class FinancialConceptAliases
             // plain income-statement element instead of the DD&A variants.
             G("DepreciationAndAmortization"),
             I("DepreciationAndAmortisationExpense"),
+            // The cash-flow add-back of the same total, for IFRS filers that tag it only there; ahead of the
+            // depreciation-only and amortisation-only lines, which are parts of it.
+            I("AdjustmentsForDepreciationAndAmortisationExpense"),
             I("DepreciationExpense"),
             I("AdjustmentsForDepreciationExpense"),
             I("AdjustmentsForAmortisationExpense"),
@@ -358,6 +361,11 @@ public static class FinancialConceptAliases
             G("PaymentsToAcquirePropertyPlantAndEquipment"),
             G("PaymentsToAcquireProductiveAssets"),
             I("PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"),
+            // IFRS's one line for property, intangible and other noncurrent asset purchases, the counterpart of
+            // PaymentsToAcquireProductiveAssets, only where the filer states no property-only line.
+            I(
+                "PurchaseOfPropertyPlantAndEquipmentIntangibleAssetsOtherThanGoodwillInvestmentPropertyAndOtherNoncurrentAssets"
+            ),
         ],
         ["acquisitions"] = [G("PaymentsToAcquireBusinessesNetOfCashAcquired")],
         ["investing-cash-flow"] =
