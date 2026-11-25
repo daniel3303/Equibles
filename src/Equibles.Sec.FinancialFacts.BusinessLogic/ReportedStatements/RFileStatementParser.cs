@@ -210,7 +210,19 @@ public static class RFileStatementParser
         }
 
         var columns = new List<ReportedStatementColumn>();
-        var dateCells = dateRow.QuerySelectorAll("th.th").ToList();
+        // A date cell's duration sits at its table column, which counts the colspan of the cells
+        // before it: a header without a footnote over footnoted values spans its td.fn column too.
+        var periodCells = new List<(IElement Cell, int Start)>();
+        var tableColumn = 0;
+        foreach (var cell in dateRow.QuerySelectorAll("th.th"))
+        {
+            if (!IsFootnoteCell(cell))
+            {
+                periodCells.Add((cell, tableColumn));
+            }
+            tableColumn += ParseSpan(cell.GetAttribute("colspan"));
+        }
+        var dateCells = periodCells.Select(period => period.Cell).ToList();
         var titleCurrencies = ParseCurrencies(scaleNote);
         var unambiguousStatementCurrency = titleCurrencies.Count == 1 ? titleCurrencies[0] : null;
         var titleSign =
@@ -247,12 +259,33 @@ public static class RFileStatementParser
                     PerShareScale = ambiguousCurrency
                         ? null
                         : ParseColumnPerShareScale(header, unit, units, scaleNote),
-                    Duration = i < durationByColumn.Count ? durationByColumn[i] : null,
+                    Duration =
+                        periodCells[i].Start < durationByColumn.Count
+                            ? durationByColumn[periodCells[i].Start]
+                            : null,
                     IsInstant = !hasDurations,
                 }
             );
         }
         return columns;
+    }
+
+    // A column footnote ("[1]") is its own header cell, spanned by the duration header, and each
+    // row answers it with a td.fn cell ParseRows never reads; as a period column it would leave
+    // every row's values shorter than the columns.
+    private static bool IsFootnoteCell(IElement cell)
+    {
+        var footnotes = cell.QuerySelectorAll("sup");
+        if (footnotes.Length == 0 || IsDate(cell.TextContent))
+        {
+            return false;
+        }
+        var text = cell.TextContent;
+        foreach (var footnote in footnotes)
+        {
+            text = text.Replace(footnote.TextContent, string.Empty);
+        }
+        return string.IsNullOrWhiteSpace(Clean(text));
     }
 
     private static string ParseCurrencySign(string text, string currency) =>
