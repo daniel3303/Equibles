@@ -240,6 +240,59 @@ public class RFileStatementParserTests
     }
 
     [Fact]
+    public void Parse_ColumnFootnoteHeaderCells_AreNotPeriodColumns()
+    {
+        // Lloyds' FY2025 20-F (0001160106-26-000010) marks its 2024 and 2023 columns with footnote [1]: each mark is a
+        // header cell of its own under "12 Months Ended", answered by an empty td.fn cell on every row.
+        var statement = RFileStatementParser.Parse(Load("lyg-20f-income-R3.htm"));
+
+        var payload = statement.Payload;
+        payload
+            .Columns.Select(c => c.Label)
+            .Should()
+            .Equal("Dec. 31, 2025", "Dec. 31, 2024", "Dec. 31, 2023");
+        payload
+            .Columns.Should()
+            .OnlyContain(c => c.Duration == "12 Months Ended" && c.Currency == "GBP");
+        payload.Rows.Should().OnlyContain(r => r.Values.Count == 3);
+        Row(payload, "Interest income").Values.Should().Equal(30_749m, 31_288m, 28_051m);
+        Row(payload, "Profit for the year").Values.Should().Equal(4_757m, 4_477m, 5_518m);
+        statement.PrimaryPeriodEnd.Should().Be(new DateOnly(2025, 12, 31));
+    }
+
+    [Fact]
+    public void Parse_DateCellSpanningItsFootnoteColumn_KeepsEachColumnsDuration()
+    {
+        // SEC gives a column whose figures carry a footnote, but whose header does not, one date cell spanning its
+        // td.fn column; a footnote on the header is a cell of its own. Durations follow table columns, not cells.
+        const string html = """
+            <html><body><table class="report">
+            <tr>
+              <th class="tl" rowspan="2">INCOME - USD ($) $ in Millions</th>
+              <th class="th" colspan="3">3 Months Ended</th>
+              <th class="th" colspan="3">9 Months Ended</th>
+            </tr>
+            <tr>
+              <th class="th" colspan="2"><div>Sep. 30, 2025</div></th>
+              <th class="th"><div>Sep. 30, 2024</div></th>
+              <th class="th"><div>Sep. 30, 2025</div></th>
+              <th class="th"><sup>[1]</sup></th>
+              <th class="th"><div>Sep. 30, 2024</div></th>
+            </tr>
+            <tr class="ro"><td class="pl"><a onclick="top.Show.showAR( this, 'defref_us-gaap_Revenues', window );">Revenue</a></td><td class="nump">10</td><td class="fn"><sup>[2]</sup></td><td class="nump">9</td><td class="nump">30</td><td class="fn"><sup>[1]</sup></td><td class="nump">27</td></tr>
+            </table></body></html>
+            """;
+
+        var payload = RFileStatementParser.Parse(html).Payload;
+
+        payload
+            .Columns.Select(c => c.Duration)
+            .Should()
+            .Equal("3 Months Ended", "3 Months Ended", "9 Months Ended", "9 Months Ended");
+        payload.Rows.Single().Values.Should().Equal(10m, 9m, 30m, 27m);
+    }
+
+    [Fact]
     public void Parse_PresentationMemberHeader_IsInheritedByOnlyItsFollowingRows()
     {
         const string html = """

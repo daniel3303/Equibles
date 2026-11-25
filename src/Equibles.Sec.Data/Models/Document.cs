@@ -362,8 +362,8 @@ public class Document
     /// backoffice "pending" metric can reference it without depending on the hosted-service
     /// assembly. Bump after a parser change to re-derive the corpus.
     /// </summary>
-    // Version 5: a figure printed behind its currency marker keeps its value and its sign.
-    public const int ReportedStatementsParserVersion = 5;
+    // Version 6: a column footnote's header cell is no period column, so rows match their columns again.
+    public const int ReportedStatementsParserVersion = 6;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
