@@ -127,13 +127,17 @@ public class OffExchangeVolumeImportService
             completed.Count,
             scopeKey
         );
+        // A week's rows count for a listing once any of its days falls on or after the date its
+        // symbol started naming the listing; earlier weeks belonged to the symbol's earlier holder.
+        var symbolStarts = await _tickerMapService.LoadSymbolStarts(cancellationToken);
         foreach (var week in weeks)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var lastDay = week.AddDays(6);
             await ImportWeek(
                 week,
-                tickerMap,
-                compressedIndex,
+                symbolStarts.Admitted(tickerMap, lastDay),
+                symbolStarts.Admitted(compressedIndex, lastDay),
                 scopeKey,
                 now.UtcDateTime,
                 cancellationToken

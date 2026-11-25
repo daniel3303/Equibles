@@ -21,6 +21,11 @@ public class FinraScraperWorker : BaseScraperWorker
     // at the top of every DoWork, mirroring the base class resetting its own retry flag.
     private bool _pollWaitRequested;
 
+    // The symbol starts follow SEC cover pages and the stored daily rows, both of which change at
+    // most daily; null until the first cycle of this process refreshes them.
+    private static readonly TimeSpan SymbolStartRefreshInterval = TimeSpan.FromHours(24);
+    private DateTimeOffset? _symbolStartsRefreshedAt;
+
     protected override string WorkerName => "FINRA scraper";
     protected override TimeSpan SleepInterval { get; }
     protected override ErrorSource ErrorSource => ErrorSource.FinraScraper;
@@ -58,6 +63,8 @@ public class FinraScraperWorker : BaseScraperWorker
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
         _pollWaitRequested = false;
+
+        await RefreshSymbolStarts(stoppingToken);
 
         // Short volume is always attempted first — its importer scans [floor, today] and
         // stores nothing for a day FINRA hasn't published, so an unpublished day leaves the
@@ -117,6 +124,37 @@ public class FinraScraperWorker : BaseScraperWorker
         if (shortInterestOutstanding)
             pending.Add($"short interest settling {publishingCycle.SettlementDate:yyyy-MM-dd}");
         return string.Join(" and ", pending);
+    }
+
+    // Before the imports, so a symbol a new holder took since the last refresh is already bounded
+    // when its earlier holder's files are next read. A failed refresh keeps the recorded starts and
+    // never holds back the imports.
+    private async Task RefreshSymbolStarts(CancellationToken stoppingToken)
+    {
+        var now = UtcNow();
+        if (now - _symbolStartsRefreshedAt < SymbolStartRefreshInterval)
+            return;
+
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var service = scope.ServiceProvider.GetRequiredService<ListingSymbolStartService>();
+            var count = await service.Refresh(stoppingToken);
+            _symbolStartsRefreshedAt = now;
+            Logger.LogInformation("{Count} listings carry a recorded symbol start", count);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(
+                ex,
+                "Refreshing listing symbol starts failed; keeping the recorded ones"
+            );
+            await ErrorReporter.Report(ErrorSource, "SymbolStarts.Refresh", ex);
+        }
     }
 
     private async Task RunShortVolumeImport(CancellationToken stoppingToken)

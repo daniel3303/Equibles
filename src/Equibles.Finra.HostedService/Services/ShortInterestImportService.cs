@@ -164,16 +164,23 @@ public class ShortInterestImportService
         var correctionFloor = DateOnly
             .FromDateTime(DateTime.UtcNow)
             .AddDays(-CorrectionLookbackDays);
+        // A settlement before the date a listing's symbol started naming it reports the symbol's
+        // earlier holder: the listing is neither imported nor counted missing on that date, so the
+        // gap retry never asks for it again.
+        var symbolStarts = await _tickerMapService.LoadSymbolStarts(cancellationToken);
         foreach (var date in datesToProcess)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var admittedMap = symbolStarts.Admitted(tickerMap, date);
             var imported = await ImportDate(
                 date,
-                tickerMap,
-                compressedIndex,
+                admittedMap,
+                symbolStarts.Admitted(compressedIndex, date),
                 reverseMap,
-                trackedListings,
+                ReferenceEquals(admittedMap, tickerMap)
+                    ? trackedListings
+                    : admittedMap.Values.Select(row => row.EquityListingId).ToHashSet(),
                 correctionFloor,
                 cancellationToken
             );

@@ -816,6 +816,31 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("EquityListingSourceIdentifier");
                 });
 
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityListingSymbolStart", b =>
+                {
+                    b.Property<Guid>("EquityListingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Ticker")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("EvidenceSource")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date");
+
+                    b.HasKey("EquityListingId", "Ticker");
+
+                    b.ToTable("EquityListingSymbolStart");
+                });
+
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityListingTickerAlias", b =>
                 {
                     b.Property<Guid>("EquityListingId")
@@ -7979,6 +8004,17 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("Listing");
 
                     b.Navigation("SourceRecord");
+                });
+
+            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityListingSymbolStart", b =>
+                {
+                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityListing", "Listing")
+                        .WithMany()
+                        .HasForeignKey("EquityListingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Listing");
                 });
 
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityListingTickerAlias", b =>

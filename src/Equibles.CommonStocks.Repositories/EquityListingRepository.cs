@@ -12,6 +12,10 @@ public class EquityListingRepository : BaseRepository<EquityListing>
     public EquityListingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
+    /// <summary>The recorded first dates each symbol names its listing, per <see cref="EquityListingSymbolStart"/>.</summary>
+    public IQueryable<EquityListingSymbolStart> GetSymbolStarts() =>
+        DbContext.Set<EquityListingSymbolStart>().AsQueryable();
+
     // A cadence stamp, not identity: one row-scoped update that re-checks the listing still carries the
     // ticker on the venue it was fetched for, so no identity lock is taken and a stale target stamps nothing.
     public async Task<bool> StampPriceSyncAttempt(

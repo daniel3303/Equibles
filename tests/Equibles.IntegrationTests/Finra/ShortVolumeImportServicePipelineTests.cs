@@ -142,6 +142,53 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Import_DatesBeforeTheListingsSymbolStart_FileNothingUnderTheListing()
+    {
+        // The symbol named an earlier security before the recorded start, so the files of those
+        // dates must not be filed under the listing that holds the symbol now.
+        await SeedStockAndLatestRow();
+        var startsOn = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3);
+        DbContext.Add(
+            new EquityListingSymbolStart
+            {
+                EquityListingId = _stock.Presentation.Listing.Id,
+                Ticker = "TESTV",
+                StartsOn = startsOn,
+                EvidenceSource = "test",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var finraClient = Substitute.For<IFinraClient>();
+        finraClient
+            .GetDailyShortVolume(Arg.Any<DateOnly>())
+            .Returns(
+                new List<ShortVolumeRecord>
+                {
+                    new()
+                    {
+                        Symbol = "TESTV",
+                        ShortVolume = 150,
+                        TotalVolume = 260,
+                    },
+                }
+            );
+
+        await BuildService(finraClient).Import(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var imported = await verify
+            .Set<DailyShortVolume>()
+            .AsNoTracking()
+            .Where(v => v.Listing.Security.EquityIssuerId == _stock.Id && v.ShortVolume == 150)
+            .Select(v => v.Date)
+            .ToListAsync();
+        imported.Should().NotBeEmpty("dates from the start on belong to the listing");
+        imported.Should().OnlyContain(date => date >= startsOn);
+    }
+
+    [Fact]
     public async Task Import_FinraClientThrowsHttpRequestException_SkipsDateWithoutThrowing()
     {
         await SeedStockAndLatestRow();

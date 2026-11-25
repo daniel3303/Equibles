@@ -41,6 +41,11 @@ public static class CommonEquityReferenceRules
             OnCollision = EquityReferenceCollision.KeepSurvivor,
             RecordRemaps = false,
         },
+        new("EquityListingSymbolStart")
+        {
+            OnCollision = EquityReferenceCollision.KeepSurvivor,
+            RecordRemaps = false,
+        },
         new("EquityIssuerPresentation") { OnCollision = EquityReferenceCollision.KeepSurvivor },
         // The owner trigger forbids re-pointing a recorded corporate action, so one follows by re-insertion
         // under the survivor listing; an action already recorded there for the same date stands.
