@@ -57,32 +57,55 @@ public class ListingSymbolStartService
                     LastFiled = group.Max(row => row.FiledDate),
                 })
                 .ToListAsync(cancellationToken)
-        ).GroupBy(row => row.Ticker, StringComparer.Ordinal).ToDictionary(group => group.Key, group => (IReadOnlyCollection<ListingSymbolStartRule.SymbolClaim>)group.Select(row => new ListingSymbolStartRule.SymbolClaim(row.EquityIssuerId, row.FirstFiled, row.LastFiled)).ToList(), StringComparer.Ordinal);
-        var listings = await _listings
+        ).ToLookup(row => row.Ticker, StringComparer.Ordinal);
+        var usListings = await _listings
             .GetAll()
-            .Where(listing => listing.Active && listing.MarketCountryCode == "US")
+            .Where(listing => listing.MarketCountryCode == "US")
             .Select(listing => new
             {
                 listing.Id,
                 listing.Security.EquityIssuerId,
                 listing.Ticker,
+                listing.Active,
             })
             .ToListAsync(cancellationToken);
+        // Evidence keeps only the separator-free symbol, so ABC.U and ABCU read alike. An issuer whose
+        // own lines spell the symbol differently from the candidate, and never like it, stated its
+        // own line, not the candidate's.
+        var spellings = usListings
+            .Where(listing => TickerNormalizer.NormalizeIdentity(listing.Ticker) != null)
+            .ToLookup(
+                listing =>
+                    (listing.EquityIssuerId, TickerNormalizer.NormalizeIdentity(listing.Ticker)),
+                listing => TickerNormalizer.NormalizeDashListed(listing.Ticker)
+            );
 
         var derived = new Dictionary<(Guid, string), DateOnly>();
-        var candidates = listings
+        var candidates = usListings
+            .Where(listing => listing.Active)
             .Select(listing =>
-                (
+            {
+                var symbol = TickerNormalizer.NormalizeIdentity(listing.Ticker) ?? "";
+                var spelled = TickerNormalizer.NormalizeDashListed(listing.Ticker);
+                return (
                     Listing: listing,
-                    Claims: claims.GetValueOrDefault(
-                        TickerNormalizer.NormalizeIdentity(listing.Ticker) ?? ""
-                    )
-                )
-            )
+                    Claims: claims[symbol]
+                        .Where(claim =>
+                            !spellings.Contains((claim.EquityIssuerId, symbol))
+                            || spellings[(claim.EquityIssuerId, symbol)].Contains(spelled)
+                        )
+                        .Select(claim => new ListingSymbolStartRule.SymbolClaim(
+                            claim.EquityIssuerId,
+                            claim.FirstFiled,
+                            claim.LastFiled
+                        ))
+                        .ToList()
+                );
+            })
             .Where(candidate =>
-                candidate.Claims?.Any(claim =>
+                candidate.Claims.Any(claim =>
                     claim.EquityIssuerId != candidate.Listing.EquityIssuerId
-                ) == true
+                )
             );
         foreach (var (listing, symbolClaims) in candidates)
         {

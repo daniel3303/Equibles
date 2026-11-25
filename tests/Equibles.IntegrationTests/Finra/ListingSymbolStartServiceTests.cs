@@ -96,4 +96,53 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
             .Should()
             .BeFalse("the start rests only on the earlier holder's cover pages");
     }
+
+    [Fact]
+    public async Task Refresh_ClaimantsOwnLineSpellsTheSymbolDifferently_RecordsNoStart()
+    {
+        // Evidence keeps the symbol without separators, so an issuer stating its own SYM-S line
+        // reads like a statement of SYMS; its own differently spelled line says which it meant.
+        var fund = EquityIssuerSeed.Create(Cik: "0000990003", Ticker: "SYMS", Name: "Fund Trust");
+        var other = EquityIssuerSeed.Create(Cik: "0000990004", Ticker: "SYM-S", Name: "Other Co");
+        DbContext.AddRange(fund, other);
+        var listing = NativeListingSeed.ForStock(DbContext, fund, "SYMS");
+        foreach (
+            var date in Weekdays(new DateOnly(2022, 1, 3), new DateOnly(2022, 1, 14))
+                .Concat(Weekdays(new DateOnly(2025, 6, 26), new DateOnly(2025, 7, 3)))
+        )
+        {
+            DbContext.Add(
+                new DailyShortVolume
+                {
+                    EquityListingId = listing.Id,
+                    ListedTicker = "SYMS",
+                    Date = date,
+                    ShortVolume = 1,
+                    TotalVolume = 2,
+                }
+            );
+        }
+        DbContext.Add(
+            new EquityIssuerTickerEvidence
+            {
+                EquityIssuerId = other.Id,
+                Ticker = "SYMS",
+                FiledDate = new DateOnly(2022, 1, 10),
+                SourceDocumentId = Guid.NewGuid(),
+                AccessionNumber = "0000990004-22-000001",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await Service().Refresh(CancellationToken.None);
+
+        (
+            await DbContext
+                .Set<EquityListingSymbolStart>()
+                .AnyAsync(row => row.EquityListingId == listing.Id)
+        )
+            .Should()
+            .BeFalse();
+    }
 }
