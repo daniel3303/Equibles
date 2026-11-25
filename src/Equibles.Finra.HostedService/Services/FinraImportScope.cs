@@ -6,6 +6,11 @@ namespace Equibles.Finra.HostedService.Services;
 
 public static class FinraImportScope
 {
+    // The scopes the listing importers write; the older "all", "tickers:" and "stocks:" markers are
+    // retired, though the nowcast still admits "all".
+    public const string ListingUniversePrefix = "listings:";
+    public const string ListingFilterPrefix = "listing-filter:";
+
     public static string ResolveListingUniverse(
         IReadOnlyDictionary<string, EquityListingReference> listings
     ) =>
@@ -78,7 +83,7 @@ public static class FinraImportScope
                 )
         );
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
-        return $"listings:{Convert.ToHexString(hash).ToLowerInvariant()}";
+        return $"{ListingUniversePrefix}{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 
     public static string ResolveListingImportScope(
@@ -110,6 +115,6 @@ public static class FinraImportScope
                     )
             );
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
-        return $"listing-filter:{Convert.ToHexString(hash).ToLowerInvariant()}";
+        return $"{ListingFilterPrefix}{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 }
