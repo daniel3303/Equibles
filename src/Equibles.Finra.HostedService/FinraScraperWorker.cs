@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Equibles.Core.Calendars;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -127,7 +128,7 @@ public class FinraScraperWorker : BaseScraperWorker
     }
 
     // Before the imports, so a symbol a new holder took since the last refresh is already bounded
-    // when its earlier holder's files are next read. A failed refresh keeps the recorded starts and
+    // when its earlier holder's files are next read. A database failure keeps the recorded starts and
     // never holds back the imports.
     private async Task RefreshSymbolStarts(CancellationToken stoppingToken)
     {
@@ -143,11 +144,13 @@ public class FinraScraperWorker : BaseScraperWorker
             _symbolStartsRefreshedAt = now;
             Logger.LogInformation("{Count} listings carry a recorded symbol start", count);
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            throw;
-        }
         catch (Exception ex)
+            when (ex
+                    is DbException
+                        or DbUpdateException
+                        or InvalidOperationException
+                        or TimeoutException
+            )
         {
             Logger.LogError(
                 ex,

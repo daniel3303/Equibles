@@ -42,6 +42,7 @@ public class ListingSymbolStartService
         _logger = logger;
     }
 
+    /// <summary>Re-derives every start from today's rows and evidence and stores the difference.</summary>
     /// <returns>The number of listings with a recorded start after the refresh.</returns>
     public async Task<int> Refresh(CancellationToken cancellationToken)
     {
