@@ -16,7 +16,10 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// one when its tag states no longer period within a year of it and it sits below three quarters
 /// of another tag's figure for that quarter in the same filing, stated or the year that filing
 /// states less the nine months filed with it (Teva's 10-K tags fourth-quarter 2025 Revenues 1,500M
-/// beside contract revenue whose year less nine months is 4,711M).
+/// beside contract revenue whose year less nine months is 4,711M). An interim figure of a tag whose
+/// year is the whole top line is one when its filing states another tag above it by a third for the
+/// same period (Legend Biotech's 6-Ks: contract revenue 55.4M of 722.5M for nine months, its 20-F's
+/// year 1,028.9M).
 /// </summary>
 public static class RevenueSlices
 {
@@ -59,8 +62,72 @@ public static class RevenueSlices
             .Where(f => !slices.Contains(f))
             .ToList();
         slices.UnionWith(QuarterSlices(standing));
+        slices.UnionWith(InterimSlices(standing));
         return slices.Count == 0 ? [.. revenue] : [.. revenue.Where(f => !slices.Contains(f))];
     }
+
+    // A tag can be the whole top line in its annual report and a slice in its interim reports (Legend
+    // Biotech's 20-F tags 2025 contract revenue at 1,028.9M, its 6-Ks the nine months at 55.4M beside
+    // 722.5M of revenue), so its year less its nine months is no quarter. An interim figure is a slice
+    // where its own filing states another tag above it by a third for that exact period, while the tag's
+    // year holding it is at least that other tag's year (its longest figure from the year's start,
+    // annualised, where it states no year): a tag that is a narrower measure all year keeps its figures.
+    private static IEnumerable<FinancialFact> InterimSlices(
+        IReadOnlyCollection<FinancialFact> facts
+    )
+    {
+        var byFiling = facts.ToLookup(f => (f.AccessionNumber, f.PeriodStart, f.PeriodEnd, f.Unit));
+        var byConcept = facts.ToLookup(f => (f.FinancialConceptId, f.Unit));
+        FinancialFact YearHolding(Guid concept, string unit, FinancialFact period) =>
+            byConcept[(concept, unit)]
+                .Where(f =>
+                    IsYear(f)
+                    && f.PeriodStart <= period.PeriodStart
+                    && f.PeriodEnd >= period.PeriodEnd
+                )
+                .MaxBy(f => f.FiledDate);
+        decimal? Yardstick(Guid other, string unit, FinancialFact year)
+        {
+            var otherFacts = byConcept[(other, unit)].ToList();
+            var otherYear = otherFacts
+                .Where(f => f.PeriodStart == year.PeriodStart && f.PeriodEnd == year.PeriodEnd)
+                .MaxBy(f => f.FiledDate);
+            if (otherYear != null)
+                return otherYear.Value;
+            var longest = otherFacts
+                .Where(f =>
+                    f.PeriodStart == year.PeriodStart && f.PeriodEnd < year.PeriodEnd && Span(f) > 0
+                )
+                .OrderByDescending(Span)
+                .ThenByDescending(f => f.FiledDate)
+                .FirstOrDefault();
+            return longest == null ? null : longest.Value * Span(year) / Span(longest);
+        }
+        return facts.Where(fact =>
+        {
+            if (
+                fact.Value <= 0
+                || Span(fact)
+                    is < FiscalPeriodSpanDays.MinQuarter
+                        or >= FiscalPeriodSpanDays.MinAnnual
+            )
+                return false;
+            var year = YearHolding(fact.FinancialConceptId, fact.Unit, fact);
+            return year != null
+                && byFiling[(fact.AccessionNumber, fact.PeriodStart, fact.PeriodEnd, fact.Unit)]
+                    .Where(other =>
+                        other.FinancialConceptId != fact.FinancialConceptId
+                        && fact.Value < other.Value * YearShareOfAnotherTagsYear
+                    )
+                    .Any(other =>
+                        Yardstick(other.FinancialConceptId, fact.Unit, year) is { } yardstick
+                        && year.Value >= yardstick * WholeYearShare
+                    );
+        });
+    }
+
+    // A year this close to the other tag's is the same top line, rounding and a late restatement aside.
+    private const decimal WholeYearShare = 0.95m;
 
     private static IEnumerable<FinancialFact> QuarterSlices(
         IReadOnlyCollection<FinancialFact> facts
