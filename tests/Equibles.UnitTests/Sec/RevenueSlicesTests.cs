@@ -58,6 +58,90 @@ public class RevenueSlicesTests
     private static FinancialFact FirstQuarter(Guid concept, decimal millions) =>
         Fact(concept, millions, QuarterFiling, new DateOnly(2024, 3, 31), DocumentType.TenQ);
 
+    private static FinancialFact Quarter(
+        Guid concept,
+        decimal millions,
+        string accession,
+        DateOnly start,
+        DateOnly end
+    )
+    {
+        var fact = Fact(
+            concept,
+            millions,
+            accession,
+            end,
+            accession == AnnualFiling ? DocumentType.TenK : DocumentType.TenQ
+        );
+        fact.PeriodStart = start;
+        return fact;
+    }
+
+    // Teva's 10-K tags fourth-quarter 2025 Revenues 1,500M and nothing else under that tag, beside
+    // contract revenue whose year (17,258M) less the nine months filed with it (12,547M) is 4,711M.
+    [Fact]
+    public void Without_LoneQuarterBelowAnotherTagsYearLessItsNineMonths_DropsTheQuarter()
+    {
+        var slice = Quarter(Revenues, 1_500m, AnnualFiling, new(2024, 10, 1), new(2024, 12, 31));
+        var year = Year(ContractRevenue, 17_258m);
+        var nineMonths = NineMonths(ContractRevenue, 12_547m);
+
+        var kept = RevenueSlices.Without([slice, year, nineMonths]);
+
+        kept.Should().BeEquivalentTo([year, nineMonths], o => o.WithStrictOrdering());
+        RevenueSlices.Without(kept).Should().HaveCount(2);
+    }
+
+    // Bitcoin Depot-shaped: a lone Revenues quarter of 0.11M beside 2.44M of contract revenue for
+    // the same quarter in the same 10-Q.
+    [Fact]
+    public void Without_LoneQuarterBelowAnotherTagsSameQuarter_DropsTheQuarter()
+    {
+        var slice = Quarter(Revenues, 0.11m, QuarterFiling, new(2024, 7, 1), new(2024, 9, 30));
+        var whole = Quarter(
+            ContractRevenue,
+            2.44m,
+            QuarterFiling,
+            new(2024, 7, 1),
+            new(2024, 9, 30)
+        );
+        var year = Year(ContractRevenue, 9.8m);
+
+        RevenueSlices
+            .Without([slice, whole, year])
+            .Should()
+            .BeEquivalentTo([whole, year], o => o.WithStrictOrdering());
+    }
+
+    // CompareFinancialFact reads one fiscal period: Blue Owl's third quarter beside the nine months
+    // that end with it holds none of Revenues' own half years and years, so nothing proves a slice.
+    [Fact]
+    public void Without_OnePeriodsFigures_DropsNoQuarter()
+    {
+        var facts = new[]
+        {
+            Quarter(Revenues, 138m, QuarterFiling, new(2024, 7, 1), new(2024, 9, 30)),
+            Quarter(ContractRevenue, 754m, QuarterFiling, new(2024, 7, 1), new(2024, 9, 30)),
+            NineMonths(ContractRevenue, 2_230m),
+        };
+
+        RevenueSlices.Without(facts).Should().HaveCount(3);
+    }
+
+    // Blue Owl's Revenues states its own half years and years, a measure of its own: its quarters stay.
+    [Fact]
+    public void Without_QuarterOfATagWithItsOwnCumulative_KeepsTheQuarter()
+    {
+        var facts = new[]
+        {
+            Quarter(Revenues, 138m, QuarterFiling, new(2024, 7, 1), new(2024, 9, 30)),
+            Quarter(ContractRevenue, 754m, QuarterFiling, new(2024, 7, 1), new(2024, 9, 30)),
+            NineMonths(Revenues, 410m),
+        };
+
+        RevenueSlices.Without(facts).Should().HaveCount(3);
+    }
+
     // BlackRock fiscal 2024: Revenues states a part of the 20,407M its contract revenue states,
     // whose nine months already came to 14,730M.
     [Fact]

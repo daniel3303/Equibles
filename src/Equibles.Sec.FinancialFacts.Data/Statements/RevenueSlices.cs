@@ -12,18 +12,25 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// states no nine months it covers (BlackRock fiscal 2024: Revenues 12,794M against 20,407M of
 /// contract revenue whose nine months were 14,730M). A tag whose quarters add up inside its year
 /// keeps it (Philip Morris's revenue net of excise taxes, a utility's revenue net of hedging
-/// losses), and a negative year is a net loss of a broader measure, never a slice.
+/// losses), and a negative year is a net loss of a broader measure, never a slice. A quarter is
+/// one when its tag states no longer period within a year of it and it sits below three quarters
+/// of another tag's figure for that quarter in the same filing, stated or the year that filing
+/// states less the nine months filed with it (Teva's 10-K tags fourth-quarter 2025 Revenues 1,500M
+/// beside contract revenue whose year less nine months is 4,711M).
 /// </summary>
 public static class RevenueSlices
 {
     // A year below three quarters of another tag's year cannot be that year less anything one
-    // quarter's revenue could hold.
+    // quarter's revenue could hold; the same share marks a quarter.
     private const decimal YearShareOfAnotherTagsYear = 0.75m;
+
+    // A tag's longer figure this close to a quarter makes the tag a series of its own there.
+    private const int YearDays = 400;
 
     /// <summary>
     /// <paramref name="revenue"/> without the slices. Each figure is judged against its own filing,
     /// so a restated year a later filing states alone stays, and a caller holding one period's facts
-    /// (no nine months) drops no year.
+    /// (no nine months, no figure ending on another date) drops no year and no quarter.
     /// </summary>
     public static List<FinancialFact> Without(IReadOnlyCollection<FinancialFact> revenue)
     {
@@ -45,7 +52,75 @@ public static class RevenueSlices
                 filing.Where(fact => IsYearSlice(fact, filing, nineMonths))
             )
         );
+        // Quarters are judged against figures neither rule above dropped, which a second call
+        // still sees, so it judges every quarter as the first did.
+        var standing = filings
+            .SelectMany(filing => filing)
+            .Where(f => !slices.Contains(f))
+            .ToList();
+        slices.UnionWith(QuarterSlices(standing));
         return slices.Count == 0 ? [.. revenue] : [.. revenue.Where(f => !slices.Contains(f))];
+    }
+
+    private static IEnumerable<FinancialFact> QuarterSlices(
+        IReadOnlyCollection<FinancialFact> facts
+    )
+    {
+        var cumulativeEnds = facts
+            .Where(f => Span(f) > FiscalPeriodSpanDays.MaxQuarter)
+            .ToLookup(f => (f.FinancialConceptId, f.Unit), f => f.PeriodEnd);
+        // The tag's missing cumulative is evidence only where the caller passed the history around the
+        // quarter: a one-period read (CompareFinancialFact's bucket) holds no longer figure ending on
+        // another date, and drops no quarter.
+        var historyEnds = facts
+            .Where(f => Span(f) > FiscalPeriodSpanDays.MaxQuarter)
+            .ToLookup(f => f.Unit, f => f.PeriodEnd);
+        var byFilingEnd = facts.ToLookup(f => (f.AccessionNumber, f.PeriodEnd, f.Unit));
+        var nineMonthsByStart = facts
+            .Where(IsNineMonths)
+            .ToLookup(f => (f.FinancialConceptId, f.PeriodStart, f.Unit));
+        return facts.Where(fact =>
+            fact.Value > 0
+            && Span(fact)
+                is >= FiscalPeriodSpanDays.MinQuarter
+                    and <= FiscalPeriodSpanDays.MaxQuarter
+            && historyEnds[fact.Unit]
+                .Any(end =>
+                    end != fact.PeriodEnd
+                    && Math.Abs(end.DayNumber - fact.PeriodEnd.DayNumber) <= YearDays
+                )
+            // A tag with a cumulative or a year around the quarter is a measure of its own.
+            && !cumulativeEnds[(fact.FinancialConceptId, fact.Unit)]
+                .Any(end => Math.Abs(end.DayNumber - fact.PeriodEnd.DayNumber) <= YearDays)
+            && byFilingEnd[(fact.AccessionNumber, fact.PeriodEnd, fact.Unit)]
+                .Where(other => other.FinancialConceptId != fact.FinancialConceptId)
+                .Any(other =>
+                    fact.Value
+                    < SameQuarter(other, fact, nineMonthsByStart) * YearShareOfAnotherTagsYear
+                )
+        );
+    }
+
+    // The other tag's figure for the quarter: stated for it, or its year less the nine months it
+    // was filed with (the latest filed on or before the year), so a later recast never meets it.
+    private static decimal SameQuarter(
+        FinancialFact other,
+        FinancialFact quarter,
+        ILookup<(Guid, DateOnly, string), FinancialFact> nineMonthsByStart
+    )
+    {
+        if (other.PeriodStart == quarter.PeriodStart)
+            return other.Value;
+        if (!IsYear(other) || other.PeriodStart >= quarter.PeriodStart)
+            return 0;
+        var nineMonths = nineMonthsByStart[
+            (other.FinancialConceptId, other.PeriodStart, other.Unit)
+        ]
+            .Where(f =>
+                f.PeriodEnd.AddDays(1) == quarter.PeriodStart && f.FiledDate <= other.FiledDate
+            )
+            .MaxBy(f => f.FiledDate);
+        return nineMonths == null ? 0 : other.Value - nineMonths.Value;
     }
 
     private static bool IsZeroSlice(FinancialFact fact, IEnumerable<FinancialFact> filing) =>
