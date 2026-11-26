@@ -95,28 +95,23 @@ public class ListingSymbolStartService
         var derived = new Dictionary<(Guid, string), Derived>();
         // A withdrawn start on a retired listing waits unchanged until the listing trades again:
         // the imports map active listings only, so lifting it could never file its rows again.
-        foreach (
-            var start in usListings
-                .Where(listing => !listing.Active)
-                .Select(listing => recorded.GetValueOrDefault((listing.Id, listing.Ticker)))
-                .Where(start =>
-                    start
-                        is {
-                            WithdrawnFrom: not null,
-                            EarlierHolderFrom: not null,
-                            EarlierHolderThrough: not null,
-                        }
-                )
-        )
+        var retiredWithdrawn = usListings
+            .Where(listing => !listing.Active)
+            .Select(listing =>
+                recorded.GetValueOrDefault((listing.Id, listing.Ticker))
+                    is {
+                        WithdrawnFrom: not null,
+                        EarlierHolderFrom: { } from,
+                        EarlierHolderThrough: { } through,
+                    } start
+                    ? (Start: start, Run: new ListingSymbolStartRule.RowRun(from, through))
+                    : default
+            )
+            .Where(entry => entry.Start != null);
+        foreach (var (start, run) in retiredWithdrawn)
         {
             derived[(start.EquityListingId, start.Ticker)] = new Derived(
-                new ListingSymbolStartRule.Derivation(
-                    start.StartsOn,
-                    new ListingSymbolStartRule.RowRun(
-                        start.EarlierHolderFrom.Value,
-                        start.EarlierHolderThrough.Value
-                    )
-                ),
+                new ListingSymbolStartRule.Derivation(start.StartsOn, run),
                 null
             );
         }
@@ -217,7 +212,7 @@ public class ListingSymbolStartService
         var lifted = stored
             .Where(row => !derived.ContainsKey((row.EquityListingId, row.Ticker)))
             .ToList();
-        foreach (var row in lifted.Where(row => row.WithdrawnFrom != null))
+        foreach (var row in lifted)
             await Reopen(row, cancellationToken);
         _starts.Delete(lifted);
 
@@ -292,6 +287,9 @@ public class ListingSymbolStartService
 
     private async Task Reopen(EquityListingSymbolStart start, CancellationToken cancellationToken)
     {
+        if (start.WithdrawnFrom is not { } withdrawnFrom)
+            return;
+
         var through = start.StartsOn.AddDays(-1);
         var reopened = 0;
         foreach (
@@ -306,7 +304,7 @@ public class ListingSymbolStartService
                 .GetRangeByScopePrefix(
                     ShortVolumeImportService.Dataset,
                     prefix,
-                    start.WithdrawnFrom.Value,
+                    withdrawnFrom,
                     through
                 )
                 .ExecuteDeleteAsync(cancellationToken);
@@ -317,7 +315,7 @@ public class ListingSymbolStartService
             start.Ticker,
             start.EquityListingId,
             reopened,
-            start.WithdrawnFrom
+            withdrawnFrom
         );
     }
 }
