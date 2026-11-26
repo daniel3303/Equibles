@@ -381,6 +381,18 @@ public static class StatementLineFacts
             && factByConceptId.TryGetValue(DepreciationTotal.ConceptId, out var summed)
         )
             return (null, summed);
+        // A statement holds a continuing operations' figure only where its filing proves it the
+        // whole (ContinuingOperationsEps.ForStatement), and the diluted EPS line reads it there.
+        if (picked.Fact == null && ContinuingOperationsEps.IsFamily(line.Concepts))
+        {
+            var continuing = PickVariant(
+                [ContinuingOperationsEps.ContinuingRef],
+                conceptIdByKey,
+                factByConceptId
+            );
+            if (continuing.Fact != null)
+                return continuing;
+        }
         if (line.Alias != BankTopLine.RevenueAlias)
             return picked;
 
