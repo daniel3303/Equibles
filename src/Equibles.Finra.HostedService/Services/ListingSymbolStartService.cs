@@ -257,13 +257,7 @@ public class ListingSymbolStartService
 
         await _starts.SaveChanges();
         foreach (var row in held)
-        {
-            if (await Withdraw(row, cancellationToken) is { } first)
-                row.WithdrawnFrom =
-                    row.WithdrawnFrom is { } withdrawnFrom && withdrawnFrom < first
-                        ? withdrawnFrom
-                        : first;
-        }
+            await Withdraw(row, cancellationToken);
         await _starts.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
     }
@@ -271,10 +265,7 @@ public class ListingSymbolStartService
     // Only rows filed under the start's own symbol go: a renamed line's rows under its earlier
     // symbol are its own history. Each dataset goes by the date its import admits the listing on;
     // a week counts from its last day.
-    private async Task<DateOnly?> Withdraw(
-        EquityListingSymbolStart start,
-        CancellationToken cancellationToken
-    )
+    private async Task Withdraw(EquityListingSymbolStart start, CancellationToken cancellationToken)
     {
         var lastWeekBefore = start.StartsOn.AddDays(-6);
         DateOnly?[] firsts =
@@ -311,7 +302,9 @@ public class ListingSymbolStartService
                 cancellationToken
             ),
         ];
-        return firsts.Min();
+        // The first withdrawn date only moves earlier: the lift reopens from it.
+        if (firsts.Min() is { } first && !(start.WithdrawnFrom <= first))
+            start.WithdrawnFrom = first;
     }
 
     private async Task<DateOnly?> Withdraw<TRow>(
