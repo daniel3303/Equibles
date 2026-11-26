@@ -22,6 +22,11 @@ public class ReportedStatementKindClassifierTests
     [InlineData("CONSOLIDATED STATEMENTS OF CASH FLOWS", ReportedStatementKind.CashFlow)]
     [InlineData("CONSOLIDATED STATEMENTS OF SHAREHOLDERS' EQUITY", ReportedStatementKind.Equity)]
     [InlineData("CONSOLIDATED STATEMENTS OF STOCKHOLDERS' EQUITY", ReportedStatementKind.Equity)]
+    [InlineData("CONSOLIDATED STATEMENTS OF OPERATING RESULTS", ReportedStatementKind.Income)]
+    [InlineData(
+        "UNAUDITED INTERIM CONDENSED CONSOLIDATED STATEMENTS OF OPERATING RESULTS",
+        ReportedStatementKind.Income
+    )]
     [InlineData("Regulatory Capital Schedule", ReportedStatementKind.Other)]
     public void Classify_FromRoleTitle_PicksTheRightKind(
         string shortName,

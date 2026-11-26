@@ -41,8 +41,10 @@ public static class ReportedStatementKindClassifier
         {
             return ReportedStatementKind.BalanceSheet;
         }
+        // "Statements of Operating Results" is Brookfield Infrastructure's and Brookfield Business's income statement.
         if (
             text.Contains("OPERATIONS")
+            || text.Contains("OPERATING RESULTS")
             || text.Contains("INCOME")
             || text.Contains("EARNINGS")
             || text.Contains("LOSS")
