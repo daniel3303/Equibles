@@ -176,6 +176,19 @@ public class FinancialFactsTools
                     );
                     (facts, conceptPriority) = (depreciation.Facts, depreciation.Priority);
                 }
+                // Diluted EPS reads a continuing-operations figure for a period the filer tags no
+                // other and reports no discontinued operations (ContinuingOperationsEps).
+                else if (ContinuingOperationsEps.IsFamily(conceptRefs))
+                {
+                    var eps = await ContinuingOperationsEpsFacts.Load(
+                        _financialFactRepository,
+                        _financialConceptRepository,
+                        [stock.Id]
+                    );
+                    (facts, conceptPriority) = (eps.Facts, eps.Priority);
+                    foreach (var (conceptId, conceptRef) in eps.ConceptsById)
+                        conceptsById.TryAdd(conceptId, conceptRef);
+                }
                 else
                     facts = await issuerFacts
                         .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
@@ -627,6 +640,31 @@ public class FinancialFactsTools
                         );
                         conceptPriority = depreciation.Priority;
                         facts = depreciation
+                            .Facts.Where(f =>
+                                f.FiscalYear == year
+                                && (
+                                    f.FiscalPeriod == period
+                                    || (
+                                        includeFullYearForQ4
+                                        && f.FiscalPeriod == SecFiscalPeriod.FullYear
+                                    )
+                                )
+                            )
+                            .ToList();
+                    }
+                    // Diluted EPS is judged on each issuer's whole history too, as GetFinancialFact
+                    // reads it (ContinuingOperationsEps).
+                    else if (ContinuingOperationsEps.IsFamily(conceptRefs))
+                    {
+                        var eps = await ContinuingOperationsEpsFacts.Load(
+                            _financialFactRepository,
+                            _financialConceptRepository,
+                            stockIds
+                        );
+                        conceptPriority = eps.Priority;
+                        foreach (var (conceptId, conceptRef) in eps.ConceptsById)
+                            conceptsById.TryAdd(conceptId, conceptRef);
+                        facts = eps
                             .Facts.Where(f =>
                                 f.FiscalYear == year
                                 && (
