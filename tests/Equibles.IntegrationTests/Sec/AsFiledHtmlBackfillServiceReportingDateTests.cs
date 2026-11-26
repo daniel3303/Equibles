@@ -114,6 +114,35 @@ public class AsFiledHtmlBackfillServiceReportingDateTests : IDisposable
         Assert.Equal(2, result.Processed);
     }
 
+    // The issuer took a new CIK after this filing; EDGAR serves it only under the one that
+    // filed it, which the stored address names.
+    [Fact]
+    public async Task Backfill_FilingStoredUnderAnEarlierCik_IsFetchedUnderTheCikOfItsAddress()
+    {
+        _dbContext.Add(
+            new Document
+            {
+                Id = Guid.NewGuid(),
+                EquityIssuerId = _company.Id,
+                DocumentType = DocumentType.EightK,
+                ReportingDate = new DateOnly(2023, 4, 12),
+                AccessionNumber = "0001654954-23-004613",
+                SourceUrl =
+                    "https://www.sec.gov/Archives/edgar/data/0001593538/0001654954-23-004613.txt",
+                AsFiledHtmlVersion = 0,
+                AsFiledHtmlAttempts = 0,
+            }
+        );
+        _dbContext.SaveChanges();
+
+        await _service.Backfill(batchSize: 10);
+
+        await _secEdgarClient.Received(1).GetDocumentContent("0001654954-23-004613", "1593538");
+        await _secEdgarClient
+            .DidNotReceive()
+            .GetDocumentContent("0001654954-23-004613", _company.Cik);
+    }
+
     [Fact]
     public async Task Backfill_SelectsAPendingEightKEvenWhenEveryCandidatePredatesTheSyncFloor()
     {

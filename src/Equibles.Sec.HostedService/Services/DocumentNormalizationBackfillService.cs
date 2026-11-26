@@ -258,7 +258,7 @@ public class DocumentNormalizationBackfillService
         {
             var source = await _secEdgarClient.GetDocumentContent(
                 document.AccessionNumber,
-                document.Issuer.Cik,
+                EdgarSubmissionAddress.Cik(document),
                 cancellationToken
             );
             // The submission's own header is the acceptance authority, so a filing stored before

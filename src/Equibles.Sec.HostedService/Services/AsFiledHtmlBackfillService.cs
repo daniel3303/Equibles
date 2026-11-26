@@ -102,7 +102,7 @@ public class AsFiledHtmlBackfillService
             {
                 var content = await _secEdgarClient.GetDocumentContent(
                     document.AccessionNumber,
-                    document.Issuer.Cik
+                    EdgarSubmissionAddress.Cik(document)
                 );
                 // The submission doesn't name its primary document; TryBuildAsFiledHtml falls
                 // back to the first displayable block (the primary by EDGAR convention).
