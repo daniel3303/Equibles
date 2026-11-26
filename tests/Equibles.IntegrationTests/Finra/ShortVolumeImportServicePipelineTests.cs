@@ -231,6 +231,8 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
             new EquityIssuerTickerEvidenceRepository(DbContext),
             new EquityListingSymbolStartRepository(DbContext),
             new DailyShortVolumeRepository(DbContext),
+            new ShortInterestRepository(DbContext),
+            new OffExchangeVolumeRepository(DbContext),
             new FinraImportPartitionRepository(DbContext),
             TimeProvider.System,
             Substitute.For<ILogger<ListingSymbolStartService>>()

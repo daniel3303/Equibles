@@ -21,6 +21,8 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
             new EquityIssuerTickerEvidenceRepository(DbContext),
             new EquityListingSymbolStartRepository(DbContext),
             new DailyShortVolumeRepository(DbContext),
+            new ShortInterestRepository(DbContext),
+            new OffExchangeVolumeRepository(DbContext),
             new FinraImportPartitionRepository(DbContext),
             TimeProvider.System,
             Substitute.For<ILogger<ListingSymbolStartService>>()
@@ -162,6 +164,11 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
         }
         // The line traded under another symbol before; those rows are its own history.
         DbContext.Add(Row(listing, "OLDS", new DateOnly(2021, 3, 1)));
+        DbContext.Add(ShortInterestRow(listing, "SYMS", new DateOnly(2022, 1, 14)));
+        DbContext.Add(ShortInterestRow(listing, "SYMS", new DateOnly(2025, 6, 30)));
+        DbContext.Add(WeeklyRow(listing, "SYMS", new DateOnly(2022, 1, 3)));
+        // The week ending on the start's first day is admitted by the weekly import.
+        DbContext.Add(WeeklyRow(listing, "SYMS", new DateOnly(2025, 6, 20)));
         DbContext.Add(
             new EquityIssuerTickerEvidence
             {
@@ -176,6 +183,32 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
         DbContext.ChangeTracker.Clear();
         return listing;
     }
+
+    private static ShortInterest ShortInterestRow(
+        EquityListing listing,
+        string ticker,
+        DateOnly settlementDate
+    ) =>
+        new()
+        {
+            EquityListingId = listing.Id,
+            ListedTicker = ticker,
+            SettlementDate = settlementDate,
+            CurrentShortPosition = 1,
+        };
+
+    private static OffExchangeVolume WeeklyRow(
+        EquityListing listing,
+        string ticker,
+        DateOnly weekStartDate
+    ) =>
+        new()
+        {
+            EquityListingId = listing.Id,
+            ListedTicker = ticker,
+            WeekStartDate = weekStartDate,
+            AtsVolume = 1,
+        };
 
     private static DailyShortVolume Row(EquityListing listing, string ticker, DateOnly date) =>
         new()
@@ -225,6 +258,24 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
             .SingleAsync(row => row.EquityListingId == listing.Id);
         start.WithdrawnFrom.Should().Be(new DateOnly(2022, 1, 3));
         start.EarlierHolderFrom.Should().Be(new DateOnly(2022, 1, 3));
+        (
+            await DbContext
+                .Set<ShortInterest>()
+                .Where(row => row.EquityListingId == listing.Id)
+                .Select(row => row.SettlementDate)
+                .ToListAsync()
+        )
+            .Should()
+            .Equal(new DateOnly(2025, 6, 30));
+        (
+            await DbContext
+                .Set<OffExchangeVolume>()
+                .Where(row => row.EquityListingId == listing.Id)
+                .Select(row => row.WeekStartDate)
+                .ToListAsync()
+        )
+            .Should()
+            .Equal(new DateOnly(2025, 6, 20));
         start.EarlierHolderThrough.Should().Be(new DateOnly(2022, 1, 14));
 
         await Service().Refresh(CancellationToken.None);
@@ -241,6 +292,28 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
                 new DateOnly(2025, 6, 26),
                 "the start outlives the rows it withdrew, or the next replay files them again"
             );
+
+        DbContext.Add(ShortInterestRow(listing, "SYMS", new DateOnly(2021, 12, 15)));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        await Service().Refresh(CancellationToken.None);
+        DbContext.ChangeTracker.Clear();
+
+        (
+            await DbContext
+                .Set<ShortInterest>()
+                .AnyAsync(row => row.SettlementDate == new DateOnly(2021, 12, 15))
+        )
+            .Should()
+            .BeFalse("a withdrawn start keeps withdrawing what is filed before it");
+        (
+            await DbContext
+                .Set<EquityListingSymbolStart>()
+                .AsNoTracking()
+                .SingleAsync(row => row.EquityListingId == listing.Id)
+        )
+            .WithdrawnFrom.Should()
+            .Be(new DateOnly(2021, 12, 15));
     }
 
     [Fact]
@@ -270,6 +343,14 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
                 }
             );
         }
+        DbContext.Add(
+            new FinraImportPartition
+            {
+                Dataset = OffExchangeVolumeImportService.Dataset,
+                PartitionDate = new DateOnly(2022, 1, 3),
+                ScopeKey = "listings:current",
+            }
+        );
         DbContext.RemoveRange(
             DbContext
                 .Set<EquityIssuerTickerEvidence>()
@@ -304,6 +385,13 @@ public class ListingSymbolStartServiceTests(ParadeDbFixture fixture) : ParadeDbM
                 [(withdrawnDate, "all"), (currentDate, "listings:current")],
                 "the withdrawn dates' listing markers reopen; the retired scope and later dates stay"
             );
+        (
+            await DbContext
+                .Set<FinraImportPartition>()
+                .AnyAsync(row => row.Dataset == OffExchangeVolumeImportService.Dataset)
+        )
+            .Should()
+            .BeFalse("the withdrawn week's marker reopens too");
     }
 
     [Fact]
