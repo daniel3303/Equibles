@@ -27,27 +27,41 @@ public static class RevenueSlices
     /// </summary>
     public static List<FinancialFact> Without(IReadOnlyCollection<FinancialFact> revenue)
     {
-        var filed = revenue.Where(IsFiledConsolidatedDuration).ToList();
-        var nineMonths = filed
-            .Where(IsNineMonths)
-            .ToLookup(f => (f.FinancialConceptId, f.PeriodStart, f.Unit), f => f.Value);
-        var slices = filed
+        var filings = revenue
+            .Where(IsFiledConsolidatedDuration)
             .GroupBy(f => (f.AccessionNumber, f.PeriodStart, f.PeriodEnd, f.Unit))
-            .SelectMany(filing => filing.Where(fact => IsSlice(fact, filing, nineMonths)))
+            .ToList();
+        var slices = filings
+            .SelectMany(filing => filing.Where(fact => IsZeroSlice(fact, filing)))
             .ToHashSet(ReferenceEqualityComparer.Instance);
+        // A zero slice is no nine months the year's tag states, so a second call, which no longer
+        // sees it, judges every year as the first did.
+        var nineMonths = filings
+            .SelectMany(filing => filing)
+            .Where(f => IsNineMonths(f) && !slices.Contains(f))
+            .ToLookup(f => (f.FinancialConceptId, f.PeriodStart, f.Unit), f => f.Value);
+        slices.UnionWith(
+            filings.SelectMany(filing =>
+                filing.Where(fact => IsYearSlice(fact, filing, nineMonths))
+            )
+        );
         return slices.Count == 0 ? [.. revenue] : [.. revenue.Where(f => !slices.Contains(f))];
     }
 
-    private static bool IsSlice(
+    private static bool IsZeroSlice(FinancialFact fact, IEnumerable<FinancialFact> filing) =>
+        fact.Value == 0
+        && filing.Any(other =>
+            other.FinancialConceptId != fact.FinancialConceptId && other.Value > 0
+        );
+
+    private static bool IsYearSlice(
         FinancialFact fact,
         IEnumerable<FinancialFact> filing,
         ILookup<(Guid, DateOnly, string), decimal> nineMonths
     )
     {
         var otherTags = filing.Where(other => other.FinancialConceptId != fact.FinancialConceptId);
-        if (fact.Value == 0)
-            return otherTags.Any(other => other.Value > 0);
-        if (fact.Value < 0 || !IsYear(fact))
+        if (fact.Value <= 0 || !IsYear(fact))
             return false;
         if (
             nineMonths[(fact.FinancialConceptId, fact.PeriodStart, fact.Unit)]

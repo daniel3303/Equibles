@@ -150,6 +150,22 @@ public class RevenueSlicesTests
         RevenueSlices.Without(facts).Should().HaveCount(3);
     }
 
+    // The chart reads the facts without slices, then folds them, which drops slices again: a zero
+    // nine months beside the contract figure supports no year in either call.
+    [Fact]
+    public void Without_ZeroNineMonthsBesideAYearSlice_DropsBothInOneCallAndASecondDropsNothing()
+    {
+        var zeroNineMonths = NineMonths(Revenues, 0m);
+        var slice = Year(Revenues, 12_794m);
+        var whole = Year(ContractRevenue, 20_407m);
+        var nineMonths = NineMonths(ContractRevenue, 14_730m);
+
+        var once = RevenueSlices.Without([zeroNineMonths, slice, whole, nineMonths]);
+
+        once.Should().BeEquivalentTo([whole, nineMonths], o => o.WithStrictOrdering());
+        RevenueSlices.Without(once).Should().BeEquivalentTo(once, o => o.WithStrictOrdering());
+    }
+
     // A commodity pool's Revenues nets its trading losses: a negative year is no slice.
     [Fact]
     public void Without_NegativeYear_KeepsTheYear()
