@@ -17,8 +17,9 @@ public static class EdgarSubmissionAddress
     );
 
     /// <summary>
-    /// The issuer's CIK, unless the stored address names this filing's accession under another
-    /// one: then that one, without leading zeros.
+    /// The issuer's CIK, unless the stored address names this filing under another one: then
+    /// that one, without leading zeros. An address of another accession than the filing's own
+    /// says nothing about it.
     /// </summary>
     public static string Cik(Document document)
     {
@@ -26,10 +27,13 @@ public static class EdgarSubmissionAddress
         var match = Submission.Match(document.SourceUrl ?? string.Empty);
         if (
             !match.Success
-            || !string.Equals(
-                match.Groups[2].Value,
-                document.AccessionNumber,
-                StringComparison.OrdinalIgnoreCase
+            || (
+                !string.IsNullOrEmpty(document.AccessionNumber)
+                && !string.Equals(
+                    match.Groups[2].Value,
+                    document.AccessionNumber,
+                    StringComparison.OrdinalIgnoreCase
+                )
             )
         )
         {

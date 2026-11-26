@@ -315,6 +315,27 @@ public class XbrlDocumentSetRecaptureServiceTests : IDisposable
         (await service.Pending().Select(d => d.Id).ToListAsync()).Should().Equal(document.Id);
     }
 
+    // The issuer took a new CIK after this filing; EDGAR serves it only under the one that
+    // filed it, which the stored address names.
+    [Fact]
+    public async Task Recapture_FilingStoredUnderAnEarlierCik_IsFetchedUnderTheCikOfItsAddress()
+    {
+        var document = await Seed(DocumentType.FortyF);
+        _issuer.Cik = "2136387";
+        await _dbContext.SaveChangesAsync();
+        _secEdgarClient
+            .GetDocumentContent(Accession, "1061574", Arg.Any<CancellationToken>())
+            .Returns(Submission(Cover, Statements));
+        _secEdgarClient
+            .GetDocumentContent(Accession, "2136387", Arg.Any<CancellationToken>())
+            .Returns<Task<string>>(_ => throw new HttpRequestException("404 (Not Found)"));
+
+        var result = await _service.Recapture(batchSize: 10);
+
+        result.Grown.Should().Be(1);
+        result.Failed.Should().Be(0);
+    }
+
     [Fact]
     public async Task Recapture_NoStoredAccession_ReadsTheSourceUrlAccessionAndKeepsIt()
     {

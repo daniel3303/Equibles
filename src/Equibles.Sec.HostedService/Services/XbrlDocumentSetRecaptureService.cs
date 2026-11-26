@@ -184,7 +184,7 @@ public partial class XbrlDocumentSetRecaptureService
 
         var submission = await _secEdgarClient.GetDocumentContent(
             accession,
-            document.Issuer.Cik,
+            EdgarSubmissionAddress.Cik(document),
             cancellationToken
         );
         if (

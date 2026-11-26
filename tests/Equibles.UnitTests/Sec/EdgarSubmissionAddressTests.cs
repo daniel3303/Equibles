@@ -58,6 +58,19 @@ public class EdgarSubmissionAddressTests
         EdgarSubmissionAddress.Cik(document).Should().Be("1593538");
     }
 
+    // A legacy row stored before accessions were stamped: its address is its only identity.
+    [Fact]
+    public void Cik_FilingWithoutAStoredAccession_IsReadFromItsAddress()
+    {
+        var document = Filing(
+            "2152623",
+            "https://www.sec.gov/Archives/edgar/data/0001593538/0001654954-23-004613.txt"
+        );
+        document.AccessionNumber = null;
+
+        EdgarSubmissionAddress.Cik(document).Should().Be("1593538");
+    }
+
     [Fact]
     public void Cik_FilingWithoutAnIssuerCik_IsTheCikOfItsAddress()
     {
