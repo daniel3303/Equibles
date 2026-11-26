@@ -15,6 +15,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Sec.FinancialFacts.BusinessLogic.ReleaseStatements;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data;
@@ -45,6 +46,7 @@ public class FinancialFactsTools
     private readonly DocumentRepository _documentRepository;
     private readonly ReleaseStatementFigureRepository _releaseFigureRepository;
     private readonly McpToolRunner _runner;
+    private readonly INetIncomeFactsReader _netIncomeFactsReader;
 
     // The document repository is optional: a host without the filings module has no stored
     // earnings release to point at.
@@ -56,9 +58,11 @@ public class FinancialFactsTools
         ErrorManager errorManager,
         ILogger<FinancialFactsTools> logger,
         DocumentRepository documentRepository = null,
-        ReleaseStatementFigureRepository releaseFigureRepository = null
+        ReleaseStatementFigureRepository releaseFigureRepository = null,
+        INetIncomeFactsReader netIncomeFactsReader = null
     )
     {
+        _netIncomeFactsReader = netIncomeFactsReader;
         _documentRepository = documentRepository;
         _releaseFigureRepository = releaseFigureRepository;
         _financialFactRepository = financialFactRepository;
@@ -226,7 +230,20 @@ public class FinancialFactsTools
                 // A foreign filer's owners' profit tagged with the opposite sign reads the sign its
                 // filing proves; the as-originally-reported reading keeps the tag (OwnersProfitSign).
                 IReadOnlySet<FinancialFact> ownersProfitNegated = new HashSet<FinancialFact>();
-                if (OwnersProfitSign.IsNetIncome(conceptRefs) && !asOriginallyReported)
+                // A host that proves the issuer's net income its own way states the line read here
+                // (INetIncomeFactsReader); the as-originally-reported reading keeps the tags.
+                var hostNetIncome =
+                    OwnersProfitSign.IsNetIncome(conceptRefs) && !asOriginallyReported
+                        ? await ReadHostNetIncome(stock)
+                        : null;
+                if (hostNetIncome != null)
+                {
+                    facts = [.. hostNetIncome.Facts];
+                    conceptPriority = hostNetIncome.Concepts.Keys.ToDictionary(id => id, _ => 0);
+                    foreach (var (conceptId, conceptRef) in hostNetIncome.Concepts)
+                        conceptsById.TryAdd(conceptId, conceptRef);
+                }
+                else if (OwnersProfitSign.IsNetIncome(conceptRefs) && !asOriginallyReported)
                 {
                     var ownersReading = await OwnersProfitSignFacts.Read(
                         _financialFactRepository,
@@ -598,6 +615,20 @@ public class FinancialFactsTools
                 var grossProfitComponents = GrossProfitMistag.IsGrossProfit(conceptRefs)
                     ? await ResolveGrossProfitComponents()
                     : [];
+                // Net income compares the line a host proves for each issuer it reads its own way
+                // (INetIncomeFactsReader), as GetFinancialFact reads it.
+                var hostNetIncome = new Dictionary<Guid, NetIncomeReading>();
+                if (OwnersProfitSign.IsNetIncome(conceptRefs))
+                    foreach (var stock in stocks)
+                        if (await ReadHostNetIncome(stock) is { } reading)
+                        {
+                            hostNetIncome[stock.Id] = reading;
+                            foreach (var (conceptId, conceptRef) in reading.Concepts)
+                            {
+                                conceptsById.TryAdd(conceptId, conceptRef);
+                                conceptPriority.TryAdd(conceptId, 0);
+                            }
+                        }
                 // One fiscal year's pick per company, and the companies whose gross profit that pick proves
                 // mis-tagged. A calendar comparison runs it for the two years that can hold the calendar year.
                 async Task<(Dictionary<Guid, FinancialFact> Best, HashSet<Guid> Mistagged)> Slice(
@@ -690,6 +721,23 @@ public class FinancialFactsTools
                                 conceptPriority.Keys.ToHashSet()
                             )
                         ).Facts;
+                    if (hostNetIncome.Count > 0)
+                        facts =
+                        [
+                            .. facts.Where(f => !hostNetIncome.ContainsKey(f.EquityIssuerId)),
+                            .. hostNetIncome.Values.SelectMany(reading =>
+                                reading.Facts.Where(f =>
+                                    f.FiscalYear == year
+                                    && (
+                                        f.FiscalPeriod == period
+                                        || (
+                                            includeFullYearForQ4
+                                            && f.FiscalPeriod == SecFiscalPeriod.FullYear
+                                        )
+                                    )
+                                )
+                            ),
+                        ];
 
                     if (includeFullYearForQ4)
                     {
@@ -1596,6 +1644,11 @@ public class FinancialFactsTools
         }
         return components;
     }
+
+    private Task<NetIncomeReading> ReadHostNetIncome(EquityIssuer stock) =>
+        _netIncomeFactsReader == null
+            ? Task.FromResult<NetIncomeReading>(null)
+            : _netIncomeFactsReader.Read(stock);
 
     private async Task<(
         HashSet<Guid> Ids,
