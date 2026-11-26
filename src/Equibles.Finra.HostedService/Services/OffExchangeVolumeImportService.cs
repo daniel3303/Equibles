@@ -27,7 +27,7 @@ public class OffExchangeVolumeImportService
     // #4369) — the bump re-imports every week FINRA still publishes so dual-class weeks fill
     // in; weeks aged out of the ~1-year rolling window are unhealable and stay as stored.
     // v4 carries exact listing identity and replays FINRA's retained weekly window.
-    private const string Dataset = "off-exchange-weekly-v4";
+    public const string Dataset = "off-exchange-weekly-v4";
     private const int CorrectionLookbackWeeks = 8;
     private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
     private static readonly HashSet<string> CompletePublicationTiers = new(
