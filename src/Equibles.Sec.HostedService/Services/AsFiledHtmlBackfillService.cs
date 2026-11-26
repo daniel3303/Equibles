@@ -100,19 +100,17 @@ public class AsFiledHtmlBackfillService
 
             try
             {
+                // The exhibits and images are fetched under the same CIK as the submission.
+                var cik = EdgarSubmissionAddress.Cik(document);
                 var content = await _secEdgarClient.GetDocumentContent(
                     document.AccessionNumber,
-                    document.Issuer.Cik
+                    cik
                 );
                 // The submission doesn't name its primary document; TryBuildAsFiledHtml falls
                 // back to the first displayable block (the primary by EDGAR convention).
                 var capture = await _captureService.Capture(
                     content,
-                    new FilingData
-                    {
-                        Cik = document.Issuer.Cik,
-                        AccessionNumber = document.AccessionNumber,
-                    },
+                    new FilingData { Cik = cik, AccessionNumber = document.AccessionNumber },
                     cancellationToken
                 );
                 await _persistenceService.UpdateAsFiledHtml(document, capture, cancellationToken);

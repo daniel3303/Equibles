@@ -54,7 +54,8 @@ public class ReportedStatementsCaptureService
         CancellationToken cancellationToken
     )
     {
-        var cik = document.Issuer?.Cik;
+        // The summary and the R-files sit under the CIK that filed the filing.
+        var cik = EdgarSubmissionAddress.Cik(document);
         var accession = document.AccessionNumber;
         if (string.IsNullOrWhiteSpace(cik) || string.IsNullOrWhiteSpace(accession))
         {

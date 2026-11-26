@@ -212,6 +212,30 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .GetDocumentContent("0001045810-26-000021", _company.Cik, Arg.Any<CancellationToken>());
     }
 
+    // A holding-company reorganization gave the issuer a new CIK; EDGAR still serves the 2023
+    // filing only under the CIK that filed it, which its stored address names.
+    [Fact]
+    public async Task Backfill_FilingStoredUnderAnEarlierCik_IsFetchedUnderTheCikOfItsAddress()
+    {
+        var document = SeedDocument(normalizedContentVersion: 0);
+        document.AccessionNumber = "0001654954-23-004613";
+        document.SourceUrl =
+            "https://www.sec.gov/Archives/edgar/data/0001593538/0001654954-23-004613.txt";
+        _company.Cik = "2152623";
+        _dbContext.SaveChanges();
+        _secEdgarClient
+            .GetDocumentContent("0001654954-23-004613", "1593538", Arg.Any<CancellationToken>())
+            .Returns(NvidiaSubmission);
+        _secEdgarClient
+            .GetDocumentContent("0001654954-23-004613", "2152623", Arg.Any<CancellationToken>())
+            .Returns<Task<string>>(_ => throw new HttpRequestException("404 (Not Found)"));
+
+        var result = await BuildSut().Backfill(batchSize: 1);
+
+        result.Replaced.Should().Be(1);
+        result.Failed.Should().Be(0);
+    }
+
     [Fact]
     public async Task Backfill_NonPeriodicDocument_IsOnlySelectedWhenPrioritized()
     {
