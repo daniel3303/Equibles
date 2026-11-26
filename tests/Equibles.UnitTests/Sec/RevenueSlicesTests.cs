@@ -105,13 +105,27 @@ public class RevenueSlicesTests
             new(2024, 7, 1),
             new(2024, 9, 30)
         );
+        var year = Year(ContractRevenue, 9.8m);
 
         RevenueSlices
-            .Without([slice, whole])
+            .Without([slice, whole, year])
             .Should()
-            .ContainSingle()
-            .Which.Should()
-            .BeSameAs(whole);
+            .BeEquivalentTo([whole, year], o => o.WithStrictOrdering());
+    }
+
+    // CompareFinancialFact reads one fiscal period: Blue Owl's third quarter beside the nine months
+    // that end with it holds none of Revenues' own half years and years, so nothing proves a slice.
+    [Fact]
+    public void Without_OnePeriodsFigures_DropsNoQuarter()
+    {
+        var facts = new[]
+        {
+            Quarter(Revenues, 138m, QuarterFiling, new(2024, 7, 1), new(2024, 9, 30)),
+            Quarter(ContractRevenue, 754m, QuarterFiling, new(2024, 7, 1), new(2024, 9, 30)),
+            NineMonths(ContractRevenue, 2_230m),
+        };
+
+        RevenueSlices.Without(facts).Should().HaveCount(3);
     }
 
     // Blue Owl's Revenues states its own half years and years, a measure of its own: its quarters stay.
