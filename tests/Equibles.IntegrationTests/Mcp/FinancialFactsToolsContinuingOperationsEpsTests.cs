@@ -14,8 +14,9 @@ namespace Equibles.IntegrationTests.Mcp;
 /// Diluted EPS reads a year the filer tags only as its continuing operations' on the fact tools.
 /// Live repro: Freeport-McMoRan's 2025 10-Qs tag <c>EarningsPerShareDiluted</c> (0.24, 0.53,
 /// 0.46) and its 10-K the year only as <c>IncomeLossFromContinuingOperationsPerDilutedShare</c>
-/// (1.52), and the alias answered no year. The second issuer is made up: its 10-K states
-/// discontinued operations, so its continuing figure is no diluted EPS.
+/// (1.52) beside the figures that prove it the whole, and the alias answered no year. The second
+/// issuer is made up: its 10-K also states discontinued operations, so its continuing figure is no
+/// diluted EPS.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FinancialFactsToolsContinuingOperationsEpsTests : ParadeDbMcpTestBase
@@ -31,6 +32,16 @@ public class FinancialFactsToolsContinuingOperationsEpsTests : ParadeDbMcpTestBa
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialFactsTools>()
+        );
+
+    private FinancialStatementTools StatementSut() =>
+        new(
+            new StatementFactRepository(DbContext),
+            new FinancialConceptRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
+            new StockSplitRepository(DbContext),
+            ErrorManager,
+            NullLogger<FinancialStatementTools>()
         );
 
     private FinancialConcept Concept(string tag)
@@ -86,6 +97,20 @@ public class FinancialFactsToolsContinuingOperationsEpsTests : ParadeDbMcpTestBa
         var diluted = Concept("EarningsPerShareDiluted");
         var continuing = Concept("IncomeLossFromContinuingOperationsPerDilutedShare");
         var discontinued = Concept("IncomeLossFromDiscontinuedOperationsNetOfTax");
+        // The 10-K's figures that prove the year's continuing EPS the whole (ContinuingOperationsEps).
+        var proof = new[]
+        {
+            (
+                Concept(
+                    "IncomeLossFromContinuingOperationsIncludingPortionAttributableToNoncontrollingInterest"
+                ),
+                4_152_000_000m,
+                "USD"
+            ),
+            (Concept("ProfitLoss"), 4_152_000_000m, "USD"),
+            (Concept("WeightedAverageNumberOfDilutedSharesOutstanding"), 1_443_000_000m, "shares"),
+            (Concept("NetIncomeLossAvailableToCommonStockholdersDiluted"), 2_197_000_000m, "USD"),
+        };
 
         var freeport = Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
@@ -146,6 +171,18 @@ public class FinancialFactsToolsContinuingOperationsEpsTests : ParadeDbMcpTestBa
                 annual,
                 "2026-02-13"
             );
+            foreach (var (concept, value, unit) in proof)
+                Add(
+                    stock,
+                    concept,
+                    "2025-01-01",
+                    "2025-12-31",
+                    value,
+                    SecFiscalPeriod.FullYear,
+                    annual,
+                    "2026-02-13",
+                    unit
+                );
             if (stock == recast)
                 Add(
                     stock,
@@ -198,5 +235,21 @@ public class FinancialFactsToolsContinuingOperationsEpsTests : ParadeDbMcpTestBa
 
         result.Should().Contain("$1.52 |");
         result.Split('\n').Count(line => line.Contains("1.52")).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("FCX", true)]
+    [InlineData("DSCO", false)]
+    public async Task GetFinancialStatement_YearTaggedOnlyAsContinuingOperations_LineReadsItWhereProved(
+        string ticker,
+        bool read
+    )
+    {
+        await Seed();
+
+        var result = await StatementSut()
+            .GetFinancialStatement(ticker, statement: "income", year: 2025, period: "FY");
+
+        result.Contains("| EPS (Diluted) | $1.52 | USD/shares | Reported |").Should().Be(read);
     }
 }

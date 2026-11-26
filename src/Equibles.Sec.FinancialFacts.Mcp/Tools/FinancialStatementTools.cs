@@ -356,6 +356,17 @@ public class FinancialStatementTools
                 facts,
                 selectedYear
             );
+        // Diluted EPS reads a continuing operations' figure where its filing proves it the whole, the
+        // figure the fact series shows for the period (ContinuingOperationsEps).
+        if (statementLines.Any(line => ContinuingOperationsEps.IsFamily(line.Concepts)))
+            facts = await ContinuingOperationsEpsFacts.ForStatement(
+                _financialFactRepository,
+                _financialConceptRepository,
+                stock.Id,
+                facts,
+                selectedYear,
+                conceptIdByKey
+            );
         // A foreign filer's owners' profit tagged with the opposite sign reads the sign its filing
         // proves, before a quarter is derived from it (OwnersProfitSign).
         var ownersProfitSign = OwnersProfitSign.Unchanged(facts);

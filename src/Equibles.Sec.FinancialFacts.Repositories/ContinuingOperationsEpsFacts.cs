@@ -1,3 +1,4 @@
+using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Microsoft.EntityFrameworkCore;
@@ -17,8 +18,41 @@ public static class ContinuingOperationsEpsFacts
     public sealed record History(
         List<FinancialFact> Facts,
         Dictionary<Guid, int> Priority,
-        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById,
+        ContinuingOperationsEps.Concepts Roles
     );
+
+    /// <summary>
+    /// A statement's facts with the proved continuing operations' figures of
+    /// <paramref name="fiscalYear"/> (<see cref="ContinuingOperationsEps.ForStatement"/>), and
+    /// their concept added to <paramref name="conceptIdByKey"/> so the diluted EPS line can read it.
+    /// </summary>
+    public static async Task<List<FinancialFact>> ForStatement(
+        FinancialFactRepository financialFactRepository,
+        FinancialConceptRepository financialConceptRepository,
+        Guid issuerId,
+        IReadOnlyCollection<FinancialFact> statementFacts,
+        int fiscalYear,
+        IDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var history = await Load(
+            financialFactRepository,
+            financialConceptRepository,
+            [issuerId],
+            cancellationToken
+        );
+        foreach (var (id, reference) in history.ConceptsById)
+            if (ContinuingOperationsEps.IsContinuing(reference.Taxonomy, reference.Tag))
+                conceptIdByKey.TryAdd((reference.Taxonomy, reference.Tag), id);
+        return ContinuingOperationsEps.ForStatement(
+            statementFacts,
+            fiscalYear,
+            history.Facts,
+            history.Roles
+        );
+    }
 
     public static async Task<History> Load(
         FinancialFactRepository financialFactRepository,
@@ -86,6 +120,6 @@ public static class ContinuingOperationsEpsFacts
             foreach (var (conceptId, rank) in issuerPriority)
                 priority.TryAdd(conceptId, rank);
         }
-        return new History(folded, priority, conceptsById);
+        return new History(folded, priority, conceptsById, roles);
     }
 }

@@ -839,6 +839,17 @@ public class StockTabService
                 facts,
                 fiscalYear
             );
+        // Diluted EPS reads a continuing operations' figure where its filing proves it the whole, the
+        // figure the fact series shows for the period (ContinuingOperationsEps).
+        if (statementLines.Any(line => ContinuingOperationsEps.IsFamily(line.Concepts)))
+            facts = await ContinuingOperationsEpsFacts.ForStatement(
+                _financialFactRepository,
+                _financialConceptRepository,
+                stock.Id,
+                facts,
+                fiscalYear,
+                conceptIdByKey
+            );
         // A foreign filer's owners' profit tagged with the opposite sign reads the sign its filing
         // proves, as the MCP statement tool reads it (OwnersProfitSign).
         if (
