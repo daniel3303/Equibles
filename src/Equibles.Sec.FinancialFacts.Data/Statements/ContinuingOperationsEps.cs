@@ -124,10 +124,10 @@ public static class ContinuingOperationsEps
         var filed = evidence
             .Where(IsConsolidatedDuration)
             .Select(f => (Fact: f, Kind: concepts.KindOf(f.FinancialConceptId)))
-            .Where(item => item.Kind != null)
+            .Where(item => item.Kind.HasValue)
             .ToLookup(
                 item => (item.Fact.AccessionNumber, item.Fact.PeriodStart, item.Fact.PeriodEnd),
-                item => (item.Fact, Kind: item.Kind.Value)
+                item => (item.Fact, Kind: item.Kind.GetValueOrDefault())
             );
         var continuing = filed
             .SelectMany(group => group)
