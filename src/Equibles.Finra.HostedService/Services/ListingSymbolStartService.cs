@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -12,8 +13,8 @@ namespace Equibles.Finra.HostedService.Services;
 /// the date the symbol started naming the listing (<see cref="ListingSymbolStartRule"/>). The FINRA
 /// imports map today's symbols onto every historical file, so without the start a recycled symbol
 /// files its earlier holder's history under the listing that holds it now. A start that holds
-/// across two refreshes withdraws the daily short-volume rows already filed before it; a withdrawn
-/// start that lifts has those dates' files read again.
+/// across two refreshes withdraws the daily short-volume, short-interest and weekly off-exchange rows
+/// already filed before it; a withdrawn start that lifts has those dates read again.
 /// </summary>
 [Service]
 public class ListingSymbolStartService
@@ -24,6 +25,8 @@ public class ListingSymbolStartService
     private readonly EquityIssuerTickerEvidenceRepository _evidence;
     private readonly EquityListingSymbolStartRepository _starts;
     private readonly DailyShortVolumeRepository _shortVolumes;
+    private readonly ShortInterestRepository _shortInterest;
+    private readonly OffExchangeVolumeRepository _offExchangeVolumes;
     private readonly FinraImportPartitionRepository _partitions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ListingSymbolStartService> _logger;
@@ -33,6 +36,8 @@ public class ListingSymbolStartService
         EquityIssuerTickerEvidenceRepository evidence,
         EquityListingSymbolStartRepository starts,
         DailyShortVolumeRepository shortVolumes,
+        ShortInterestRepository shortInterest,
+        OffExchangeVolumeRepository offExchangeVolumes,
         FinraImportPartitionRepository partitions,
         TimeProvider timeProvider,
         ILogger<ListingSymbolStartService> logger
@@ -42,6 +47,8 @@ public class ListingSymbolStartService
         _evidence = evidence;
         _starts = starts;
         _shortVolumes = shortVolumes;
+        _shortInterest = shortInterest;
+        _offExchangeVolumes = offExchangeVolumes;
         _partitions = partitions;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -92,7 +99,7 @@ public class ListingSymbolStartService
                 listing => TickerNormalizer.NormalizeDashListed(listing.Ticker)
             );
 
-        var derived = new Dictionary<(Guid, string), Derived>();
+        var derived = new Dictionary<(Guid, string), ListingSymbolStartRule.Derivation>();
         // A withdrawn start on a retired listing waits unchanged until the listing trades again:
         // the imports map active listings only, so lifting it could never file its rows again.
         var retiredWithdrawn = usListings
@@ -110,9 +117,9 @@ public class ListingSymbolStartService
             .Where(entry => entry.Start != null);
         foreach (var (start, run) in retiredWithdrawn)
         {
-            derived[(start.EquityListingId, start.Ticker)] = new Derived(
-                new ListingSymbolStartRule.Derivation(start.StartsOn, run),
-                null
+            derived[(start.EquityListingId, start.Ticker)] = new ListingSymbolStartRule.Derivation(
+                start.StartsOn,
+                run
             );
         }
 
@@ -174,17 +181,13 @@ public class ListingSymbolStartService
             if (derivation is not { } start)
                 continue;
 
-            var earlier = dates.Where(date => date < start.StartsOn).ToList();
-            derived[(listing.Id, listing.Ticker)] = new Derived(
-                start,
-                earlier.Count > 0 ? earlier[0] : null
-            );
+            derived[(listing.Id, listing.Ticker)] = start;
             _logger.LogInformation(
                 "Symbol {Ticker} names listing {ListingId} from {StartsOn}; {Earlier} stored daily short-volume rows under it are dated earlier",
                 listing.Ticker,
                 listing.Id,
                 start.StartsOn,
-                earlier.Count
+                dates.Count(date => date < start.StartsOn)
             );
         }
 
@@ -192,14 +195,8 @@ public class ListingSymbolStartService
         return derived.Count;
     }
 
-    // A derived start, and the first of the rows filed under its symbol before it.
-    private readonly record struct Derived(
-        ListingSymbolStartRule.Derivation Start,
-        DateOnly? FirstEarlierRow
-    );
-
     private async Task Store(
-        IReadOnlyDictionary<(Guid, string), Derived> derived,
+        IReadOnlyDictionary<(Guid, string), ListingSymbolStartRule.Derivation> derived,
         IReadOnlyCollection<EquityListingSymbolStart> stored,
         CancellationToken cancellationToken
     )
@@ -217,25 +214,21 @@ public class ListingSymbolStartService
         _starts.Delete(lifted);
 
         // A start that moved waits a refresh before any withdrawal; one that held since the
-        // previous refresh marks its earlier rows withdrawn before they go.
-        var withdrawals = new List<EquityListingSymbolStart>();
+        // previous refresh withdraws whatever is still filed before it.
+        var held = new List<EquityListingSymbolStart>();
         foreach (
             var row in stored.Where(row => derived.ContainsKey((row.EquityListingId, row.Ticker)))
         )
         {
-            var (start, firstEarlierRow) = derived[(row.EquityListingId, row.Ticker)];
+            var start = derived[(row.EquityListingId, row.Ticker)];
             if (row.StartsOn != start.StartsOn)
             {
                 row.StartsOn = start.StartsOn;
                 row.RecordedAt = now;
             }
-            else if (firstEarlierRow is { } first)
+            else
             {
-                row.WithdrawnFrom =
-                    row.WithdrawnFrom is { } withdrawnFrom && withdrawnFrom < first
-                        ? withdrawnFrom
-                        : first;
-                withdrawals.Add(row);
+                held.Add(row);
             }
             row.EarlierHolderFrom = start.EarlierHolder.Start;
             row.EarlierHolderThrough = start.EarlierHolder.End;
@@ -243,7 +236,7 @@ public class ListingSymbolStartService
 
         var storedKeys = stored.Select(row => (row.EquityListingId, row.Ticker)).ToHashSet();
         foreach (
-            var ((listingId, ticker), (start, _)) in derived.Where(entry =>
+            var ((listingId, ticker), start) in derived.Where(entry =>
                 !storedKeys.Contains(entry.Key)
             )
         )
@@ -263,26 +256,87 @@ public class ListingSymbolStartService
         }
 
         await _starts.SaveChanges();
-        foreach (var row in withdrawals)
-            await Withdraw(row, cancellationToken);
+        foreach (var row in held)
+        {
+            if (await Withdraw(row, cancellationToken) is { } first)
+                row.WithdrawnFrom =
+                    row.WithdrawnFrom is { } withdrawnFrom && withdrawnFrom < first
+                        ? withdrawnFrom
+                        : first;
+        }
+        await _starts.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
     }
 
     // Only rows filed under the start's own symbol go: a renamed line's rows under its earlier
-    // symbol are its own history.
-    private async Task Withdraw(EquityListingSymbolStart start, CancellationToken cancellationToken)
+    // symbol are its own history. Each dataset goes by the date its import admits the listing on;
+    // a week counts from its last day.
+    private async Task<DateOnly?> Withdraw(
+        EquityListingSymbolStart start,
+        CancellationToken cancellationToken
+    )
     {
-        var withdrawn = await _shortVolumes
-            .GetHistoryByListingId(start.EquityListingId)
-            .Where(row => row.ListedTicker == start.Ticker && row.Date < start.StartsOn)
-            .ExecuteDeleteAsync(cancellationToken);
+        var lastWeekBefore = start.StartsOn.AddDays(-6);
+        DateOnly?[] firsts =
+        [
+            await Withdraw(
+                start,
+                "daily short-volume",
+                _shortVolumes
+                    .GetHistoryByListingId(start.EquityListingId)
+                    .Where(row => row.ListedTicker == start.Ticker && row.Date < start.StartsOn),
+                row => row.Date,
+                cancellationToken
+            ),
+            await Withdraw(
+                start,
+                "short-interest",
+                _shortInterest
+                    .GetHistoryByListingId(start.EquityListingId)
+                    .Where(row =>
+                        row.ListedTicker == start.Ticker && row.SettlementDate < start.StartsOn
+                    ),
+                row => row.SettlementDate,
+                cancellationToken
+            ),
+            await Withdraw(
+                start,
+                "weekly off-exchange",
+                _offExchangeVolumes
+                    .GetHistoryByListingId(start.EquityListingId)
+                    .Where(row =>
+                        row.ListedTicker == start.Ticker && row.WeekStartDate < lastWeekBefore
+                    ),
+                row => row.WeekStartDate,
+                cancellationToken
+            ),
+        ];
+        return firsts.Min();
+    }
+
+    private async Task<DateOnly?> Withdraw<TRow>(
+        EquityListingSymbolStart start,
+        string dataset,
+        IQueryable<TRow> rows,
+        Expression<Func<TRow, DateOnly>> date,
+        CancellationToken cancellationToken
+    )
+    {
+        var dates = rows.Select(date);
+        if (!await dates.AnyAsync(cancellationToken))
+            return null;
+
+        var first = await dates.MinAsync(cancellationToken);
+        var withdrawn = await rows.ExecuteDeleteAsync(cancellationToken);
         _logger.LogInformation(
-            "Withdrew {Count} daily short-volume rows filed under {Ticker} on listing {ListingId} before its symbol start {StartsOn}",
+            "Withdrew {Count} {Dataset} rows filed under {Ticker} on listing {ListingId} before its symbol start {StartsOn}",
             withdrawn,
+            dataset,
             start.Ticker,
             start.EquityListingId,
             start.StartsOn
         );
+        return first;
     }
 
     private async Task Reopen(EquityListingSymbolStart start, CancellationToken cancellationToken)
@@ -290,27 +344,34 @@ public class ListingSymbolStartService
         if (start.WithdrawnFrom is not { } withdrawnFrom)
             return;
 
+        // Short interest needs none: its import re-fetches every stored date's missing listings.
+        // A weekly partition is keyed by its week's first day, which may fall before the first
+        // withdrawn date; the import reads only the weeks FINRA still publishes.
         var through = start.StartsOn.AddDays(-1);
         var reopened = 0;
         foreach (
-            var prefix in new[]
+            var (dataset, from) in new[]
             {
-                FinraImportScope.ListingUniversePrefix,
-                FinraImportScope.ListingFilterPrefix,
+                (ShortVolumeImportService.Dataset, withdrawnFrom),
+                (OffExchangeVolumeImportService.Dataset, withdrawnFrom.AddDays(-6)),
             }
         )
         {
-            reopened += await _partitions
-                .GetRangeByScopePrefix(
-                    ShortVolumeImportService.Dataset,
-                    prefix,
-                    withdrawnFrom,
-                    through
-                )
-                .ExecuteDeleteAsync(cancellationToken);
+            foreach (
+                var prefix in new[]
+                {
+                    FinraImportScope.ListingUniversePrefix,
+                    FinraImportScope.ListingFilterPrefix,
+                }
+            )
+            {
+                reopened += await _partitions
+                    .GetRangeByScopePrefix(dataset, prefix, from, through)
+                    .ExecuteDeleteAsync(cancellationToken);
+            }
         }
         _logger.LogInformation(
-            "Symbol start {StartsOn} of {Ticker} on listing {ListingId} lifted; reopened {Count} daily short-volume partitions from {WithdrawnFrom}",
+            "Symbol start {StartsOn} of {Ticker} on listing {ListingId} lifted; reopened {Count} daily and weekly partitions from {WithdrawnFrom}",
             start.StartsOn,
             start.Ticker,
             start.EquityListingId,
