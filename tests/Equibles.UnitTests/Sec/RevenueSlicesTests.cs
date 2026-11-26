@@ -263,4 +263,189 @@ public class RevenueSlicesTests
 
         RevenueSlices.Without(facts).Should().HaveCount(3);
     }
+
+    // Legend Biotech's 6-Ks tag 2025 contract revenue as a slice beside revenue (first quarter 9.438M
+    // of 195.053M, half year 44.779M of 450.111M, second quarter 35.341M of 255.058M, nine months
+    // 55.36M of 722.523M, third quarter 10.499M of 272.33M); its 20-F tags the year's contract revenue
+    // at 1,028.9M and no revenue figure for the year.
+    private static readonly Guid IfrsRevenue = Guid.NewGuid();
+    private static readonly Guid IfrsContractRevenue = Guid.NewGuid();
+
+    private static FinancialFact Legend(
+        Guid concept,
+        decimal millions,
+        string start,
+        string end,
+        string accession,
+        string filed,
+        DocumentType form = null
+    ) =>
+        new()
+        {
+            FinancialConceptId = concept,
+            Unit = "USD",
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = DateOnly.Parse(start),
+            PeriodEnd = DateOnly.Parse(end),
+            Value = millions * 1_000_000m,
+            FiscalYear = 2025,
+            FiscalPeriod = SecFiscalPeriod.FullYear,
+            Form = form ?? DocumentType.SixK,
+            FiledDate = DateOnly.Parse(filed),
+            AccessionNumber = accession,
+        };
+
+    private static FinancialFact[] LegendInterims(Guid concept, params decimal[] millions) =>
+        [
+            Legend(
+                concept,
+                millions[0],
+                "2025-01-01",
+                "2025-03-31",
+                "0001801198-25-000021",
+                "2025-05-13"
+            ),
+            Legend(
+                concept,
+                millions[1],
+                "2025-01-01",
+                "2025-06-30",
+                "0001801198-25-000026",
+                "2025-08-11"
+            ),
+            Legend(
+                concept,
+                millions[2],
+                "2025-04-01",
+                "2025-06-30",
+                "0001801198-25-000026",
+                "2025-08-11"
+            ),
+            Legend(
+                concept,
+                millions[3],
+                "2025-01-01",
+                "2025-09-30",
+                "0001801198-25-000031",
+                "2025-11-12"
+            ),
+            Legend(
+                concept,
+                millions[4],
+                "2025-07-01",
+                "2025-09-30",
+                "0001801198-25-000031",
+                "2025-11-12"
+            ),
+        ];
+
+    private static FinancialFact LegendYear(Guid concept, decimal millions) =>
+        Legend(
+            concept,
+            millions,
+            "2025-01-01",
+            "2025-12-31",
+            "0001801198-26-000008",
+            "2026-03-10",
+            DocumentType.TwentyF
+        );
+
+    [Fact]
+    public void Without_InterimSlicesOfATagWhoseYearIsTheTopLine_DropsThem()
+    {
+        var slices = LegendInterims(IfrsContractRevenue, 9.438m, 44.779m, 35.341m, 55.36m, 10.499m);
+        var revenue = LegendInterims(IfrsRevenue, 195.053m, 450.111m, 255.058m, 722.523m, 272.33m);
+        var year = LegendYear(IfrsContractRevenue, 1_028.9m);
+
+        var kept = RevenueSlices.Without([.. slices, .. revenue, year]);
+
+        kept.Should().BeEquivalentTo([.. revenue, year]);
+        RevenueSlices.Without(kept).Should().BeEquivalentTo(kept);
+    }
+
+    // Made up: contract revenue a narrower measure all year (its year 300M against revenue's 1,028.9M)
+    // keeps its interim figures.
+    [Fact]
+    public void Without_InterimFiguresOfANarrowerMeasureAllYear_KeepsThem()
+    {
+        var narrower = LegendInterims(
+            IfrsContractRevenue,
+            9.438m,
+            44.779m,
+            35.341m,
+            55.36m,
+            10.499m
+        );
+        var revenue = LegendInterims(IfrsRevenue, 195.053m, 450.111m, 255.058m, 722.523m, 272.33m);
+        FinancialFact[] facts =
+        [
+            .. narrower,
+            .. revenue,
+            LegendYear(IfrsContractRevenue, 300m),
+            LegendYear(IfrsRevenue, 1_028.9m),
+        ];
+
+        RevenueSlices.Without(facts).Should().HaveCount(facts.Length);
+    }
+
+    // Made up: a top line a derivative loss moves (revenue 600M in a first quarter where contract
+    // revenue is 1,000M, 3,850M for the year against 4,000M) keeps its figures.
+    [Fact]
+    public void Without_TopLineASwingMovesWithinItsYear_KeepsItsFigures()
+    {
+        var swung = LegendInterims(IfrsRevenue, 600m, 1_500m, 900m, 2_700m, 1_200m);
+        var contract = LegendInterims(IfrsContractRevenue, 1_000m, 2_000m, 1_000m, 3_000m, 1_000m);
+        FinancialFact[] facts =
+        [
+            .. swung,
+            .. contract,
+            LegendYear(IfrsRevenue, 3_850m),
+            LegendYear(IfrsContractRevenue, 4_000m),
+        ];
+
+        RevenueSlices.Without(facts).Should().HaveCount(facts.Length);
+    }
+
+    // Made up: the 2025 20-F tags contract revenue at 300M beside 1,030M of revenue, and the 2026 20-F
+    // restates the year at 1,028.9M beside the same revenue. Dropping the interim slices leaves the
+    // first 20-F's year without nine months, a slice the same call drops too.
+    [Fact]
+    public void Without_OtherTagStatesTheYear_ASecondCallDropsNothingMore()
+    {
+        var slices = LegendInterims(IfrsContractRevenue, 9.438m, 44.779m, 35.341m, 55.36m, 10.499m);
+        var revenue = LegendInterims(IfrsRevenue, 195.053m, 450.111m, 255.058m, 722.523m, 272.33m);
+        var restated = Legend(
+            IfrsContractRevenue,
+            1_028.9m,
+            "2025-01-01",
+            "2025-12-31",
+            "0001801198-27-000009",
+            "2027-03-09",
+            DocumentType.TwentyF
+        );
+        var revenueRestated = Legend(
+            IfrsRevenue,
+            1_030m,
+            "2025-01-01",
+            "2025-12-31",
+            "0001801198-27-000009",
+            "2027-03-09",
+            DocumentType.TwentyF
+        );
+        var revenueYear = LegendYear(IfrsRevenue, 1_030m);
+        FinancialFact[] facts =
+        [
+            .. slices,
+            .. revenue,
+            LegendYear(IfrsContractRevenue, 300m),
+            revenueYear,
+            restated,
+            revenueRestated,
+        ];
+
+        var kept = RevenueSlices.Without(facts);
+
+        kept.Should().BeEquivalentTo([.. revenue, revenueYear, restated, revenueRestated]);
+        RevenueSlices.Without(kept).Should().BeEquivalentTo(kept);
+    }
 }
