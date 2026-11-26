@@ -19,6 +19,16 @@ public class EquityListingSymbolStart
 
     public DateOnly StartsOn { get; set; }
 
+    // The earlier holder's run of source rows the start rests on, kept because a withdrawal
+    // removes those rows and the start must outlive them.
+    public DateOnly? EarlierHolderFrom { get; set; }
+
+    public DateOnly? EarlierHolderThrough { get; set; }
+
+    // The first date whose rows under the symbol were withdrawn as the earlier holder's; set
+    // before they go, so a start lifted later can have that span read again.
+    public DateOnly? WithdrawnFrom { get; set; }
+
     [Required, MaxLength(64)]
     public string EvidenceSource { get; set; }
 

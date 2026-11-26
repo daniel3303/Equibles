@@ -171,4 +171,67 @@ public class ListingSymbolStartRuleTests
 
         start.Should().BeNull();
     }
+
+    [Fact]
+    public void Derive_EarlierHolderStatedTheSymbolOverItsRun_ReturnsTheRunTheStartRestsOn()
+    {
+        var dates = Rows(Run("2020-01-02", "2022-06-08"), Run("2025-06-26", "2026-11-24"));
+
+        var derivation = Derive(dates, Own, [Claim(Earlier, "2020-01-29", "2022-06-01")]);
+
+        derivation
+            .Should()
+            .Be(new Derivation(D("2025-06-26"), new RowRun(D("2020-01-02"), D("2022-06-08"))));
+    }
+
+    [Fact]
+    public void Holds_EarlierRowsWithdrawnAndOneClaimMidRun_KeepsTheStart()
+    {
+        // The withdrawn run spans years and its holder filed once in the middle of it; the start
+        // must survive with only the listing's own rows left.
+        var dates = Rows(Run("2025-06-26", "2026-11-24"));
+
+        var holds = Holds(
+            D("2025-06-26"),
+            new RowRun(D("2020-01-02"), D("2022-06-08")),
+            dates,
+            Own,
+            [Claim(Earlier, "2021-03-15", "2021-03-15")]
+        );
+
+        holds.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Holds_EarlierHoldersStatementsGone_LiftsTheStart()
+    {
+        var dates = Rows(Run("2025-06-26", "2026-11-24"));
+
+        var holds = Holds(
+            D("2025-06-26"),
+            new RowRun(D("2020-01-02"), D("2022-06-08")),
+            dates,
+            Own,
+            [Claim(Own, "2025-06-01", "2026-11-01")]
+        );
+
+        holds.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Holds_OwnIssuerStatedTheSymbolDuringTheWithdrawnRun_LiftsTheStart()
+    {
+        // The listing's own issuer stated the symbol while the run traded, so the run was its own.
+        var dates = Rows(Run("2025-06-26", "2026-11-24"));
+
+        var holds = Holds(
+            D("2025-06-26"),
+            new RowRun(D("2020-01-02"), D("2022-06-08")),
+            dates,
+            Own,
+            [Claim(Earlier, "2020-01-29", "2022-06-01"), Claim(Own, "2021-01-04", "2026-11-01")]
+        );
+
+        holds.Should().BeFalse();
+    }
 }

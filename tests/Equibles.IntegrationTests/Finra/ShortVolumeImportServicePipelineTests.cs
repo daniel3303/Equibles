@@ -189,6 +189,66 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Import_AfterAWithdrawnStartLifts_FilesTheReopenedDatesUnderTheListing()
+    {
+        // A withdrawn start whose evidence went: its dates sit under complete markers, so only the
+        // reopen lets the next import file them under the listing again.
+        await SeedStockAndLatestRow();
+        var startsOn = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3);
+        DbContext.Add(
+            new EquityListingSymbolStart
+            {
+                EquityListingId = _stock.Presentation.Listing.Id,
+                Ticker = "TESTV",
+                StartsOn = startsOn,
+                EarlierHolderFrom = startsOn.AddDays(-400),
+                EarlierHolderThrough = startsOn.AddDays(-300),
+                WithdrawnFrom = startsOn.AddDays(-30),
+                EvidenceSource = ListingSymbolStartService.EvidenceSource,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var finraClient = Substitute.For<IFinraClient>();
+        finraClient
+            .GetDailyShortVolume(Arg.Any<DateOnly>())
+            .Returns(
+                new List<ShortVolumeRecord>
+                {
+                    new()
+                    {
+                        Symbol = "TESTV",
+                        ShortVolume = 150,
+                        TotalVolume = 260,
+                    },
+                }
+            );
+        await BuildService(finraClient).Import(CancellationToken.None);
+        DbContext.ChangeTracker.Clear();
+
+        await new ListingSymbolStartService(
+            new EquityListingRepository(DbContext),
+            new EquityIssuerTickerEvidenceRepository(DbContext),
+            new EquityListingSymbolStartRepository(DbContext),
+            new DailyShortVolumeRepository(DbContext),
+            new FinraImportPartitionRepository(DbContext),
+            TimeProvider.System,
+            Substitute.For<ILogger<ListingSymbolStartService>>()
+        ).Refresh(CancellationToken.None);
+        DbContext.ChangeTracker.Clear();
+        await BuildService(finraClient).Import(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var imported = await verify
+            .Set<DailyShortVolume>()
+            .AsNoTracking()
+            .Where(v => v.Listing.Security.EquityIssuerId == _stock.Id && v.ShortVolume == 150)
+            .Select(v => v.Date)
+            .ToListAsync();
+        imported.Should().Contain(date => date < startsOn);
+    }
+
+    [Fact]
     public async Task Import_FinraClientThrowsHttpRequestException_SkipsDateWithoutThrowing()
     {
         await SeedStockAndLatestRow();
