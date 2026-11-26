@@ -380,7 +380,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GenerateEmbeddingBatch_PendingChunks_PassesOnlyChunks_WithoutEmbeddingsToProcessor()
     {
-        // Parallel concern to ChunkDocumentBatch: the Phase 2 worker query
+        // Parallel concern to ChunkDocumentBatch: the embedding batch's query
         // .Where(c => !c.Embeddings.Any()) must filter on a navigation collection,
         // which only behaves correctly against real Postgres. The unit-tier
         // DocumentManagerTests exercises only the IsConfigured guard clauses for
