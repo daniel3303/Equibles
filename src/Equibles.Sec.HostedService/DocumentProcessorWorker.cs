@@ -33,31 +33,35 @@ public class DocumentProcessorWorker : BaseScraperWorker
     )
         : base(logger, scopeFactory, errorReporter) { }
 
+    // A text is in search once it is chunked; its embeddings only add the vector arm. Pending
+    // documents are therefore chunked before every embedding batch: generating all embeddings
+    // first kept new filings out of search for as long as the embedding backlog lasted, hours
+    // during a corpus-wide text rebuild. The cycle ends when no embedding is left to generate.
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
-        Logger.LogInformation("Phase 1: Chunking all pending documents");
         while (!stoppingToken.IsCancellationRequested)
         {
-            await using var chunkScope = ScopeFactory.CreateAsyncScope();
-            var documentManager = chunkScope.ServiceProvider.GetRequiredService<DocumentManager>();
-            var workDone = await documentManager.ChunkDocumentBatch(stoppingToken);
-            if (!workDone)
+            await ChunkPending(stoppingToken);
+            if (stoppingToken.IsCancellationRequested || !await EmbedBatch(stoppingToken))
                 break;
         }
-        Logger.LogInformation("Phase 1 complete: All documents chunked");
+    }
 
-        Logger.LogInformation("Phase 2: Generating all pending embeddings");
-        while (!stoppingToken.IsCancellationRequested)
+    private async Task ChunkPending(CancellationToken stoppingToken)
+    {
+        var chunked = true;
+        while (chunked && !stoppingToken.IsCancellationRequested)
         {
-            await using var embedScope = ScopeFactory.CreateAsyncScope();
-            var documentManager = embedScope.ServiceProvider.GetRequiredService<DocumentManager>();
-            var workDone = await documentManager.GenerateEmbeddingBatch(
-                _embeddingCursor,
-                stoppingToken
-            );
-            if (!workDone)
-                break;
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var documentManager = scope.ServiceProvider.GetRequiredService<DocumentManager>();
+            chunked = await documentManager.ChunkDocumentBatch(stoppingToken);
         }
-        Logger.LogInformation("Phase 2 complete: All embeddings generated");
+    }
+
+    private async Task<bool> EmbedBatch(CancellationToken stoppingToken)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var documentManager = scope.ServiceProvider.GetRequiredService<DocumentManager>();
+        return await documentManager.GenerateEmbeddingBatch(_embeddingCursor, stoppingToken);
     }
 }
