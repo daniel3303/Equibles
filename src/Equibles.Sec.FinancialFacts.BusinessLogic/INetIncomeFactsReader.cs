@@ -19,8 +19,13 @@ public interface INetIncomeFactsReader
     Task<NetIncomeReading> Read(EquityIssuer issuer, CancellationToken cancellationToken = default);
 }
 
-/// <summary>The figures an <see cref="INetIncomeFactsReader"/> states, with the concept each carries.</summary>
+/// <summary>
+/// The figures an <see cref="INetIncomeFactsReader"/> states, with the concept each carries.
+/// <paramref name="Derived"/> holds the quarters of <paramref name="Facts"/> the host worked out
+/// itself: the tools mark them and work out none of their own, so they show the host's quarters.
+/// </summary>
 public sealed record NetIncomeReading(
     IReadOnlyList<FinancialFact> Facts,
-    IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> Concepts
+    IReadOnlyDictionary<Guid, FinancialConceptAliases.ConceptRef> Concepts,
+    IReadOnlySet<FinancialFact> Derived
 );

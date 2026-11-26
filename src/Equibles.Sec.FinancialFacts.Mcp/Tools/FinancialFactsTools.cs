@@ -277,6 +277,13 @@ public class FinancialFactsTools
                         asOriginallyReported,
                         formFilter
                     );
+                else if (hostNetIncome != null)
+                {
+                    // The host's own worked-out quarters stand for the ones this tool would work
+                    // out, so a quarter the host holds back stays absent; a form filter drops them.
+                    picked = PickFlowRows(facts, conceptPriority, false, formFilter);
+                    derived.UnionWith(picked.Where(hostNetIncome.Derived.Contains));
+                }
                 else if (
                     formFilter == null
                     && !asOriginallyReported
@@ -725,9 +732,11 @@ public class FinancialFactsTools
                         facts =
                         [
                             .. facts.Where(f => !hostNetIncome.ContainsKey(f.EquityIssuerId)),
+                            // Filed figures only, as for every other issuer compared.
                             .. hostNetIncome.Values.SelectMany(reading =>
                                 reading.Facts.Where(f =>
-                                    f.FiscalYear == year
+                                    !reading.Derived.Contains(f)
+                                    && f.FiscalYear == year
                                     && (
                                         f.FiscalPeriod == period
                                         || (

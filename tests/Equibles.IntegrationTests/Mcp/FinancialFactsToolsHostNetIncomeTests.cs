@@ -36,31 +36,64 @@ public class FinancialFactsToolsHostNetIncomeTests : ParadeDbMcpTestBase
             netIncomeFactsReader: reader
         );
 
-    private sealed class Reader(Guid issuerId, decimal? value) : INetIncomeFactsReader
+    private static readonly Dictionary<Guid, FinancialConceptAliases.ConceptRef> Concepts = new()
     {
+        [OwnersProfit] = new(FactTaxonomy.IfrsFull, "ProfitLossAttributableToOwnersOfParent"),
+    };
+
+    private sealed class Reader(
+        Guid issuerId,
+        IReadOnlyList<FinancialFact> facts,
+        IReadOnlySet<FinancialFact> derived = null
+    ) : INetIncomeFactsReader
+    {
+        public Reader(Guid issuerId, decimal? value)
+            : this(issuerId, value == null ? [] : [Year(issuerId, OwnersProfit, value.Value)]) { }
+
         public Task<NetIncomeReading> Read(
             EquityIssuer issuer,
             CancellationToken cancellationToken = default
         ) =>
             Task.FromResult(
-                issuer.Id != issuerId ? null
-                : value == null
-                    ? new NetIncomeReading(
-                        [],
-                        new Dictionary<Guid, FinancialConceptAliases.ConceptRef>()
-                    )
-                : new NetIncomeReading(
-                    [Year(issuerId, OwnersProfit, value.Value)],
-                    new Dictionary<Guid, FinancialConceptAliases.ConceptRef>
-                    {
-                        [OwnersProfit] = new(
-                            FactTaxonomy.IfrsFull,
-                            "ProfitLossAttributableToOwnersOfParent"
-                        ),
-                    }
-                )
+                issuer.Id != issuerId
+                    ? null
+                    : new NetIncomeReading(facts, Concepts, derived ?? new HashSet<FinancialFact>())
             );
     }
+
+    // Made-up 2025 quarters beside the proven year: 1,692M, 2,395M and 2,482M, so the year less
+    // them is 1,198M.
+    private static FinancialFact Quarter(
+        Guid issuerId,
+        SecFiscalPeriod period,
+        int startMonth,
+        decimal value,
+        bool derived = false
+    ) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            EquityIssuerId = issuerId,
+            FinancialConceptId = OwnersProfit,
+            Unit = "USD",
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2025, startMonth, 1),
+            PeriodEnd = new DateOnly(2025, startMonth, 1).AddMonths(3).AddDays(-1),
+            Value = value,
+            FiscalYear = 2025,
+            FiscalPeriod = period,
+            Form = derived ? null : DocumentType.SixK,
+            FiledDate = new DateOnly(2025, startMonth, 1).AddMonths(4),
+            AccessionNumber = derived ? null : $"0001610520-25-00{startMonth:00}01",
+        };
+
+    private static List<FinancialFact> ThreeQuarters(Guid issuerId) =>
+        [
+            Year(issuerId, OwnersProfit, 7_767_000_000m),
+            Quarter(issuerId, SecFiscalPeriod.Q1, 1, 1_692_000_000m),
+            Quarter(issuerId, SecFiscalPeriod.Q2, 4, 2_395_000_000m),
+            Quarter(issuerId, SecFiscalPeriod.Q3, 7, 2_482_000_000m),
+        ];
 
     private static FinancialFact Year(Guid issuerId, Guid conceptId, decimal value) =>
         new()
@@ -143,5 +176,52 @@ public class FinancialFactsToolsHostNetIncomeTests : ParadeDbMcpTestBase
             .GetFinancialFact("UBS", "net-income");
 
         result.Should().Contain("7,797");
+    }
+
+    [Fact]
+    public async Task GetFinancialFact_HostHoldsAFourthQuarterBack_WorksOutNoneOfItsOwn()
+    {
+        var ubs = await Seed();
+
+        var result = await Sut(new Reader(ubs.Id, ThreeQuarters(ubs.Id)))
+            .GetFinancialFact("UBS", "net-income", fiscalPeriod: "Q4");
+
+        result.Should().NotContain("1,198");
+    }
+
+    [Fact]
+    public async Task GetFinancialFact_HostWorkedOutAFourthQuarter_ShowsItMarked()
+    {
+        var ubs = await Seed();
+        var fourth = Quarter(ubs.Id, SecFiscalPeriod.Q4, 10, 1_198_000_000m, derived: true);
+
+        var result = await Sut(
+                new Reader(
+                    ubs.Id,
+                    [.. ThreeQuarters(ubs.Id), fourth],
+                    new HashSet<FinancialFact> { fourth }
+                )
+            )
+            .GetFinancialFact("UBS", "net-income", fiscalPeriod: "Q4");
+
+        result.Should().Contain("1,198").And.Contain("(derived)");
+    }
+
+    [Fact]
+    public async Task CompareFinancialFact_HostWorkedOutAFourthQuarter_ComparesFiledFiguresOnly()
+    {
+        var ubs = await Seed();
+        var fourth = Quarter(ubs.Id, SecFiscalPeriod.Q4, 10, 1_198_000_000m, derived: true);
+
+        var result = await Sut(
+                new Reader(
+                    ubs.Id,
+                    [.. ThreeQuarters(ubs.Id), fourth],
+                    new HashSet<FinancialFact> { fourth }
+                )
+            )
+            .CompareFinancialFact(["UBS"], "net-income", fiscalYear: 2025, fiscalPeriod: "Q4");
+
+        result.Should().NotContain("1,198");
     }
 }
