@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Equibles.EquityMarkets.Data.Catalog;
 
 // One venue family the directory and price lanes know how to serve; the code is the join key on every stored row.
@@ -87,4 +89,26 @@ public sealed record EquityMarket(
     public bool IsHomeVenue(string marketIdentifierCode) =>
         marketIdentifierCode != null
         && HomeVenueCodes.Contains(marketIdentifierCode, StringComparer.Ordinal);
+
+    // The Yahoo-style symbol for one of this market's tickers, which price and reference providers share;
+    // null without a suffix or when a numeric code is not the venue's width.
+    public string YahooSymbol(string ticker)
+    {
+        if (string.IsNullOrWhiteSpace(ticker) || string.IsNullOrWhiteSpace(YahooSuffix))
+            return null;
+        if (NumericTickerWidth is { } sourceWidth && ticker.Length != sourceWidth)
+            return null;
+        if (YahooNumericSymbolWidth is not { } width)
+            return ticker + YahooSuffix;
+        // Exchange numeric codes and provider symbols can have different leading-zero widths.
+        return
+            ticker.All(char.IsAsciiDigit)
+            && int.TryParse(ticker, NumberStyles.None, CultureInfo.InvariantCulture, out var code)
+            && code > 0
+            ? code.ToString(
+                "D" + width.ToString(CultureInfo.InvariantCulture),
+                CultureInfo.InvariantCulture
+            ) + YahooSuffix
+            : null;
+    }
 }
