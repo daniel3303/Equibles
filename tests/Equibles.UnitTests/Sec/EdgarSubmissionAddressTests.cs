@@ -1,6 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Sec.Data.Models;
-using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -69,6 +68,20 @@ public class EdgarSubmissionAddressTests
         document.AccessionNumber = null;
 
         EdgarSubmissionAddress.Cik(document).Should().Be("1593538");
+    }
+
+    // A caller that resolved the issuer by itself passes its CIK; the filing's issuer is not read.
+    [Fact]
+    public void Cik_IssuerCikGivenByTheCaller_IsJudgedAgainstTheAddress()
+    {
+        var document = Filing(
+            null,
+            "https://www.sec.gov/Archives/edgar/data/0001593538/0001654954-23-004613.txt"
+        );
+        document.Issuer = null;
+
+        EdgarSubmissionAddress.Cik(document, "2152623").Should().Be("1593538");
+        EdgarSubmissionAddress.Cik(document, "0001593538").Should().Be("0001593538");
     }
 
     [Fact]

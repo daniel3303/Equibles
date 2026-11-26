@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
-using Equibles.Sec.Data.Models;
 
-namespace Equibles.Sec.HostedService.Services;
+namespace Equibles.Sec.Data.Models;
 
 /// <summary>
 /// The CIK a stored filing's submission is fetched under. EDGAR serves a submission only under a
@@ -21,9 +20,14 @@ public static class EdgarSubmissionAddress
     /// that one, without leading zeros. An address of another accession than the filing's own
     /// says nothing about it.
     /// </summary>
-    public static string Cik(Document document)
+    public static string Cik(Document document) => Cik(document, document.Issuer?.Cik);
+
+    /// <summary>
+    /// As <see cref="Cik(Document)"/>, for a caller that holds the issuer's CIK without the
+    /// filing's issuer loaded.
+    /// </summary>
+    public static string Cik(Document document, string issuerCik)
     {
-        var issuerCik = document.Issuer?.Cik;
         var match = Submission.Match(document.SourceUrl ?? string.Empty);
         if (
             !match.Success
