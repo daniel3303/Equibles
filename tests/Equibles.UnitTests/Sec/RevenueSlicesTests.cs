@@ -387,4 +387,65 @@ public class RevenueSlicesTests
 
         RevenueSlices.Without(facts).Should().HaveCount(facts.Length);
     }
+
+    // Made up: a top line a derivative loss moves (revenue 600M in a first quarter where contract
+    // revenue is 1,000M, 3,850M for the year against 4,000M) keeps its figures.
+    [Fact]
+    public void Without_TopLineASwingMovesWithinItsYear_KeepsItsFigures()
+    {
+        var swung = LegendInterims(IfrsRevenue, 600m, 1_500m, 900m, 2_700m, 1_200m);
+        var contract = LegendInterims(IfrsContractRevenue, 1_000m, 2_000m, 1_000m, 3_000m, 1_000m);
+        FinancialFact[] facts =
+        [
+            .. swung,
+            .. contract,
+            LegendYear(IfrsRevenue, 3_850m),
+            LegendYear(IfrsContractRevenue, 4_000m),
+        ];
+
+        RevenueSlices.Without(facts).Should().HaveCount(facts.Length);
+    }
+
+    // Made up: the 2025 20-F tags contract revenue at 300M beside 1,030M of revenue, and the 2026 20-F
+    // restates the year at 1,028.9M beside the same revenue. Dropping the interim slices leaves the
+    // first 20-F's year without nine months, a slice the same call drops too.
+    [Fact]
+    public void Without_OtherTagStatesTheYear_ASecondCallDropsNothingMore()
+    {
+        var slices = LegendInterims(IfrsContractRevenue, 9.438m, 44.779m, 35.341m, 55.36m, 10.499m);
+        var revenue = LegendInterims(IfrsRevenue, 195.053m, 450.111m, 255.058m, 722.523m, 272.33m);
+        var restated = Legend(
+            IfrsContractRevenue,
+            1_028.9m,
+            "2025-01-01",
+            "2025-12-31",
+            "0001801198-27-000009",
+            "2027-03-09",
+            DocumentType.TwentyF
+        );
+        var revenueRestated = Legend(
+            IfrsRevenue,
+            1_030m,
+            "2025-01-01",
+            "2025-12-31",
+            "0001801198-27-000009",
+            "2027-03-09",
+            DocumentType.TwentyF
+        );
+        var revenueYear = LegendYear(IfrsRevenue, 1_030m);
+        FinancialFact[] facts =
+        [
+            .. slices,
+            .. revenue,
+            LegendYear(IfrsContractRevenue, 300m),
+            revenueYear,
+            restated,
+            revenueRestated,
+        ];
+
+        var kept = RevenueSlices.Without(facts);
+
+        kept.Should().BeEquivalentTo([.. revenue, revenueYear, restated, revenueRestated]);
+        RevenueSlices.Without(kept).Should().BeEquivalentTo(kept);
+    }
 }

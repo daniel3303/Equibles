@@ -18,8 +18,8 @@ namespace Equibles.Sec.FinancialFacts.Data.Statements;
 /// states less the nine months filed with it (Teva's 10-K tags fourth-quarter 2025 Revenues 1,500M
 /// beside contract revenue whose year less nine months is 4,711M). An interim figure of a tag whose
 /// year is the whole top line is one when its filing states another tag above it by a third for the
-/// same period (Legend Biotech's 6-Ks: contract revenue 55.4M of 722.5M for nine months, its 20-F's
-/// year 1,028.9M).
+/// same period and it sits below a quarter of its share of that year (Legend Biotech's 6-Ks: contract
+/// revenue 55.4M of 722.5M for nine months, its 20-F's year 1,028.9M).
 /// </summary>
 public static class RevenueSlices
 {
@@ -36,6 +36,21 @@ public static class RevenueSlices
     /// (no nine months, no figure ending on another date) drops no year and no quarter.
     /// </summary>
     public static List<FinancialFact> Without(IReadOnlyCollection<FinancialFact> revenue)
+    {
+        // Each rule judges the figures the others left (dropping an interim slice can leave its tag's
+        // year without nine months), so the rules run until a pass drops nothing; a second call then
+        // drops nothing either. Rules only drop, so the loop ends.
+        var kept = revenue;
+        while (true)
+        {
+            var slices = Slices(kept);
+            if (slices.Count == 0)
+                return [.. kept];
+            kept = [.. kept.Where(f => !slices.Contains(f))];
+        }
+    }
+
+    private static HashSet<object> Slices(IReadOnlyCollection<FinancialFact> revenue)
     {
         var filings = revenue
             .Where(IsFiledConsolidatedDuration)
@@ -63,15 +78,17 @@ public static class RevenueSlices
             .ToList();
         slices.UnionWith(QuarterSlices(standing));
         slices.UnionWith(InterimSlices(standing));
-        return slices.Count == 0 ? [.. revenue] : [.. revenue.Where(f => !slices.Contains(f))];
+        return slices;
     }
 
     // A tag can be the whole top line in its annual report and a slice in its interim reports (Legend
     // Biotech's 20-F tags 2025 contract revenue at 1,028.9M, its 6-Ks the nine months at 55.4M beside
     // 722.5M of revenue), so its year less its nine months is no quarter. An interim figure is a slice
-    // where its own filing states another tag above it by a third for that exact period, while the tag's
-    // year holding it is at least that other tag's year (its longest figure from the year's start,
-    // annualised, where it states no year): a tag that is a narrower measure all year keeps its figures.
+    // where its own filing states another tag above it by a third for that exact period, it sits below a
+    // quarter of its pro-rata share of the tag's year holding it, and that year is at least the other
+    // tag's year in the same filing (the other tag's longest figure from the year's start, annualised,
+    // where it states no figure for the year at all): a tag that is a narrower measure all year keeps its
+    // figures, and so does a top line a swing in hedging or derivative revenue moves within its year.
     private static IEnumerable<FinancialFact> InterimSlices(
         IReadOnlyCollection<FinancialFact> facts
     )
@@ -89,11 +106,19 @@ public static class RevenueSlices
         decimal? Yardstick(Guid other, string unit, FinancialFact year)
         {
             var otherFacts = byConcept[(other, unit)].ToList();
-            var otherYear = otherFacts
+            var otherYears = otherFacts
                 .Where(f => f.PeriodStart == year.PeriodStart && f.PeriodEnd == year.PeriodEnd)
-                .MaxBy(f => f.FiledDate);
-            if (otherYear != null)
-                return otherYear.Value;
+                .ToList();
+            if (otherYears.Count > 0)
+            {
+                // A year another filing states is no evidence on this filing's measure.
+                var stated = otherYears
+                    .Where(f => f.AccessionNumber == year.AccessionNumber)
+                    .Select(f => f.Value)
+                    .Distinct()
+                    .ToList();
+                return stated.Count == 1 ? stated[0] : null;
+            }
             var longest = otherFacts
                 .Where(f =>
                     f.PeriodStart == year.PeriodStart && f.PeriodEnd < year.PeriodEnd && Span(f) > 0
@@ -114,6 +139,8 @@ public static class RevenueSlices
                 return false;
             var year = YearHolding(fact.FinancialConceptId, fact.Unit, fact);
             return year != null
+                && fact.Value
+                    < year.Value * Span(fact) / Span(year) * ShareOfItsYearASliceStaysBelow
                 && byFiling[(fact.AccessionNumber, fact.PeriodStart, fact.PeriodEnd, fact.Unit)]
                     .Where(other =>
                         other.FinancialConceptId != fact.FinancialConceptId
@@ -128,6 +155,10 @@ public static class RevenueSlices
 
     // A year this close to the other tag's is the same top line, rounding and a late restatement aside.
     private const decimal WholeYearShare = 0.95m;
+
+    // A part of the whole top line sits near its pro-rata share of the year; a quarter of that share is
+    // no seasonality or swing within one measure.
+    private const decimal ShareOfItsYearASliceStaysBelow = 0.25m;
 
     private static IEnumerable<FinancialFact> QuarterSlices(
         IReadOnlyCollection<FinancialFact> facts
