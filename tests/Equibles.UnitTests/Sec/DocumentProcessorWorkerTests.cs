@@ -12,9 +12,9 @@ public class DocumentProcessorWorkerTests
     [Fact]
     public void SleepInterval_IsFifteenSeconds()
     {
-        // DocumentProcessorWorker is the worker that orchestrates Phase 1 (chunking)
-        // and Phase 2 (embedding generation) over every pending SEC document. The
-        // 15-second `SleepInterval` is the gap between full passes of both phases —
+        // DocumentProcessorWorker chunks every pending SEC document and generates every
+        // pending embedding, chunking again before each embedding batch. The
+        // 15-second `SleepInterval` is the gap between two such passes —
         // each pass can chain many `DocumentManager.GenerateEmbeddingBatch` calls,
         // and each batch fans out to the Ollama / hosted embedding endpoint. If a
         // refactor tightened the interval (a plausible copy-paste of
