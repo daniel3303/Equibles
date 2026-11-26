@@ -1,5 +1,6 @@
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.Sec.FinancialFacts.Data;
 
@@ -34,6 +35,19 @@ public static class FinancialFactSourcePriority
 
         return Rank(form);
     }
+
+    /// <summary>
+    /// The rank of a form for a fact of this period. A measured full year is the annual report's to
+    /// state: a quarterly report repeating the year ranks after it (Comfort Systems' 10-Q gave fiscal
+    /// 2025 revenue as 1,831.3M against its 10-K's 9,101.6M), on the same scale as <see cref="Rank(DocumentType)"/>
+    /// so ranks of years and quarters still compare. Any shorter period ranks by form alone, so a later
+    /// quarterly report still recasts a quarter or a balance.
+    /// </summary>
+    public static int Rank(DocumentType form, DateOnly periodStart, DateOnly periodEnd) =>
+        IsInterimPeriodicForm(form)
+        && periodEnd.DayNumber - periodStart.DayNumber >= FiscalPeriodSpanDays.MinAnnual
+            ? 1
+            : Rank(form);
 
     public static int Rank(DocumentType form)
     {

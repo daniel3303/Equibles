@@ -126,6 +126,34 @@ public class BankTopLineFoldTests
             );
     }
 
+    // A filer with no bank lines still passes the fold, which drops the year its own filing shows is
+    // a slice of the top line (RevenueSlices): the year reads the tag stating the whole.
+    [Fact]
+    public void Fold_RevenueYearItsFilingShowsIsASlice_YearReadsTheWholeLine()
+    {
+        var nineMonths = Fact(
+            ContractRevenue,
+            14_730m,
+            Q2Filing,
+            SecFiscalPeriod.Q3,
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 9, 30),
+            new DateOnly(2025, 11, 6)
+        );
+
+        var (facts, priority) = BankTopLine.Fold(
+            [Year(Revenues, 12_794m), Year(ContractRevenue, 20_407m), nineMonths],
+            [],
+            [],
+            RevenuePriority
+        );
+
+        FinancialFactSeriesShaper
+            .PickBestFact(facts.Where(f => f.FiscalPeriod == SecFiscalPeriod.FullYear), priority)
+            .Value.Should()
+            .Be(20_407_000_000m);
+    }
+
     [Fact]
     public void Fold_RevenuesEqualsTheSum_KeepsTheFilersOwnFacts()
     {

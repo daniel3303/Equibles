@@ -117,8 +117,9 @@ public static class FinancialFactSeriesShaper
             .Select(g => g.OrderBy(f => f.FiscalYear).ThenBy(f => f.FiscalPeriod).First())
             .ToList();
 
-    // Canonical periodic source, then the alias's primary tag, then the latest filing (or the
-    // earliest, as originally reported), with the accession as the stable same-day tiebreak.
+    // Canonical periodic source (a year the annual report's), then the alias's primary tag, then the
+    // latest filing (or the earliest, as originally reported), with the accession as the stable
+    // same-day tiebreak.
     private static IOrderedEnumerable<FinancialFact> OrderByAuthority(
         IOrderedEnumerable<FinancialFact> facts,
         IReadOnlyDictionary<Guid, int> conceptPriority,
@@ -126,7 +127,7 @@ public static class FinancialFactSeriesShaper
     )
     {
         var ranked = facts
-            .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form))
+            .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form, f.PeriodStart, f.PeriodEnd))
             .ThenBy(f => conceptPriority.GetValueOrDefault(f.FinancialConceptId, int.MaxValue));
         return asOriginallyReported
             ? ranked.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber)
