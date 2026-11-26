@@ -1,4 +1,3 @@
-using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories.Models;
 using Equibles.EquityMarkets.Data.Catalog;
@@ -72,7 +71,7 @@ internal static class YahooListingSource
             market?.CountryCode == target.MarketCountryCode
             && !string.IsNullOrWhiteSpace(market.YahooSuffix)
             && !string.IsNullOrWhiteSpace(market.YahooExchangeCode)
-            && Symbol(target.Ticker, market) != null
+            && market.YahooSymbol(target.Ticker) != null
             ? market
             : null;
     }
@@ -81,7 +80,7 @@ internal static class YahooListingSource
 
     internal static string ProviderSymbol(PriceSeriesTarget target) =>
         target.IsUs ? target.Ticker
-        : Market(target) is { } market ? Symbol(target.Ticker, market)
+        : Market(target) is { } market ? market.YahooSymbol(target.Ticker)
         : null;
 
     // The provider symbol for a listing named by its venue alone; a market outside the catalog has no Yahoo identity.
@@ -89,35 +88,7 @@ internal static class YahooListingSource
         string ticker,
         string marketCountryCode,
         string marketIdentifierCode
-    )
-    {
-        if (string.IsNullOrWhiteSpace(ticker))
-            return null;
-        if (marketCountryCode == "US")
-            return ticker;
-        var market = EquityMarketCatalog.ByMarketIdentifierCode(marketIdentifierCode);
-        return market?.CountryCode == marketCountryCode ? Symbol(ticker, market) : null;
-    }
-
-    private static string Symbol(string ticker, EquityMarket market)
-    {
-        if (string.IsNullOrWhiteSpace(ticker) || string.IsNullOrWhiteSpace(market.YahooSuffix))
-            return null;
-        if (market.NumericTickerWidth is { } sourceWidth && ticker.Length != sourceWidth)
-            return null;
-        if (market.YahooNumericSymbolWidth is not { } width)
-            return ticker + market.YahooSuffix;
-        // Exchange numeric codes and provider symbols can have different leading-zero widths.
-        return
-            ticker.All(char.IsAsciiDigit)
-            && int.TryParse(ticker, NumberStyles.None, CultureInfo.InvariantCulture, out var code)
-            && code > 0
-            ? code.ToString(
-                "D" + width.ToString(CultureInfo.InvariantCulture),
-                CultureInfo.InvariantCulture
-            ) + market.YahooSuffix
-            : null;
-    }
+    ) => EquityMarketCatalog.YahooSymbol(ticker, marketCountryCode, marketIdentifierCode);
 
     internal static bool MatchesListing(PriceSeriesTarget target, EquityListing listing) =>
         listing.Id == target.EquityListingId
