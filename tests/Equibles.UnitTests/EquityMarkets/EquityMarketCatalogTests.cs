@@ -396,6 +396,25 @@ public class EquityMarketCatalogTests
             .Be((market.SessionClose, market.ClosingAuctionEnd));
     }
 
+    [Theory]
+    [InlineData("AAPL", "US", null, "AAPL")]
+    [InlineData("SAP", "DE", "XETR", "SAP.DE")]
+    [InlineData("ABC", "FR", "XETR", null)]
+    [InlineData("ABC", null, "ZZZZ", null)]
+    [InlineData("ABC", null, null, null)]
+    public void YahooSymbol_ComesOnlyFromAMarketInItsOwnCountry(
+        string ticker,
+        string countryCode,
+        string marketIdentifierCode,
+        string expected
+    )
+    {
+        EquityMarketCatalog
+            .YahooSymbol(ticker, countryCode, marketIdentifierCode)
+            .Should()
+            .Be(expected);
+    }
+
     [Fact]
     public void Nse_PrecedesBseAndLondonSoAnNseLineHoldsThePresentation()
     {

@@ -430,6 +430,25 @@ public static class EquityMarketCatalog
             ? market
             : null;
 
+    // The Yahoo-style symbol for a listing named by its venue: a US listing is its bare ticker, and a
+    // market outside the catalog, or one listed under another country, has none.
+    public static string YahooSymbol(
+        string ticker,
+        string marketCountryCode,
+        string marketIdentifierCode
+    )
+    {
+        if (string.IsNullOrWhiteSpace(ticker))
+            return null;
+        if (marketCountryCode == "US")
+            return ticker;
+        var market = ByMarketIdentifierCode(marketIdentifierCode);
+        // An unknown market with no country would otherwise compare null to null and dereference it.
+        return market != null && market.CountryCode == marketCountryCode
+            ? market.YahooSymbol(ticker)
+            : null;
+    }
+
     // The market a caller-typed venue code names: one of its stored codes, or its operating code.
     public static EquityMarket ByCallerVenueCode(string venueCode) =>
         ByMarketIdentifierCode(venueCode)
