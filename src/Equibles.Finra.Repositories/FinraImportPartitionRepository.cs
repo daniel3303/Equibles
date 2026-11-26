@@ -35,4 +35,20 @@ public class FinraImportPartitionRepository : BaseRepository<FinraImportPartitio
                 p.Dataset == dataset && p.ScopeKey == scopeKey && p.PartitionDate == partitionDate
             );
     }
+
+    public IQueryable<FinraImportPartition> GetRangeByScopePrefix(
+        string dataset,
+        string scopePrefix,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        return GetAll()
+            .Where(p =>
+                p.Dataset == dataset
+                && p.ScopeKey.StartsWith(scopePrefix)
+                && p.PartitionDate >= startDate
+                && p.PartitionDate <= endDate
+            );
+    }
 }

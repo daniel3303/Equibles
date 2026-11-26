@@ -28,7 +28,7 @@ public class ShortVolumeImportService
     // (bounded per cycle) and the upsert REPLACES the corrupted sums.
     // v3 carries exact listing identity, so ETF and other reference tickers no longer collapse
     // into the filer's primary row. The new partition key replays the bounded history.
-    private const string Dataset = "daily-short-volume-files-v3";
+    public const string Dataset = "daily-short-volume-files-v3";
     private const int CorrectionLookbackDays = 7;
     private static readonly DateOnly FirstConsolidatedFileDate = new(2018, 8, 1);
     private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);

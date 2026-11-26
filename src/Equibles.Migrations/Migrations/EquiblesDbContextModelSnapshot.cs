@@ -825,6 +825,12 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<DateOnly?>("EarlierHolderFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EarlierHolderThrough")
+                        .HasColumnType("date");
+
                     b.Property<string>("EvidenceSource")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -834,6 +840,9 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("WithdrawnFrom")
                         .HasColumnType("date");
 
                     b.HasKey("EquityListingId", "Ticker");

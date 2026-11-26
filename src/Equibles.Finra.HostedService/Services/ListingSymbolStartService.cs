@@ -11,7 +11,9 @@ namespace Equibles.Finra.HostedService.Services;
 /// Records, for each active US listing whose symbol another issuer stated on its SEC cover pages,
 /// the date the symbol started naming the listing (<see cref="ListingSymbolStartRule"/>). The FINRA
 /// imports map today's symbols onto every historical file, so without the start a recycled symbol
-/// files its earlier holder's history under the listing that holds it now.
+/// files its earlier holder's history under the listing that holds it now. A start that holds
+/// across two refreshes withdraws the daily short-volume rows already filed before it; a withdrawn
+/// start that lifts has those dates' files read again.
 /// </summary>
 [Service]
 public class ListingSymbolStartService
@@ -22,6 +24,7 @@ public class ListingSymbolStartService
     private readonly EquityIssuerTickerEvidenceRepository _evidence;
     private readonly EquityListingSymbolStartRepository _starts;
     private readonly DailyShortVolumeRepository _shortVolumes;
+    private readonly FinraImportPartitionRepository _partitions;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ListingSymbolStartService> _logger;
 
@@ -30,6 +33,7 @@ public class ListingSymbolStartService
         EquityIssuerTickerEvidenceRepository evidence,
         EquityListingSymbolStartRepository starts,
         DailyShortVolumeRepository shortVolumes,
+        FinraImportPartitionRepository partitions,
         TimeProvider timeProvider,
         ILogger<ListingSymbolStartService> logger
     )
@@ -38,14 +42,21 @@ public class ListingSymbolStartService
         _evidence = evidence;
         _starts = starts;
         _shortVolumes = shortVolumes;
+        _partitions = partitions;
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
-    /// <summary>Re-derives every start from today's rows and evidence and stores the difference.</summary>
+    /// <summary>
+    /// Re-derives every start from today's rows and evidence, stores the difference, and withdraws
+    /// the rows filed before each start that held since the previous refresh.
+    /// </summary>
     /// <returns>The number of listings with a recorded start after the refresh.</returns>
     public async Task<int> Refresh(CancellationToken cancellationToken)
     {
+        var recorded = (
+            await _starts.GetBySource(EvidenceSource).ToListAsync(cancellationToken)
+        ).ToDictionary(row => (row.EquityListingId, row.Ticker));
         var claims = (
             await _evidence
                 .GetAll()
@@ -81,7 +92,30 @@ public class ListingSymbolStartService
                 listing => TickerNormalizer.NormalizeDashListed(listing.Ticker)
             );
 
-        var derived = new Dictionary<(Guid, string), DateOnly>();
+        var derived = new Dictionary<(Guid, string), Derived>();
+        // A withdrawn start on a retired listing waits unchanged until the listing trades again:
+        // the imports map active listings only, so lifting it could never file its rows again.
+        var retiredWithdrawn = usListings
+            .Where(listing => !listing.Active)
+            .Select(listing =>
+                recorded.GetValueOrDefault((listing.Id, listing.Ticker))
+                    is {
+                        WithdrawnFrom: not null,
+                        EarlierHolderFrom: { } from,
+                        EarlierHolderThrough: { } through,
+                    } start
+                    ? (Start: start, Run: new ListingSymbolStartRule.RowRun(from, through))
+                    : default
+            )
+            .Where(entry => entry.Start != null);
+        foreach (var (start, run) in retiredWithdrawn)
+        {
+            derived[(start.EquityListingId, start.Ticker)] = new Derived(
+                new ListingSymbolStartRule.Derivation(start.StartsOn, run),
+                null
+            );
+        }
+
         var candidates = usListings
             .Where(listing => listing.Active)
             .Select(listing =>
@@ -118,51 +152,98 @@ public class ListingSymbolStartService
                 .OrderBy(row => row.Date)
                 .Select(row => row.Date)
                 .ToListAsync(cancellationToken);
-            if (
-                ListingSymbolStartRule.StartsOn(dates, listing.EquityIssuerId, symbolClaims) is
-                { } start
-            )
-            {
-                derived[(listing.Id, listing.Ticker)] = start;
-                _logger.LogInformation(
-                    "Symbol {Ticker} names listing {ListingId} from {StartsOn}; {Earlier} stored daily short-volume rows under it are dated earlier",
-                    listing.Ticker,
-                    listing.Id,
-                    start,
-                    dates.Count(date => date < start)
-                );
-            }
+            var derivation = recorded.GetValueOrDefault((listing.Id, listing.Ticker))
+                is {
+                    WithdrawnFrom: not null,
+                    EarlierHolderFrom: { } from,
+                    EarlierHolderThrough: { } through,
+                } withdrawn
+                ? ListingSymbolStartRule.Holds(
+                    withdrawn.StartsOn,
+                    new ListingSymbolStartRule.RowRun(from, through),
+                    dates,
+                    listing.EquityIssuerId,
+                    symbolClaims
+                )
+                    ? new ListingSymbolStartRule.Derivation(
+                        withdrawn.StartsOn,
+                        new ListingSymbolStartRule.RowRun(from, through)
+                    )
+                    : null
+                : ListingSymbolStartRule.Derive(dates, listing.EquityIssuerId, symbolClaims);
+            if (derivation is not { } start)
+                continue;
+
+            var earlier = dates.Where(date => date < start.StartsOn).ToList();
+            derived[(listing.Id, listing.Ticker)] = new Derived(
+                start,
+                earlier.Count > 0 ? earlier[0] : null
+            );
+            _logger.LogInformation(
+                "Symbol {Ticker} names listing {ListingId} from {StartsOn}; {Earlier} stored daily short-volume rows under it are dated earlier",
+                listing.Ticker,
+                listing.Id,
+                start.StartsOn,
+                earlier.Count
+            );
         }
 
-        await Store(derived, cancellationToken);
+        await Store(derived, recorded.Values, cancellationToken);
         return derived.Count;
     }
 
+    // A derived start, and the first of the rows filed under its symbol before it.
+    private readonly record struct Derived(
+        ListingSymbolStartRule.Derivation Start,
+        DateOnly? FirstEarlierRow
+    );
+
     private async Task Store(
-        IReadOnlyDictionary<(Guid, string), DateOnly> derived,
+        IReadOnlyDictionary<(Guid, string), Derived> derived,
+        IReadOnlyCollection<EquityListingSymbolStart> stored,
         CancellationToken cancellationToken
     )
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var stored = await _starts.GetBySource(EvidenceSource).ToListAsync(cancellationToken);
-        // A start whose evidence went lifts; one whose evidence moved follows it.
-        _starts.Delete(
-            stored.Where(row => !derived.ContainsKey((row.EquityListingId, row.Ticker)))
-        );
+        await using var transaction = await _starts.BeginTransaction(cancellationToken);
+
+        // A start whose evidence went lifts. Its withdrawn dates sit under complete import markers,
+        // so those markers reopen and the next imports file the dates under the listing again.
+        var lifted = stored
+            .Where(row => !derived.ContainsKey((row.EquityListingId, row.Ticker)))
+            .ToList();
+        foreach (var row in lifted)
+            await Reopen(row, cancellationToken);
+        _starts.Delete(lifted);
+
+        // A start that moved waits a refresh before any withdrawal; one that held since the
+        // previous refresh marks its earlier rows withdrawn before they go.
+        var withdrawals = new List<EquityListingSymbolStart>();
         foreach (
-            var row in stored.Where(row =>
-                derived.TryGetValue((row.EquityListingId, row.Ticker), out var startsOn)
-                && row.StartsOn != startsOn
-            )
+            var row in stored.Where(row => derived.ContainsKey((row.EquityListingId, row.Ticker)))
         )
         {
-            row.StartsOn = derived[(row.EquityListingId, row.Ticker)];
-            row.RecordedAt = now;
+            var (start, firstEarlierRow) = derived[(row.EquityListingId, row.Ticker)];
+            if (row.StartsOn != start.StartsOn)
+            {
+                row.StartsOn = start.StartsOn;
+                row.RecordedAt = now;
+            }
+            else if (firstEarlierRow is { } first)
+            {
+                row.WithdrawnFrom =
+                    row.WithdrawnFrom is { } withdrawnFrom && withdrawnFrom < first
+                        ? withdrawnFrom
+                        : first;
+                withdrawals.Add(row);
+            }
+            row.EarlierHolderFrom = start.EarlierHolder.Start;
+            row.EarlierHolderThrough = start.EarlierHolder.End;
         }
 
         var storedKeys = stored.Select(row => (row.EquityListingId, row.Ticker)).ToHashSet();
         foreach (
-            var ((listingId, ticker), startsOn) in derived.Where(entry =>
+            var ((listingId, ticker), (start, _)) in derived.Where(entry =>
                 !storedKeys.Contains(entry.Key)
             )
         )
@@ -172,7 +253,9 @@ public class ListingSymbolStartService
                 {
                     EquityListingId = listingId,
                     Ticker = ticker,
-                    StartsOn = startsOn,
+                    StartsOn = start.StartsOn,
+                    EarlierHolderFrom = start.EarlierHolder.Start,
+                    EarlierHolderThrough = start.EarlierHolder.End,
                     EvidenceSource = EvidenceSource,
                     RecordedAt = now,
                 }
@@ -180,5 +263,59 @@ public class ListingSymbolStartService
         }
 
         await _starts.SaveChanges();
+        foreach (var row in withdrawals)
+            await Withdraw(row, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    // Only rows filed under the start's own symbol go: a renamed line's rows under its earlier
+    // symbol are its own history.
+    private async Task Withdraw(EquityListingSymbolStart start, CancellationToken cancellationToken)
+    {
+        var withdrawn = await _shortVolumes
+            .GetHistoryByListingId(start.EquityListingId)
+            .Where(row => row.ListedTicker == start.Ticker && row.Date < start.StartsOn)
+            .ExecuteDeleteAsync(cancellationToken);
+        _logger.LogInformation(
+            "Withdrew {Count} daily short-volume rows filed under {Ticker} on listing {ListingId} before its symbol start {StartsOn}",
+            withdrawn,
+            start.Ticker,
+            start.EquityListingId,
+            start.StartsOn
+        );
+    }
+
+    private async Task Reopen(EquityListingSymbolStart start, CancellationToken cancellationToken)
+    {
+        if (start.WithdrawnFrom is not { } withdrawnFrom)
+            return;
+
+        var through = start.StartsOn.AddDays(-1);
+        var reopened = 0;
+        foreach (
+            var prefix in new[]
+            {
+                FinraImportScope.ListingUniversePrefix,
+                FinraImportScope.ListingFilterPrefix,
+            }
+        )
+        {
+            reopened += await _partitions
+                .GetRangeByScopePrefix(
+                    ShortVolumeImportService.Dataset,
+                    prefix,
+                    withdrawnFrom,
+                    through
+                )
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+        _logger.LogInformation(
+            "Symbol start {StartsOn} of {Ticker} on listing {ListingId} lifted; reopened {Count} daily short-volume partitions from {WithdrawnFrom}",
+            start.StartsOn,
+            start.Ticker,
+            start.EquityListingId,
+            reopened,
+            withdrawnFrom
+        );
     }
 }
