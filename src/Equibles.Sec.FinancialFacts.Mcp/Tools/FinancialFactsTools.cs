@@ -567,7 +567,8 @@ public class FinancialFactsTools
                 var stockIds = stocks.Select(s => s.Id).ToList();
                 // The revenue alias also loads a bank's net interest and noninterest income,
                 // which stand in for a missing or partial revenue line (BankTopLine).
-                var bankComponentIds = BankTopLine.IsRevenue(conceptRefs)
+                var foldsRevenue = BankTopLine.IsRevenue(conceptRefs);
+                var bankComponentIds = foldsRevenue
                     ? await ResolveBankTopLineComponentIds()
                     : (
                         NetInterestIncome: new HashSet<Guid>(),
@@ -679,31 +680,38 @@ public class FinancialFactsTools
                         .GroupBy(f => f.EquityIssuerId)
                         .Select(g =>
                         {
-                            var (candidates, priority) = BankTopLine.Fold(
-                                g.Where(f => conceptPriority.ContainsKey(f.FinancialConceptId))
-                                    .ToList(),
-                                g.Where(f =>
-                                        bankComponentIds.NetInterestIncome.Contains(
-                                            f.FinancialConceptId
+                            var own = g.Where(f =>
+                                    conceptPriority.ContainsKey(f.FinancialConceptId)
+                                )
+                                .ToList();
+                            // Only revenue folds: the fold also drops revenue slices (RevenueSlices),
+                            // which no other concept's tags are.
+                            var (candidates, priority) = !foldsRevenue
+                                ? (own, new Dictionary<Guid, int>(conceptPriority))
+                                : BankTopLine.Fold(
+                                    own,
+                                    g.Where(f =>
+                                            bankComponentIds.NetInterestIncome.Contains(
+                                                f.FinancialConceptId
+                                            )
                                         )
-                                    )
-                                    .ToList(),
-                                g.Where(f =>
-                                        bankComponentIds.NoninterestIncome.Contains(
-                                            f.FinancialConceptId
+                                        .ToList(),
+                                    g.Where(f =>
+                                            bankComponentIds.NoninterestIncome.Contains(
+                                                f.FinancialConceptId
+                                            )
                                         )
-                                    )
-                                    .ToList(),
-                                conceptPriority,
-                                // One period shows none of the filer's history, so its interest
-                                // expense is what proves revenue before interest expense.
-                                g.Where(f =>
-                                        bankComponentIds.InterestExpense.Contains(
-                                            f.FinancialConceptId
+                                        .ToList(),
+                                    conceptPriority,
+                                    // One period shows none of the filer's history, so its interest
+                                    // expense is what proves revenue before interest expense.
+                                    g.Where(f =>
+                                            bankComponentIds.InterestExpense.Contains(
+                                                f.FinancialConceptId
+                                            )
                                         )
-                                    )
-                                    .ToList()
-                            );
+                                        .ToList()
+                                );
                             (candidates, priority) = OperatingCostsContinuation.Fold(
                                 claimableAlias,
                                 operatingCosts.ClaimedStockIds.Contains(g.Key)

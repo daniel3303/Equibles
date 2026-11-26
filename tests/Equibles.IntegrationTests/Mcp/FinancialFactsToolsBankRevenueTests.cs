@@ -146,6 +146,39 @@ public class FinancialFactsToolsBankRevenueTests : ParadeDbMcpTestBase
         result.Should().NotContain("$182,000,000");
     }
 
+    // Only revenue folds, since the fold also drops revenue slices (RevenueSlices): another concept compares the figure
+    // its first tag states, as GetFinancialFact reads it, never a sibling tag's beside a zero.
+    [Fact]
+    public async Task CompareFinancialFact_AnotherConceptsFirstTagIsZero_ComparesTheFirstTag()
+    {
+        var stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "CAPX",
+            Name: "Capex Example Corp",
+            Cik: "0000999001"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
+        AddQuarter(
+            stock,
+            Concept("PaymentsToAcquirePropertyPlantAndEquipment"),
+            SecFiscalPeriod.Q2,
+            0m
+        );
+        AddQuarter(stock, Concept("PaymentsToAcquireProductiveAssets"), SecFiscalPeriod.Q2, 120m);
+        await DbContext.SaveChangesAsync();
+
+        var result = await FactsSut()
+            .CompareFinancialFact(
+                ["CAPX"],
+                "capital-expenditures",
+                fiscalYear: 2026,
+                fiscalPeriod: "Q2"
+            );
+
+        result.Should().Contain("CAPX");
+        result.Should().NotContain("$120,000,000");
+    }
+
     [Fact]
     public async Task GetFinancialStatement_RevenuesIsAFeeSlice_RevenueLineIsTheBankTopLine()
     {
