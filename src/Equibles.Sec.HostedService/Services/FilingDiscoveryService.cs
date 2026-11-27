@@ -18,6 +18,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     // CompanySyncService's blank-website memo). The worker is single-threaded;
     // the concurrent dictionary is for safety, not contention.
     private static DateTime _lastFeedPollAtUtc;
+    private static DateTime _lastReleaseSweepAtUtc;
     private static readonly ConcurrentDictionary<string, DateTime> SeenFeedEntries = new();
     private static readonly TimeSpan SeenFeedEntryRetention = TimeSpan.FromHours(12);
 
@@ -39,6 +40,12 @@ public class FilingDiscoveryService : IFilingDiscoveryService
 
     private const int FeedPageSize = 100;
 
+    // EDGAR holds what it accepts after 17:30 ET and releases it at 06:00 ET on the next filing day.
+    private static readonly TimeSpan ReleaseTime = TimeSpan.FromHours(6);
+    private static readonly TimeSpan HoldCutoff = new(17, 30, 0);
+    private static readonly TimeSpan ReleaseSweepWindow = TimeSpan.FromHours(4);
+    private static readonly TimeSpan ReleaseSweepInterval = TimeSpan.FromMinutes(10);
+
     private static readonly TimeZoneInfo EasternTimeZone = ResolveEasternTimeZone();
 
     private readonly ISecEdgarClient _secEdgarClient;
@@ -46,15 +53,18 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     private readonly DocumentScraperOptions _options;
     private readonly ILogger<FilingDiscoveryService> _logger;
     private readonly IReadOnlyList<IRecentFilingSink> _recentFilingSinks;
+    private readonly TimeProvider _clock;
 
     public FilingDiscoveryService(
         ISecEdgarClient secEdgarClient,
         BackfillStateRepository backfillStateRepository,
         IOptions<DocumentScraperOptions> options,
         ILogger<FilingDiscoveryService> logger,
-        IEnumerable<IRecentFilingSink> recentFilingSinks = null
+        IEnumerable<IRecentFilingSink> recentFilingSinks = null,
+        TimeProvider clock = null
     )
     {
+        _clock = clock ?? TimeProvider.System;
         _secEdgarClient = secEdgarClient;
         _backfillStateRepository = backfillStateRepository;
         _options = options.Value;
@@ -86,7 +96,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         // Captured before the collectors run so entries seeded during this
         // pass's feed poll can never look retry-due in this same pass, even
         // when a slow multi-page poll makes the pass span minutes.
-        var utcNow = DateTime.UtcNow;
+        var utcNow = _clock.GetUtcNow().UtcDateTime;
 
         await CollectFromRecentFeed(cikToCompany, syncedForms, dirty, cancellationToken);
         if (includeDailyIndex)
@@ -280,10 +290,23 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         CancellationToken cancellationToken
     )
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = _clock.GetUtcNow().UtcDateTime;
         if (utcNow - _lastFeedPollAtUtc < TimeSpan.FromSeconds(_options.RecentFeedPollSeconds))
             return;
         _lastFeedPollAtUtc = utcNow;
+
+        // The 06:00 ET release lists the held filings by acceptance time among the evening entries an earlier poll
+        // read, so the overlap stop ended the walk on its first page and a released 8-K waited hours for a restart's
+        // full walk (2026-11-27). After a release the walk goes on to the previous filing day's 17:30 ET.
+        var release = LatestReleaseUtc(utcNow);
+        var releaseSweep =
+            utcNow - release < ReleaseSweepWindow
+            && (
+                _lastReleaseSweepAtUtc < release
+                || utcNow - _lastReleaseSweepAtUtc >= ReleaseSweepInterval
+            );
+        DateTimeOffset? holdFloor = null;
+        var reachedHoldFloor = false;
 
         PruneSeenFeedEntries(utcNow);
 
@@ -323,6 +346,13 @@ public class FilingDiscoveryService : IFilingDiscoveryService
             var sawKnownEntry = false;
             foreach (var entry in entries)
             {
+                if (releaseSweep && entry.Updated is { } accepted && accepted.UtcDateTime < release)
+                {
+                    // The newest entry from before the release dates the filing day whose evening it released.
+                    holdFloor ??= HoldFloorOf(accepted);
+                    reachedHoldFloor |= accepted < holdFloor;
+                }
+
                 // The same accession appears once per associated entity (filer,
                 // subject, reporting owner), each with its own CIK — key on both
                 // so a page boundary can't hide the tracked side of a filing.
@@ -369,10 +399,17 @@ public class FilingDiscoveryService : IFilingDiscoveryService
 
             // Overlap with the previous poll (or a short page) means the window
             // between polls is fully covered — stop paging.
-            if (sawKnownEntry || entries.Count < FeedPageSize)
+            var covered = sawKnownEntry && (!releaseSweep || reachedHoldFloor);
+            if (covered || entries.Count < FeedPageSize)
+            {
+                if (releaseSweep)
+                    EndReleaseSweep(utcNow, page + 1, holdFloor, fresh.Count);
                 return;
+            }
         }
 
+        if (releaseSweep)
+            EndReleaseSweep(utcNow, _options.RecentFeedMaxPages, holdFloor, fresh.Count);
         _logger.LogWarning(
             "Latest-filings feed poll exhausted {Pages} pages without overlapping the previous poll — a burst may have scrolled entries out; the daily index will catch them",
             _options.RecentFeedMaxPages
@@ -563,6 +600,34 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         }
     }
 
+    private void EndReleaseSweep(DateTime utcNow, int pages, DateTimeOffset? holdFloor, int fresh)
+    {
+        StampReleaseSweep(utcNow);
+        _logger.LogInformation(
+            "Latest-filings release sweep read {Pages} pages back to {HoldFloor:u} and found {Fresh} new entries",
+            pages,
+            holdFloor,
+            fresh
+        );
+    }
+
+    private static void StampReleaseSweep(DateTime utcNow) => _lastReleaseSweepAtUtc = utcNow;
+
+    // The latest 06:00 ET at or before the instant, in UTC.
+    private static DateTime LatestReleaseUtc(DateTime utcNow)
+    {
+        var eastern = TimeZoneInfo.ConvertTimeFromUtc(utcNow, EasternTimeZone);
+        var day = eastern.TimeOfDay >= ReleaseTime ? eastern.Date : eastern.Date.AddDays(-1);
+        return TimeZoneInfo.ConvertTimeToUtc(day + ReleaseTime, EasternTimeZone);
+    }
+
+    // 17:30 ET on the Eastern day of the acceptance.
+    private static DateTimeOffset HoldFloorOf(DateTimeOffset accepted)
+    {
+        var day = TimeZoneInfo.ConvertTime(accepted, EasternTimeZone).Date;
+        return TimeZoneInfo.ConvertTimeToUtc(day + HoldCutoff, EasternTimeZone);
+    }
+
     private static TimeZoneInfo ResolveEasternTimeZone()
     {
         try
@@ -580,6 +645,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     internal static void ResetCrossCycleStateForTests()
     {
         _lastFeedPollAtUtc = default;
+        _lastReleaseSweepAtUtc = default;
         SeenFeedEntries.Clear();
         PendingFeedAccessions.Clear();
     }

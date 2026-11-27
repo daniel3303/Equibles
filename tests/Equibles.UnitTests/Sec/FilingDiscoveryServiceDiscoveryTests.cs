@@ -291,6 +291,140 @@ public class FilingDiscoveryServiceDiscoveryTests
         dirty.Should().ContainSingle().Which.Should().BeSameAs(nvidia);
     }
 
+    private sealed class Clock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private static readonly TimeSpan Eastern = TimeSpan.FromHours(-5);
+
+    private static EdgarRecentFilingEntry FeedEntry(
+        string cik,
+        string form,
+        int serial,
+        DateTimeOffset accepted
+    ) =>
+        new()
+        {
+            Cik = cik,
+            FormType = form,
+            AccessionNumber = $"{cik}-26-{serial:D6}",
+            Updated = accepted,
+        };
+
+    // Ownership forms, which EDGAR disseminates at once even after hours, one a minute back from the newest.
+    private static List<EdgarRecentFilingEntry> OwnershipForms(
+        int first,
+        int count,
+        DateTimeOffset newest
+    ) =>
+        [
+            .. Enumerable
+                .Range(first, count)
+                .Select(i => FeedEntry("0000999999", "4", i, newest.AddMinutes(first - i))),
+        ];
+
+    // Recorded at the 06:00 ET release of 2026-11-27 (EDGAR closed for Thanksgiving): Applied Digital's 8-K
+    // accepted 11-25 at 20:54 ET sat on the feed's second page and Vishay Precision's (17:49 ET) further down,
+    // among evening entries the night's polls had read. The walk stopped on the first page, and both waited
+    // over four hours for a worker restart's full walk.
+    [Fact]
+    public async Task Feed_AfterTheMorningRelease_WalksPastReadEntriesToTheHeldFilings()
+    {
+        await using var context = CreateContext();
+        EquityIssuer appliedDigital = Tracked("APLD", "1144879");
+        EquityIssuer vishayPrecision = Tracked("VPG", "1487952");
+        var evening = new DateTimeOffset(2026, 11, 25, 21, 56, 0, Eastern);
+        var nightPage = OwnershipForms(0, 100, evening);
+        var morning = new DateTimeOffset(2026, 11, 27, 6, 5, 0, Eastern);
+        List<EdgarRecentFilingEntry> morningFirst =
+        [
+            .. Enumerable
+                .Range(0, 5)
+                .Select(i => FeedEntry("0000888888", "424B2", i, morning.AddMinutes(-i))),
+            .. nightPage.Take(95),
+        ];
+        List<EdgarRecentFilingEntry> morningSecond =
+        [
+            .. nightPage.Skip(95),
+            FeedEntry(
+                "0001144879",
+                "8-K",
+                69,
+                new DateTimeOffset(2026, 11, 25, 20, 54, 45, Eastern)
+            ),
+            .. OwnershipForms(100, 94, evening.AddMinutes(-100)),
+        ];
+        List<EdgarRecentFilingEntry> morningThird =
+        [
+            FeedEntry(
+                "0001487952",
+                "8-K",
+                38325,
+                new DateTimeOffset(2026, 11, 25, 17, 49, 20, Eastern)
+            ),
+            .. OwnershipForms(194, 99, new DateTimeOffset(2026, 11, 25, 17, 45, 0, Eastern)),
+        ];
+        var client = ClientWithFeed();
+        client
+            .GetRecentFilings(0, 100, Arg.Any<CancellationToken>())
+            .Returns(nightPage, morningFirst);
+        client.GetRecentFilings(100, 100, Arg.Any<CancellationToken>()).Returns([], morningSecond);
+        client.GetRecentFilings(200, 100, Arg.Any<CancellationToken>()).Returns(morningThird);
+        var clock = new Clock(new DateTimeOffset(2026, 11, 27, 10, 50, 0, TimeSpan.Zero));
+        var service = new FilingDiscoveryService(
+            client,
+            new BackfillStateRepository(context),
+            Options.Create(new DocumentScraperOptions()),
+            Substitute.For<ILogger<FilingDiscoveryService>>(),
+            clock: clock
+        );
+
+        var night = await service.DiscoverCompaniesFromRecentFeed([
+            appliedDigital,
+            vishayPrecision,
+        ]);
+        clock.Now = new DateTimeOffset(2026, 11, 27, 11, 6, 0, TimeSpan.Zero);
+        var released = await service.DiscoverCompaniesFromRecentFeed([
+            appliedDigital,
+            vishayPrecision,
+        ]);
+
+        night.Should().BeEmpty();
+        released.Should().HaveCount(2).And.Contain(appliedDigital).And.Contain(vishayPrecision);
+    }
+
+    // Away from the release a page holding a read entry ends the walk, so a poll costs one request.
+    [Fact]
+    public async Task Feed_LaterInTheDay_StopsOnThePageThatOverlapsTheLastPoll()
+    {
+        await using var context = CreateContext();
+        var afternoon = new DateTimeOffset(2026, 11, 27, 14, 0, 0, Eastern);
+        var firstPage = OwnershipForms(0, 100, afternoon);
+        var client = ClientWithFeed();
+        client.GetRecentFilings(0, 100, Arg.Any<CancellationToken>()).Returns(firstPage);
+        client.GetRecentFilings(100, 100, Arg.Any<CancellationToken>()).Returns([]);
+        var clock = new Clock(afternoon.AddMinutes(1));
+        var service = new FilingDiscoveryService(
+            client,
+            new BackfillStateRepository(context),
+            Options.Create(new DocumentScraperOptions()),
+            Substitute.For<ILogger<FilingDiscoveryService>>(),
+            clock: clock
+        );
+        await service.DiscoverCompaniesFromRecentFeed([Tracked("AAPL", "320193")]);
+        client.ClearReceivedCalls();
+        clock.Now = afternoon.AddMinutes(2);
+
+        await service.DiscoverCompaniesFromRecentFeed([Tracked("AAPL", "320193")]);
+
+        await client
+            .Received(1)
+            .GetRecentFilings(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Feed_PollFailure_IsSwallowed()
     {
