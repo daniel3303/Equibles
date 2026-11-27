@@ -305,8 +305,10 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                 _lastReleaseSweepAtUtc < release
                 || utcNow - _lastReleaseSweepAtUtc >= ReleaseSweepInterval
             );
+        var releaseDay = TimeZoneInfo.ConvertTimeFromUtc(release, EasternTimeZone).Date;
         DateTimeOffset? holdFloor = null;
         var reachedHoldFloor = false;
+        var sawAnyKnownEntry = false;
 
         PruneSeenFeedEntries(utcNow);
 
@@ -346,9 +348,14 @@ public class FilingDiscoveryService : IFilingDiscoveryService
             var sawKnownEntry = false;
             foreach (var entry in entries)
             {
-                if (releaseSweep && entry.Updated is { } accepted && accepted.UtcDateTime < release)
+                // The newest entry of an earlier day dates the filing day whose evening was released. Entries the
+                // release day holds before 06:00 (the 00:15 ET effectiveness notices) are no filing day's evening.
+                if (
+                    releaseSweep
+                    && entry.Updated is { } accepted
+                    && TimeZoneInfo.ConvertTime(accepted, EasternTimeZone).Date < releaseDay
+                )
                 {
-                    // The newest entry from before the release dates the filing day whose evening it released.
                     holdFloor ??= HoldFloorOf(accepted);
                     reachedHoldFloor |= accepted < holdFloor;
                 }
@@ -399,7 +406,10 @@ public class FilingDiscoveryService : IFilingDiscoveryService
 
             // Overlap with the previous poll (or a short page) means the window
             // between polls is fully covered — stop paging.
-            var covered = sawKnownEntry && (!releaseSweep || reachedHoldFloor);
+            // Past the floor nothing was held, and its entries may be older than the seen-entry memo, so a sweep that
+            // has met read entries stops there; one that has met none (after a restart) walks on as any first poll.
+            sawAnyKnownEntry |= sawKnownEntry;
+            var covered = releaseSweep ? reachedHoldFloor && sawAnyKnownEntry : sawKnownEntry;
             if (covered || entries.Count < FeedPageSize)
             {
                 if (releaseSweep)
