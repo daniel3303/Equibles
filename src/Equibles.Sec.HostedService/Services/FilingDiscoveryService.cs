@@ -138,7 +138,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                     "Feed-flagged filing {AccessionNumber} appeared in CIK {Cik}'s submissions enumeration {Minutes:F1} minutes after its feed flag",
                     accessionNumber,
                     numericCik,
-                    (DateTime.UtcNow - pending.FirstSeenAtUtc).TotalMinutes
+                    (_clock.GetUtcNow().UtcDateTime - pending.FirstSeenAtUtc).TotalMinutes
                 );
             }
         }
@@ -442,7 +442,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         CancellationToken cancellationToken
     )
     {
-        var latestFinalDay = LatestFinalIndexDay(DateTime.UtcNow);
+        var latestFinalDay = LatestFinalIndexDay(_clock.GetUtcNow().UtcDateTime);
         var state = await _backfillStateRepository.GetByName(DailyIndexStateName);
 
         if (state?.Floor == null)
