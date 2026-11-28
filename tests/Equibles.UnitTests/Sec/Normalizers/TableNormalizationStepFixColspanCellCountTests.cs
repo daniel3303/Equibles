@@ -20,7 +20,7 @@ public class TableNormalizationStepFixColspanCellCountTests
             "<html><body><table><tr><td colspan=\"3\">A</td></tr></table></body></html>"
         );
         var table = doc.QuerySelector("table");
-        var step = new TableNormalizationStep(parser);
+        var step = new TableNormalizationStep();
         var method = typeof(TableNormalizationStep).GetMethod(
             "FixColspan",
             BindingFlags.NonPublic | BindingFlags.Instance

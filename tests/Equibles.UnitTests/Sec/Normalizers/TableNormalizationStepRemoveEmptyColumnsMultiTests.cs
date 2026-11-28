@@ -22,7 +22,7 @@ public class TableNormalizationStepRemoveEmptyColumnsMultiTests
                 + "</table></body></html>"
         );
         var table = doc.QuerySelector("table");
-        var step = new TableNormalizationStep(parser);
+        var step = new TableNormalizationStep();
         var method = typeof(TableNormalizationStep).GetMethod(
             "RemoveEmptyColumns",
             BindingFlags.NonPublic | BindingFlags.Instance

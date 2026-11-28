@@ -32,4 +32,66 @@ public class SecDocumentTablePipelineTests
         chunks.Should().ContainSingle();
         chunks[0].Content.Should().Contain("77,286 | 67% |\n| Graphics | 22,459");
     }
+
+    // A statement as one filer's software writes it: every spacer cell holds a zero-width space, so
+    // the spacer rows and columns, the "$" columns and the years one column off all used to survive.
+    [Fact]
+    public void NormalizeAndConvert_StatementPaddedWithZeroWidthSpaces_ReadsAsAPlainTable()
+    {
+        const string zws = "<p><span>\u200B</span></p>";
+        var html =
+            "<table><tbody>"
+            + $"<tr><td>{zws}</td><td>{zws}</td><td colspan=\"5\"><p><b>Three Months Ended September&nbsp;30,&nbsp;</b></p></td></tr>"
+            + $"<tr><td>{zws}</td><td><p>&nbsp;&nbsp;\u200B&nbsp;\u200B</p></td><td colspan=\"2\"><p><b>2026</b></p></td><td><p>&nbsp;&nbsp;\u200B&nbsp;\u200B</p></td><td colspan=\"2\"><p><b>2025</b></p></td></tr>"
+            + $"<tr><td><p>Revenues</p></td><td>{zws}</td><td><p>$</p></td><td><p> 2,638,081</p></td><td>{zws}</td><td><p>$</p></td><td><p> 2,458,378</p></td></tr>"
+            + $"<tr><td><p>Cost of operations</p></td><td>{zws}</td><td>{zws}</td><td><p> 1,501,143</p></td><td>{zws}</td><td>{zws}</td><td><p> 1,406,854</p></td></tr>"
+            + "</tbody></table>";
+
+        var markdown = new SecDocumentHtmlToMarkdownConverter().Convert(
+            new SecDocumentHtmlNormalizer().NormalizeFragment(html)
+        );
+
+        markdown
+            .Split('\n')
+            .Where(line => line.StartsWith('|'))
+            .Should()
+            .Equal(
+                "|  | Three Months Ended September 30, |  |",
+                "| --- | --- | --- |",
+                "|  | 2026 | 2025 |",
+                "| Revenues | 2,638,081 | 2,458,378 |",
+                "| Cost of operations | 1,501,143 | 1,406,854 |"
+            );
+    }
+
+    [Fact]
+    public void NormalizeAndConvert_SourceLineWrapsAndLinkTargets_LeaveNoBreaksOrEmptyLinks()
+    {
+        var html =
+            "<p><a name=\"CASH\"></a>Statements of cash flows</p>"
+            + "<table><tr><td>Cash\nFlows From Operating Activities:</td><td>(5,455,432)</td></tr>"
+            + "<tr><td>Cost<br>of sales</td><td>567</td></tr></table>";
+
+        var markdown = new SecDocumentHtmlToMarkdownConverter().Convert(
+            new SecDocumentHtmlNormalizer().NormalizeFragment(html)
+        );
+
+        markdown.Should().NotContain("[]()");
+        markdown.Should().Contain("| Cash Flows From Operating Activities: | (5,455,432) |");
+        markdown.Should().Contain("| Cost<br>of sales | 567 |");
+    }
+
+    [Fact]
+    public void NormalizeAndConvert_HeadingInsideALinkTarget_StaysAHeading()
+    {
+        var html =
+            "<div><a name=\"n5\"><span style=\"font-weight:bold\">Note 5. Debt</span></a>"
+            + "<p><span>The Company has a revolving facility.</span></p></div>";
+
+        var markdown = new SecDocumentHtmlToMarkdownConverter().Convert(
+            new SecDocumentHtmlNormalizer().NormalizeFragment(html)
+        );
+
+        markdown.Should().Contain("### Note 5. Debt").And.NotContain("[]()");
+    }
 }

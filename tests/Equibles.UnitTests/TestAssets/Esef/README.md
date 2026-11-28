@@ -63,7 +63,7 @@
 - `bff-2025-envelope.xhtml.gz` is the complete retained XHTML envelope from the [official 1INFO report package](https://www.1info.it/PORTALE1INFO/Pdf/Pdf?pdf=167713_oneinfo.zip&data=2025&filetype=documenti&titolo=&download=1); no fixture bytes were changed.
 - Its gzip SHA-256 is `76611d4b227a25cd6fd3a5329903d03fcb52bcbdc8e24161670a47a1f96149fa`; the 34,672,821-character envelope retains the capture's existing binary-asset removal.
 - Repeated span/div layout classes and span ids dominate its size. Removing class metadata changes Markdown paragraph boundaries, so the compact retrieval copy preserves a neutral nonempty class.
-- Full original normalization produces 2,048,711 UTF-8 bytes, SHA-256 `c599cd1356a8f79910cfca43f03dd28d085bf77bd144421d17c36abf703ba474`; recovered text must match exactly, including whitespace.
+- Full original normalization produces 2,046,744 UTF-8 bytes, SHA-256 `382ad316aae77a4852b2b76f82275ac69d2fdcc42e1cf66453799591a2d44b17`; recovered text must match exactly, including whitespace.
 
 ## DFDS interim report with trailing twelve-month figures
 

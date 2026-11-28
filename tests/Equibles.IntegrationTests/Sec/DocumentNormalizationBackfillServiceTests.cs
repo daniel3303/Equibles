@@ -848,9 +848,9 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             .ReplaceContent(
                 document,
                 Arg.Is<byte[]>(bytes =>
-                    bytes.Length == 586181
+                    bytes.Length == 584638
                     && Convert.ToHexStringLower(SHA256.HashData(bytes))
-                        == "0741059b65e3784ce64a6a40d3896f09bb037835ef0bffce6b772a8c4a6acd49"
+                        == "3adbf26bc784e81e71bf82adab8dc21544219ef480c613e9ca141d6189bff2f2"
                 ),
                 Arg.Any<CancellationToken>()
             );

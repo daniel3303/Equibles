@@ -5,19 +5,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 
 public class TableNormalizationStepArialPreWrapEmptyCellTests
 {
-    // IsCellEmpty has FOUR distinct empty-cell signatures: NullOrWhiteSpace
-    // text, the canonical `&nbsp;`/`&#160;` entity, a third VERY specific
-    // magic-string match for an Arial pre-wrap span (a recurring SEC filer
-    // artifact), and the IsOnlyWhitespaceSpan fallback. The first three are
-    // structurally independent — the third sits between the `&nbsp;` arm and
-    // the AngleSharp-reparsing fallback and is the ONLY hard-coded substring
-    // probe of its kind in the normalizer. A refactor that "consolidated" the
-    // magic-string check into the IsOnlyWhitespaceSpan fallback would change
-    // the matching surface (Contains vs reparse) — that filer-emitted span
-    // would have to round-trip through AngleSharp and survive IsMeaningfulText
-    // with the exact same verdict, which is not guaranteed across versions.
-    // Pin the magic-string arm so a future "cleanup" cannot silently let those
-    // decorative spans leak into the rendered table.
+    // A recurring SEC filer artifact: a pre-wrap Arial span holding one space pads a visually empty cell.
     [Fact]
     public void Execute_RowWithOnlyArialPreWrapSpanCell_RemovesRow()
     {
@@ -30,7 +18,7 @@ public class TableNormalizationStepArialPreWrapEmptyCellTests
                 + "<tr><td>Real content</td></tr>"
                 + "</table></body></html>"
         );
-        var step = new TableNormalizationStep(parser);
+        var step = new TableNormalizationStep();
 
         step.Execute(doc);
 

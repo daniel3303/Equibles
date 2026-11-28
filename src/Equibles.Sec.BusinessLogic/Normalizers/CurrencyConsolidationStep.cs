@@ -28,6 +28,11 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
 
+    private static readonly Regex PrefixedFigureRegex = new(
+        @"^\(?[-−–]?\d[\d,.]*\)?%?$",
+        RegexOptions.Compiled
+    );
+
     private static readonly Regex UsDollarRegex = new(
         @"\bUS\$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
@@ -114,19 +119,21 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
             if (colIndex >= cells.Count || (colIndex + 1) >= cells.Count)
                 continue;
 
-            var currentCell = cells[colIndex].TextContent.Trim();
+            var currentCell = HtmlElementExtensions.TrimBlank(cells[colIndex].TextContent);
             if (IsEmptyCell(currentCell))
                 continue;
 
-            var detectedCurrency = DetectCurrency(currentCell);
-            var nextCell = cells[colIndex + 1].TextContent.Trim();
+            // Words that mention a currency ("net of $437 issuance cost", "Amount (US$)") are a
+            // label, never a currency column's sign: they neither qualify the column nor name it.
+            var detectedCurrency = IsCurrencyMark(currentCell) ? DetectCurrency(currentCell) : null;
+            var nextCell = HtmlElementExtensions.TrimBlank(cells[colIndex + 1].TextContent);
             if (detectedCurrency == null)
             {
                 // A raw symbol that was deliberately rejected by DetectCurrency is a foreign
                 // prefixed symbol such as C$ or A$. Treat it as conflicting currency evidence:
                 // shifting it as a Workiva header would later strip the symbol and mislabel the
                 // whole table as USD.
-                if (ContainsAnyCurrencySymbol(currentCell))
+                if (DetectCurrency(currentCell) == null && ContainsAnyCurrencySymbol(currentCell))
                     return false;
 
                 // Workiva colspans put both leading headers and values from symbol-less rows in
@@ -153,10 +160,15 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
         return remainder.Length == 0 || CurrencyScaleRegex.IsMatch(remainder);
     }
 
-    private bool IsEmptyCell(string cellText)
-    {
-        return string.IsNullOrWhiteSpace(cellText) || cellText == "\u00A0";
-    }
+    // A currency column's sign: the sign alone (or with its scale) or a figure it prefixes ("$100").
+    private bool IsCurrencyMark(string text) =>
+        DetectCurrency(text) != null
+        && (
+            IsStandaloneCurrencyCell(text)
+            || PrefixedFigureRegex.IsMatch(RemoveCurrencySymbols(text).Replace(" ", ""))
+        );
+
+    private bool IsEmptyCell(string cellText) => HtmlElementExtensions.IsBlankText(cellText);
 
     private string DetectCurrency(string text)
     {
@@ -224,9 +236,12 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
                     continue;
 
                 var currentCell = cells[colIndex];
-                var currentText = currentCell.TextContent.Trim();
+                var currentText = HtmlElementExtensions.TrimBlank(currentCell.TextContent);
 
-                var cleanTitle = RemoveCurrencySymbols(currentText);
+                // Only a sign is dropped; a label or header moves across with its words intact.
+                var cleanTitle = IsCurrencyMark(currentText)
+                    ? RemoveCurrencySymbols(currentText)
+                    : currentText;
                 if (cleanTitle.Length > 0 && (colIndex + 1) >= cells.Count)
                     continue;
 
