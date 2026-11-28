@@ -1,7 +1,7 @@
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 
-namespace Equibles.Sec.FinancialFacts.Mcp.Helpers;
+namespace Equibles.Sec.FinancialFacts.BusinessLogic.Comparison;
 
 /// <summary>
 /// Places a company's fiscal year in the calendar year holding most of its days, so peers with different
