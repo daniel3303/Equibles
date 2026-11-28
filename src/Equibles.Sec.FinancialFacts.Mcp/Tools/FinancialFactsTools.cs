@@ -16,6 +16,7 @@ using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
+using Equibles.Sec.FinancialFacts.BusinessLogic.Comparison;
 using Equibles.Sec.FinancialFacts.BusinessLogic.ReleaseStatements;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Splits;
 using Equibles.Sec.FinancialFacts.Data;
@@ -47,6 +48,8 @@ public class FinancialFactsTools
     private readonly ReleaseStatementFigureRepository _releaseFigureRepository;
     private readonly McpToolRunner _runner;
     private readonly INetIncomeFactsReader _netIncomeFactsReader;
+    private readonly FinancialConceptResolver _conceptResolver;
+    private readonly FinancialFactComparisonReader _comparisonReader;
 
     // The document repository is optional: a host without the filings module has no stored
     // earnings release to point at.
@@ -70,6 +73,15 @@ public class FinancialFactsTools
         _commonStockRepository = commonStockRepository;
         _stockSplitRepository = stockSplitRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
+        _conceptResolver = new FinancialConceptResolver(
+            financialFactRepository,
+            financialConceptRepository
+        );
+        _comparisonReader = new FinancialFactComparisonReader(
+            financialFactRepository,
+            financialConceptRepository,
+            netIncomeFactsReader
+        );
     }
 
     [McpServerTool(Name = "GetFinancialFact", Title = "Financial Concept Lookup", ReadOnly = true)]
@@ -571,10 +583,6 @@ public class FinancialFactsTools
                 if (tickerError != null)
                     return tickerError;
 
-                var (conceptPriority, conceptsById) = await ResolveConcepts(conceptRefs);
-                if (conceptPriority.Count == 0)
-                    return $"No '{concept}' data has been ingested.";
-
                 // Two queries instead of 2N: batch-load the requested stocks,
                 // then all matching facts in one go keyed by company.
                 var stocks = await _commonStockRepository.GetUsByTickers(requested).ToListAsync();
@@ -601,290 +609,18 @@ public class FinancialFactsTools
                         stocks.Add(venueStock);
                 }
 
-                var stockIds = stocks.Select(s => s.Id).ToList();
-                // The revenue alias also loads a bank's net interest and noninterest income,
-                // which stand in for a missing or partial revenue line (BankTopLine).
-                var foldsRevenue = BankTopLine.IsRevenue(conceptRefs);
-                var bankComponentIds = foldsRevenue
-                    ? await ResolveBankTopLineComponentIds()
-                    : (
-                        NetInterestIncome: new HashSet<Guid>(),
-                        NoninterestIncome: new HashSet<Guid>(),
-                        InterestExpense: new HashSet<Guid>()
-                    );
-                // The cost lines continue through operating costs per issuer
-                // (OperatingCostsContinuation); gross profit loads what proves a mis-tag.
-                var claimableAlias = OperatingCostsContinuation.ClaimableAlias(conceptRefs);
-                var operatingCosts =
-                    claimableAlias == null
-                        ? (Ids: new HashSet<Guid>(), ClaimedStockIds: new HashSet<Guid>())
-                        : await ResolveOperatingCostsClaims(claimableAlias, stockIds, conceptsById);
-                var grossProfitComponents = GrossProfitMistag.IsGrossProfit(conceptRefs)
-                    ? await ResolveGrossProfitComponents()
-                    : [];
-                // Net income compares the line a host proves for each issuer it reads its own way
-                // (INetIncomeFactsReader), as GetFinancialFact reads it.
-                var hostNetIncome = new Dictionary<Guid, NetIncomeReading>();
-                if (OwnersProfitSign.IsNetIncome(conceptRefs))
-                    foreach (var stock in stocks)
-                        if (await ReadHostNetIncome(stock) is { } reading)
-                        {
-                            hostNetIncome[stock.Id] = reading;
-                            foreach (var (conceptId, conceptRef) in reading.Concepts)
-                            {
-                                conceptsById.TryAdd(conceptId, conceptRef);
-                                conceptPriority.TryAdd(conceptId, 0);
-                            }
-                        }
-                // One fiscal year's pick per company, and the companies whose gross profit that pick proves
-                // mis-tagged. A calendar comparison runs it for the two years that can hold the calendar year.
-                async Task<(Dictionary<Guid, FinancialFact> Best, HashSet<Guid> Mistagged)> Slice(
-                    int year
-                )
-                {
-                    var loadedConceptIds = conceptPriority
-                        .Keys.Concat(bankComponentIds.NetInterestIncome)
-                        .Concat(bankComponentIds.NoninterestIncome)
-                        .Concat(bankComponentIds.InterestExpense)
-                        .Concat(operatingCosts.Ids)
-                        .Concat(grossProfitComponents.SelectMany(c => c.Ids))
-                        .ToList();
-                    // A Q4 request must also load the year's fp=FY rows: filers whose
-                    // Company Facts carry Q4 frames report the discrete fourth quarter
-                    // under the FullYear stamp (see ReportedQuarterPromotion).
-                    var includeFullYearForQ4 = period == SecFiscalPeriod.Q4;
-                    var facts = await _financialFactRepository
-                        .GetConsolidatedByIssuerIds(stockIds)
-                        .Where(f =>
-                            f.FiscalYear == year
-                            && (
-                                f.FiscalPeriod == period
-                                || (
-                                    includeFullYearForQ4
-                                    && f.FiscalPeriod == SecFiscalPeriod.FullYear
-                                )
-                            )
-                            && loadedConceptIds.Contains(f.FinancialConceptId)
-                        )
-                        .ToListAsync();
-                    // Depreciation and amortization is judged on each issuer's whole history, so the
-                    // period compared shows the figure GetFinancialFact shows (DepreciationTotal).
-                    if (DepreciationTotal.IsFamily(conceptRefs))
-                    {
-                        var depreciation = await DepreciationTotalFacts.Load(
-                            _financialFactRepository,
-                            _financialConceptRepository,
-                            stockIds
-                        );
-                        conceptPriority = depreciation.Priority;
-                        facts = depreciation
-                            .Facts.Where(f =>
-                                f.FiscalYear == year
-                                && (
-                                    f.FiscalPeriod == period
-                                    || (
-                                        includeFullYearForQ4
-                                        && f.FiscalPeriod == SecFiscalPeriod.FullYear
-                                    )
-                                )
-                            )
-                            .ToList();
-                    }
-                    // Diluted EPS is judged on each issuer's whole history too, as GetFinancialFact
-                    // reads it (ContinuingOperationsEps).
-                    else if (ContinuingOperationsEps.IsFamily(conceptRefs))
-                    {
-                        var eps = await ContinuingOperationsEpsFacts.Load(
-                            _financialFactRepository,
-                            _financialConceptRepository,
-                            stockIds
-                        );
-                        conceptPriority = eps.Priority;
-                        foreach (var (conceptId, conceptRef) in eps.ConceptsById)
-                            conceptsById.TryAdd(conceptId, conceptRef);
-                        facts = eps
-                            .Facts.Where(f =>
-                                f.FiscalYear == year
-                                && (
-                                    f.FiscalPeriod == period
-                                    || (
-                                        includeFullYearForQ4
-                                        && f.FiscalPeriod == SecFiscalPeriod.FullYear
-                                    )
-                                )
-                            )
-                            .ToList();
-                    }
-
-                    // A foreign filer's owners' profit reads the sign its filing proves, as
-                    // GetFinancialFact reads it (OwnersProfitSign).
-                    if (OwnersProfitSign.IsNetIncome(conceptRefs))
-                        facts = (
-                            await OwnersProfitSignFacts.Read(
-                                _financialFactRepository,
-                                _financialConceptRepository,
-                                stockIds,
-                                facts,
-                                conceptPriority.Keys.ToHashSet()
-                            )
-                        ).Facts;
-                    if (hostNetIncome.Count > 0)
-                        facts =
-                        [
-                            .. facts.Where(f => !hostNetIncome.ContainsKey(f.EquityIssuerId)),
-                            // Filed figures only, as for every other issuer compared.
-                            .. hostNetIncome.Values.SelectMany(reading =>
-                                reading.Facts.Where(f =>
-                                    !reading.Derived.Contains(f)
-                                    && f.FiscalYear == year
-                                    && (
-                                        f.FiscalPeriod == period
-                                        || (
-                                            includeFullYearForQ4
-                                            && f.FiscalPeriod == SecFiscalPeriod.FullYear
-                                        )
-                                    )
-                                )
-                            ),
-                        ];
-
-                    if (includeFullYearForQ4)
-                    {
-                        // Promote per company: only a quarter-span row ending exactly
-                        // where the company's own year does is that year's fourth
-                        // quarter — comparative re-filings in the slice end earlier
-                        // and belong to the prior year. The remaining fp=FY rows
-                        // (the annual totals) are dropped, never compared as Q4.
-                        facts = facts
-                            .Where(f => f.FiscalPeriod == SecFiscalPeriod.Q4)
-                            .Concat(
-                                facts
-                                    .GroupBy(f => f.EquityIssuerId)
-                                    .SelectMany(
-                                        ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice
-                                    )
-                            )
-                            .ToList();
-                    }
-
-                    // Same deterministic pick as GetFinancialFact: canonical periodic
-                    // sources win before the alias's primary tag, then latest filing and
-                    // accession provide stable amendment ordering (Postgres has no
-                    // implicit row order).
-                    var best = facts
-                        .GroupBy(f => f.EquityIssuerId)
-                        .Select(g =>
-                        {
-                            var own = g.Where(f =>
-                                    conceptPriority.ContainsKey(f.FinancialConceptId)
-                                )
-                                .ToList();
-                            // Only revenue folds: the fold also drops revenue slices (RevenueSlices),
-                            // which no other concept's tags are.
-                            var (candidates, priority) = !foldsRevenue
-                                ? (own, new Dictionary<Guid, int>(conceptPriority))
-                                : BankTopLine.Fold(
-                                    own,
-                                    g.Where(f =>
-                                            bankComponentIds.NetInterestIncome.Contains(
-                                                f.FinancialConceptId
-                                            )
-                                        )
-                                        .ToList(),
-                                    g.Where(f =>
-                                            bankComponentIds.NoninterestIncome.Contains(
-                                                f.FinancialConceptId
-                                            )
-                                        )
-                                        .ToList(),
-                                    conceptPriority,
-                                    // One period shows none of the filer's history, so its interest
-                                    // expense is what proves revenue before interest expense.
-                                    g.Where(f =>
-                                            bankComponentIds.InterestExpense.Contains(
-                                                f.FinancialConceptId
-                                            )
-                                        )
-                                        .ToList()
-                                );
-                            (candidates, priority) = OperatingCostsContinuation.Fold(
-                                claimableAlias,
-                                operatingCosts.ClaimedStockIds.Contains(g.Key)
-                                    ? claimableAlias
-                                    : null,
-                                candidates,
-                                priority,
-                                g.Where(f => operatingCosts.Ids.Contains(f.FinancialConceptId))
-                                    .ToList()
-                            );
-                            return (
-                                StockId: g.Key,
-                                Fact: FinancialFactSeriesShaper.PickBestFact(candidates, priority)
-                            );
-                        })
-                        .Where(item => item.Fact != null)
-                        .ToDictionary(item => item.StockId, item => item.Fact);
-                    var mistagged =
-                        grossProfitComponents.Count == 0
-                            ? []
-                            : best.Where(entry =>
-                                {
-                                    var stockFacts = facts
-                                        .Where(f => f.EquityIssuerId == entry.Key)
-                                        .ToList();
-                                    var picks = grossProfitComponents
-                                        .Select(c =>
-                                            FinancialFactSeriesShaper.PickBestFact(
-                                                stockFacts.Where(f =>
-                                                    c.Ids.Contains(f.FinancialConceptId)
-                                                ),
-                                                c.Priority
-                                            )
-                                        )
-                                        .ToList();
-                                    return picks.All(pick => pick != null)
-                                        && GrossProfitMistag
-                                            .MistaggedRows(
-                                                [entry.Value],
-                                                [picks[0]],
-                                                [picks[1]],
-                                                [picks[2]]
-                                            )
-                                            .Count > 0;
-                                })
-                                .Select(entry => entry.Key)
-                                .ToHashSet();
-                    return (best, mistagged);
-                }
-
-                Dictionary<Guid, FinancialFact> bestByStock;
-                HashSet<Guid> mistaggedStockIds;
-                if (!calendar)
-                {
-                    (bestByStock, mistaggedStockIds) = await Slice(fiscalYear);
-                }
-                else
-                {
-                    var endingInYear = await Slice(fiscalYear);
-                    var endingNextYear = await Slice(fiscalYear + 1);
-                    var chosen = CalendarYearAlignment.Choose(
-                        fiscalYear,
-                        endingInYear.Best,
-                        endingNextYear.Best
-                    );
-                    bestByStock = chosen.ToDictionary(
-                        entry => entry.Key,
-                        entry => entry.Value.Fact
-                    );
-                    mistaggedStockIds = chosen
-                        .Where(entry =>
-                            (
-                                entry.Value.Stamp == fiscalYear ? endingInYear : endingNextYear
-                            ).Mistagged.Contains(entry.Key)
-                        )
-                        .Select(entry => entry.Key)
-                        .ToHashSet();
-                }
+                var comparison = await _comparisonReader.Compare(
+                    conceptRefs,
+                    stocks,
+                    fiscalYear,
+                    period,
+                    calendar
+                );
+                if (comparison == null)
+                    return $"No '{concept}' data has been ingested.";
+                var conceptsById = comparison.ConceptsById;
+                var bestByStock = comparison.BestByIssuer;
+                var mistaggedStockIds = comparison.MistaggedIssuerIds;
 
                 var (rows, skipped) = BuildComparisonRows(requested, stockByTicker, bestByStock);
                 var splitAdjustedStockIds = rows.Where(row =>
@@ -1585,89 +1321,10 @@ public class FinancialFactsTools
         return GrossProfitMistag.MistaggedRows(shown, rows[0], rows[1], rows[2]);
     }
 
-    // Per issuer, whether its operating costs continue the alias (OperatingCostsContinuation),
-    // from each issuer's whole consolidated history of the three cost lines; the operating-costs
-    // variants join conceptsById so a folded row reads its own variant.
-    private async Task<(
-        HashSet<Guid> Ids,
-        HashSet<Guid> ClaimedStockIds
-    )> ResolveOperatingCostsClaims(
-        string alias,
-        IReadOnlyCollection<Guid> stockIds,
-        Dictionary<Guid, FinancialConceptAliases.ConceptRef> conceptsById
-    )
-    {
-        var (operatingCostIds, operatingCostsById) = await ResolveAliasConcepts(
-            OperatingCostsContinuation.OperatingCostsAlias
-        );
-        if (operatingCostIds.Count == 0)
-            return ([], []);
-        var (operatingExpenseIds, _) = await ResolveAliasConcepts(
-            OperatingCostsContinuation.OperatingExpensesAlias
-        );
-        var (totalCostIds, _) = await ResolveAliasConcepts(
-            OperatingCostsContinuation.TotalCostsAlias
-        );
-        var ids = operatingCostIds.Concat(operatingExpenseIds).Concat(totalCostIds).ToList();
-        var history = await _financialFactRepository
-            .GetConsolidatedByIssuerIds(stockIds)
-            .Where(f => ids.Contains(f.FinancialConceptId))
-            .ToListAsync();
-        var claimed = history
-            .GroupBy(f => f.EquityIssuerId)
-            .Where(g =>
-                OperatingCostsContinuation.Claimant(
-                    g.Where(f => operatingCostIds.Contains(f.FinancialConceptId)).ToList(),
-                    g.Where(f => operatingExpenseIds.Contains(f.FinancialConceptId)).ToList(),
-                    g.Where(f => totalCostIds.Contains(f.FinancialConceptId)).ToList()
-                ) == alias
-            )
-            .Select(g => g.Key)
-            .ToHashSet();
-        foreach (var (conceptId, conceptRef) in operatingCostsById)
-            conceptsById.TryAdd(conceptId, conceptRef);
-        return (operatingCostIds, claimed);
-    }
-
-    // Operating income, revenue and cost of revenue, in that order: what proves a gross profit
-    // holds operating income (GrossProfitMistag). Empty when any is not ingested.
-    private async Task<
-        List<(HashSet<Guid> Ids, Dictionary<Guid, int> Priority)>
-    > ResolveGrossProfitComponents()
-    {
-        var components = new List<(HashSet<Guid> Ids, Dictionary<Guid, int> Priority)>();
-        foreach (
-            var alias in new[]
-            {
-                GrossProfitMistag.OperatingIncomeAlias,
-                GrossProfitMistag.RevenueAlias,
-                GrossProfitMistag.CostOfRevenueAlias,
-            }
-        )
-        {
-            FinancialConceptAliases.TryResolve(alias, out var refs);
-            var (priority, _) = await ResolveConcepts(refs);
-            if (priority.Count == 0)
-                return [];
-            components.Add(([.. priority.Keys], priority));
-        }
-        return components;
-    }
-
     private Task<NetIncomeReading> ReadHostNetIncome(EquityIssuer stock) =>
         _netIncomeFactsReader == null
             ? Task.FromResult<NetIncomeReading>(null)
             : _netIncomeFactsReader.Read(stock);
-
-    private async Task<(
-        HashSet<Guid> Ids,
-        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
-    )> ResolveAliasConcepts(string alias)
-    {
-        FinancialConceptAliases.TryResolve(alias, out var refs);
-        var (priority, conceptsById) = await ResolveConcepts(refs);
-        return ([.. priority.Keys], conceptsById);
-    }
 
     // A bank's net interest and noninterest income facts, which the revenue alias folds in where
     // its revenue line is missing or partial (BankTopLine).
@@ -1696,61 +1353,26 @@ public class FinancialFactsTools
         );
     }
 
-    private async Task<(
+    private Task<(
+        Dictionary<Guid, int> Priority,
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
+    )> ResolveConcepts(IReadOnlyList<FinancialConceptAliases.ConceptRef> conceptRefs) =>
+        _conceptResolver.ResolveConcepts(conceptRefs);
+
+    private Task<(
+        HashSet<Guid> Ids,
+        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
+    )> ResolveAliasConcepts(string alias) => _conceptResolver.ResolveAliasConcepts(alias);
+
+    private Task<(
         HashSet<Guid> NetInterestIncome,
         HashSet<Guid> NoninterestIncome,
         HashSet<Guid> InterestExpense
-    )> ResolveBankTopLineComponentIds()
-    {
-        FinancialConceptAliases.TryResolve(BankTopLine.NetInterestIncomeAlias, out var netInterest);
-        FinancialConceptAliases.TryResolve(BankTopLine.NoninterestIncomeAlias, out var noninterest);
-        FinancialConceptAliases.TryResolve(
-            BankTopLine.InterestExpenseAlias,
-            out var interestExpense
-        );
-        var (netInterestPriority, _) = await ResolveConcepts(netInterest);
-        var (noninterestPriority, _) = await ResolveConcepts(noninterest);
-        var (interestExpensePriority, _) = await ResolveConcepts(interestExpense);
-        return (
-            [.. netInterestPriority.Keys],
-            [.. noninterestPriority.Keys],
-            [.. interestExpensePriority.Keys]
-        );
-    }
+    )> ResolveBankTopLineComponentIds() => _conceptResolver.ResolveBankTopLineComponentIds();
 
-    // The alias's ingested concepts: their pick priority, and the variant each was reported
-    // under, which decides how a split moves its values.
-    private async Task<(
-        Dictionary<Guid, int> Priority,
-        Dictionary<Guid, FinancialConceptAliases.ConceptRef> ConceptsById
-    )> ResolveConcepts(IReadOnlyList<FinancialConceptAliases.ConceptRef> conceptRefs)
-    {
-        var taxonomies = conceptRefs.Select(c => c.Taxonomy).Distinct().ToList();
-        var tags = conceptRefs.Select(c => c.Tag).Distinct().ToList();
-        // (taxonomy, tag) → position in the alias's ordered tag list; lower
-        // index is the alias's preferred/primary concept.
-        var priorityByPair = new Dictionary<(FactTaxonomy, string), int>();
-        for (var i = 0; i < conceptRefs.Count; i++)
-            priorityByPair.TryAdd((conceptRefs[i].Taxonomy, conceptRefs[i].Tag), i);
-
-        var rows = await _financialConceptRepository
-            .GetMatching(taxonomies, tags)
-            .Select(c => new
-            {
-                c.Id,
-                c.Taxonomy,
-                c.Tag,
-            })
-            .ToListAsync();
-
-        // GetMatching is a taxonomy×tag cross product over a tiny alias tag set
-        // (over-fetch is negligible here); narrow to the alias's exact pairs.
-        var known = rows.Where(r => priorityByPair.ContainsKey((r.Taxonomy, r.Tag))).ToList();
-        return (
-            known.ToDictionary(r => r.Id, r => priorityByPair[(r.Taxonomy, r.Tag)]),
-            known.ToDictionary(r => r.Id, r => conceptRefs[priorityByPair[(r.Taxonomy, r.Tag)]])
-        );
-    }
+    private Task<
+        List<(HashSet<Guid> Ids, Dictionary<Guid, int> Priority)>
+    > ResolveGrossProfitComponents() => _conceptResolver.ResolveGrossProfitComponents();
 
     private static FactSplitKind SplitKind(
         FinancialFact fact,

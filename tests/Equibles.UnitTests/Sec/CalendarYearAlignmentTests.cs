@@ -1,5 +1,5 @@
+using Equibles.Sec.FinancialFacts.BusinessLogic.Comparison;
 using Equibles.Sec.FinancialFacts.Data.Models;
-using Equibles.Sec.FinancialFacts.Mcp.Helpers;
 
 namespace Equibles.UnitTests.Sec;
 
