@@ -322,12 +322,10 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             if (!IsHeaderOverFigures(rows, colIndex))
                 continue;
 
-            foreach (var row in rows)
+            var rowCells = rows.Select(HtmlElementExtensions.DirectChildCells)
+                .Where(cells => colIndex < cells.Count);
+            foreach (var cells in rowCells)
             {
-                var cells = HtmlElementExtensions.DirectChildCells(row);
-                if (colIndex >= cells.Count)
-                    continue;
-
                 if (!IsCellEmpty(cells[colIndex]))
                     cells[colIndex + 1].InnerHtml = cells[colIndex].InnerHtml;
                 cells[colIndex].Remove();
@@ -339,9 +337,8 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
     {
         var hasHeader = false;
         var hasFigure = false;
-        foreach (var row in rows)
+        foreach (var cells in rows.Select(HtmlElementExtensions.DirectChildCells))
         {
-            var cells = HtmlElementExtensions.DirectChildCells(row);
             var header = colIndex < cells.Count && !IsCellEmpty(cells[colIndex]);
             var next = colIndex + 1 < cells.Count && !IsCellEmpty(cells[colIndex + 1]);
             if (header)
