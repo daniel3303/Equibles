@@ -23,10 +23,11 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
             new PositionedProseConversionStep(),
             new InlineXbrlProseConversionStep(),
             new XbrlStripStep(),
-            new NameAnchorRemovalStep(),
             new TableNormalizationStep(),
             new PaginationRemovalStep(),
             new HeadingConversionStep(),
+            // After headings: the heading step judges a span by its parent, often the link target.
+            new NameAnchorRemovalStep(),
             new ListConversionStep(),
             new CurrencyConsolidationStep(),
         ];

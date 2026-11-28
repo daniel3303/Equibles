@@ -80,4 +80,18 @@ public class SecDocumentTablePipelineTests
         markdown.Should().Contain("| Cash Flows From Operating Activities: | (5,455,432) |");
         markdown.Should().Contain("| Cost<br>of sales | 567 |");
     }
+
+    [Fact]
+    public void NormalizeAndConvert_HeadingInsideALinkTarget_StaysAHeading()
+    {
+        var html =
+            "<div><a name=\"n5\"><span style=\"font-weight:bold\">Note 5. Debt</span></a>"
+            + "<p><span>The Company has a revolving facility.</span></p></div>";
+
+        var markdown = new SecDocumentHtmlToMarkdownConverter().Convert(
+            new SecDocumentHtmlNormalizer().NormalizeFragment(html)
+        );
+
+        markdown.Should().Contain("### Note 5. Debt").And.NotContain("[]()");
+    }
 }
