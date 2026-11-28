@@ -10,9 +10,7 @@ namespace Equibles.UnitTests.Sec.Normalizers;
 /// whose cells contain visual content but no text (a signature image, an
 /// embedded chart) is NOT dropped — is unpinned, even though SEC filings
 /// routinely place signature images inside trailing table rows of the 10-K
-/// signature page. Asserting it here makes the normalizer safe for image-only
-/// rows and locks down `IsOnlyWhitespaceSpan`'s no-span branch to mean "not
-/// only whitespace spans, the cell has other visual content".
+/// signature page.
 /// </summary>
 public class TableNormalizationStepImageCellRowPreservationTests
 {
@@ -27,7 +25,7 @@ public class TableNormalizationStepImageCellRowPreservationTests
         var parser = new HtmlParser(
             new HtmlParserOptions { IsAcceptingCustomElementsEverywhere = true }
         );
-        var step = new TableNormalizationStep(parser);
+        var step = new TableNormalizationStep();
         var doc = parser.ParseDocument(
             "<html><body><table>"
                 + "<tr><td>Data</td></tr>"

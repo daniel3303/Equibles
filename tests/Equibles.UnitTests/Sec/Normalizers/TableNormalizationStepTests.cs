@@ -12,7 +12,7 @@ public class TableNormalizationStepTests
 
     public TableNormalizationStepTests()
     {
-        _step = new TableNormalizationStep(_parser);
+        _step = new TableNormalizationStep();
     }
 
     [Fact]
@@ -316,9 +316,7 @@ public class TableNormalizationStepTests
     [Fact]
     public void Execute_WhitespaceOnlySpanCellVsNonWhitespaceSpanCell_DistinguishesEmptiness()
     {
-        // First cell holds only a whitespace/&nbsp; span (IsOnlyWhitespaceSpan
-        // → true: spans present, none with real text). Second cell has a span
-        // with real text (IsOnlyWhitespaceSpan → false on the first non-ws span).
+        // First cell holds only whitespace spans; the second holds a span with real text.
         var doc = _parser.ParseDocument(
             "<html><body><table>"
                 + "<tr><td><span> </span><span>  </span></td><td><span>Real</span></td></tr>"

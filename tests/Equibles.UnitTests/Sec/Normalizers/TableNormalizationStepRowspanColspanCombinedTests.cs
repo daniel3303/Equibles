@@ -22,7 +22,7 @@ public class TableNormalizationStepRowspanColspanCombinedTests
                 + "<tr><td>C</td></tr>"
                 + "</table></body></html>"
         );
-        var step = new TableNormalizationStep(parser);
+        var step = new TableNormalizationStep();
 
         step.Execute(doc);
 

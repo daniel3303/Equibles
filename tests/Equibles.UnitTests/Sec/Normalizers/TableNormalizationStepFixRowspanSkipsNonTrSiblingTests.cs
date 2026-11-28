@@ -26,7 +26,7 @@ public class TableNormalizationStepFixRowspanSkipsNonTrSiblingTests
                 + "</tbody></table></body></html>"
         );
         var table = doc.QuerySelector("table");
-        var step = new TableNormalizationStep(parser);
+        var step = new TableNormalizationStep();
         var method = typeof(TableNormalizationStep).GetMethod(
             "FixRowspan",
             BindingFlags.NonPublic | BindingFlags.Instance

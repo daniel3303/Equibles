@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
-using AngleSharp.Html.Parser;
 
 namespace Equibles.Sec.BusinessLogic.Normalizers;
 
@@ -9,12 +9,17 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
     private const string ColSpanAttribute = "colspan";
     private const string RowSpanAttribute = "rowspan";
 
-    private readonly HtmlParser _parser;
+    // Marks the cells a colspan expansion adds, so a header is moved only across its own span.
+    private const string SpanFillAttribute = "data-colspan-fill";
 
-    internal TableNormalizationStep(HtmlParser parser)
-    {
-        _parser = parser;
-    }
+    private static readonly Regex HtmlWhitespaceRun = new(@"[ \t\r\n\f]+", RegexOptions.Compiled);
+
+    // A figure as filings print it: grouped digits or a decimal, signed by parentheses, a dash or a
+    // currency sign, or a lone dash for nil. A bare four-digit year is a header, never a figure.
+    private static readonly Regex Figure = new(
+        @"^\(?[-−–]?\$?\s?(?:\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+\.\d+)\)?%?$|^[-−–—]$",
+        RegexOptions.Compiled
+    );
 
     public void Execute(IHtmlDocument doc)
     {
@@ -24,11 +29,32 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
 
         foreach (var table in tables)
         {
+            CollapseCellWhitespace(table);
             FixColspan(table, doc);
             FixRowspan(table, doc);
             RemoveEmptyRows(table);
             RemoveEmptyColumns(table);
             MergeSuffixColumns(table);
+            MoveHeadersOverFigures(table);
+            ClearBlankCells(table);
+        }
+
+        foreach (var cell in doc.QuerySelectorAll($"[{SpanFillAttribute}]"))
+        {
+            cell.RemoveAttribute(SpanFillAttribute);
+        }
+    }
+
+    // HTML renders a line break inside text as a space, but the Markdown converter writes one inside
+    // a cell as <br>; filers wrap their source lines mid-label ("Cash\nFlows"), so collapse them first.
+    private static void CollapseCellWhitespace(IElement table)
+    {
+        var texts = table
+            .Descendants<IText>()
+            .Where(text => text.ParentElement?.Closest("pre") == null);
+        foreach (var text in texts)
+        {
+            text.Data = HtmlWhitespaceRun.Replace(text.Data, " ");
         }
     }
 
@@ -58,6 +84,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             for (int i = 1; i < colspanValue; i++)
             {
                 var newCell = doc.CreateElement("td");
+                newCell.SetAttribute(SpanFillAttribute, "");
                 if (rowspanAttr != null)
                 {
                     newCell.SetAttribute(RowSpanAttribute, rowspanAttr);
@@ -146,45 +173,17 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
         }
     }
 
-    private bool IsRowEmpty(IElement row) =>
+    private static bool IsRowEmpty(IElement row) =>
         HtmlElementExtensions.DirectChildCells(row).All(IsCellEmpty);
 
-    private bool IsCellEmpty(IElement cell)
-    {
-        var cellText = cell.TextContent.Trim();
-        if (IsMeaningfulText(cellText))
-            return false;
+    // Empty whatever wraps the blank (<p>&nbsp;</p>, <font>, a zero-width space), unless the cell
+    // holds something visual without text: a logo, signature or checkmark image, a link, a form field.
+    private static bool IsCellEmpty(IElement cell) =>
+        HtmlElementExtensions.IsBlankText(cell.TextContent)
+        && cell.QuerySelector(MeaningfulNonTextSelector) == null;
 
-        var cellHtml = cell.InnerHtml.Trim();
-        if (string.IsNullOrWhiteSpace(cellHtml))
-            return true;
-        if (cellHtml is "&nbsp;" or "&#160;")
-            return true;
-        if (
-            cellHtml.Contains(
-                "white-space:pre-wrap;font-family:Arial;font-kerning:none;min-width:fit-content;\"> </span>"
-            )
-        )
-            return true;
-
-        return IsOnlyWhitespaceSpan(cellHtml);
-    }
-
-    // Meaningful non-text content: an element that carries data without any text
-    // (a logo/signature/checkmark <img>, a linked <a href>, a form <input>, …).
-    private const string MeaningfulNonSpanSelector =
+    private const string MeaningfulNonTextSelector =
         "img, a[href], input, svg, object, embed, iframe, video, audio, canvas, picture";
-
-    private bool IsOnlyWhitespaceSpan(string html)
-    {
-        var tempDoc = _parser.ParseDocument(html);
-        var spans = tempDoc.QuerySelectorAll("span").ToList();
-        if (spans.Count == 0 || spans.Any(span => IsMeaningfulText(span.TextContent.Trim())))
-            return false;
-        // A whitespace span beside a text-free <img>/<a href>/<input> is NOT "only
-        // whitespace spans" — the cell still holds meaningful content and must be kept.
-        return tempDoc.QuerySelectorAll(MeaningfulNonSpanSelector).Length == 0;
-    }
 
     private void RemoveEmptyColumns(IElement table)
     {
@@ -250,7 +249,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
                 if (colIndex >= cells.Count)
                     continue;
 
-                var suffix = cells[colIndex].TextContent.Trim();
+                var suffix = HtmlElementExtensions.TrimBlank(cells[colIndex].TextContent);
                 if (suffix.Length > 0)
                     AppendToFigure(cells[colIndex - 1], suffix);
                 cells[colIndex].Remove();
@@ -261,7 +260,8 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
     // The suffix joins the figure's own text node, so the converter cannot space them apart.
     private static void AppendToFigure(IElement cell, string suffix)
     {
-        var figure = cell.Descendants<IText>().Last(text => !string.IsNullOrWhiteSpace(text.Data));
+        var figure = cell.Descendants<IText>()
+            .Last(text => !HtmlElementExtensions.IsBlankText(text.Data));
         figure.Data = figure.Data.TrimEnd() + suffix;
     }
 
@@ -275,7 +275,7 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
             if (colIndex >= cells.Count)
                 continue;
 
-            var text = cells[colIndex].TextContent.Trim();
+            var text = HtmlElementExtensions.TrimBlank(cells[colIndex].TextContent);
             if (text.Length == 0)
                 continue;
 
@@ -290,13 +290,80 @@ internal class TableNormalizationStep : IHtmlNormalizationStep
     // A figure ends in a digit; a percent may also follow a negative already closed, as in "(7)".
     private static bool EndsWithFigure(IElement cell, string suffix)
     {
-        var figure = cell.TextContent.TrimEnd();
+        var figure = HtmlElementExtensions.TrimBlank(cell.TextContent);
         if (figure.Length == 0)
             return false;
 
         return char.IsDigit(figure[^1]) || (figure[^1] == ')' && suffix == "%");
     }
 
-    private static bool IsMeaningfulText(string text) =>
-        !string.IsNullOrWhiteSpace(text) && text != " ";
+    // The padding of a kept blank cell (a zero-width space, &nbsp;) carries into the Markdown as noise.
+    private static void ClearBlankCells(IElement table)
+    {
+        foreach (var cell in table.QuerySelectorAll("td, th").Where(IsCellEmpty))
+        {
+            cell.InnerHtml = string.Empty;
+        }
+    }
+
+    // A header spanning a spacer and a figure column lands, once its colspan is expanded, over the
+    // spacer while the figures sit one column right ("% Change" | "" over "" | "12.2"). Move a column
+    // that holds only header text into its right neighbour when each header spanned that neighbour
+    // and the neighbour holds figures; a header over a column of its own stays, as does the label column.
+    private static void MoveHeadersOverFigures(IElement table)
+    {
+        var rows = table.QuerySelectorAll("tr").ToList();
+        if (rows.Count == 0)
+            return;
+
+        var maxCols = rows.Max(row => HtmlElementExtensions.DirectChildCells(row).Count);
+        for (var colIndex = maxCols - 2; colIndex >= 1; colIndex--)
+        {
+            if (!IsHeaderOverFigures(rows, colIndex))
+                continue;
+
+            foreach (var row in rows)
+            {
+                var cells = HtmlElementExtensions.DirectChildCells(row);
+                if (colIndex >= cells.Count)
+                    continue;
+
+                if (!IsCellEmpty(cells[colIndex]))
+                    cells[colIndex + 1].InnerHtml = cells[colIndex].InnerHtml;
+                cells[colIndex].Remove();
+            }
+        }
+    }
+
+    private static bool IsHeaderOverFigures(List<IElement> rows, int colIndex)
+    {
+        var hasHeader = false;
+        var hasFigure = false;
+        foreach (var row in rows)
+        {
+            var cells = HtmlElementExtensions.DirectChildCells(row);
+            var header = colIndex < cells.Count && !IsCellEmpty(cells[colIndex]);
+            var next = colIndex + 1 < cells.Count && !IsCellEmpty(cells[colIndex + 1]);
+            if (header)
+            {
+                if (
+                    next
+                    || colIndex + 1 >= cells.Count
+                    || !cells[colIndex + 1].HasAttribute(SpanFillAttribute)
+                    || IsFigure(cells[colIndex])
+                )
+                    return false;
+                hasHeader = true;
+            }
+            else if (next && IsFigure(cells[colIndex + 1]))
+            {
+                hasFigure = true;
+            }
+        }
+
+        return hasHeader && hasFigure;
+    }
+
+    private static bool IsFigure(IElement cell) =>
+        Figure.IsMatch(HtmlElementExtensions.TrimBlank(cell.TextContent));
 }

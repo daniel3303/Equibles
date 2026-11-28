@@ -37,8 +37,8 @@ public class EsefRetrievalStylesTests
     [InlineData(
         "bff-2025",
         34_672_821,
-        2_048_711,
-        "C599CD1356A8F79910CFCA43F03DD28D085BF77BD144421D17C36ABF703BA474",
+        2_046_744,
+        "382AD316AAE77A4852B2B76F82275AC69D2FDCC42E1CF66453799591A2D44B17",
         "Debiti verso banche"
     )]
     public void Build_RecordedOversizedReport_RetainsTheCompleteNormalizedText(

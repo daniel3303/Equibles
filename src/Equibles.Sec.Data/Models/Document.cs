@@ -116,7 +116,7 @@ public class Document
     /// Current stored-text pipeline version. Bump after a normalization or conversion change
     /// that must be applied to already-ingested EDGAR documents.
     /// </summary>
-    public const int NormalizedContentBuilderVersion = 2;
+    public const int NormalizedContentBuilderVersion = 3;
 
     /// <summary>
     /// The first version any content builder stamps; a document below it never had its text

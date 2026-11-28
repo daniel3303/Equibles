@@ -26,7 +26,7 @@ public class TableNormalizationStepImageOnlyColumnPreservationTests
         var parser = new HtmlParser(
             new HtmlParserOptions { IsAcceptingCustomElementsEverywhere = true }
         );
-        var step = new TableNormalizationStep(parser);
+        var step = new TableNormalizationStep();
         var doc = parser.ParseDocument(
             "<html><body><table>"
                 + "<tr><td>A</td><td><img src=\"sig1.png\" alt=\"signature\"></td></tr>"

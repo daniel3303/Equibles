@@ -10,7 +10,7 @@ public class TableNormalizationStepSuffixColumnTests
     {
         var parser = new HtmlParser();
         var doc = parser.ParseDocument($"<html><body>{tableHtml}</body></html>");
-        new TableNormalizationStep(parser).Execute(doc);
+        new TableNormalizationStep().Execute(doc);
         return doc.QuerySelectorAll("tr")
             .Select(row => row.QuerySelectorAll("td").Select(c => c.TextContent.Trim()).ToList())
             .ToList();
