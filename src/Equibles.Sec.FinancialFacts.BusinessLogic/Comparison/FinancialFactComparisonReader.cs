@@ -80,16 +80,18 @@ public class FinancialFactComparisonReader
         var hostNetIncome = new Dictionary<Guid, NetIncomeReading>();
         if (OwnersProfitSign.IsNetIncome(conceptRefs))
         {
+            var readings = new List<(EquityIssuer Stock, NetIncomeReading Reading)>();
             foreach (var stock in stocks)
             {
-                if (await ReadHostNetIncome(stock) is { } reading)
+                readings.Add((stock, await ReadHostNetIncome(stock)));
+            }
+            foreach (var (stock, reading) in readings.Where(read => read.Reading != null))
+            {
+                hostNetIncome[stock.Id] = reading;
+                foreach (var (conceptId, conceptRef) in reading.Concepts)
                 {
-                    hostNetIncome[stock.Id] = reading;
-                    foreach (var (conceptId, conceptRef) in reading.Concepts)
-                    {
-                        conceptsById.TryAdd(conceptId, conceptRef);
-                        conceptPriority.TryAdd(conceptId, 0);
-                    }
+                    conceptsById.TryAdd(conceptId, conceptRef);
+                    conceptPriority.TryAdd(conceptId, 0);
                 }
             }
         }
